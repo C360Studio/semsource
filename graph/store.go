@@ -82,15 +82,36 @@ func (s *Store) Count() int {
 	return len(s.entities)
 }
 
-// hashEntity returns a JSON fingerprint of the entity's content.
-// Excludes provenance timestamps to avoid false positives from re-processing.
+// hashEntity returns a JSON fingerprint of the entity's semantic content.
+// Excludes provenance timestamps and triple metadata (Timestamp, Confidence,
+// Context, Datatype, ExpiresAt) to avoid false positives when the same entity
+// is re-normalized with fresh timestamps.
 func hashEntity(e *GraphEntity) string {
-	type stable struct {
-		ID      string        `json:"id"`
-		Triples []message.Triple `json:"triples"`
-		Edges   []GraphEdge   `json:"edges,omitempty"`
+	// stableTriple captures only the semantic fields of a Triple.
+	type stableTriple struct {
+		Subject   string `json:"s"`
+		Predicate string `json:"p"`
+		Object    any    `json:"o"`
+		Source    string `json:"src"`
 	}
-	s := stable{ID: e.ID, Triples: e.Triples, Edges: e.Edges}
+
+	type stable struct {
+		ID      string         `json:"id"`
+		Triples []stableTriple `json:"triples,omitempty"`
+		Edges   []GraphEdge    `json:"edges,omitempty"`
+	}
+
+	st := make([]stableTriple, len(e.Triples))
+	for i, t := range e.Triples {
+		st[i] = stableTriple{
+			Subject:   t.Subject,
+			Predicate: t.Predicate,
+			Object:    t.Object,
+			Source:    t.Source,
+		}
+	}
+
+	s := stable{ID: e.ID, Triples: st, Edges: e.Edges}
 	data, err := json.Marshal(s)
 	if err != nil {
 		// Fall back to empty string — forces update on next upsert.

@@ -69,6 +69,11 @@ type Engine struct {
 	lastEmitMu sync.Mutex
 	lastEmit   time.Time
 
+	// pathIndex maps a source file path to the set of entity IDs produced from it.
+	// Used by retractionIDsForPath to find entities to remove on a file delete event.
+	pathIndexMu sync.Mutex
+	pathIndex   map[string]map[string]struct{} // filePath → set of entityIDs
+
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 	stopped bool
@@ -85,6 +90,7 @@ func NewEngine(cfg *config.Config, emitter Emitter, logger *slog.Logger, opts ..
 		logger:            logger,
 		heartbeatInterval: 30 * time.Second,
 		reseedInterval:    60 * time.Second,
+		pathIndex:         make(map[string]map[string]struct{}),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -273,6 +279,11 @@ func (e *Engine) handleChange(ctx context.Context, ev handler.ChangeEvent) {
 				changed = append(changed, entity)
 			}
 		}
+		// Record the path → entity ID mapping regardless of whether anything
+		// changed — a subsequent delete needs to know which IDs to retract.
+		if ev.Path != "" && len(entities) > 0 {
+			e.indexPath(ev.Path, entities)
+		}
 		if len(changed) > 0 {
 			event := e.buildDeltaEvent(changed)
 			if err := e.emitter.Emit(ctx, event); err != nil {
@@ -343,9 +354,25 @@ func (e *Engine) touchLastEmit() {
 	e.lastEmitMu.Unlock()
 }
 
-// retractionIDsForPath returns the IDs of all stored entities whose provenance
-// SourceID matches the deleted path.
+// retractionIDsForPath returns the IDs of all entities that were produced from
+// the given file path, using the path index maintained during handleChange.
+// Falls back to a full store scan matching Provenance.SourceID for entities
+// that entered the store via the initial seed (which does not have path info).
 func (e *Engine) retractionIDsForPath(path string) []string {
+	e.pathIndexMu.Lock()
+	idSet, ok := e.pathIndex[path]
+	if ok {
+		ids := make([]string, 0, len(idSet))
+		for id := range idSet {
+			ids = append(ids, id)
+		}
+		delete(e.pathIndex, path)
+		e.pathIndexMu.Unlock()
+		return ids
+	}
+	e.pathIndexMu.Unlock()
+
+	// Fallback: scan store for entities whose SourceID matches the path.
 	all := e.store.Snapshot()
 	var ids []string
 	for _, entity := range all {
@@ -354,6 +381,18 @@ func (e *Engine) retractionIDsForPath(path string) []string {
 		}
 	}
 	return ids
+}
+
+// indexPath records the association between a file path and the entity IDs
+// produced from it. Called after a successful create/modify change event.
+func (e *Engine) indexPath(path string, entities []*graph.GraphEntity) {
+	e.pathIndexMu.Lock()
+	defer e.pathIndexMu.Unlock()
+	idSet := make(map[string]struct{}, len(entities))
+	for _, ent := range entities {
+		idSet[ent.ID] = struct{}{}
+	}
+	e.pathIndex[path] = idSet
 }
 
 // sourceConfigAdapter adapts config.SourceEntry to the handler.SourceConfig interface.

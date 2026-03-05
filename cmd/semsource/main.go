@@ -21,6 +21,11 @@ import (
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/engine"
+	asthandler "github.com/c360studio/semsource/handler/ast"
+	"github.com/c360studio/semsource/handler/cfgfile"
+	dochandler "github.com/c360studio/semsource/handler/doc"
+	githandler "github.com/c360studio/semsource/handler/git"
+	urlhandler "github.com/c360studio/semsource/handler/url"
 	"github.com/c360studio/semsource/normalizer"
 )
 
@@ -77,15 +82,11 @@ func run() error {
 	)
 
 	// --- Handler registration ---
-	// M1: No concrete handlers yet. The engine runs in scaffold mode —
-	// it will emit an empty SEED on startup and watch no sources.
-	// Each handler is registered here as it is implemented in M2:
-	//
-	//   eng.RegisterHandler(git.NewHandler(logger))
-	//   eng.RegisterHandler(ast.NewHandler(logger))
-	//   eng.RegisterHandler(doc.NewHandler(logger))
-	//   eng.RegisterHandler(cfg2.NewHandler(logger))
-	//   eng.RegisterHandler(url.NewHandler(logger))
+	eng.RegisterHandler(asthandler.New(logger))
+	eng.RegisterHandler(githandler.New(githandler.Config{}))
+	eng.RegisterHandler(dochandler.New())
+	eng.RegisterHandler(cfgfile.New(nil))
+	eng.RegisterHandler(urlhandler.New(logger))
 
 	// --- Signal handling ---
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

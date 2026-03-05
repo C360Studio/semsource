@@ -1,0 +1,336 @@
+// Package git implements the SourceHandler for git repositories.
+// It clones or opens local repos, walks commit history, and emits
+// commit/author/branch RawEntity values for the normalizer.
+package git
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/c360studio/semsource/handler"
+)
+
+// allowedProtocols lists git URL schemes that are permitted.
+var allowedProtocols = map[string]bool{
+	"https": true,
+	"git":   true,
+	"ssh":   true,
+}
+
+// Config controls GitHandler behaviour.
+type Config struct {
+	// PollInterval is how often Watch polls for new commits.
+	// Default: 30s.
+	PollInterval time.Duration
+
+	// MaxCommits caps the number of commits ingested per Ingest call.
+	// 0 means unlimited.
+	MaxCommits int
+}
+
+// DefaultConfig returns a Config with sensible defaults.
+func DefaultConfig() Config {
+	return Config{
+		PollInterval: 30 * time.Second,
+		MaxCommits:   0,
+	}
+}
+
+// GitHandler implements handler.SourceHandler for git sources.
+// It is safe for concurrent use.
+type GitHandler struct {
+	cfg Config
+}
+
+// New creates a GitHandler with the given configuration.
+func New(cfg Config) *GitHandler {
+	return &GitHandler{cfg: cfg}
+}
+
+// SourceType implements handler.SourceHandler.
+func (h *GitHandler) SourceType() string { return handler.SourceTypeGit }
+
+// Supports implements handler.SourceHandler.
+func (h *GitHandler) Supports(cfg handler.SourceConfig) bool {
+	return cfg.GetType() == handler.SourceTypeGit
+}
+
+// Ingest opens the local repo at cfg.GetPath(), walks its commit log, and
+// returns RawEntity values for commits, authors, and the current branch.
+// For remote URLs (cfg.GetURL() set) it uses the path as the local clone
+// destination if populated; otherwise returns an error asking for a local
+// path (cloning at runtime is outside the MVP scope).
+func (h *GitHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	repoPath := cfg.GetPath()
+	if repoPath == "" {
+		return nil, fmt.Errorf("git handler: path is required for local repo ingestion")
+	}
+
+	// Derive a system slug from the repo path.
+	system := repoSlug(repoPath)
+
+	// Get current branch.
+	branch, err := currentBranch(ctx, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("git handler: get branch: %w", err)
+	}
+
+	// Get HEAD SHA.
+	head, err := headCommitSHA(ctx, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("git handler: get HEAD: %w", err)
+	}
+
+	// Walk commit log.
+	commits, err := listCommits(ctx, repoPath, h.cfg.MaxCommits)
+	if err != nil {
+		return nil, fmt.Errorf("git handler: list commits: %w", err)
+	}
+
+	var entities []handler.RawEntity
+	seenAuthors := make(map[string]bool)
+
+	for _, c := range commits {
+		commitEntity := BuildCommitEntity(c.sha, c.authorFull, c.subject, system)
+		// Add file-touch edges.
+		for _, f := range c.files {
+			commitEntity.Edges = append(commitEntity.Edges, handler.RawEdge{
+				FromHint: shortSHA(c.sha),
+				ToHint:   f,
+				EdgeType: "touches",
+			})
+		}
+		// Add authored-by edge.
+		commitEntity.Edges = append(commitEntity.Edges, handler.RawEdge{
+			FromHint: shortSHA(c.sha),
+			ToHint:   c.authorEmail,
+			EdgeType: "authored_by",
+		})
+		entities = append(entities, commitEntity)
+
+		// One author entity per unique email.
+		if !seenAuthors[c.authorEmail] {
+			seenAuthors[c.authorEmail] = true
+			entities = append(entities, BuildAuthorEntity(c.authorName, c.authorEmail, system))
+		}
+	}
+
+	// Branch entity.
+	entities = append(entities, BuildBranchEntity(branch, head, system))
+
+	return entities, nil
+}
+
+// Watch starts a polling loop that emits a ChangeEvent whenever the HEAD
+// commit SHA changes. Returns (nil, nil) when watching is not enabled.
+// The returned channel is closed when ctx is cancelled.
+func (h *GitHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
+	if !cfg.IsWatchEnabled() {
+		return nil, nil
+	}
+
+	repoPath := cfg.GetPath()
+	if repoPath == "" {
+		return nil, fmt.Errorf("git handler: path is required for watch")
+	}
+
+	ch := make(chan handler.ChangeEvent, 4)
+	go h.pollLoop(ctx, repoPath, ch)
+	return ch, nil
+}
+
+// pollLoop polls the repo for HEAD changes and sends ChangeEvents.
+func (h *GitHandler) pollLoop(ctx context.Context, repoPath string, ch chan<- handler.ChangeEvent) {
+	defer close(ch)
+
+	ticker := time.NewTicker(h.cfg.PollInterval)
+	defer ticker.Stop()
+
+	// Record initial HEAD so we only fire on changes.
+	lastSHA, _ := headCommitSHA(ctx, repoPath)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			currentSHA, err := headCommitSHA(ctx, repoPath)
+			if err != nil || currentSHA == lastSHA {
+				continue
+			}
+			lastSHA = currentSHA
+
+			// Re-ingest the repo to get updated entities.
+			entities, err := h.Ingest(ctx, &localCfg{path: repoPath})
+			if err != nil {
+				continue
+			}
+
+			select {
+			case ch <- handler.ChangeEvent{
+				Path:      repoPath,
+				Operation: handler.OperationModify,
+				Timestamp: time.Now(),
+				Entities:  entities,
+			}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+// localCfg is a minimal SourceConfig used internally by pollLoop.
+type localCfg struct{ path string }
+
+func (c *localCfg) GetType() string      { return handler.SourceTypeGit }
+func (c *localCfg) GetPath() string      { return c.path }
+func (c *localCfg) GetURL() string       { return "" }
+func (c *localCfg) IsWatchEnabled() bool { return false }
+
+// --------------------------------------------------------------------------
+// Git primitives
+// --------------------------------------------------------------------------
+
+// ValidateGitURL validates that the URL uses an allowed protocol.
+// Exported so tests can call it directly.
+func ValidateGitURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("git URL is required")
+	}
+	// SSH shorthand: git@github.com:owner/repo.git
+	if strings.HasPrefix(rawURL, "git@") {
+		return nil
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if !allowedProtocols[scheme] {
+		return fmt.Errorf("protocol %q not allowed (use https, git, or ssh)", scheme)
+	}
+	return nil
+}
+
+// headCommitSHA returns the full SHA of HEAD.
+func headCommitSHA(ctx context.Context, repoPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// currentBranch returns the current branch name.
+func currentBranch(ctx context.Context, repoPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse --abbrev-ref HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// commitRecord holds raw data parsed from git log output.
+type commitRecord struct {
+	sha         string
+	authorName  string
+	authorEmail string
+	authorFull  string
+	subject     string
+	files       []string
+}
+
+// listCommits walks the repo log and returns commit records.
+// limit == 0 means return all commits.
+func listCommits(ctx context.Context, repoPath string, limit int) ([]commitRecord, error) {
+	// Use a custom format: SHA|AuthorName|AuthorEmail|Subject
+	// Followed by a blank line, then the --name-only file list, then a separator.
+	args := []string{
+		"log",
+		"--format=COMMIT:%H|%aN|%aE|%s",
+		"--name-only",
+		"--no-merges",
+	}
+	if limit > 0 {
+		args = append(args, fmt.Sprintf("-n%d", limit))
+	}
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log: %w", err)
+	}
+
+	return parseGitLog(string(out)), nil
+}
+
+// parseGitLog parses the output of our custom git log format.
+func parseGitLog(output string) []commitRecord {
+	var records []commitRecord
+	var current *commitRecord
+
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, "COMMIT:") {
+			if current != nil {
+				records = append(records, *current)
+			}
+			parts := strings.SplitN(strings.TrimPrefix(line, "COMMIT:"), "|", 4)
+			if len(parts) != 4 {
+				continue
+			}
+			current = &commitRecord{
+				sha:         parts[0],
+				authorName:  parts[1],
+				authorEmail: parts[2],
+				authorFull:  parts[1] + " <" + parts[2] + ">",
+				subject:     parts[3],
+			}
+			continue
+		}
+		// Non-empty lines after a COMMIT header are file names.
+		if current != nil && strings.TrimSpace(line) != "" {
+			current.files = append(current.files, strings.TrimSpace(line))
+		}
+	}
+	if current != nil {
+		records = append(records, *current)
+	}
+	return records
+}
+
+// repoSlug converts a local repo path into a NATS-safe system slug.
+// Uses the last path component (repo directory name) with slashes replaced.
+func repoSlug(repoPath string) string {
+	// Use the directory base name as the system slug.
+	parts := strings.Split(strings.TrimRight(repoPath, "/"), "/")
+	name := parts[len(parts)-1]
+	if name == "" {
+		return "unknown"
+	}
+	// Replace path-unsafe characters.
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, ".", "-")
+	return name
+}
+
+// shortSHA returns the first 7 characters of a SHA.
+func shortSHA(sha string) string {
+	if len(sha) >= 7 {
+		return sha[:7]
+	}
+	return sha
+}
