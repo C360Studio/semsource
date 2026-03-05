@@ -22,8 +22,13 @@ type GraphEntity struct {
 	// Edges represent explicit relationships to other entities.
 	Edges []GraphEdge `json:"edges,omitempty"`
 
-	// Provenance records where this entity originated.
+	// Provenance records the primary (most recent) origin of this entity.
 	Provenance SourceProvenance `json:"provenance"`
+
+	// AdditionalProvenance accumulates provenance records from prior merges.
+	// The FederationProcessor appends previous Provenance here on each merge.
+	// This field is always appended, never replaced.
+	AdditionalProvenance []SourceProvenance `json:"additional_provenance,omitempty"`
 }
 
 // GraphEdge represents a directed relationship between two graph entities.
