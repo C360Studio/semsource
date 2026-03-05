@@ -1,0 +1,22 @@
+{
+  "components": {
+    "websocket-output": {
+      "name": "websocket-output",
+      "type": "output",
+      "enabled": true,
+      "config": {
+        "http_port": 7890,
+        "path": "/graph",
+        "ports": {
+          "inputs": [
+            {
+              "name": "graph_events",
+              "subject": "semsource.graph.event",
+              "type": "nats"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
