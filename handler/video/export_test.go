@@ -48,3 +48,8 @@ func SceneThreshold(cfg handler.SourceConfig) float64 {
 func IntervalSeconds(s string) int {
 	return intervalSeconds(s)
 }
+
+// ResolvePaths exposes resolvePaths for table-driven unit tests.
+func ResolvePaths(cfg handler.SourceConfig) []string {
+	return resolvePaths(cfg)
+}

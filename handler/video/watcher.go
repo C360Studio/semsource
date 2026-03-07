@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/handler/internal/fswatcher"
 )
 
-// Watch starts an FSWatcher on the path in cfg and returns a channel of
-// ChangeEvent values. Each event includes re-processed entities for the
-// changed file.
+// Watch starts an FSWatcher on every path in cfg and returns a single channel
+// of ChangeEvent values. Each event includes re-processed entities for the
+// changed file. Events from all watchers are fanned into the one output channel.
 //
 // Returns (nil, nil) when cfg.IsWatchEnabled() is false — callers must check.
 func (h *VideoHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
@@ -20,9 +21,9 @@ func (h *VideoHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-c
 		return nil, nil
 	}
 
-	root := cfg.GetPath()
-	if root == "" {
-		return nil, fmt.Errorf("video handler: Watch requires a non-empty path")
+	roots := resolvePaths(cfg)
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("video handler: Watch requires at least one configured path")
 	}
 
 	wcfg := fswatcher.WatchConfig{
@@ -32,38 +33,65 @@ func (h *VideoHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-c
 		ExcludeDirs:    []string{".git", "node_modules", "vendor"},
 	}
 
-	w, err := fswatcher.New(wcfg, root)
-	if err != nil {
-		return nil, fmt.Errorf("video handler: create watcher: %w", err)
+	// Start one FSWatcher per root and collect them together with their root.
+	type watcherEntry struct {
+		w    *fswatcher.FSWatcher
+		root string
+	}
+	entries := make([]watcherEntry, 0, len(roots))
+	for _, root := range roots {
+		w, err := fswatcher.New(wcfg, root)
+		if err != nil {
+			// Stop any already-started watchers before returning.
+			for _, e := range entries {
+				_ = e.w.Stop()
+			}
+			return nil, fmt.Errorf("video handler: create watcher for %q: %w", root, err)
+		}
+		if err := w.Start(ctx); err != nil {
+			for _, e := range entries {
+				_ = e.w.Stop()
+			}
+			_ = w.Stop()
+			return nil, fmt.Errorf("video handler: start watcher for %q: %w", root, err)
+		}
+		entries = append(entries, watcherEntry{w: w, root: root})
 	}
 
-	if err := w.Start(ctx); err != nil {
-		return nil, fmt.Errorf("video handler: start watcher: %w", err)
-	}
+	// Fan-in: one goroutine per watcher pipes into the shared output channel.
+	// The output channel is closed once all per-watcher goroutines have exited.
+	out := make(chan handler.ChangeEvent, 64*len(entries))
 
-	out := make(chan handler.ChangeEvent, 64)
-
-	go func() {
-		defer close(out)
-		for {
-			select {
-			case <-ctx.Done():
-				_ = w.Stop()
-				return
-
-			case ev, ok := <-w.Events():
-				if !ok {
-					return
-				}
-				enriched := h.enrichEvent(ctx, ev, root, cfg)
+	var wg sync.WaitGroup
+	for _, entry := range entries {
+		wg.Add(1)
+		go func(w *fswatcher.FSWatcher, root string) {
+			defer wg.Done()
+			defer func() { _ = w.Stop() }()
+			for {
 				select {
-				case out <- enriched:
 				case <-ctx.Done():
-					_ = w.Stop()
 					return
+
+				case ev, ok := <-w.Events():
+					if !ok {
+						return
+					}
+					enriched := h.enrichEvent(ctx, ev, root, cfg)
+					select {
+					case out <- enriched:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
-		}
+		}(entry.w, entry.root)
+	}
+
+	// Close the output channel once every per-watcher goroutine has finished.
+	go func() {
+		wg.Wait()
+		close(out)
 	}()
 
 	return out, nil

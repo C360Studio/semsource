@@ -69,6 +69,7 @@ func (s *memStore) Delete(_ context.Context, key string) error {
 type sourceConfig struct {
 	typ              string
 	path             string
+	paths            []string
 	url              string
 	watch            bool
 	keyframeMode     string
@@ -76,14 +77,14 @@ type sourceConfig struct {
 	sceneThreshold   float64
 }
 
-func (s sourceConfig) GetType() string            { return s.typ }
-func (s sourceConfig) GetPath() string            { return s.path }
-func (s sourceConfig) GetPaths() []string         { return nil }
-func (s sourceConfig) GetURL() string             { return s.url }
-func (s sourceConfig) IsWatchEnabled() bool       { return s.watch }
-func (s sourceConfig) GetKeyframeMode() string    { return s.keyframeMode }
+func (s sourceConfig) GetType() string             { return s.typ }
+func (s sourceConfig) GetPath() string             { return s.path }
+func (s sourceConfig) GetPaths() []string          { return s.paths }
+func (s sourceConfig) GetURL() string              { return s.url }
+func (s sourceConfig) IsWatchEnabled() bool        { return s.watch }
+func (s sourceConfig) GetKeyframeMode() string     { return s.keyframeMode }
 func (s sourceConfig) GetKeyframeInterval() string { return s.keyframeInterval }
-func (s sourceConfig) GetSceneThreshold() float64 { return s.sceneThreshold }
+func (s sourceConfig) GetSceneThreshold() float64  { return s.sceneThreshold }
 
 // ffmpegAvailable returns true when both ffprobe and ffmpeg are in PATH.
 func ffmpegAvailable() bool {
@@ -585,6 +586,115 @@ func TestVideoHandler_Ingest_SceneMode(t *testing.T) {
 	}
 
 	t.Logf("scene mode: got %d total entities (1 video + %d keyframes)", len(entities), len(entities)-1)
+}
+
+// ---------------------------------------------------------------------------
+// resolvePaths — table-driven (no ffmpeg required)
+// ---------------------------------------------------------------------------
+
+func TestVideoHandler_ResolvePaths(t *testing.T) {
+	tests := []struct {
+		name  string
+		path  string
+		paths []string
+		want  []string
+	}{
+		{
+			name:  "GetPaths non-empty takes priority",
+			path:  "/single",
+			paths: []string{"/a", "/b"},
+			want:  []string{"/a", "/b"},
+		},
+		{
+			name:  "falls back to GetPath when GetPaths is nil",
+			path:  "/single",
+			paths: nil,
+			want:  []string{"/single"},
+		},
+		{
+			name:  "falls back to GetPath when GetPaths is empty slice",
+			path:  "/only",
+			paths: []string{},
+			want:  []string{"/only"},
+		},
+		{
+			name:  "returns nil when both are empty",
+			path:  "",
+			paths: nil,
+			want:  nil,
+		},
+		{
+			name:  "three-path config",
+			path:  "",
+			paths: []string{"/p1", "/p2", "/p3"},
+			want:  []string{"/p1", "/p2", "/p3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := sourceConfig{typ: "video", path: tt.path, paths: tt.paths}
+			got := videohandler.ResolvePaths(cfg)
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("ResolvePaths() = %v, want %v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Errorf("ResolvePaths()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Ingest multi-path — structural test (no ffmpeg required)
+// ---------------------------------------------------------------------------
+
+// TestVideoHandler_Ingest_MultiplePaths verifies that Ingest walks every path
+// returned by resolvePaths. Since ffmpeg may not be present, we use empty
+// directories (no video files) and non-video files to confirm:
+//   - Both directories are visited without error.
+//   - Non-video files are silently skipped.
+//   - Zero entities are returned (correct — no video files were found).
+func TestVideoHandler_Ingest_MultiplePaths(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	// Place a non-video file in each directory — they must be silently skipped.
+	if err := os.WriteFile(filepath.Join(dir1, "readme.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir2, "config.json"), []byte("{}"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	h := videohandler.New()
+	cfg := sourceConfig{
+		typ:   "video",
+		paths: []string{dir1, dir2},
+	}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() unexpected error: %v", err)
+	}
+	if len(entities) != 0 {
+		t.Errorf("Ingest() = %d entities, want 0 (no video files present)", len(entities))
+	}
+}
+
+// TestVideoHandler_Ingest_NoPathsError verifies that Ingest returns an error
+// when neither GetPath nor GetPaths is configured.
+func TestVideoHandler_Ingest_NoPathsError(t *testing.T) {
+	h := videohandler.New()
+	cfg := sourceConfig{typ: "video"} // path and paths both zero values
+
+	_, err := h.Ingest(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("Ingest() expected an error when no paths are configured, got nil")
+	}
 }
 
 func TestVideoHandler_Ingest_MetadataOnlyWithoutStore(t *testing.T) {

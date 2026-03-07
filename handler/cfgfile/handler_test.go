@@ -26,6 +26,23 @@ func (s *stubSourceConfig) GetKeyframeMode() string    { return "" }
 func (s *stubSourceConfig) GetKeyframeInterval() string { return "" }
 func (s *stubSourceConfig) GetSceneThreshold() float64 { return 0 }
 
+// stubMultiPathSourceConfig is like stubSourceConfig but returns multiple paths
+// from GetPaths() and returns "" from GetPath(), exercising the multi-path code path.
+type stubMultiPathSourceConfig struct {
+	sourceType string
+	paths      []string
+	watch      bool
+}
+
+func (s *stubMultiPathSourceConfig) GetType() string             { return s.sourceType }
+func (s *stubMultiPathSourceConfig) GetPath() string             { return "" }
+func (s *stubMultiPathSourceConfig) GetPaths() []string          { return s.paths }
+func (s *stubMultiPathSourceConfig) GetURL() string              { return "" }
+func (s *stubMultiPathSourceConfig) IsWatchEnabled() bool        { return s.watch }
+func (s *stubMultiPathSourceConfig) GetKeyframeMode() string     { return "" }
+func (s *stubMultiPathSourceConfig) GetKeyframeInterval() string { return "" }
+func (s *stubMultiPathSourceConfig) GetSceneThreshold() float64  { return 0 }
+
 var _ handler.SourceHandler = (*cfgfile.ConfigHandler)(nil)
 
 func TestConfigHandler_SourceType(t *testing.T) {
@@ -291,5 +308,49 @@ func TestConfigHandler_Watch_NilWhenDisabled(t *testing.T) {
 	}
 	if ch != nil {
 		t.Error("Watch should return nil channel when watch disabled")
+	}
+}
+
+func TestConfigHandler_Ingest_MultiplePaths(t *testing.T) {
+	// First root: contains a go.mod.
+	dir1 := t.TempDir()
+	gomod := "module github.com/example/alpha\n\ngo 1.21\n\nrequire github.com/pkg/errors v0.9.0\n"
+	if err := os.WriteFile(filepath.Join(dir1, "go.mod"), []byte(gomod), 0644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	// Second root: contains a package.json.
+	dir2 := t.TempDir()
+	pkgJSON := `{"name":"beta","version":"2.0.0","dependencies":{"lodash":"^4.0.0"}}`
+	if err := os.WriteFile(filepath.Join(dir2, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+
+	h := cfgfile.New(nil)
+	cfg := &stubMultiPathSourceConfig{
+		sourceType: "config",
+		paths:      []string{dir1, dir2},
+	}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+
+	// Expect at least a module entity (from dir1) and a package entity (from dir2).
+	var hasModule, hasPackage bool
+	for _, e := range entities {
+		switch e.EntityType {
+		case "module":
+			hasModule = true
+		case "package":
+			hasPackage = true
+		}
+	}
+	if !hasModule {
+		t.Error("expected a 'module' entity from dir1 (go.mod), none found")
+	}
+	if !hasPackage {
+		t.Error("expected a 'package' entity from dir2 (package.json), none found")
 	}
 }

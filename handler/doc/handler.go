@@ -47,42 +47,63 @@ func (h *DocHandler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
-// Ingest walks the path(s) in cfg, reads each supported document file, and
-// returns a RawEntity per file. It respects ctx cancellation.
+// resolvePaths returns the set of root paths to process for cfg.
+// If GetPaths() is non-empty those are used; otherwise GetPath() is the
+// single-element fallback so that existing single-path configs keep working.
+// Returns an error when both sources are empty.
+func resolvePaths(cfg handler.SourceConfig) ([]string, error) {
+	if paths := cfg.GetPaths(); len(paths) > 0 {
+		return paths, nil
+	}
+	p := cfg.GetPath()
+	if p == "" {
+		return nil, fmt.Errorf("doc handler: no paths configured (GetPaths is empty and GetPath is empty)")
+	}
+	return []string{p}, nil
+}
+
+// Ingest walks all configured path(s) in cfg, reads each supported document
+// file, and returns a RawEntity per file. It respects ctx cancellation.
 func (h *DocHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
-	root := cfg.GetPath()
-	if root == "" {
-		return nil, fmt.Errorf("doc handler: GetPath() returned empty string")
+	roots, err := resolvePaths(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	var entities []handler.RawEntity
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+	for _, root := range roots {
 		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
+			return nil, err
 		}
 
-		ext := strings.ToLower(filepath.Ext(path))
-		if !docExtensions[ext] {
-			return nil
-		}
+		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
 
-		entity, err := ingestFile(path, root)
-		if err != nil {
-			// Non-fatal: log and continue.
+			ext := strings.ToLower(filepath.Ext(path))
+			if !docExtensions[ext] {
+				return nil
+			}
+
+			entity, err := ingestFile(path, root)
+			if err != nil {
+				// Non-fatal: log and continue.
+				return nil
+			}
+			entities = append(entities, entity)
 			return nil
+		})
+		if walkErr != nil {
+			return nil, fmt.Errorf("doc handler: walk %q: %w", root, walkErr)
 		}
-		entities = append(entities, entity)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("doc handler: walk %q: %w", root, err)
 	}
 
 	return entities, nil

@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/handler/internal/fswatcher"
 )
 
-// Watch starts an FSWatcher on the path in cfg and returns a channel of
-// ChangeEvent values. Each event includes re-read entities for the changed file.
+// Watch starts one FSWatcher per configured path in cfg and returns a single
+// channel of ChangeEvent values. Each event includes re-read entities for the
+// changed file. All per-root watcher channels are fanned into the returned
+// channel so callers see a unified stream.
 //
 // Returns (nil, nil) when cfg.IsWatchEnabled() is false — callers must check.
 func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
@@ -19,9 +22,9 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 		return nil, nil
 	}
 
-	root := cfg.GetPath()
-	if root == "" {
-		return nil, fmt.Errorf("doc handler: Watch requires a non-empty path")
+	roots, err := resolvePaths(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("doc handler: Watch: %w", err)
 	}
 
 	wcfg := fswatcher.WatchConfig{
@@ -31,38 +34,70 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 		ExcludeDirs:    []string{".git", "node_modules", "vendor"},
 	}
 
-	w, err := fswatcher.New(wcfg, root)
-	if err != nil {
-		return nil, fmt.Errorf("doc handler: create watcher: %w", err)
+	// Start one watcher per root, collecting them so we can stop them all on
+	// shutdown and fan their events into a single output channel.
+	watchers := make([]*fswatcher.FSWatcher, 0, len(roots))
+	for _, root := range roots {
+		w, err := fswatcher.New(wcfg, root)
+		if err != nil {
+			// Stop any watchers already started before returning.
+			for _, started := range watchers {
+				_ = started.Stop()
+			}
+			return nil, fmt.Errorf("doc handler: create watcher for %q: %w", root, err)
+		}
+		if err := w.Start(ctx); err != nil {
+			_ = w.Stop()
+			for _, started := range watchers {
+				_ = started.Stop()
+			}
+			return nil, fmt.Errorf("doc handler: start watcher for %q: %w", root, err)
+		}
+		watchers = append(watchers, w)
 	}
 
-	if err := w.Start(ctx); err != nil {
-		return nil, fmt.Errorf("doc handler: start watcher: %w", err)
+	out := make(chan handler.ChangeEvent, 64*len(watchers))
+
+	// Launch one fan-in goroutine per watcher. Each goroutine knows its root
+	// so enrichEvent can compute the correct relative path.
+	stopAll := func() {
+		for _, w := range watchers {
+			_ = w.Stop()
+		}
 	}
 
-	out := make(chan handler.ChangeEvent, 64)
-
-	go func() {
-		defer close(out)
-		for {
-			select {
-			case <-ctx.Done():
-				_ = w.Stop()
-				return
-
-			case ev, ok := <-w.Events():
-				if !ok {
-					return
-				}
-				enriched := enrichEvent(ev, root)
+	var wg sync.WaitGroup
+	for i, w := range watchers {
+		wg.Add(1)
+		root := roots[i]
+		go func(w *fswatcher.FSWatcher, root string) {
+			defer wg.Done()
+			for {
 				select {
-				case out <- enriched:
 				case <-ctx.Done():
-					_ = w.Stop()
 					return
+				case ev, ok := <-w.Events():
+					if !ok {
+						return
+					}
+					enriched := enrichEvent(ev, root)
+					select {
+					case out <- enriched:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
-		}
+		}(w, root)
+	}
+
+	// Closer goroutine: waits for all fan-in goroutines then closes out and
+	// stops any watchers still running.
+	go func() {
+		defer close(out)
+		<-ctx.Done()
+		stopAll()
+		wg.Wait()
 	}()
 
 	return out, nil

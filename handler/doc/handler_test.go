@@ -332,6 +332,54 @@ func TestDocHandler_Ingest_EmptyDir(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Ingest — multiple paths
+// ---------------------------------------------------------------------------
+
+func TestDocHandler_Ingest_MultiplePaths(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	writeMD(t, dirA, "alpha.md", "# Alpha\nContent in dirA.")
+	writeMD(t, dirA, "beta.txt", "Plain text in dirA.")
+	writeMD(t, dirB, "gamma.md", "# Gamma\nContent in dirB.")
+
+	h := dochandler.New()
+	// GetPath returns paths[0] when paths is non-empty; GetPaths returns both dirs.
+	cfg := sourceConfig{
+		typ:   "docs",
+		path:  dirA,
+		paths: []string{dirA, dirB},
+	}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+
+	// Three files total: two in dirA, one in dirB.
+	if len(entities) != 3 {
+		t.Fatalf("entity count: got %d, want 3", len(entities))
+	}
+
+	// Collect relative file_path values across all entities to confirm both
+	// directories contributed files.
+	seenPaths := make(map[string]bool)
+	for _, e := range entities {
+		for _, tr := range e.Triples {
+			if strings.Contains(tr.Predicate, "file_path") {
+				seenPaths[tr.Object.(string)] = true
+			}
+		}
+	}
+
+	for _, want := range []string{"alpha.md", "beta.txt", "gamma.md"} {
+		if !seenPaths[want] {
+			t.Errorf("expected file_path %q in triples, not found; seen: %v", want, seenPaths)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Watch — disabled returns nil (no fsnotify needed)
 // ---------------------------------------------------------------------------
 

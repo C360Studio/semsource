@@ -79,48 +79,66 @@ func (h *VideoHandler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
-// Ingest walks the path in cfg, reads each supported video file, extracts
+// Ingest walks all paths in cfg, reads each supported video file, extracts
 // metadata and keyframes, and returns a RawEntity per video plus one per
 // keyframe. It respects ctx cancellation.
+//
+// Path resolution: GetPaths() is used when non-empty; otherwise GetPath() is
+// used as a single-element list. An error is returned when both are empty.
 func (h *VideoHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
-	root := cfg.GetPath()
-	if root == "" {
-		return nil, fmt.Errorf("video handler: GetPath() returned empty string")
+	roots := resolvePaths(cfg)
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("video handler: no paths configured (set path or paths in source config)")
 	}
 
 	var entities []handler.RawEntity
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
+	for _, root := range roots {
+		err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
 
-		ext := strings.ToLower(filepath.Ext(path))
-		if !defaultExtensions[ext] {
-			return nil
-		}
+			ext := strings.ToLower(filepath.Ext(path))
+			if !defaultExtensions[ext] {
+				return nil
+			}
 
-		videoEntity, keyframeEntities, err := h.ingestFile(ctx, path, root, cfg)
+			videoEntity, keyframeEntities, err := h.ingestFile(ctx, path, root, cfg)
+			if err != nil {
+				// Non-fatal: skip unreadable or unsupported files and continue.
+				h.logger.Warn("video handler: skipping file", "path", path, "error", err)
+				return nil
+			}
+			entities = append(entities, videoEntity)
+			entities = append(entities, keyframeEntities...)
+			return nil
+		})
 		if err != nil {
-			// Non-fatal: skip unreadable or unsupported files and continue.
-			h.logger.Warn("video handler: skipping file", "path", path, "error", err)
-			return nil
+			return nil, fmt.Errorf("video handler: walk %q: %w", root, err)
 		}
-		entities = append(entities, videoEntity)
-		entities = append(entities, keyframeEntities...)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("video handler: walk %q: %w", root, err)
 	}
 
 	return entities, nil
+}
+
+// resolvePaths returns the list of root directories to process for cfg.
+// It prefers GetPaths() when non-empty, falling back to a single-element
+// slice containing GetPath(). Returns nil when both are empty.
+func resolvePaths(cfg handler.SourceConfig) []string {
+	if paths := cfg.GetPaths(); len(paths) > 0 {
+		return paths
+	}
+	if p := cfg.GetPath(); p != "" {
+		return []string{p}
+	}
+	return nil
 }
 
 // ingestFile reads a single video file, probes its metadata, extracts

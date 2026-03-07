@@ -81,42 +81,58 @@ func (h *ImageHandler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
-// Ingest walks the path in cfg, reads each supported image file, and
+// resolvePaths returns the effective set of root paths to process for cfg.
+// When GetPaths() is non-empty it is used directly; otherwise the single
+// GetPath() value is returned as a one-element slice. An error is returned
+// when both are empty so callers receive a clear diagnostic.
+func resolvePaths(cfg handler.SourceConfig) ([]string, error) {
+	if paths := cfg.GetPaths(); len(paths) > 0 {
+		return paths, nil
+	}
+	p := cfg.GetPath()
+	if p == "" {
+		return nil, fmt.Errorf("image handler: no paths configured (GetPaths is empty and GetPath is empty)")
+	}
+	return []string{p}, nil
+}
+
+// Ingest walks every path in cfg, reads each supported image file, and
 // returns a RawEntity per file. It respects ctx cancellation.
 func (h *ImageHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
-	root := cfg.GetPath()
-	if root == "" {
-		return nil, fmt.Errorf("image handler: GetPath() returned empty string")
+	roots, err := resolvePaths(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	var entities []handler.RawEntity
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
+	for _, root := range roots {
+		if err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
 
-		ext := strings.ToLower(filepath.Ext(path))
-		if !defaultExtensions[ext] {
-			return nil
-		}
+			ext := strings.ToLower(filepath.Ext(path))
+			if !defaultExtensions[ext] {
+				return nil
+			}
 
-		entity, err := h.ingestFile(ctx, path, root)
-		if err != nil {
-			// Non-fatal: skip unreadable or malformed files and continue.
+			entity, err := h.ingestFile(ctx, path, root)
+			if err != nil {
+				// Non-fatal: skip unreadable or malformed files and continue.
+				return nil
+			}
+			entities = append(entities, entity)
 			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("image handler: walk %q: %w", root, err)
 		}
-		entities = append(entities, entity)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("image handler: walk %q: %w", root, err)
 	}
 
 	return entities, nil

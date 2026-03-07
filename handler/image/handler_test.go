@@ -81,18 +81,30 @@ func (s *memStore) keys() []string {
 type sourceConfig struct {
 	typ   string
 	path  string
+	paths []string
 	url   string
 	watch bool
 }
 
-func (s sourceConfig) GetType() string            { return s.typ }
-func (s sourceConfig) GetPath() string            { return s.path }
-func (s sourceConfig) GetPaths() []string         { return nil }
-func (s sourceConfig) GetURL() string             { return s.url }
+func (s sourceConfig) GetType() string  { return s.typ }
+func (s sourceConfig) GetPaths() []string { return s.paths }
+func (s sourceConfig) GetURL() string   { return s.url }
 func (s sourceConfig) IsWatchEnabled() bool       { return s.watch }
 func (s sourceConfig) GetKeyframeMode() string    { return "" }
 func (s sourceConfig) GetKeyframeInterval() string { return "" }
 func (s sourceConfig) GetSceneThreshold() float64 { return 0 }
+
+// GetPath returns the primary path: the explicit path field when set, or the
+// first element of paths when only a multi-path config is provided.
+func (s sourceConfig) GetPath() string {
+	if s.path != "" {
+		return s.path
+	}
+	if len(s.paths) > 0 {
+		return s.paths[0]
+	}
+	return ""
+}
 
 // write1x1PNG generates a minimal 1×1 pixel PNG and writes it to dir/name.
 // Returns the absolute path of the written file.
@@ -749,5 +761,36 @@ func TestImageHandler_Ingest_WithoutStore_NoStorageTriples(t *testing.T) {
 		if tr.Predicate == "source.media.storage_ref" || tr.Predicate == "source.media.thumbnail_ref" {
 			t.Errorf("unexpected storage triple %q in metadata-only mode", tr.Predicate)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Multi-path Ingest
+// ---------------------------------------------------------------------------
+
+func TestImageHandler_Ingest_MultiplePaths(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	// Place distinct PNG files in each directory so entities from both are
+	// expected in the result set.
+	write1x1PNG(t, dirA, "alpha.png")
+	writeSVG(t, dirA, "alpha.svg")
+	write1x1PNG(t, dirB, "beta.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{
+		typ:   "image",
+		paths: []string{dirA, dirB},
+	}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+
+	// dirA contributes 2 files (alpha.png, alpha.svg); dirB contributes 1 (beta.png).
+	if len(entities) != 3 {
+		t.Errorf("entity count: got %d, want 3 (2 from dirA, 1 from dirB)", len(entities))
 	}
 }

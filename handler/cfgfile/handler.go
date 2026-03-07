@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/c360studio/semsource/handler"
@@ -50,61 +51,62 @@ func New(cfg *Config) *ConfigHandler {
 func (h *ConfigHandler) SourceType() string { return handler.SourceTypeConfig }
 
 // Supports implements handler.SourceHandler.
-// Returns true when cfg.GetType() == "config" and the path exists.
+// Returns true when cfg.GetType() == "config" and at least one configured
+// path exists on disk.
 func (h *ConfigHandler) Supports(cfg handler.SourceConfig) bool {
 	if cfg.GetType() != handler.SourceTypeConfig {
 		return false
 	}
-	p := cfg.GetPath()
-	if p == "" {
-		return false
+	for _, p := range resolvePaths(cfg) {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
 	}
-	if _, err := os.Stat(p); err != nil {
-		return false
-	}
-	return true
+	return false
 }
 
 // Ingest implements handler.SourceHandler.
-// It walks the path in cfg, parses recognised config files, and returns
+// It walks all configured paths, parses recognised config files, and returns
 // the resulting RawEntity slice.
 func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
-	root := cfg.GetPath()
-	if root == "" {
-		return nil, fmt.Errorf("cfgfile: path is required")
+	paths := resolvePaths(cfg)
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("cfgfile: at least one path is required")
 	}
 
 	var entities []handler.RawEntity
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		if info.IsDir() {
-			return nil
-		}
-		base := filepath.Base(path)
-		if !configFileNames[base] {
-			return nil
-		}
+	for _, root := range paths {
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			if info.IsDir() {
+				return nil
+			}
+			base := filepath.Base(path)
+			if !configFileNames[base] {
+				return nil
+			}
 
-		content, readErr := os.ReadFile(path)
-		if readErr != nil {
-			h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
-			return nil
-		}
+			content, readErr := os.ReadFile(path)
+			if readErr != nil {
+				h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
+				return nil
+			}
 
-		parsed := h.parseFile(base, path, content, root)
-		entities = append(entities, parsed...)
-		return nil
-	})
-	if err != nil && err != context.Canceled {
-		return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
+			parsed := h.parseFile(base, path, content, root)
+			entities = append(entities, parsed...)
+			return nil
+		})
+		if err != nil && err != context.Canceled {
+			return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
+		}
 	}
 
 	return entities, nil
@@ -112,35 +114,67 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 
 // Watch implements handler.SourceHandler.
 // Returns nil, nil when watching is disabled.
+// One FSWatcher is created per configured path; all event streams are merged
+// into a single output channel that is closed when ctx is cancelled or all
+// per-root watchers have stopped.
 func (h *ConfigHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
 	if !cfg.IsWatchEnabled() {
 		return nil, nil
 	}
 
+	paths := resolvePaths(cfg)
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("cfgfile: at least one path is required for watching")
+	}
+
 	watchCfg := h.cfg.Watch
 	watchCfg.Enabled = true
-	// Watch recognised config file extensions; also watch extensionless (Dockerfile)
+	// Watch recognised config file extensions; Dockerfile is extensionless but
+	// the fanOut filter catches it by base name regardless.
 	watchCfg.FileExtensions = []string{".mod", ".json"}
 
-	fsw, err := fswatcher.New(watchCfg, cfg.GetPath())
-	if err != nil {
-		return nil, fmt.Errorf("cfgfile: create watcher: %w", err)
-	}
-	if err := fsw.Start(ctx); err != nil {
-		return nil, fmt.Errorf("cfgfile: start watcher: %w", err)
+	out := make(chan handler.ChangeEvent, 64*len(paths))
+
+	var watchers []*fswatcher.FSWatcher
+	for _, root := range paths {
+		fsw, err := fswatcher.New(watchCfg, root)
+		if err != nil {
+			// Stop any watchers already started before returning the error.
+			for _, w := range watchers {
+				_ = w.Stop()
+			}
+			return nil, fmt.Errorf("cfgfile: create watcher for %s: %w", root, err)
+		}
+		if err := fsw.Start(ctx); err != nil {
+			for _, w := range watchers {
+				_ = w.Stop()
+			}
+			return nil, fmt.Errorf("cfgfile: start watcher for %s: %w", root, err)
+		}
+		watchers = append(watchers, fsw)
 	}
 
-	out := make(chan handler.ChangeEvent, 64)
-	go h.fanOut(ctx, cfg.GetPath(), fsw.Events(), out)
+	// Fan all per-root event streams into out; close out when every stream ends.
+	go func() {
+		defer close(out)
+		var wg sync.WaitGroup
+		for i, fsw := range watchers {
+			wg.Add(1)
+			go func(root string, events <-chan handler.ChangeEvent) {
+				defer wg.Done()
+				h.fanOut(ctx, root, events, out)
+			}(paths[i], fsw.Events())
+		}
+		wg.Wait()
+	}()
+
 	return out, nil
 }
 
-// fanOut reads raw FSWatcher events, enriches them with parsed entities,
-// and forwards them to the output channel. It also detects Dockerfile changes
-// which the FSWatcher may miss (extensionless).
+// fanOut reads raw FSWatcher events for a single root, enriches them with
+// parsed entities, and forwards them to out. The caller is responsible for
+// closing out after all fanOut goroutines have returned.
 func (h *ConfigHandler) fanOut(ctx context.Context, root string, in <-chan handler.ChangeEvent, out chan<- handler.ChangeEvent) {
-	defer close(out)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -337,6 +371,20 @@ func (h *ConfigHandler) dockerfileEntities(content []byte, path, system string) 
 	}
 
 	return entities
+}
+
+// resolvePaths returns the list of filesystem paths to operate on for cfg.
+// If cfg.GetPaths() is non-empty it is returned directly; otherwise the single
+// path from cfg.GetPath() is wrapped in a slice so callers only deal with one
+// code path. Returns nil when both sources are empty.
+func resolvePaths(cfg handler.SourceConfig) []string {
+	if paths := cfg.GetPaths(); len(paths) > 0 {
+		return paths
+	}
+	if p := cfg.GetPath(); p != "" {
+		return []string{p}
+	}
+	return nil
 }
 
 // systemSlug returns a NATS-safe system slug derived from the root directory path.
