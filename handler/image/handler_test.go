@@ -3,17 +3,75 @@ package image_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/c360studio/semsource/handler"
 	imagehandler "github.com/c360studio/semsource/handler/image"
 )
+
+// memStore is an in-memory implementation of storage.Store for testing.
+type memStore struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func newMemStore() *memStore {
+	return &memStore{data: make(map[string][]byte)}
+}
+
+func (s *memStore) Put(_ context.Context, key string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[key] = append([]byte(nil), data...)
+	return nil
+}
+
+func (s *memStore) Get(_ context.Context, key string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.data[key]
+	if !ok {
+		return nil, fmt.Errorf("key not found: %s", key)
+	}
+	return d, nil
+}
+
+func (s *memStore) List(_ context.Context, prefix string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var keys []string
+	for k := range s.data {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
+}
+
+func (s *memStore) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, key)
+	return nil
+}
+
+func (s *memStore) keys() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for k := range s.data {
+		out = append(out, k)
+	}
+	return out
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -491,5 +549,201 @@ func TestImageHandler_Watch_WatchDisabledReturnsNil(t *testing.T) {
 	}
 	if ch != nil {
 		t.Error("Watch() should return nil channel when watch is disabled")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ObjectStore binary storage
+// ---------------------------------------------------------------------------
+
+func TestImageHandler_Ingest_WithStore_StoresOriginal(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	store := newMemStore()
+	h := imagehandler.New(imagehandler.WithStore(store))
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+	if len(entities) == 0 {
+		t.Fatal("no entities")
+	}
+
+	// Should have stored the original binary.
+	keys := store.keys()
+	var originalKey string
+	for _, k := range keys {
+		if strings.Contains(k, "/original") {
+			originalKey = k
+		}
+	}
+	if originalKey == "" {
+		t.Fatalf("no original key found in store; keys: %v", keys)
+	}
+
+	// Verify the stored data matches the file.
+	fileData, _ := os.ReadFile(filepath.Join(dir, "photo.png"))
+	storedData, _ := store.Get(context.Background(), originalKey)
+	if !bytes.Equal(fileData, storedData) {
+		t.Error("stored data does not match file content")
+	}
+}
+
+func TestImageHandler_Ingest_WithStore_StorageRefTriple(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	store := newMemStore()
+	h := imagehandler.New(imagehandler.WithStore(store))
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+	if len(entities) == 0 {
+		t.Fatal("no entities")
+	}
+
+	found := false
+	for _, tr := range entities[0].Triples {
+		if tr.Predicate == "source.media.storage_ref" {
+			found = true
+			key, ok := tr.Object.(string)
+			if !ok || !strings.Contains(key, "/original") {
+				t.Errorf("storage_ref triple Object = %v, expected string containing '/original'", tr.Object)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected triple with predicate source.media.storage_ref")
+	}
+}
+
+func TestImageHandler_Ingest_WithStore_NoThumbnailForSmallImage(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "tiny.png") // 1x1 — well under 512px threshold
+
+	store := newMemStore()
+	h := imagehandler.New(imagehandler.WithStore(store))
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+	if len(entities) == 0 {
+		t.Fatal("no entities")
+	}
+
+	// No thumbnail should be generated for a 1x1 image.
+	for _, k := range store.keys() {
+		if strings.Contains(k, "/thumbnail") {
+			t.Error("unexpected thumbnail stored for 1x1 image")
+		}
+	}
+
+	// No thumbnail_ref triple should exist.
+	for _, tr := range entities[0].Triples {
+		if tr.Predicate == "source.media.thumbnail_ref" {
+			t.Error("unexpected thumbnail_ref triple for 1x1 image")
+		}
+	}
+}
+
+// writeLargePNG generates a 1024×768 solid-color PNG — large enough to trigger thumbnail generation.
+func writeLargePNG(t *testing.T, dir, name string) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1024, 768))
+	for y := range 768 {
+		for x := range 1024 {
+			img.Set(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("png.Encode: %v", err)
+	}
+
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func TestImageHandler_Ingest_WithStore_ThumbnailForLargeImage(t *testing.T) {
+	dir := t.TempDir()
+	writeLargePNG(t, dir, "large.png")
+
+	store := newMemStore()
+	h := imagehandler.New(imagehandler.WithStore(store))
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+	if len(entities) == 0 {
+		t.Fatal("no entities")
+	}
+
+	// Should have both original and thumbnail stored.
+	var hasOriginal, hasThumbnail bool
+	for _, k := range store.keys() {
+		if strings.Contains(k, "/original") {
+			hasOriginal = true
+		}
+		if strings.Contains(k, "/thumbnail") {
+			hasThumbnail = true
+		}
+	}
+	if !hasOriginal {
+		t.Error("expected original in store")
+	}
+	if !hasThumbnail {
+		t.Error("expected thumbnail in store for 1024x768 image")
+	}
+
+	// Should have thumbnail_ref triple.
+	found := false
+	for _, tr := range entities[0].Triples {
+		if tr.Predicate == "source.media.thumbnail_ref" {
+			found = true
+			key, ok := tr.Object.(string)
+			if !ok || !strings.Contains(key, "/thumbnail") {
+				t.Errorf("thumbnail_ref = %v, expected string containing '/thumbnail'", tr.Object)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected triple with predicate source.media.thumbnail_ref")
+	}
+}
+
+func TestImageHandler_Ingest_WithoutStore_NoStorageTriples(t *testing.T) {
+	dir := t.TempDir()
+	writeLargePNG(t, dir, "large.png")
+
+	// No store — metadata-only mode.
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+	if len(entities) == 0 {
+		t.Fatal("no entities")
+	}
+
+	for _, tr := range entities[0].Triples {
+		if tr.Predicate == "source.media.storage_ref" || tr.Predicate == "source.media.thumbnail_ref" {
+			t.Errorf("unexpected storage triple %q in metadata-only mode", tr.Predicate)
+		}
 	}
 }
