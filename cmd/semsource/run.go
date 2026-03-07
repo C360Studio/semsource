@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semsource/handler/cfgfile"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	githandler "github.com/c360studio/semsource/handler/git"
+	audiohandler "github.com/c360studio/semsource/handler/audio"
 	imghandler "github.com/c360studio/semsource/handler/image"
 	urlhandler "github.com/c360studio/semsource/handler/url"
 	videohandler "github.com/c360studio/semsource/handler/video"
@@ -84,9 +85,11 @@ func runCmd(args []string) error {
 
 		eng.RegisterHandler(imghandler.New(imghandler.WithStore(objStore), imghandler.WithLogger(logger)))
 		eng.RegisterHandler(videohandler.New(videohandler.WithStore(objStore), videohandler.WithLogger(logger)))
+		eng.RegisterHandler(audiohandler.New(audiohandler.WithStore(objStore), audiohandler.WithLogger(logger)))
 	} else {
 		eng.RegisterHandler(imghandler.New())
 		eng.RegisterHandler(videohandler.New())
+		eng.RegisterHandler(audiohandler.New())
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

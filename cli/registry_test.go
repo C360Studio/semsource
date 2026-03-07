@@ -19,6 +19,7 @@ func TestRegistryContainsExpectedWizards(t *testing.T) {
 		"url":    false,
 		"image":  false,
 		"video":  false,
+		"audio":  false,
 	}
 	for _, w := range wizards {
 		wantTypes[w.TypeKey()] = true
@@ -31,28 +32,21 @@ func TestRegistryContainsExpectedWizards(t *testing.T) {
 }
 
 func TestAvailableFiltering(t *testing.T) {
-	var available, unavailable []SourceWizard
+	var available int
 	for _, w := range Wizards() {
-		ok, _ := w.Available()
+		ok, reason := w.Available()
 		if ok {
-			available = append(available, w)
+			available++
 		} else {
-			unavailable = append(unavailable, w)
+			// Unavailable wizards must provide a reason.
+			if reason == "" {
+				t.Errorf("wizard %q: Available() returned false with empty reason", w.TypeKey())
+			}
 		}
 	}
 
-	if len(available) == 0 {
+	if available == 0 {
 		t.Fatal("expected at least one available wizard")
-	}
-	// Video should be unavailable.
-	foundVideo := false
-	for _, w := range unavailable {
-		if w.TypeKey() == "video" {
-			foundVideo = true
-		}
-	}
-	if !foundVideo {
-		t.Error("expected video wizard to be unavailable")
 	}
 }
 

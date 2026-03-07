@@ -245,6 +245,8 @@ func shouldPreselect(typeKey string, info *ProjectInfo) bool {
 		return info.HasImages
 	case "video":
 		return false // Videos are never auto-detected
+	case "audio":
+		return false
 	default:
 		return false
 	}

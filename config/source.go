@@ -11,6 +11,7 @@ var validSourceTypes = map[string]bool{
 	"url":    true,
 	"image":  true,
 	"video":  true,
+	"audio":  true,
 }
 
 // SourceEntry represents a single source to be ingested.
@@ -77,7 +78,7 @@ type SourceEntry struct {
 // Validate checks that the SourceEntry has the required fields for its type.
 func (s SourceEntry) Validate() error {
 	if !validSourceTypes[s.Type] {
-		return fmt.Errorf("source: unknown type %q (valid: git, ast, docs, config, url, image, video)", s.Type)
+		return fmt.Errorf("source: unknown type %q (valid: git, ast, docs, config, url, image, video, audio)", s.Type)
 	}
 
 	switch s.Type {
@@ -112,6 +113,10 @@ func (s SourceEntry) Validate() error {
 		}
 		if s.KeyframeMode != "" && s.KeyframeMode != "interval" && s.KeyframeMode != "scene" && s.KeyframeMode != "iframes" {
 			return fmt.Errorf("source type %q: keyframe_mode must be interval, scene, or iframes", s.Type)
+		}
+	case "audio":
+		if len(s.Paths) == 0 {
+			return fmt.Errorf("source type %q: at least one path is required", s.Type)
 		}
 	}
 

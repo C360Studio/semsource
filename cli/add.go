@@ -196,8 +196,25 @@ func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, erro
 			MaxFileSize:      *maxSize,
 		}, nil
 
+	case "audio":
+		paths := fs.String("paths", "", "comma-separated list of paths to scan")
+		watch := fs.Bool("watch", true, "watch for changes")
+		maxSize := fs.String("max-file-size", "500MB", "maximum file size")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *paths == "" {
+			return nil, fmt.Errorf("audio source requires --paths")
+		}
+		return &config.SourceEntry{
+			Type:        "audio",
+			Paths:       splitComma(*paths),
+			Watch:       *watch,
+			MaxFileSize: *maxSize,
+		}, nil
+
 	default:
-		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, docs, config, url, image, video)", typeKey)
+		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, docs, config, url, image, video, audio)", typeKey)
 	}
 }
 

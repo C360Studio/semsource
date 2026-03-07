@@ -441,12 +441,13 @@ func (h *VideoHandler) extractKeyframes(ctx context.Context, path, mode, interva
 
 	args := []string{"-i", path, "-vf", vf}
 
-	// vsync vfn avoids duplicate frames for scene/iframe modes.
+	// Use variable frame rate to avoid duplicate frames for scene/iframe modes.
 	if mode == "scene" || mode == "iframes" {
-		args = append(args, "-vsync", "vfn")
+		args = append(args, "-fps_mode", "vfr")
 	}
 
-	args = append(args, "-q:v", "2", outPattern)
+	// Force full-range pixel format for MJPEG compatibility.
+	args = append(args, "-pix_fmt", "yuvj420p", "-q:v", "2", outPattern)
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {

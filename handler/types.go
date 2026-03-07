@@ -15,6 +15,7 @@ const (
 	SourceTypeURL    = "url"
 	SourceTypeImage  = "image"
 	SourceTypeVideo  = "video"
+	SourceTypeAudio  = "audio"
 )
 
 // Domain constants for entity domain classification.

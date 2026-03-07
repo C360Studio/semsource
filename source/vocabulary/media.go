@@ -81,6 +81,18 @@ const (
 	MediaFrameIndex = "source.media.frame_index"
 )
 
+// Audio-specific predicates.
+const (
+	// MediaSampleRate is the audio sample rate in Hz.
+	MediaSampleRate = "source.media.sample_rate"
+
+	// MediaChannels is the number of audio channels (1=mono, 2=stereo, etc.).
+	MediaChannels = "source.media.channels"
+
+	// MediaBitDepth is the audio bit depth (bits per sample).
+	MediaBitDepth = "source.media.bit_depth"
+)
+
 // registerMediaPredicates registers all media predicates with the vocabulary.
 // Called from the init() in predicates.go so that all source predicates are
 // initialised in a single well-known location.
@@ -176,4 +188,21 @@ func registerMediaPredicates() {
 		vocabulary.WithDescription("Zero-based frame index within the video (Phase 2: keyframe extraction only)"),
 		vocabulary.WithDataType("int"),
 		vocabulary.WithIRI(Namespace+"mediaFrameIndex"))
+
+	// --- Audio predicates ---
+
+	vocabulary.Register(MediaSampleRate,
+		vocabulary.WithDescription("Audio sample rate in Hz (e.g. 44100, 48000)"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI(MaNamespace+"samplingRate"))
+
+	vocabulary.Register(MediaChannels,
+		vocabulary.WithDescription("Number of audio channels: 1=mono, 2=stereo, etc."),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI(MaNamespace+"hasNumberOfTracks"))
+
+	vocabulary.Register(MediaBitDepth,
+		vocabulary.WithDescription("Audio bit depth (bits per raw sample)"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI(Namespace+"audioBitDepth"))
 }

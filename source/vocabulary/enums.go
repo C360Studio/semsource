@@ -154,6 +154,9 @@ const (
 	// MediaTypeKeyframe identifies a keyframe extracted from a video.
 	// Phase 2: keyframe extraction only.
 	MediaTypeKeyframe MediaTypeValue = "keyframe"
+
+	// MediaTypeAudio identifies an audio media entity.
+	MediaTypeAudio MediaTypeValue = "audio"
 )
 
 // RelatedDomains maps domains to conceptually related domains.

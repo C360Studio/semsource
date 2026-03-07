@@ -34,6 +34,10 @@ const (
 	// ClassKeyframe represents an extracted video frame.
 	// Semsource-specific; no standard ontology equivalent.
 	ClassKeyframe = Namespace + "Keyframe"
+
+	// MaAudioTrack represents an audio media resource.
+	// Mapped to the W3C Media Ontology AudioTrack class.
+	MaAudioTrack = MaNamespace + "AudioTrack"
 )
 
 // FOAF depiction IRIs for image-entity relationships.

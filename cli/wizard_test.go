@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,68 +11,70 @@ import (
 	"github.com/c360studio/semsource/config"
 )
 
-// buildInitInput constructs terminal input for the Init wizard.
-// Since tests run from a temp dir with no detectable project files,
-// nothing is pre-selected. We must toggle sources on manually.
-//
-// Registration order (alphabetical by filename):
-//
-//	1. wizard_ast.go   → Code (AST)
-//	2. wizard_cfg.go   → Config files
-//	3. wizard_doc.go   → Documentation
-//	4. wizard_git.go   → Git history
-//	5. wizard_image.go → Images
-//	6. wizard_url.go   → URLs
-//	7. wizard_video.go → Video stream (unavailable)
-//
-// Simulates:
-//   - namespace entry
-//   - graph stream address (default)
-//   - toggle menu: toggle on sources 1-6, then "done"
-//   - AST wizard prompts: path (default "."), language index 1 (auto-detect), watch yes
-//   - Config wizard prompts: one path, watch yes
-//   - Doc wizard prompts: one path, watch yes
-//   - Git wizard prompts: url, branch (default "main"), watch yes
-//   - Image wizard prompts: one path, max file size (default "50MB"), generate thumbnails yes
-//   - URL wizard prompts: one URL, poll interval (default "5m")
-func buildInitInput() string {
-	lines := []string{
-		"testorg", // namespace (no auto-detected default in temp dir)
-		"",        // graph stream address (default localhost:7890)
-		// Source menu: toggle on each source type (none pre-selected in temp dir).
-		"1",    // toggle Code (AST)
-		"2",    // toggle Config files
-		"3",    // toggle Documentation
-		"4",    // toggle Git history
-		"5",    // toggle Images
-		"6",    // toggle URLs
-		"done", // finish source selection
-		// AST wizard
+// wantedTestSources maps source type keys to the wizard prompt answers
+// needed to complete that wizard's interactive flow.
+var wantedTestSources = map[string][]string{
+	"ast": {
 		"",  // path (default ".")
 		"1", // language: auto-detect
 		"y", // watch
-		// Config wizard
+	},
+	"config": {
 		"go.mod", // path
 		"",       // end multi-line
 		"y",      // watch
-		// Doc wizard
+	},
+	"docs": {
 		"docs/", // path
 		"",      // end multi-line
 		"y",     // watch
-		// Git wizard
+	},
+	"git": {
 		"https://github.com/example/repo", // url
 		"",                                // branch (default "main")
 		"y",                               // watch
-		// Image wizard
+	},
+	"image": {
 		"assets/", // path
 		"",        // end multi-line
 		"",        // max file size (default "50MB")
 		"y",       // generate thumbnails
-		// URL wizard
+	},
+	"url": {
 		"https://example.com", // url
 		"",                    // end multi-line
 		"",                    // poll interval (default "5m")
+	},
+}
+
+// buildInitInput constructs terminal input for the Init wizard.
+// It dynamically determines menu positions from the registered wizard list
+// so the test is stable regardless of which optional wizards are available
+// (e.g., video/audio become available when ffmpeg is installed).
+func buildInitInput() string {
+	lines := []string{
+		"testorg", // namespace
+		"",        // graph stream address (default)
 	}
+
+	// Determine which menu positions to toggle — only the source types we
+	// have prompt answers for. Menu is 1-indexed.
+	wizards := Wizards()
+	for i, w := range wizards {
+		if _, ok := wantedTestSources[w.TypeKey()]; ok {
+			lines = append(lines, fmt.Sprintf("%d", i+1))
+		}
+	}
+	lines = append(lines, "done")
+
+	// Append wizard prompts in registration order (same order the Init
+	// wizard iterates selected sources).
+	for _, w := range wizards {
+		if answers, ok := wantedTestSources[w.TypeKey()]; ok {
+			lines = append(lines, answers...)
+		}
+	}
+
 	return strings.Join(lines, "\n") + "\n"
 }
 
