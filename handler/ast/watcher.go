@@ -3,23 +3,23 @@ package ast
 import (
 	"time"
 
-	semspecast "github.com/c360studio/semspec/processor/ast"
+	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/handler"
 )
 
-// translateWatchEvent converts a semspec WatchEvent into a handler.ChangeEvent.
-func translateWatchEvent(ev semspecast.WatchEvent, lang, system string) handler.ChangeEvent {
+// translateWatchEvent converts a WatchEvent into a handler.ChangeEvent.
+func translateWatchEvent(ev semsourceast.WatchEvent, lang, system string) handler.ChangeEvent {
 	ce := handler.ChangeEvent{
 		Path:      ev.Path,
 		Timestamp: time.Now(),
 	}
 
 	switch ev.Operation {
-	case semspecast.OpCreate:
+	case semsourceast.OpCreate:
 		ce.Operation = handler.OperationCreate
-	case semspecast.OpModify:
+	case semsourceast.OpModify:
 		ce.Operation = handler.OperationModify
-	case semspecast.OpDelete:
+	case semsourceast.OpDelete:
 		ce.Operation = handler.OperationDelete
 		// Delete events carry no entities — the engine uses the Path to issue RETRACT.
 		return ce

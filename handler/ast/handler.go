@@ -1,10 +1,10 @@
 // Package ast implements the SourceHandler for AST-based code entity extraction.
-// It delegates parsing to the semspec ast package and its registered language parsers.
+// It delegates parsing to the semsource ast package and its registered language parsers.
 //
 // Language parsers register themselves via init() through blank imports:
 //
-//	import _ "github.com/c360studio/semspec/processor/ast/golang"
-//	import _ "github.com/c360studio/semspec/processor/ast/ts"
+//	import _ "github.com/c360studio/semsource/source/ast/golang"
+//	import _ "github.com/c360studio/semsource/source/ast/ts"
 package ast
 
 import (
@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	semspecast "github.com/c360studio/semspec/processor/ast"
+	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Register Go and TypeScript/JavaScript language parsers.
-	_ "github.com/c360studio/semspec/processor/ast/golang"
-	_ "github.com/c360studio/semspec/processor/ast/ts"
+	_ "github.com/c360studio/semsource/source/ast/golang"
+	_ "github.com/c360studio/semsource/source/ast/ts"
 
 	"github.com/c360studio/semsource/handler"
 )
@@ -63,7 +63,7 @@ func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	lang, org, project, root := resolveConfig(cfg)
 
-	parser, err := semspecast.DefaultRegistry.CreateParser(lang, org, project, root)
+	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, org, project, root)
 	if err != nil {
 		return nil, fmt.Errorf("asthandler: create %s parser: %w", lang, err)
 	}
@@ -91,12 +91,12 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 
 	lang, org, project, root := resolveConfig(cfg)
 
-	parser, err := semspecast.DefaultRegistry.CreateParser(lang, org, project, root)
+	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, org, project, root)
 	if err != nil {
 		return nil, fmt.Errorf("asthandler: create %s parser for watch: %w", lang, err)
 	}
 
-	wcfg := semspecast.WatcherConfig{
+	wcfg := semsourceast.WatcherConfig{
 		RepoRoot:      root,
 		Org:           org,
 		Project:       project,
@@ -106,7 +106,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 		ExcludeDirs:   []string{"vendor", "node_modules", ".git"},
 	}
 
-	watcher, err := semspecast.NewWatcherWithParser(wcfg, parser)
+	watcher, err := semsourceast.NewWatcherWithParser(wcfg, parser)
 	if err != nil {
 		return nil, fmt.Errorf("asthandler: create watcher: %w", err)
 	}
@@ -144,17 +144,17 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 }
 
 // parseDirectory walks root and calls ParseFile on every file the parser handles.
-func parseDirectory(ctx context.Context, parser semspecast.FileParser, root string) ([]*semspecast.ParseResult, error) {
+func parseDirectory(ctx context.Context, parser semsourceast.FileParser, root string) ([]*semsourceast.ParseResult, error) {
 	// Prefer the optional ParseDirectory method if available (Go parser supports it).
 	type directoryParser interface {
-		ParseDirectory(ctx context.Context, dirPath string) ([]*semspecast.ParseResult, error)
+		ParseDirectory(ctx context.Context, dirPath string) ([]*semsourceast.ParseResult, error)
 	}
 	if dp, ok := parser.(directoryParser); ok {
 		return dp.ParseDirectory(ctx, root)
 	}
 
 	// Fall back to walking the directory and calling ParseFile on each file.
-	var results []*semspecast.ParseResult
+	var results []*semsourceast.ParseResult
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

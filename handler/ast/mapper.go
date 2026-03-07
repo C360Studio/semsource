@@ -1,13 +1,13 @@
 package ast
 
 import (
-	semspecast "github.com/c360studio/semspec/processor/ast"
+	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/handler"
 )
 
-// mapParseResult converts a semspec ParseResult into a slice of RawEntity values.
+// mapParseResult converts a ParseResult into a slice of RawEntity values.
 // The system slug is the NATS-safe identifier for the source path.
-func mapParseResult(result *semspecast.ParseResult, lang, system string) []handler.RawEntity {
+func mapParseResult(result *semsourceast.ParseResult, lang, system string) []handler.RawEntity {
 	if result == nil {
 		return nil
 	}
@@ -25,8 +25,8 @@ func mapParseResult(result *semspecast.ParseResult, lang, system string) []handl
 	return entities
 }
 
-// mapCodeEntity converts a single semspec CodeEntity to a RawEntity.
-func mapCodeEntity(ce *semspecast.CodeEntity, domain, system string) handler.RawEntity {
+// mapCodeEntity converts a single CodeEntity to a RawEntity.
+func mapCodeEntity(ce *semsourceast.CodeEntity, domain, system string) handler.RawEntity {
 	raw := handler.RawEntity{
 		SourceType: handler.SourceTypeAST,
 		Domain:     domain,
@@ -39,7 +39,7 @@ func mapCodeEntity(ce *semspecast.CodeEntity, domain, system string) handler.Raw
 			"language":   ce.Language,
 			"visibility": string(ce.Visibility),
 		},
-		// Carry the pre-formed triples from the semspec entity directly.
+		// Carry the pre-formed triples from the entity directly.
 		// The normalizer will merge these with any properties-derived triples.
 		Triples: ce.Triples(),
 	}
@@ -61,7 +61,7 @@ func mapCodeEntity(ce *semspecast.CodeEntity, domain, system string) handler.Raw
 }
 
 // codeEntityEdges extracts RawEdge values from the relationship fields of a CodeEntity.
-func codeEntityEdges(ce *semspecast.CodeEntity) []handler.RawEdge {
+func codeEntityEdges(ce *semsourceast.CodeEntity) []handler.RawEdge {
 	var edges []handler.RawEdge
 
 	for _, callee := range ce.Calls {

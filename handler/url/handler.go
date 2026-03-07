@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360studio/semspec/source/weburl"
+	"github.com/c360studio/semsource/source/weburl"
 	"github.com/c360studio/semsource/handler"
 )
 
