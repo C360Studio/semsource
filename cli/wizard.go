@@ -243,6 +243,8 @@ func shouldPreselect(typeKey string, info *ProjectInfo) bool {
 		return false // URLs are never auto-detected
 	case "image":
 		return info.HasImages
+	case "video":
+		return false // Videos are never auto-detected
 	default:
 		return false
 	}

@@ -15,6 +15,7 @@ import (
 	githandler "github.com/c360studio/semsource/handler/git"
 	imghandler "github.com/c360studio/semsource/handler/image"
 	urlhandler "github.com/c360studio/semsource/handler/url"
+	videohandler "github.com/c360studio/semsource/handler/video"
 	"github.com/c360studio/semsource/normalizer"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/storage/objectstore"
@@ -82,8 +83,10 @@ func runCmd(args []string) error {
 		logger.Info("object store connected", "bucket", cfg.ObjectStore.Bucket)
 
 		eng.RegisterHandler(imghandler.New(imghandler.WithStore(objStore), imghandler.WithLogger(logger)))
+		eng.RegisterHandler(videohandler.New(videohandler.WithStore(objStore), videohandler.WithLogger(logger)))
 	} else {
 		eng.RegisterHandler(imghandler.New())
+		eng.RegisterHandler(videohandler.New())
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

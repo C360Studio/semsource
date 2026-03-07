@@ -175,8 +175,29 @@ func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, erro
 			MaxFileSize: *maxSize,
 		}, nil
 
+	case "video":
+		paths := fs.String("paths", "", "comma-separated list of paths to scan")
+		watch := fs.Bool("watch", true, "watch for changes")
+		keyframeMode := fs.String("keyframe-mode", "interval", "keyframe extraction mode: interval, scene, or iframes")
+		keyframeInterval := fs.String("keyframe-interval", "30s", "interval between keyframe extractions (e.g. 30s)")
+		maxSize := fs.String("max-file-size", "2GB", "maximum file size")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *paths == "" {
+			return nil, fmt.Errorf("video source requires --paths")
+		}
+		return &config.SourceEntry{
+			Type:             "video",
+			Paths:            splitComma(*paths),
+			Watch:            *watch,
+			KeyframeMode:     *keyframeMode,
+			KeyframeInterval: *keyframeInterval,
+			MaxFileSize:      *maxSize,
+		}, nil
+
 	default:
-		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, docs, config, url, image)", typeKey)
+		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, docs, config, url, image, video)", typeKey)
 	}
 }
 

@@ -496,3 +496,122 @@ func TestLoadConfigFromReader_ObjectStoreMissingNATSUrl(t *testing.T) {
 		t.Fatal("expected validation error for object_store with empty nats_url, got nil")
 	}
 }
+
+func TestLoadConfigFromReader_VideoSource(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {
+      "type": "video",
+      "paths": ["recordings/", "training/"],
+      "keyframe_mode": "interval",
+      "keyframe_interval": "30s",
+      "max_file_size": "2GB",
+      "watch": true
+    }
+  ],
+  "object_store": {
+    "nats_url": "nats://localhost:4222",
+    "bucket": "semsource-media",
+    "ttl": "720h"
+  }
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	src := cfg.Sources[0]
+	if src.Type != "video" {
+		t.Errorf("type: got %q, want %q", src.Type, "video")
+	}
+	if len(src.Paths) != 2 || src.Paths[0] != "recordings/" || src.Paths[1] != "training/" {
+		t.Errorf("paths: got %v, want [recordings/ training/]", src.Paths)
+	}
+	if src.KeyframeMode != "interval" {
+		t.Errorf("keyframe_mode: got %q, want %q", src.KeyframeMode, "interval")
+	}
+	if src.KeyframeInterval != "30s" {
+		t.Errorf("keyframe_interval: got %q, want %q", src.KeyframeInterval, "30s")
+	}
+	if src.MaxFileSize != "2GB" {
+		t.Errorf("max_file_size: got %q, want %q", src.MaxFileSize, "2GB")
+	}
+	if !src.Watch {
+		t.Error("watch: got false, want true")
+	}
+
+	if cfg.ObjectStore == nil {
+		t.Fatal("object_store: got nil, want non-nil")
+	}
+
+	// Verify keyframe_interval is a valid Go duration.
+	d, err := time.ParseDuration(src.KeyframeInterval)
+	if err != nil {
+		t.Fatalf("keyframe_interval %q is not a valid Go duration: %v", src.KeyframeInterval, err)
+	}
+	if d != 30*time.Second {
+		t.Errorf("keyframe_interval duration: got %v, want 30s", d)
+	}
+}
+
+func TestLoadConfigFromReader_VideoMissingPaths(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "video"}
+  ],
+  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for video source missing paths, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_VideoMissingObjectStore(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "video", "paths": ["recordings/"]}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for video source without object_store, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_VideoInvalidKeyframeMode(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "video", "paths": ["recordings/"], "keyframe_mode": "magic"}
+  ],
+  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for video source with invalid keyframe_mode, got nil")
+	}
+}

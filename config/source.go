@@ -10,6 +10,7 @@ var validSourceTypes = map[string]bool{
 	"config": true,
 	"url":    true,
 	"image":  true,
+	"video":  true,
 }
 
 // SourceEntry represents a single source to be ingested.
@@ -58,12 +59,25 @@ type SourceEntry struct {
 	// ThumbnailMaxDim is the maximum dimension (width or height) for generated thumbnails.
 	// Used by image sources. Default: 512.
 	ThumbnailMaxDim int `json:"thumbnail_max_dim,omitempty"`
+
+	// KeyframeMode controls how keyframes are extracted from video sources.
+	// Valid values: "interval", "scene", "iframes". Default: "interval".
+	KeyframeMode string `json:"keyframe_mode,omitempty"`
+
+	// KeyframeInterval is the time between keyframe extractions for interval mode.
+	// Must be parseable as a Go time.Duration (e.g., "30s"). Used by video sources.
+	KeyframeInterval string `json:"keyframe_interval,omitempty"`
+
+	// SceneThreshold is the scene-change sensitivity for scene-based keyframe extraction.
+	// Range: 0.0 (detect every frame) to 1.0 (detect only major scene changes).
+	// Used by video sources in scene mode.
+	SceneThreshold float64 `json:"scene_threshold,omitempty"`
 }
 
 // Validate checks that the SourceEntry has the required fields for its type.
 func (s SourceEntry) Validate() error {
 	if !validSourceTypes[s.Type] {
-		return fmt.Errorf("source: unknown type %q (valid: git, ast, docs, config, url, image)", s.Type)
+		return fmt.Errorf("source: unknown type %q (valid: git, ast, docs, config, url, image, video)", s.Type)
 	}
 
 	switch s.Type {
@@ -91,6 +105,13 @@ func (s SourceEntry) Validate() error {
 			if ext == "" {
 				return fmt.Errorf("source type %q: extensions must not contain empty strings", s.Type)
 			}
+		}
+	case "video":
+		if len(s.Paths) == 0 {
+			return fmt.Errorf("source type %q: at least one path is required", s.Type)
+		}
+		if s.KeyframeMode != "" && s.KeyframeMode != "interval" && s.KeyframeMode != "scene" && s.KeyframeMode != "iframes" {
+			return fmt.Errorf("source type %q: keyframe_mode must be interval, scene, or iframes", s.Type)
 		}
 	}
 
