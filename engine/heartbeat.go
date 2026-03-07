@@ -3,17 +3,17 @@ package engine
 import (
 	"time"
 
-	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semstreams/federation"
 )
 
 // buildHeartbeatEvent constructs a HEARTBEAT liveness event.
-func (e *Engine) buildHeartbeatEvent() *graph.GraphEvent {
-	return &graph.GraphEvent{
-		Type:      graph.EventTypeHEARTBEAT,
+func (e *Engine) buildHeartbeatEvent() *federation.Event {
+	return &federation.Event{
+		Type:      federation.EventTypeHEARTBEAT,
 		SourceID:  "semsource",
 		Namespace: e.cfg.Namespace,
 		Timestamp: time.Now(),
-		Provenance: graph.SourceProvenance{
+		Provenance: federation.Provenance{
 			SourceType: "engine",
 			SourceID:   "semsource",
 			Timestamp:  time.Now(),

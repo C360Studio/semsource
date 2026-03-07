@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/normalizer"
+	"github.com/c360studio/semstreams/federation"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -436,7 +436,7 @@ func TestNormalize_PublicNamespaceOverride(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Type assertion — Normalize returns *graph.GraphEntity
+// Type assertion — Normalize returns *federation.Entity
 // ---------------------------------------------------------------------------
 
 func TestNormalize_ReturnType(t *testing.T) {
@@ -455,6 +455,6 @@ func TestNormalize_ReturnType(t *testing.T) {
 		t.Fatalf("Normalize() error: %v", err)
 	}
 
-	// Compile-time: verify the return is *graph.GraphEntity
-	var _ *graph.GraphEntity = got
+	// Compile-time: verify the return is *federation.Entity
+	var _ *federation.Entity = got
 }

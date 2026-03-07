@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semstreams/federation"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -29,7 +29,7 @@ func New(cfg Config) *Normalizer {
 	return &Normalizer{cfg: cfg}
 }
 
-// Normalize converts a single RawEntity into a *graph.GraphEntity.
+// Normalize converts a single RawEntity into a *federation.Entity.
 //
 // The entity ID is built from:
 //
@@ -41,7 +41,7 @@ func New(cfg Config) *Normalizer {
 // Required fields: Domain, System, EntityType, Instance.
 // Returns an error if any required field is empty or the resulting ID
 // fails NATS KV key validation.
-func (n *Normalizer) Normalize(raw handler.RawEntity) (*graph.GraphEntity, error) {
+func (n *Normalizer) Normalize(raw handler.RawEntity) (*federation.Entity, error) {
 	if err := validateRaw(raw); err != nil {
 		return nil, fmt.Errorf("normalizer: %w", err)
 	}
@@ -57,11 +57,11 @@ func (n *Normalizer) Normalize(raw handler.RawEntity) (*graph.GraphEntity, error
 	triples := n.buildTriples(id, raw)
 	edges := buildEdges(id, raw)
 
-	entity := &graph.GraphEntity{
+	entity := &federation.Entity{
 		ID:      id,
 		Triples: triples,
 		Edges:   edges,
-		Provenance: graph.SourceProvenance{
+		Provenance: federation.Provenance{
 			SourceType: raw.SourceType,
 			SourceID:   raw.System,
 			Timestamp:  time.Now().UTC(),
@@ -80,8 +80,8 @@ func (n *Normalizer) Normalize(raw handler.RawEntity) (*graph.GraphEntity, error
 // The engine logs the error and skips the batch; no entities are upserted or
 // emitted for that change event. Handlers are responsible for emitting only
 // valid RawEntity values.
-func (n *Normalizer) NormalizeBatch(raws []handler.RawEntity) ([]*graph.GraphEntity, error) {
-	out := make([]*graph.GraphEntity, 0, len(raws))
+func (n *Normalizer) NormalizeBatch(raws []handler.RawEntity) ([]*federation.Entity, error) {
+	out := make([]*federation.Entity, 0, len(raws))
 	for i, raw := range raws {
 		entity, err := n.Normalize(raw)
 		if err != nil {
@@ -142,7 +142,7 @@ func (n *Normalizer) buildTriples(entityID string, raw handler.RawEntity) []mess
 //
 // Edges whose target org cannot be resolved (malformed entityID) are silently
 // dropped; this is a programming error in the handler, not a runtime condition.
-func buildEdges(entityID string, raw handler.RawEntity) []graph.GraphEdge {
+func buildEdges(entityID string, raw handler.RawEntity) []federation.Edge {
 	if len(raw.Edges) == 0 {
 		return nil
 	}
@@ -155,10 +155,10 @@ func buildEdges(entityID string, raw handler.RawEntity) []graph.GraphEdge {
 		return nil
 	}
 
-	edges := make([]graph.GraphEdge, 0, len(raw.Edges))
+	edges := make([]federation.Edge, 0, len(raw.Edges))
 	for _, re := range raw.Edges {
 		toID := BuildEntityID(org, PlatformSemsource, raw.Domain, raw.System, raw.EntityType, re.ToHint)
-		edges = append(edges, graph.GraphEdge{
+		edges = append(edges, federation.Edge{
 			FromID:   entityID,
 			ToID:     toID,
 			EdgeType: re.EdgeType,

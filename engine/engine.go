@@ -17,16 +17,16 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semstreams/federation"
 )
 
 // Normalizer converts raw handler output into normalized graph entities.
 // The concrete implementation lives in the normalizer package; this interface
 // allows the engine to be tested without the normalizer dependency.
 type Normalizer interface {
-	Normalize(raw handler.RawEntity) (*graph.GraphEntity, error)
-	NormalizeBatch(raws []handler.RawEntity) ([]*graph.GraphEntity, error)
+	Normalize(raw handler.RawEntity) (*federation.Entity, error)
+	NormalizeBatch(raws []handler.RawEntity) ([]*federation.Entity, error)
 }
 
 // Option configures Engine behaviour.
@@ -54,7 +54,7 @@ type Engine struct {
 	cfg        *config.Config
 	handlers   []handler.SourceHandler
 	normalizer Normalizer // nil = passthrough (scaffold mode)
-	store      *graph.Store
+	store      *federation.Store
 	emitter    Emitter
 	logger     *slog.Logger
 
@@ -85,7 +85,7 @@ type Engine struct {
 func NewEngine(cfg *config.Config, emitter Emitter, logger *slog.Logger, opts ...Option) *Engine {
 	e := &Engine{
 		cfg:               cfg,
-		store:             graph.NewStore(),
+		store:             federation.NewStore(),
 		emitter:           emitter,
 		logger:            logger,
 		heartbeatInterval: 30 * time.Second,
@@ -204,18 +204,18 @@ func (e *Engine) seed(ctx context.Context) error {
 
 // normalizeAll converts raw entities using the normalizer if present,
 // or creates passthrough graph entities in scaffold mode.
-func (e *Engine) normalizeAll(raws []handler.RawEntity) ([]*graph.GraphEntity, error) {
+func (e *Engine) normalizeAll(raws []handler.RawEntity) ([]*federation.Entity, error) {
 	if e.normalizer != nil {
 		return e.normalizer.NormalizeBatch(raws)
 	}
 	// Scaffold passthrough: construct minimal entities without full ID normalization.
-	entities := make([]*graph.GraphEntity, 0, len(raws))
+	entities := make([]*federation.Entity, 0, len(raws))
 	for i := range raws {
 		raw := &raws[i]
-		entity := &graph.GraphEntity{
+		entity := &federation.Entity{
 			ID:      fmt.Sprintf("%s.semsource.%s.%s.%s.%s", e.cfg.Namespace, raw.Domain, raw.System, raw.EntityType, raw.Instance),
 			Triples: raw.Triples,
-			Provenance: graph.SourceProvenance{
+			Provenance: federation.Provenance{
 				SourceType: raw.SourceType,
 				SourceID:   raw.System,
 				Timestamp:  time.Now(),
@@ -273,7 +273,7 @@ func (e *Engine) handleChange(ctx context.Context, ev handler.ChangeEvent) {
 			)
 			return
 		}
-		var changed []*graph.GraphEntity
+		var changed []*federation.Entity
 		for _, entity := range entities {
 			if e.store.Upsert(entity) {
 				changed = append(changed, entity)
@@ -385,7 +385,7 @@ func (e *Engine) retractionIDsForPath(path string) []string {
 
 // indexPath records the association between a file path and the entity IDs
 // produced from it. Called after a successful create/modify change event.
-func (e *Engine) indexPath(path string, entities []*graph.GraphEntity) {
+func (e *Engine) indexPath(path string, entities []*federation.Entity) {
 	e.pathIndexMu.Lock()
 	defer e.pathIndexMu.Unlock()
 	idSet := make(map[string]struct{}, len(entities))

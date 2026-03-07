@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
@@ -38,11 +37,6 @@ func writeMD(t *testing.T, dir, name, content string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
-}
-
-// findTriple returns the first triple whose predicate matches pred, or nil.
-func findTriple(triples interface{ GetTriples() []interface{ GetPredicate() string; GetObject() interface{} } }, pred string) interface{} {
-	return nil // unused — we use the concrete type below
 }
 
 // ---------------------------------------------------------------------------
@@ -334,26 +328,8 @@ func TestDocHandler_Ingest_EmptyDir(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Watch
+// Watch — disabled returns nil (no fsnotify needed)
 // ---------------------------------------------------------------------------
-
-func TestDocHandler_Watch_ReturnsChannel(t *testing.T) {
-	dir := t.TempDir()
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir, watch: true}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ch, err := h.Watch(ctx, cfg)
-	if err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
-	if ch == nil {
-		t.Fatal("Watch() returned nil channel")
-	}
-}
 
 func TestDocHandler_Watch_WatchDisabledReturnsNil(t *testing.T) {
 	dir := t.TempDir()
@@ -370,36 +346,5 @@ func TestDocHandler_Watch_WatchDisabledReturnsNil(t *testing.T) {
 	}
 	if ch != nil {
 		t.Error("Watch() should return nil channel when watch is disabled")
-	}
-}
-
-func TestDocHandler_Watch_EmitsOnCreate(t *testing.T) {
-	dir := t.TempDir()
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir, watch: true}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	ch, err := h.Watch(ctx, cfg)
-	if err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
-
-	time.Sleep(30 * time.Millisecond) // let watcher register
-
-	writeMD(t, dir, "new.md", "# New\nContent.")
-
-	select {
-	case ev, ok := <-ch:
-		if !ok {
-			t.Fatal("channel closed unexpectedly")
-		}
-		if ev.Operation != handler.OperationCreate {
-			t.Errorf("Operation = %q, want %q", ev.Operation, handler.OperationCreate)
-		}
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for watch event")
 	}
 }

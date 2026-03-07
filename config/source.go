@@ -15,32 +15,32 @@ var validSourceTypes = map[string]bool{
 // Fields are selectively populated based on the source Type.
 type SourceEntry struct {
 	// Type identifies the handler: git, ast, docs, config, url.
-	Type string `yaml:"type"`
+	Type string `json:"type"`
 
 	// URL is the remote endpoint for git and url source types.
-	URL string `yaml:"url,omitempty"`
+	URL string `json:"url,omitempty"`
 
 	// Branch specifies the git branch to track.
-	Branch string `yaml:"branch,omitempty"`
+	Branch string `json:"branch,omitempty"`
 
 	// Path is the local filesystem path for ast sources.
-	Path string `yaml:"path,omitempty"`
+	Path string `json:"path,omitempty"`
 
 	// Paths is a list of filesystem paths for docs and config sources.
-	Paths []string `yaml:"paths,omitempty"`
+	Paths []string `json:"paths,omitempty"`
 
 	// Language specifies the programming language for ast sources (e.g., "go").
-	Language string `yaml:"language,omitempty"`
+	Language string `json:"language,omitempty"`
 
 	// URLs is a list of HTTP/S URLs for url sources.
-	URLs []string `yaml:"urls,omitempty"`
+	URLs []string `json:"urls,omitempty"`
 
 	// PollInterval is how often to re-fetch url sources (e.g., "300s").
 	// Must be parseable as a Go time.Duration.
-	PollInterval string `yaml:"poll_interval,omitempty"`
+	PollInterval string `json:"poll_interval,omitempty"`
 
 	// Watch enables continuous file-system or network watching for this source.
-	Watch bool `yaml:"watch,omitempty"`
+	Watch bool `json:"watch,omitempty"`
 }
 
 // Validate checks that the SourceEntry has the required fields for its type.

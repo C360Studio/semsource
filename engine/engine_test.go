@@ -9,8 +9,8 @@ import (
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/engine"
-	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semstreams/federation"
 )
 
 // stubSourceConfig satisfies handler.SourceConfig for testing.
@@ -92,7 +92,7 @@ func TestEngine_Start_EmitsSEED(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("expected at least one event, got 0")
 	}
-	if events[0].Type != graph.EventTypeSEED {
+	if events[0].Type != federation.EventTypeSEED {
 		t.Errorf("first event type = %v, want SEED", events[0].Type)
 	}
 	if events[0].Namespace != "acme" {
@@ -163,7 +163,7 @@ func TestEngine_Heartbeat_Emitted(t *testing.T) {
 	events := emitter.CapturedEvents()
 	var heartbeats int
 	for _, ev := range events {
-		if ev.Type == graph.EventTypeHEARTBEAT {
+		if ev.Type == federation.EventTypeHEARTBEAT {
 			heartbeats++
 		}
 	}
@@ -181,8 +181,8 @@ func TestLogEmitter_ConcurrentSafe(t *testing.T) {
 
 	for range goroutines {
 		go func() {
-			event := &graph.GraphEvent{
-				Type:      graph.EventTypeDELTA,
+			event := &federation.Event{
+				Type:      federation.EventTypeDELTA,
 				SourceID:  "test",
 				Namespace: "acme",
 				Timestamp: time.Now(),
@@ -248,7 +248,7 @@ func TestEngine_BuildSeedEvent_IncludesStoreEntities(t *testing.T) {
 	// We can't assert specific entity count without the normalizer,
 	// but we can verify SEED was emitted without error.
 	seed := events[0]
-	if seed.Type != graph.EventTypeSEED {
+	if seed.Type != federation.EventTypeSEED {
 		t.Errorf("event type = %v, want SEED", seed.Type)
 	}
 }

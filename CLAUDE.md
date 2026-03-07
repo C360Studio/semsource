@@ -11,18 +11,33 @@ Part of the Complete 360 Studio ecosystem. MIT licensed.
 ## Technology
 
 - **Language:** Go
-- **Platform dependency:** semstreams (NATS JetStream infrastructure, `github.com/c360studio/semstreams`)
+- **Platform dependency:** semstreams (NATS JetStream infrastructure, `github.com/c360studio/semstreams`). Uses `semstreams/federation` types directly for entities, events, edges, provenance, and the in-memory store.
 - **Transport:** WebSocket server (output/websocket from semstreams) on port 7890
-- **Config format:** YAML (`semsource.yaml`)
+- **Config format:** JSON (`semsource.json`)
+
+## CLI Commands
+
+```bash
+semsource init              # Interactive setup wizard → writes semsource.json
+semsource run               # Start the ingestion engine
+semsource add [type]        # Add a source (interactive or with flags)
+semsource sources           # List configured sources
+semsource validate          # Check config without starting
+semsource version           # Print version
+```
+
+Non-interactive add: `semsource add ast --path ./src --language go --watch`
+
+Bare `semsource` with no args auto-runs if `semsource.json` exists.
 
 ## Build & Test Commands
 
 ```bash
 go build ./...
-go test ./...
-go test -run TestName ./path/to/package   # single test
-go test -race ./...                        # race detection
-go test -coverprofile=coverage.out ./...   # coverage
+go test ./...                              # unit tests only
+go test -tags=integration ./...            # include integration tests
+go test -run TestName ./path/to/package    # single test
+go test -race -tags=integration ./...      # race detection
 ```
 
 ## Architecture
@@ -30,7 +45,7 @@ go test -coverprofile=coverage.out ./...   # coverage
 ### Component Flow
 
 ```
-[semsource.yaml] → [Source Intake] → [Handler Dispatch] → [Graph Normalizer] → [output/websocket]
+[semsource.json] → [Source Intake] → [Handler Dispatch] → [Graph Normalizer] → [output/websocket]
 ```
 
 Follows the semstreams pattern: **Listen → Process → Persist → Publish**.
@@ -101,18 +116,19 @@ New message types must follow the payload registry pattern: define type → impl
 - Fan-out via WebSocket output's built-in multi-client broadcast
 - `at-least-once` delivery using WebSocket ack/nack protocol
 - MVP targets same-LAN deployment only (no TLS/reverse proxy)
-- ASTHandler imports existing SemSpec indexer as dependency (may move to shared package)
-- `FederationProcessor` lives in each consumer flow (not centralized) — simpler, sufficient for MVP
+- AST parsers, doc parsers, weburl, and vocabulary packages are self-contained in `source/` (copied from semspec, no cross-repo dependency)
+- `FederationProcessor` lives in each consumer flow (from `semstreams/processor/federation`), not in semsource — semsource just emits events
+- Graph types use `semstreams/federation` directly (`federation.Entity`, `federation.Event`, `federation.Store`). The `graph/` package contains only `GraphEventPayload` (domain-specific payload registration for `"semsource"`)
 
 ## Development Milestones
 
 Current roadmap (see spec Section 10 for full details):
 
-1. **M1 — Repo & Scaffold**: semstreams dependency, core types (`GraphEntity`, `GraphEdge`, `GraphEvent`), `SourceHandler` interface, YAML config loader, output/websocket wiring
-2. **M2 — Core Handlers**: GitHandler, ASTHandler, DocHandler, ConfigHandler, URLHandler
-3. **M3 — Graph Normalization & Events**: Deterministic entity IDs, namespace routing, SEED/DELTA/RETRACT/HEARTBEAT emission
-4. **M4 — FederationProcessor**: Merge policy, edge union semantics, provenance append
-5. **M5 — Parallel Consumer Validation**: SemSpec + SemDragon consuming simultaneously
+1. **M1 — Repo & Scaffold** ✅: semstreams dependency, core types (using `federation.*`), `SourceHandler` interface, JSON config loader, output/websocket wiring
+2. **M2 — Core Handlers** ✅: GitHandler, ASTHandler, DocHandler, ConfigHandler, URLHandler
+3. **M3 — Graph Normalization & Events** ✅: Deterministic entity IDs, namespace routing, SEED/DELTA/RETRACT/HEARTBEAT emission
+4. **M4 — FederationProcessor** ✅: Lives in `semstreams/processor/federation`. Semsource verified alignment and deleted local copy.
+5. **M5 — Parallel Consumer Validation**: SemSpec + SemDragon consuming simultaneously (integration guide at `docs/integration/m5-consumer-integration.md`)
 6. **M6 — Federation Validation**: Multiple SemSource instances producing identical `public.*` IDs
 
 ## Custom Agents & Skills

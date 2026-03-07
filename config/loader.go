@@ -1,14 +1,13 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-
-	"gopkg.in/yaml.v3"
 )
 
-// LoadConfig reads the YAML file at path, unmarshals it, applies defaults,
+// LoadConfig reads the JSON file at path, unmarshals it, applies defaults,
 // and validates it. Returns a ready-to-use *Config or a descriptive error.
 func LoadConfig(path string) (*Config, error) {
 	f, err := os.Open(path)
@@ -20,16 +19,16 @@ func LoadConfig(path string) (*Config, error) {
 	return LoadConfigFromReader(f)
 }
 
-// LoadConfigFromReader parses YAML from r, applies defaults, and validates.
+// LoadConfigFromReader parses JSON from r, applies defaults, and validates.
 // Useful for testing without touching the filesystem.
 func LoadConfigFromReader(r io.Reader) (*Config, error) {
 	var cfg Config
 
-	dec := yaml.NewDecoder(r)
-	dec.KnownFields(true)
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("config: parse YAML: %w", err)
+		return nil, fmt.Errorf("config: parse JSON: %w", err)
 	}
 
 	cfg.applyDefaults()

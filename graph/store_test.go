@@ -6,17 +6,22 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semstreams/federation"
 	"github.com/c360studio/semstreams/message"
 )
 
-func makeEntity(id string, triples ...message.Triple) *graph.GraphEntity {
-	return &graph.GraphEntity{
-		ID:      id,
-		Triples: triples,
+func makeEntity(id string) graph.GraphEntity {
+	now := time.Now()
+	return graph.GraphEntity{
+		ID: id,
+		Triples: []message.Triple{
+			{Subject: id, Predicate: "test.prop", Object: "value", Timestamp: now},
+		},
+		Edges: []federation.Edge{},
 		Provenance: graph.SourceProvenance{
-			SourceType: "test",
+			SourceType: "git",
 			SourceID:   "test-source",
-			Timestamp:  time.Now(),
+			Timestamp:  now,
 			Handler:    "TestHandler",
 		},
 	}
@@ -24,108 +29,72 @@ func makeEntity(id string, triples ...message.Triple) *graph.GraphEntity {
 
 func TestStore_Upsert_NewEntity(t *testing.T) {
 	s := graph.NewStore()
+	e := makeEntity("acme.semsource.git.repo.commit.abc123")
 
-	entity := makeEntity("acme.semsource.git.repo.commit.a1b2c3",
-		message.Triple{Subject: "acme.semsource.git.repo.commit.a1b2c3", Predicate: "git.sha", Object: "a1b2c3"},
-	)
-
-	changed := s.Upsert(entity)
+	changed := s.Upsert(e)
 	if !changed {
-		t.Error("Upsert() should return true for new entity")
+		t.Error("Upsert of new entity: got changed=false, want true")
 	}
 	if s.Count() != 1 {
-		t.Errorf("Count() = %d, want 1", s.Count())
+		t.Errorf("Count after first Upsert: got %d, want 1", s.Count())
 	}
 }
 
-func TestStore_Upsert_UnchangedEntity(t *testing.T) {
+func TestStore_Upsert_SameEntityUnchanged(t *testing.T) {
 	s := graph.NewStore()
+	e := makeEntity("acme.semsource.git.repo.commit.abc123")
 
-	entity := makeEntity("acme.semsource.git.repo.commit.a1b2c3",
-		message.Triple{Subject: "acme.semsource.git.repo.commit.a1b2c3", Predicate: "git.sha", Object: "a1b2c3"},
-	)
-
-	s.Upsert(entity)
-	changed := s.Upsert(entity)
+	s.Upsert(e)
+	changed := s.Upsert(e)
 	if changed {
-		t.Error("Upsert() should return false when entity is unchanged")
+		t.Error("Upsert of identical entity: got changed=true, want false")
 	}
 	if s.Count() != 1 {
-		t.Errorf("Count() = %d, want 1", s.Count())
+		t.Errorf("Count after duplicate Upsert: got %d, want 1", s.Count())
 	}
 }
 
-func TestStore_Upsert_ChangedEntity(t *testing.T) {
+func TestStore_Upsert_UpdatedEntity(t *testing.T) {
 	s := graph.NewStore()
+	id := "acme.semsource.git.repo.commit.abc123"
+	e1 := makeEntity(id)
+	s.Upsert(e1)
 
-	id := "acme.semsource.git.repo.commit.a1b2c3"
-	entity1 := makeEntity(id,
-		message.Triple{Subject: id, Predicate: "git.sha", Object: "a1b2c3"},
-	)
-	entity2 := makeEntity(id,
-		message.Triple{Subject: id, Predicate: "git.sha", Object: "a1b2c3"},
-		message.Triple{Subject: id, Predicate: "git.message", Object: "fix: bug"},
-	)
+	// Modify the triples to simulate a change
+	e2 := makeEntity(id)
+	e2.Triples = append(e2.Triples, message.Triple{
+		Subject:   id,
+		Predicate: "test.extra",
+		Object:    "new-value",
+		Timestamp: time.Now(),
+	})
 
-	s.Upsert(entity1)
-	changed := s.Upsert(entity2)
+	changed := s.Upsert(e2)
 	if !changed {
-		t.Error("Upsert() should return true when entity content changes")
-	}
-	if s.Count() != 1 {
-		t.Errorf("Count() = %d, want 1", s.Count())
+		t.Error("Upsert of modified entity: got changed=false, want true")
 	}
 }
 
 func TestStore_Remove_Existing(t *testing.T) {
 	s := graph.NewStore()
-
-	id := "acme.semsource.git.repo.commit.a1b2c3"
+	id := "acme.semsource.git.repo.commit.abc123"
 	s.Upsert(makeEntity(id))
 
 	removed := s.Remove(id)
 	if !removed {
-		t.Error("Remove() should return true for existing entity")
+		t.Error("Remove of existing entity: got removed=false, want true")
 	}
 	if s.Count() != 0 {
-		t.Errorf("Count() = %d, want 0", s.Count())
+		t.Errorf("Count after Remove: got %d, want 0", s.Count())
 	}
 }
 
-func TestStore_Remove_NonExistent(t *testing.T) {
+func TestStore_Remove_Nonexistent(t *testing.T) {
 	s := graph.NewStore()
 
-	removed := s.Remove("nonexistent.id.here.foo.bar.baz")
+	removed := s.Remove("nonexistent.id")
 	if removed {
-		t.Error("Remove() should return false for non-existent entity")
-	}
-}
-
-func TestStore_Snapshot(t *testing.T) {
-	s := graph.NewStore()
-
-	entities := []*graph.GraphEntity{
-		makeEntity("acme.semsource.git.repo.commit.a1b2c3"),
-		makeEntity("acme.semsource.git.repo.commit.d4e5f6"),
-		makeEntity("acme.semsource.git.repo.author.alice"),
-	}
-
-	for _, e := range entities {
-		s.Upsert(e)
-	}
-
-	snap := s.Snapshot()
-	if len(snap) != 3 {
-		t.Errorf("Snapshot() len = %d, want 3", len(snap))
-	}
-
-	// Verify snapshot is independent copy — mutations don't affect store
-	snap[0].ID = "mutated"
-	snap2 := s.Snapshot()
-	for _, e := range snap2 {
-		if e.ID == "mutated" {
-			t.Error("Snapshot() should return copies, not references")
-		}
+		t.Error("Remove of nonexistent entity: got removed=true, want false")
 	}
 }
 
@@ -133,68 +102,95 @@ func TestStore_Snapshot_Empty(t *testing.T) {
 	s := graph.NewStore()
 	snap := s.Snapshot()
 	if snap == nil {
-		t.Error("Snapshot() should return empty slice, not nil")
+		t.Error("Snapshot of empty store: got nil, want empty slice")
 	}
 	if len(snap) != 0 {
-		t.Errorf("Snapshot() len = %d, want 0", len(snap))
+		t.Errorf("Snapshot of empty store: got %d entities, want 0", len(snap))
+	}
+}
+
+func TestStore_Snapshot_Contents(t *testing.T) {
+	s := graph.NewStore()
+	ids := []string{
+		"acme.semsource.git.repo.commit.abc123",
+		"acme.semsource.git.repo.commit.def456",
+		"acme.semsource.git.repo.commit.ghi789",
+	}
+	for _, id := range ids {
+		s.Upsert(makeEntity(id))
+	}
+
+	snap := s.Snapshot()
+	if len(snap) != 3 {
+		t.Fatalf("Snapshot count: got %d, want 3", len(snap))
+	}
+
+	// Verify all IDs are present
+	seen := make(map[string]bool)
+	for _, e := range snap {
+		seen[e.ID] = true
+	}
+	for _, id := range ids {
+		if !seen[id] {
+			t.Errorf("Snapshot missing entity %q", id)
+		}
+	}
+}
+
+func TestStore_Snapshot_IsCopy(t *testing.T) {
+	s := graph.NewStore()
+	id := "acme.semsource.git.repo.commit.abc123"
+	s.Upsert(makeEntity(id))
+
+	snap := s.Snapshot()
+	// Mutating the snapshot should not affect the store
+	snap[0].ID = "mutated"
+	if s.Count() != 1 {
+		t.Error("Snapshot mutation affected store count")
+	}
+	snap2 := s.Snapshot()
+	if snap2[0].ID == "mutated" {
+		t.Error("Snapshot mutation leaked into store")
 	}
 }
 
 func TestStore_Count(t *testing.T) {
 	s := graph.NewStore()
-
 	if s.Count() != 0 {
-		t.Errorf("Count() = %d, want 0", s.Count())
+		t.Errorf("Initial count: got %d, want 0", s.Count())
 	}
 
-	s.Upsert(makeEntity("acme.semsource.git.repo.commit.a1b2c3"))
-	if s.Count() != 1 {
-		t.Errorf("Count() = %d, want 1", s.Count())
+	for i := range 5 {
+		s.Upsert(makeEntity("acme.semsource.git.repo.commit." + string(rune('a'+i))))
 	}
-
-	s.Upsert(makeEntity("acme.semsource.git.repo.commit.d4e5f6"))
-	if s.Count() != 2 {
-		t.Errorf("Count() = %d, want 2", s.Count())
-	}
-
-	s.Remove("acme.semsource.git.repo.commit.a1b2c3")
-	if s.Count() != 1 {
-		t.Errorf("Count() = %d, want 1 after remove", s.Count())
+	if s.Count() != 5 {
+		t.Errorf("Count after 5 upserts: got %d, want 5", s.Count())
 	}
 }
 
 func TestStore_ConcurrentAccess(t *testing.T) {
 	s := graph.NewStore()
-	const workers = 20
-	const ops = 100
+	const goroutines = 50
+	const opsPerGoroutine = 20
 
 	var wg sync.WaitGroup
-	wg.Add(workers)
+	wg.Add(goroutines)
 
-	for i := range workers {
-		go func(workerID int) {
+	for g := range goroutines {
+		go func(g int) {
 			defer wg.Done()
-			for j := range ops {
-				id := "acme.semsource.git.repo.commit.test"
-				// Vary ID slightly to exercise concurrent inserts
-				if j%2 == 0 {
-					id = "acme.semsource.git.repo.author.alice"
-				}
-
-				switch j % 4 {
-				case 0, 1:
-					s.Upsert(makeEntity(id))
-				case 2:
+			for op := range opsPerGoroutine {
+				id := "acme.semsource.git.repo.commit." + string(rune('a'+g%26)) + string(rune('a'+op%26))
+				s.Upsert(makeEntity(id))
+				_ = s.Count()
+				_ = s.Snapshot()
+				if op%5 == 0 {
 					s.Remove(id)
-				case 3:
-					_ = s.Snapshot()
-					_ = s.Count()
 				}
-				_ = workerID
 			}
-		}(i)
+		}(g)
 	}
 
 	wg.Wait()
-	// No panic or race = success; final count is non-deterministic
+	// If the race detector doesn't flag anything, the test passes.
 }

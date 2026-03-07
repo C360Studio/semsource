@@ -1,9 +1,11 @@
+// Package graph provides the semsource-domain event payload for the message bus.
 package graph
 
 import (
 	"encoding/json"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/federation"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -24,9 +26,10 @@ func init() {
 var GraphEventType = message.Type{Domain: "semsource", Category: "graph_event", Version: "v1"}
 
 // GraphEventPayload implements message.Payload for graph events.
-// It wraps GraphEvent for transport through the semstreams message bus.
+// It wraps federation.Event for transport through the semstreams message bus
+// with domain "semsource".
 type GraphEventPayload struct {
-	Event GraphEvent `json:"event"`
+	Event federation.Event `json:"event"`
 }
 
 // Schema returns the message type for the Payload interface.

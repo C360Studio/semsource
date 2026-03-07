@@ -1,37 +1,33 @@
-// Package graph provides core graph entity types for the SemSource knowledge graph.
+// Package graph provides core graph types and in-memory storage for semsource.
 package graph
 
 import (
 	"time"
 
+	"github.com/c360studio/semstreams/federation"
 	"github.com/c360studio/semstreams/message"
 )
 
-// GraphEntity represents a normalized knowledge graph entity produced by SemSource.
-// It aligns with semstreams/graph.EntityState but carries SemSource-specific provenance.
-//
-// The ID field is the 6-part entity identifier: org.platform.domain.system.type.instance
-// which must be a valid NATS KV key.
+// GraphEntity is a normalized knowledge graph entity used internally by semsource.
+// It mirrors federation.Entity but is sovereign to this service; handlers produce
+// GraphEntity values that the normalizer converts to federation.Entity for emission.
 type GraphEntity struct {
-	// ID is the deterministic 6-part entity identifier.
+	// ID is the deterministic 6-part entity identifier:
+	// org.platform.domain.system.type.instance
 	ID string `json:"id"`
 
 	// Triples are the single source of truth for all semantic properties.
 	Triples []message.Triple `json:"triples"`
 
-	// Edges represent explicit relationships to other entities.
-	Edges []GraphEdge `json:"edges,omitempty"`
+	// Edges represent explicit directed relationships to other entities.
+	Edges []federation.Edge `json:"edges,omitempty"`
 
-	// Provenance records the primary (most recent) origin of this entity.
+	// Provenance records the origin of this entity.
 	Provenance SourceProvenance `json:"provenance"`
-
-	// AdditionalProvenance accumulates provenance records from prior merges.
-	// The FederationProcessor appends previous Provenance here on each merge.
-	// This field is always appended, never replaced.
-	AdditionalProvenance []SourceProvenance `json:"additional_provenance,omitempty"`
 }
 
 // GraphEdge represents a directed relationship between two graph entities.
+// Aligns with federation.Edge for straightforward conversion.
 type GraphEdge struct {
 	// FromID is the source entity's 6-part ID.
 	FromID string `json:"from_id"`
@@ -39,7 +35,7 @@ type GraphEdge struct {
 	// ToID is the target entity's 6-part ID.
 	ToID string `json:"to_id"`
 
-	// EdgeType describes the semantic relationship (e.g., "authored_by", "imports", "calls").
+	// EdgeType describes the semantic relationship (e.g., "authored_by", "imports").
 	EdgeType string `json:"edge_type"`
 
 	// Weight is an optional edge weight (0.0 = unweighted, positive = weighted).
@@ -49,9 +45,9 @@ type GraphEdge struct {
 	Properties map[string]any `json:"properties,omitempty"`
 }
 
-// SourceProvenance records the origin of an entity or event.
+// SourceProvenance records the origin of a graph entity or event.
 type SourceProvenance struct {
-	// SourceType identifies the class of source (e.g., "git", "ast", "url", "doc", "config").
+	// SourceType identifies the class of source (e.g., "git", "ast", "url").
 	SourceType string `json:"source_type"`
 
 	// SourceID is the unique identifier for the specific source instance.
@@ -62,4 +58,25 @@ type SourceProvenance struct {
 
 	// Handler is the name of the handler that produced this entity.
 	Handler string `json:"handler"`
+}
+
+// ToFederationProvenance converts a SourceProvenance to a federation.Provenance
+// for emission via the semstreams transport.
+func (sp SourceProvenance) ToFederationProvenance() federation.Provenance {
+	return federation.Provenance{
+		SourceType: sp.SourceType,
+		SourceID:   sp.SourceID,
+		Timestamp:  sp.Timestamp,
+		Handler:    sp.Handler,
+	}
+}
+
+// ToFederationEntity converts a GraphEntity to a federation.Entity for emission.
+func (ge GraphEntity) ToFederationEntity() federation.Entity {
+	return federation.Entity{
+		ID:         ge.ID,
+		Triples:    ge.Triples,
+		Edges:      ge.Edges,
+		Provenance: ge.Provenance.ToFederationProvenance(),
+	}
 }

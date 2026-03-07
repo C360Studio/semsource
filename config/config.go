@@ -1,4 +1,4 @@
-// Package config loads and validates the semsource.yaml configuration file.
+// Package config loads and validates the semsource.json configuration file.
 package config
 
 import "fmt"
@@ -6,39 +6,39 @@ import "fmt"
 // OutputConfig describes a single output endpoint for the flow.
 type OutputConfig struct {
 	// Name is a human-readable identifier for this output.
-	Name string `yaml:"name"`
+	Name string `json:"name"`
 
 	// Type describes the output mechanism (e.g., "network").
-	Type string `yaml:"type"`
+	Type string `json:"type"`
 
 	// Subject is the endpoint address (e.g., "http://0.0.0.0:7890/graph").
-	Subject string `yaml:"subject"`
+	Subject string `json:"subject"`
 }
 
 // FlowConfig holds transport and delivery settings.
 type FlowConfig struct {
 	// Outputs lists the downstream endpoints this flow writes to.
-	Outputs []OutputConfig `yaml:"outputs"`
+	Outputs []OutputConfig `json:"outputs"`
 
 	// DeliveryMode controls acknowledgement semantics.
 	// Defaults to "at-least-once".
-	DeliveryMode string `yaml:"delivery_mode"`
+	DeliveryMode string `json:"delivery_mode"`
 
 	// AckTimeout is the maximum time to wait for an acknowledgement.
 	// Must be a valid Go duration string. Defaults to "5s".
-	AckTimeout string `yaml:"ack_timeout"`
+	AckTimeout string `json:"ack_timeout"`
 }
 
 // Config is the top-level semsource configuration.
 type Config struct {
 	// Namespace is the org identifier used in entity ID construction (e.g., "acme").
-	Namespace string `yaml:"namespace"`
+	Namespace string `json:"namespace"`
 
 	// Flow configures transport delivery behaviour.
-	Flow FlowConfig `yaml:"flow"`
+	Flow FlowConfig `json:"flow"`
 
 	// Sources lists all ingestion sources.
-	Sources []SourceEntry `yaml:"sources"`
+	Sources []SourceEntry `json:"sources"`
 }
 
 // applyDefaults fills in omitted fields with their documented defaults.

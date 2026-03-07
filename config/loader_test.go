@@ -8,48 +8,52 @@ import (
 	"github.com/c360studio/semsource/config"
 )
 
-const validYAML = `
-namespace: acme
+const validJSON = `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {
+        "name": "graph_stream",
+        "type": "network",
+        "subject": "http://0.0.0.0:7890/graph"
+      }
+    ],
+    "delivery_mode": "at-least-once",
+    "ack_timeout": "5s"
+  },
+  "sources": [
+    {
+      "type": "git",
+      "url": "github.com/acme/gcs",
+      "branch": "main",
+      "watch": true
+    },
+    {
+      "type": "ast",
+      "path": "./",
+      "language": "go",
+      "watch": true
+    },
+    {
+      "type": "docs",
+      "paths": ["README.md", "docs/"],
+      "watch": true
+    },
+    {
+      "type": "config",
+      "paths": ["go.mod", "Dockerfile"],
+      "watch": true
+    },
+    {
+      "type": "url",
+      "urls": ["https://docs.acme.io/gcs"],
+      "poll_interval": "300s"
+    }
+  ]
+}`
 
-flow:
-  outputs:
-    - name: graph_stream
-      type: network
-      subject: http://0.0.0.0:7890/graph
-  delivery_mode: at-least-once
-  ack_timeout: 5s
-
-sources:
-  - type: git
-    url: github.com/acme/gcs
-    branch: main
-    watch: true
-
-  - type: ast
-    path: ./
-    language: go
-    watch: true
-
-  - type: docs
-    paths:
-      - README.md
-      - docs/
-    watch: true
-
-  - type: config
-    paths:
-      - go.mod
-      - Dockerfile
-    watch: true
-
-  - type: url
-    urls:
-      - https://docs.acme.io/gcs
-    poll_interval: 300s
-`
-
-func TestLoadConfigFromReader_ValidYAML(t *testing.T) {
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(validYAML))
+func TestLoadConfigFromReader_ValidJSON(t *testing.T) {
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(validJSON))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,19 +142,18 @@ func TestLoadConfigFromReader_ValidYAML(t *testing.T) {
 }
 
 func TestLoadConfigFromReader_Defaults(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources:
-  - type: git
-    url: github.com/myorg/repo
-    branch: main
-`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo", "branch": "main"}
+  ]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,136 +167,133 @@ sources:
 }
 
 func TestLoadConfigFromReader_MissingNamespace(t *testing.T) {
-	yaml := `
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources:
-  - type: git
-    url: github.com/myorg/repo
-    branch: main
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo", "branch": "main"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for missing namespace, got nil")
 	}
 }
 
 func TestLoadConfigFromReader_NoOutputs(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs: []
-sources:
-  - type: git
-    url: github.com/myorg/repo
-    branch: main
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {"outputs": []},
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo", "branch": "main"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for empty outputs, got nil")
 	}
 }
 
 func TestLoadConfigFromReader_NoSources(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources: []
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": []
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for empty sources, got nil")
 	}
 }
 
 func TestLoadConfigFromReader_InvalidSourceType(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources:
-  - type: database
-    url: postgres://localhost/mydb
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "database", "url": "postgres://localhost/mydb"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for invalid source type, got nil")
 	}
 }
 
 func TestLoadConfigFromReader_GitMissingURL(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources:
-  - type: git
-    branch: main
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "branch": "main"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for git source missing url, got nil")
 	}
 }
 
 func TestLoadConfigFromReader_ASTMissingPath(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources:
-  - type: ast
-    language: go
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "ast", "language": "go"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for ast source missing path, got nil")
 	}
 }
 
 func TestLoadConfigFromReader_URLMissingURLs(t *testing.T) {
-	yaml := `
-namespace: myorg
-flow:
-  outputs:
-    - name: out
-      type: network
-      subject: http://localhost:7890/graph
-sources:
-  - type: url
-    poll_interval: 60s
-`
-	_, err := config.LoadConfigFromReader(strings.NewReader(yaml))
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "url", "poll_interval": "60s"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for url source missing urls, got nil")
 	}
 }
 
-func TestLoadConfigFromReader_InvalidYAML(t *testing.T) {
-	_, err := config.LoadConfigFromReader(strings.NewReader(":\ninvalid: [yaml"))
+func TestLoadConfigFromReader_InvalidJSON(t *testing.T) {
+	_, err := config.LoadConfigFromReader(strings.NewReader("{invalid json"))
 	if err == nil {
-		t.Fatal("expected error for invalid YAML, got nil")
+		t.Fatal("expected error for invalid JSON, got nil")
 	}
 }
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
-	_, err := config.LoadConfig("/nonexistent/path/semsource.yaml")
+	_, err := config.LoadConfig("/nonexistent/path/semsource.json")
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
@@ -301,7 +301,7 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 
 // TestAckTimeoutDuration verifies the AckTimeout can be parsed as a Go duration.
 func TestAckTimeoutDuration(t *testing.T) {
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(validYAML))
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(validJSON))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestAckTimeoutDuration(t *testing.T) {
 
 // TestPollIntervalDuration verifies url source poll_interval can be parsed as a Go duration.
 func TestPollIntervalDuration(t *testing.T) {
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(validYAML))
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(validJSON))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

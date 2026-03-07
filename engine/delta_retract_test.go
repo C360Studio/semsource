@@ -7,9 +7,9 @@ import (
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/engine"
-	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/normalizer"
+	"github.com/c360studio/semstreams/federation"
 )
 
 // --- helpers ---
@@ -51,7 +51,7 @@ func (h *watchHandler) Watch(_ context.Context, _ handler.SourceConfig) (<-chan 
 
 // waitForEventType polls captured events until an event of the given type appears
 // or the deadline is exceeded. Returns the matching event or nil.
-func waitForEventType(emitter *engine.LogEmitter, want graph.EventType, deadline time.Duration) *graph.GraphEvent {
+func waitForEventType(emitter *engine.LogEmitter, want federation.EventType, deadline time.Duration) *federation.Event {
 	end := time.Now().Add(deadline)
 	for time.Now().Before(end) {
 		for _, ev := range emitter.CapturedEvents() {
@@ -65,7 +65,7 @@ func waitForEventType(emitter *engine.LogEmitter, want graph.EventType, deadline
 }
 
 // countEventType counts captured events of the given type.
-func countEventType(emitter *engine.LogEmitter, want graph.EventType) int {
+func countEventType(emitter *engine.LogEmitter, want federation.EventType) int {
 	var n int
 	for _, ev := range emitter.CapturedEvents() {
 		if ev.Type == want {
@@ -112,7 +112,7 @@ func TestEngine_Watch_EmitsDELTA_OnCreate(t *testing.T) {
 		},
 	}
 
-	ev := waitForEventType(emitter, graph.EventTypeDELTA, 500*time.Millisecond)
+	ev := waitForEventType(emitter, federation.EventTypeDELTA, 500*time.Millisecond)
 	if ev == nil {
 		t.Fatal("no DELTA event emitted after create ChangeEvent")
 	}
@@ -159,7 +159,7 @@ func TestEngine_Watch_EmitsDELTA_OnModify(t *testing.T) {
 		Entities:  []handler.RawEntity{entity},
 	}
 	// Wait for it to land.
-	if waitForEventType(emitter, graph.EventTypeDELTA, 300*time.Millisecond) == nil {
+	if waitForEventType(emitter, federation.EventTypeDELTA, 300*time.Millisecond) == nil {
 		t.Fatal("no DELTA on initial create")
 	}
 
@@ -173,7 +173,7 @@ func TestEngine_Watch_EmitsDELTA_OnModify(t *testing.T) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	if countEventType(emitter, graph.EventTypeDELTA) < 2 {
+	if countEventType(emitter, federation.EventTypeDELTA) < 2 {
 		t.Error("expected at least 2 DELTA events after create + modify")
 	}
 }
@@ -214,16 +214,16 @@ func TestEngine_Watch_NoDELTA_WhenEntityUnchanged(t *testing.T) {
 
 	// First event: creates entity and emits DELTA.
 	watchCh <- ce
-	if waitForEventType(emitter, graph.EventTypeDELTA, 300*time.Millisecond) == nil {
+	if waitForEventType(emitter, federation.EventTypeDELTA, 300*time.Millisecond) == nil {
 		t.Fatal("no DELTA on initial create")
 	}
-	deltaCount := countEventType(emitter, graph.EventTypeDELTA)
+	deltaCount := countEventType(emitter, federation.EventTypeDELTA)
 
 	// Second identical event: entity is unchanged — store dedup prevents DELTA.
 	watchCh <- ce
 	time.Sleep(100 * time.Millisecond)
 
-	if countEventType(emitter, graph.EventTypeDELTA) != deltaCount {
+	if countEventType(emitter, federation.EventTypeDELTA) != deltaCount {
 		t.Error("DELTA emitted for unchanged entity — store dedup failed")
 	}
 }
@@ -262,7 +262,7 @@ func TestEngine_Watch_DELTA_EntityHasCorrectID(t *testing.T) {
 		},
 	}
 
-	ev := waitForEventType(emitter, graph.EventTypeDELTA, 500*time.Millisecond)
+	ev := waitForEventType(emitter, federation.EventTypeDELTA, 500*time.Millisecond)
 	if ev == nil {
 		t.Fatal("no DELTA event")
 	}
@@ -314,7 +314,7 @@ func TestEngine_Watch_EmitsRETRACT_OnDelete(t *testing.T) {
 			},
 		},
 	}
-	if waitForEventType(emitter, graph.EventTypeDELTA, 300*time.Millisecond) == nil {
+	if waitForEventType(emitter, federation.EventTypeDELTA, 300*time.Millisecond) == nil {
 		t.Fatal("no DELTA on initial create")
 	}
 
@@ -324,7 +324,7 @@ func TestEngine_Watch_EmitsRETRACT_OnDelete(t *testing.T) {
 		Path:      filePath,
 	}
 
-	ev := waitForEventType(emitter, graph.EventTypeRETRACT, 500*time.Millisecond)
+	ev := waitForEventType(emitter, federation.EventTypeRETRACT, 500*time.Millisecond)
 	if ev == nil {
 		t.Fatal("no RETRACT event emitted after delete ChangeEvent")
 	}
@@ -369,7 +369,7 @@ func TestEngine_Watch_RETRACT_ContainsEntityID(t *testing.T) {
 			},
 		},
 	}
-	if waitForEventType(emitter, graph.EventTypeDELTA, 300*time.Millisecond) == nil {
+	if waitForEventType(emitter, federation.EventTypeDELTA, 300*time.Millisecond) == nil {
 		t.Fatal("no DELTA on initial create")
 	}
 
@@ -378,7 +378,7 @@ func TestEngine_Watch_RETRACT_ContainsEntityID(t *testing.T) {
 		Path:      filePath,
 	}
 
-	ev := waitForEventType(emitter, graph.EventTypeRETRACT, 500*time.Millisecond)
+	ev := waitForEventType(emitter, federation.EventTypeRETRACT, 500*time.Millisecond)
 	if ev == nil {
 		t.Fatal("no RETRACT event")
 	}
@@ -421,7 +421,7 @@ func TestEngine_Watch_NoRETRACT_WhenEntityNotInStore(t *testing.T) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	if countEventType(emitter, graph.EventTypeRETRACT) != 0 {
+	if countEventType(emitter, federation.EventTypeRETRACT) != 0 {
 		t.Error("RETRACT emitted for a path that was never in the store")
 	}
 }
@@ -458,7 +458,7 @@ func TestEngine_Watch_NormalizationError_SkipsBatch(t *testing.T) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	if countEventType(emitter, graph.EventTypeDELTA) != 0 {
+	if countEventType(emitter, federation.EventTypeDELTA) != 0 {
 		t.Error("DELTA emitted despite normalization error — batch should be skipped")
 	}
 }
