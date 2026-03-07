@@ -191,10 +191,14 @@ func (h *GitHandler) pollLoop(ctx context.Context, repoPath string, ch chan<- ha
 // localCfg is a minimal SourceConfig used internally by pollLoop.
 type localCfg struct{ path string }
 
-func (c *localCfg) GetType() string      { return handler.SourceTypeGit }
-func (c *localCfg) GetPath() string      { return c.path }
-func (c *localCfg) GetURL() string       { return "" }
-func (c *localCfg) IsWatchEnabled() bool { return false }
+func (c *localCfg) GetType() string            { return handler.SourceTypeGit }
+func (c *localCfg) GetPath() string            { return c.path }
+func (c *localCfg) GetPaths() []string         { return nil }
+func (c *localCfg) GetURL() string             { return "" }
+func (c *localCfg) IsWatchEnabled() bool       { return false }
+func (c *localCfg) GetKeyframeMode() string    { return "" }
+func (c *localCfg) GetKeyframeInterval() string { return "" }
+func (c *localCfg) GetSceneThreshold() float64 { return 0 }
 
 // --------------------------------------------------------------------------
 // Git primitives

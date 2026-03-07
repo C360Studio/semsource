@@ -209,7 +209,8 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 	// Extract keyframes. Non-fatal: log and continue with zero keyframes.
 	mode := keyframeMode(cfg)
 	interval := keyframeInterval(cfg)
-	keyframes, kfErr := h.extractKeyframes(ctx, path, mode, interval)
+	threshold := sceneThreshold(cfg)
+	keyframes, kfErr := h.extractKeyframes(ctx, path, mode, interval, threshold)
 	if kfErr != nil {
 		h.logger.Warn("video handler: keyframe extraction failed",
 			"path", path, "error", kfErr)
@@ -392,7 +393,7 @@ type keyframeResult struct {
 // extractKeyframes runs ffmpeg to extract keyframes from path into a temp
 // directory, then reads the resulting JPEG files. The mode selects the
 // extraction strategy: "interval" (default), "scene", or "iframes".
-func (h *VideoHandler) extractKeyframes(ctx context.Context, path, mode, interval string) ([]keyframeResult, error) {
+func (h *VideoHandler) extractKeyframes(ctx context.Context, path, mode, interval string, threshold float64) ([]keyframeResult, error) {
 	// ffprobe / ffmpeg must be available; skip gracefully when they are not.
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return nil, fmt.Errorf("ffmpeg not found in PATH: %w", err)
@@ -409,8 +410,8 @@ func (h *VideoHandler) extractKeyframes(ctx context.Context, path, mode, interva
 	var vf string
 	switch mode {
 	case "scene":
-		// Select frames where the scene change score exceeds 0.3.
-		vf = "select='gt(scene,0.3)',showinfo"
+		// Select frames where the scene change score exceeds the threshold.
+		vf = fmt.Sprintf("select='gt(scene,%g)',showinfo", threshold)
 	case "iframes":
 		// Select only I-frames (intra-coded frames).
 		vf = "select='eq(pict_type,I)'"
@@ -509,16 +510,30 @@ func intervalSeconds(s string) int {
 }
 
 // keyframeMode returns the keyframe extraction mode from the source config.
-// SourceConfig does not expose arbitrary keys, so we default to "interval".
-// Handlers that need mode/interval configuration should extend SourceConfig.
-func keyframeMode(_ handler.SourceConfig) string {
+// Falls back to "interval" when not configured.
+func keyframeMode(cfg handler.SourceConfig) string {
+	if m := cfg.GetKeyframeMode(); m != "" {
+		return m
+	}
 	return "interval"
 }
 
 // keyframeInterval returns the keyframe extraction interval from the source config.
-// Defaults to "30s" when not configurable via the current SourceConfig interface.
-func keyframeInterval(_ handler.SourceConfig) string {
+// Falls back to "30s" when not configured.
+func keyframeInterval(cfg handler.SourceConfig) string {
+	if iv := cfg.GetKeyframeInterval(); iv != "" {
+		return iv
+	}
 	return "30s"
+}
+
+// sceneThreshold returns the scene-change sensitivity from the source config.
+// Falls back to 0.3 when not configured.
+func sceneThreshold(cfg handler.SourceConfig) float64 {
+	if t := cfg.GetSceneThreshold(); t > 0 {
+		return t
+	}
+	return 0.3
 }
 
 // contentHash returns the hex-encoded SHA-256 of b.

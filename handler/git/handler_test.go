@@ -21,10 +21,14 @@ type srcCfg struct {
 	watch bool
 }
 
-func (c *srcCfg) GetType() string      { return c.typ }
-func (c *srcCfg) GetPath() string      { return c.path }
-func (c *srcCfg) GetURL() string       { return c.url }
-func (c *srcCfg) IsWatchEnabled() bool { return c.watch }
+func (c *srcCfg) GetType() string            { return c.typ }
+func (c *srcCfg) GetPath() string            { return c.path }
+func (c *srcCfg) GetPaths() []string         { return nil }
+func (c *srcCfg) GetURL() string             { return c.url }
+func (c *srcCfg) IsWatchEnabled() bool       { return c.watch }
+func (c *srcCfg) GetKeyframeMode() string    { return "" }
+func (c *srcCfg) GetKeyframeInterval() string { return "" }
+func (c *srcCfg) GetSceneThreshold() float64 { return 0 }
 
 // --------------------------------------------------------------------------
 // Interface compliance

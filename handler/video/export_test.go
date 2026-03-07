@@ -2,7 +2,11 @@
 // external test package (video_test). This file is compiled only during testing.
 package video
 
-import "time"
+import (
+	"time"
+
+	"github.com/c360studio/semsource/handler"
+)
 
 // FormatTimestamp exposes formatTimestamp for table-driven unit tests.
 func FormatTimestamp(d time.Duration) string {
@@ -23,4 +27,24 @@ func Slugify(path string) string {
 // JSON without needing ffprobe installed.
 func ParseProbeOutput(data []byte) (*ProbeResult, error) {
 	return parseProbeOutput(data)
+}
+
+// KeyframeMode exposes keyframeMode for testing config passthrough.
+func KeyframeMode(cfg handler.SourceConfig) string {
+	return keyframeMode(cfg)
+}
+
+// KeyframeInterval exposes keyframeInterval for testing config passthrough.
+func KeyframeInterval(cfg handler.SourceConfig) string {
+	return keyframeInterval(cfg)
+}
+
+// SceneThreshold exposes sceneThreshold for testing config passthrough.
+func SceneThreshold(cfg handler.SourceConfig) float64 {
+	return sceneThreshold(cfg)
+}
+
+// IntervalSeconds exposes intervalSeconds for testing.
+func IntervalSeconds(s string) int {
+	return intervalSeconds(s)
 }

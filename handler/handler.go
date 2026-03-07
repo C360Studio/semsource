@@ -12,12 +12,16 @@ import "context"
 // for handler dispatch. Concrete implementations live in the config package —
 // this interface keeps the handler package free of config dependencies.
 type SourceConfig interface {
-	// GetType returns the source type string (git, ast, doc, config, url).
+	// GetType returns the source type string (git, ast, doc, config, url, image, video).
 	GetType() string
 
 	// GetPath returns the primary filesystem path for the source, if applicable.
 	// Returns empty string for URL-based sources.
 	GetPath() string
+
+	// GetPaths returns all configured filesystem paths for multi-path sources
+	// (docs, config, image, video). Returns nil for single-path sources.
+	GetPaths() []string
 
 	// GetURL returns the primary URL for the source, if applicable.
 	// Returns empty string for filesystem-based sources.
@@ -25,6 +29,18 @@ type SourceConfig interface {
 
 	// IsWatchEnabled reports whether real-time watching is enabled for this source.
 	IsWatchEnabled() bool
+
+	// GetKeyframeMode returns the keyframe extraction mode for video sources.
+	// Valid values: "interval", "scene", "iframes". Returns "" for non-video sources.
+	GetKeyframeMode() string
+
+	// GetKeyframeInterval returns the keyframe extraction interval for video sources.
+	// Returns "" when not configured (handler uses its own default).
+	GetKeyframeInterval() string
+
+	// GetSceneThreshold returns the scene-change sensitivity for video sources
+	// using scene mode. Returns 0 when not configured.
+	GetSceneThreshold() float64
 }
 
 // SourceHandler is the core interface implemented by every source handler.

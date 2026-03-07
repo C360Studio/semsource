@@ -16,10 +16,14 @@ type mockConfig struct {
 	watchEnabled bool
 }
 
-func (m *mockConfig) GetType() string       { return m.sourceType }
-func (m *mockConfig) GetPath() string       { return m.path }
-func (m *mockConfig) GetURL() string        { return m.url }
-func (m *mockConfig) IsWatchEnabled() bool  { return m.watchEnabled }
+func (m *mockConfig) GetType() string            { return m.sourceType }
+func (m *mockConfig) GetPath() string            { return m.path }
+func (m *mockConfig) GetPaths() []string         { return nil }
+func (m *mockConfig) GetURL() string             { return m.url }
+func (m *mockConfig) IsWatchEnabled() bool       { return m.watchEnabled }
+func (m *mockConfig) GetKeyframeMode() string    { return "" }
+func (m *mockConfig) GetKeyframeInterval() string { return "" }
+func (m *mockConfig) GetSceneThreshold() float64 { return 0 }
 
 // mockHandler implements SourceHandler for interface compliance testing.
 type mockHandler struct {

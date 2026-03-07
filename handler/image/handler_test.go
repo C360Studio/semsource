@@ -85,10 +85,14 @@ type sourceConfig struct {
 	watch bool
 }
 
-func (s sourceConfig) GetType() string      { return s.typ }
-func (s sourceConfig) GetPath() string      { return s.path }
-func (s sourceConfig) GetURL() string       { return s.url }
-func (s sourceConfig) IsWatchEnabled() bool { return s.watch }
+func (s sourceConfig) GetType() string            { return s.typ }
+func (s sourceConfig) GetPath() string            { return s.path }
+func (s sourceConfig) GetPaths() []string         { return nil }
+func (s sourceConfig) GetURL() string             { return s.url }
+func (s sourceConfig) IsWatchEnabled() bool       { return s.watch }
+func (s sourceConfig) GetKeyframeMode() string    { return "" }
+func (s sourceConfig) GetKeyframeInterval() string { return "" }
+func (s sourceConfig) GetSceneThreshold() float64 { return 0 }
 
 // write1x1PNG generates a minimal 1×1 pixel PNG and writes it to dir/name.
 // Returns the absolute path of the written file.

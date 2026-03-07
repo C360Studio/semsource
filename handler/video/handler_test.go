@@ -3,7 +3,9 @@ package video_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -65,16 +67,23 @@ func (s *memStore) Delete(_ context.Context, key string) error {
 
 // sourceConfig adapts test parameters to handler.SourceConfig.
 type sourceConfig struct {
-	typ   string
-	path  string
-	url   string
-	watch bool
+	typ              string
+	path             string
+	url              string
+	watch            bool
+	keyframeMode     string
+	keyframeInterval string
+	sceneThreshold   float64
 }
 
-func (s sourceConfig) GetType() string      { return s.typ }
-func (s sourceConfig) GetPath() string      { return s.path }
-func (s sourceConfig) GetURL() string       { return s.url }
-func (s sourceConfig) IsWatchEnabled() bool { return s.watch }
+func (s sourceConfig) GetType() string            { return s.typ }
+func (s sourceConfig) GetPath() string            { return s.path }
+func (s sourceConfig) GetPaths() []string         { return nil }
+func (s sourceConfig) GetURL() string             { return s.url }
+func (s sourceConfig) IsWatchEnabled() bool       { return s.watch }
+func (s sourceConfig) GetKeyframeMode() string    { return s.keyframeMode }
+func (s sourceConfig) GetKeyframeInterval() string { return s.keyframeInterval }
+func (s sourceConfig) GetSceneThreshold() float64 { return s.sceneThreshold }
 
 // ffmpegAvailable returns true when both ffprobe and ffmpeg are in PATH.
 func ffmpegAvailable() bool {
@@ -339,14 +348,282 @@ func TestSourceTypeVideo_Constant(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Config passthrough — keyframeMode, keyframeInterval, sceneThreshold
+// ---------------------------------------------------------------------------
+
+func TestVideoHandler_KeyframeMode_FromConfig(t *testing.T) {
+	tests := []struct {
+		mode string
+		want string
+	}{
+		{"", "interval"},        // default
+		{"interval", "interval"},
+		{"scene", "scene"},
+		{"iframes", "iframes"},
+	}
+	for _, tt := range tests {
+		cfg := sourceConfig{typ: "video", keyframeMode: tt.mode}
+		got := videohandler.KeyframeMode(cfg)
+		if got != tt.want {
+			t.Errorf("KeyframeMode(%q) = %q, want %q", tt.mode, got, tt.want)
+		}
+	}
+}
+
+func TestVideoHandler_KeyframeInterval_FromConfig(t *testing.T) {
+	tests := []struct {
+		interval string
+		want     string
+	}{
+		{"", "30s"},    // default
+		{"10s", "10s"},
+		{"1m", "1m"},
+		{"90s", "90s"},
+	}
+	for _, tt := range tests {
+		cfg := sourceConfig{typ: "video", keyframeInterval: tt.interval}
+		got := videohandler.KeyframeInterval(cfg)
+		if got != tt.want {
+			t.Errorf("KeyframeInterval(%q) = %q, want %q", tt.interval, got, tt.want)
+		}
+	}
+}
+
+func TestVideoHandler_SceneThreshold_FromConfig(t *testing.T) {
+	tests := []struct {
+		threshold float64
+		want      float64
+	}{
+		{0, 0.3},     // default
+		{0.5, 0.5},
+		{0.1, 0.1},
+		{0.9, 0.9},
+	}
+	for _, tt := range tests {
+		cfg := sourceConfig{typ: "video", sceneThreshold: tt.threshold}
+		got := videohandler.SceneThreshold(cfg)
+		if got != tt.want {
+			t.Errorf("SceneThreshold(%v) = %v, want %v", tt.threshold, got, tt.want)
+		}
+	}
+}
+
+func TestVideoHandler_IntervalSeconds(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"", 30},      // default
+		{"10s", 10},
+		{"1m", 60},
+		{"90s", 90},
+		{"invalid", 30}, // fallback
+		{"-5s", 30},     // non-positive fallback
+	}
+	for _, tt := range tests {
+		got := videohandler.IntervalSeconds(tt.input)
+		if got != tt.want {
+			t.Errorf("IntervalSeconds(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Integration — requires ffprobe/ffmpeg in PATH
 // ---------------------------------------------------------------------------
 
-func TestVideoHandler_Ingest_RequiresFFmpeg(t *testing.T) {
+func TestVideoHandler_Ingest_WithFFmpeg(t *testing.T) {
 	if !ffmpegAvailable() {
 		t.Skip("ffmpeg/ffprobe not available in PATH")
 	}
-	// This test is a placeholder for environments where ffmpeg is installed.
-	// Full integration tests belong in a file tagged with //go:build integration.
-	t.Log("ffmpeg available — integration tests can be added here")
+
+	// Generate a minimal 1-second test video using ffmpeg.
+	dir := t.TempDir()
+	videoPath := filepath.Join(dir, "test.mp4")
+	cmd := exec.Command("ffmpeg",
+		"-f", "lavfi", "-i", "color=c=blue:s=320x240:d=1",
+		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+		"-shortest",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-c:a", "aac",
+		"-y", videoPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to generate test video: %v\n%s", err, out)
+	}
+
+	store := newMemStore()
+	h := videohandler.New(videohandler.WithStore(store))
+
+	cfg := sourceConfig{
+		typ:              "video",
+		path:             dir,
+		keyframeMode:     "interval",
+		keyframeInterval: "1s",
+	}
+
+	ctx := context.Background()
+	entities, err := h.Ingest(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+
+	if len(entities) == 0 {
+		t.Fatal("Ingest() returned no entities")
+	}
+
+	// First entity should be the video itself.
+	video := entities[0]
+	if video.EntityType != "video" {
+		t.Errorf("first entity type = %q, want %q", video.EntityType, "video")
+	}
+
+	// Verify metadata properties.
+	if w, ok := video.Properties["width"].(int); !ok || w != 320 {
+		t.Errorf("width = %v, want 320", video.Properties["width"])
+	}
+	if h, ok := video.Properties["height"].(int); !ok || h != 240 {
+		t.Errorf("height = %v, want 240", video.Properties["height"])
+	}
+	if codec, ok := video.Properties["codec"].(string); !ok || codec != "h264" {
+		t.Errorf("codec = %v, want h264", video.Properties["codec"])
+	}
+
+	// Video binary should be stored.
+	if ref, ok := video.Properties["storage_ref"].(string); !ok || ref == "" {
+		t.Error("expected storage_ref property for video with store")
+	}
+
+	// Should have at least one keyframe entity (1s video with 1s interval = 1 frame).
+	var keyframes int
+	for _, e := range entities {
+		if e.EntityType == "keyframe" {
+			keyframes++
+			// Keyframe should have keyframe_of edge.
+			if len(e.Edges) == 0 {
+				t.Error("keyframe entity has no edges")
+			} else if e.Edges[0].EdgeType != "keyframe_of" {
+				t.Errorf("keyframe edge type = %q, want %q", e.Edges[0].EdgeType, "keyframe_of")
+			}
+		}
+	}
+	if keyframes == 0 {
+		t.Error("expected at least one keyframe entity")
+	}
+}
+
+func TestVideoHandler_Ingest_SceneMode(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg/ffprobe not available in PATH")
+	}
+
+	// Generate a 2-second video with a color change at 1s for scene detection.
+	dir := t.TempDir()
+	videoPath := filepath.Join(dir, "scene.mp4")
+
+	// Create two 1s clips of different colors, then concatenate.
+	clip1 := filepath.Join(dir, "clip1.mp4")
+	clip2 := filepath.Join(dir, "clip2.mp4")
+
+	cmd1 := exec.Command("ffmpeg",
+		"-f", "lavfi", "-i", "color=c=red:s=160x120:d=1",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-y", clip1,
+	)
+	if out, err := cmd1.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg clip1: %v\n%s", err, out)
+	}
+
+	cmd2 := exec.Command("ffmpeg",
+		"-f", "lavfi", "-i", "color=c=green:s=160x120:d=1",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-y", clip2,
+	)
+	if out, err := cmd2.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg clip2: %v\n%s", err, out)
+	}
+
+	// Concatenate using the concat demuxer.
+	concatFile := filepath.Join(dir, "concat.txt")
+	concatContent := fmt.Sprintf("file '%s'\nfile '%s'\n", clip1, clip2)
+	if err := os.WriteFile(concatFile, []byte(concatContent), 0644); err != nil {
+		t.Fatalf("write concat file: %v", err)
+	}
+
+	cmdConcat := exec.Command("ffmpeg",
+		"-f", "concat", "-safe", "0", "-i", concatFile,
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-y", videoPath,
+	)
+	if out, err := cmdConcat.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg concat: %v\n%s", err, out)
+	}
+
+	h := videohandler.New()
+	cfg := sourceConfig{
+		typ:            "video",
+		path:           dir,
+		keyframeMode:   "scene",
+		sceneThreshold: 0.2,
+	}
+
+	ctx := context.Background()
+	entities, err := h.Ingest(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+
+	// We should get the video entity plus any detected scene keyframes.
+	if len(entities) == 0 {
+		t.Fatal("Ingest() returned no entities")
+	}
+
+	// The concat video should produce at least one keyframe at the scene change.
+	video := entities[0]
+	if video.EntityType != "video" {
+		t.Errorf("first entity type = %q, want %q", video.EntityType, "video")
+	}
+
+	t.Logf("scene mode: got %d total entities (1 video + %d keyframes)", len(entities), len(entities)-1)
+}
+
+func TestVideoHandler_Ingest_MetadataOnlyWithoutStore(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg/ffprobe not available in PATH")
+	}
+
+	dir := t.TempDir()
+	videoPath := filepath.Join(dir, "meta.mp4")
+	cmd := exec.Command("ffmpeg",
+		"-f", "lavfi", "-i", "color=c=black:s=160x120:d=1",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-y", videoPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v\n%s", err, out)
+	}
+
+	// No store — metadata-only mode.
+	h := videohandler.New()
+	cfg := sourceConfig{typ: "video", path: dir}
+
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest() error: %v", err)
+	}
+
+	if len(entities) == 0 {
+		t.Fatal("Ingest() returned no entities")
+	}
+
+	video := entities[0]
+	// Should NOT have storage_ref without a store.
+	if _, ok := video.Properties["storage_ref"]; ok {
+		t.Error("unexpected storage_ref property without store")
+	}
+
+	// Should still have metadata.
+	if video.Properties["codec"] == "" {
+		t.Error("expected codec metadata even without store")
+	}
 }

@@ -17,10 +17,14 @@ type stubSourceConfig struct {
 	watch      bool
 }
 
-func (s *stubSourceConfig) GetType() string      { return s.sourceType }
-func (s *stubSourceConfig) GetPath() string       { return s.path }
-func (s *stubSourceConfig) GetURL() string        { return "" }
-func (s *stubSourceConfig) IsWatchEnabled() bool  { return s.watch }
+func (s *stubSourceConfig) GetType() string            { return s.sourceType }
+func (s *stubSourceConfig) GetPath() string            { return s.path }
+func (s *stubSourceConfig) GetPaths() []string         { return nil }
+func (s *stubSourceConfig) GetURL() string             { return "" }
+func (s *stubSourceConfig) IsWatchEnabled() bool       { return s.watch }
+func (s *stubSourceConfig) GetKeyframeMode() string    { return "" }
+func (s *stubSourceConfig) GetKeyframeInterval() string { return "" }
+func (s *stubSourceConfig) GetSceneThreshold() float64 { return 0 }
 
 var _ handler.SourceHandler = (*cfgfile.ConfigHandler)(nil)
 

@@ -422,4 +422,10 @@ func (a sourceConfigAdapter) GetURL() string {
 	return ""
 }
 
+func (a sourceConfigAdapter) GetPaths() []string { return a.entry.Paths }
+
 func (a sourceConfigAdapter) IsWatchEnabled() bool { return a.entry.Watch }
+
+func (a sourceConfigAdapter) GetKeyframeMode() string      { return a.entry.KeyframeMode }
+func (a sourceConfigAdapter) GetKeyframeInterval() string   { return a.entry.KeyframeInterval }
+func (a sourceConfigAdapter) GetSceneThreshold() float64    { return a.entry.SceneThreshold }
