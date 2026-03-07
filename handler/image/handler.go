@@ -1,0 +1,279 @@
+// Package image implements the ImageHandler for image file sources.
+package image
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/c360studio/semsource/handler"
+	source "github.com/c360studio/semsource/source/vocabulary"
+	"github.com/c360studio/semstreams/message"
+)
+
+// sourceTypeKey is the config source type key for image sources.
+const sourceTypeKey = "image"
+
+// defaultExtensions lists the file extensions ImageHandler will process.
+var defaultExtensions = map[string]bool{
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".gif":  true,
+	".webp": true,
+	".svg":  true,
+}
+
+// ImageHandler handles image file sources.
+// It implements handler.SourceHandler.
+type ImageHandler struct{}
+
+// New returns a ready-to-use ImageHandler.
+func New() *ImageHandler {
+	return &ImageHandler{}
+}
+
+// SourceType returns the handler type identifier as used in semsource.json.
+func (h *ImageHandler) SourceType() string {
+	return sourceTypeKey
+}
+
+// Supports returns true when cfg describes an "image" source.
+func (h *ImageHandler) Supports(cfg handler.SourceConfig) bool {
+	return cfg.GetType() == sourceTypeKey
+}
+
+// Ingest walks the path in cfg, reads each supported image file, and
+// returns a RawEntity per file. It respects ctx cancellation.
+func (h *ImageHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+	root := cfg.GetPath()
+	if root == "" {
+		return nil, fmt.Errorf("image handler: GetPath() returned empty string")
+	}
+
+	var entities []handler.RawEntity
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		if !defaultExtensions[ext] {
+			return nil
+		}
+
+		entity, err := ingestFile(path, root)
+		if err != nil {
+			// Non-fatal: skip unreadable or malformed files and continue.
+			return nil
+		}
+		entities = append(entities, entity)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("image handler: walk %q: %w", root, err)
+	}
+
+	return entities, nil
+}
+
+// ingestFile reads a single image file and constructs its RawEntity.
+func ingestFile(path, root string) (handler.RawEntity, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return handler.RawEntity{}, fmt.Errorf("read %q: %w", path, err)
+	}
+
+	hash := contentHash(content)
+	instance := hash[:6]
+
+	relPath, _ := filepath.Rel(root, path)
+	ext := filepath.Ext(path)
+	mimeType := mimeForExt(ext)
+	format := formatForExt(ext)
+	fileSize := int64(len(content))
+
+	width, height := imageDimensions(path)
+
+	now := time.Now().UTC()
+
+	triples := []message.Triple{
+		{
+			Subject:    "", // filled by normalizer after ID assignment
+			Predicate:  source.MediaType,
+			Object:     "image",
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaMimeType,
+			Object:     mimeType,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaWidth,
+			Object:     width,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaHeight,
+			Object:     height,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaFilePath,
+			Object:     relPath,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaFileHash,
+			Object:     hash,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaFileSize,
+			Object:     fileSize,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+		{
+			Subject:    "",
+			Predicate:  source.MediaFormat,
+			Object:     format,
+			Source:     handler.SourceTypeImage,
+			Timestamp:  now,
+			Confidence: 1.0,
+		},
+	}
+
+	return handler.RawEntity{
+		SourceType: handler.SourceTypeImage,
+		Domain:     handler.DomainMedia,
+		System:     slugify(root),
+		EntityType: "image",
+		Instance:   instance,
+		Properties: map[string]any{
+			"file_path":    relPath,
+			"mime_type":    mimeType,
+			"content_hash": hash,
+			"width":        width,
+			"height":       height,
+			"file_size":    fileSize,
+			"format":       format,
+		},
+		Triples: triples,
+	}, nil
+}
+
+// imageDimensions returns the pixel width and height of the image at path.
+// For SVG and WebP files, which require special decoders not in the standard
+// library, it returns (0, 0). Returns (0, 0) on any decode error.
+func imageDimensions(path string) (width, height int) {
+	ext := strings.ToLower(filepath.Ext(path))
+	// SVG is XML-based; WebP is not supported by the standard library decoders.
+	if ext == ".svg" || ext == ".webp" {
+		return 0, 0
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return 0, 0
+	}
+	return cfg.Width, cfg.Height
+}
+
+// contentHash returns the hex-encoded SHA-256 of b.
+func contentHash(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// mimeForExt returns the MIME type for known image extensions.
+func mimeForExt(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// formatForExt returns the format name for known image extensions.
+func formatForExt(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg":
+		return "jpeg"
+	default:
+		return strings.TrimPrefix(strings.ToLower(ext), ".")
+	}
+}
+
+// slugify converts a filesystem path into a slug safe for use in entity IDs:
+// slashes become hyphens.
+func slugify(path string) string {
+	s := filepath.ToSlash(path)
+	s = strings.TrimPrefix(s, "/")
+	return strings.ReplaceAll(s, "/", "-")
+}
+
+// imageDimensionsFromBytes decodes image config from a byte slice.
+// Used in tests where a file does not yet exist on disk.
+func imageDimensionsFromBytes(b []byte, ext string) (width, height int) {
+	if ext == ".svg" || ext == ".webp" {
+		return 0, 0
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(b))
+	if err != nil {
+		return 0, 0
+	}
+	return cfg.Width, cfg.Height
+}

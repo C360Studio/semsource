@@ -331,3 +331,144 @@ func TestPollIntervalDuration(t *testing.T) {
 		t.Errorf("PollInterval duration: got %v, want 300s", d)
 	}
 }
+
+func TestLoadConfigFromReader_ImageSource(t *testing.T) {
+	trueVal := true
+	_ = trueVal // used only to confirm the bool pointer round-trips correctly
+
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {
+      "type": "image",
+      "paths": ["assets/images/"],
+      "extensions": ["png", "jpg"],
+      "max_file_size": "50MB",
+      "generate_thumbnails": true,
+      "thumbnail_max_dim": 512,
+      "watch": true
+    }
+  ],
+  "object_store": {
+    "bucket": "semsource-media",
+    "ttl": "720h"
+  }
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	src := cfg.Sources[0]
+	if src.Type != "image" {
+		t.Errorf("type: got %q, want %q", src.Type, "image")
+	}
+	if len(src.Paths) != 1 || src.Paths[0] != "assets/images/" {
+		t.Errorf("paths: got %v, want [assets/images/]", src.Paths)
+	}
+	if len(src.Extensions) != 2 || src.Extensions[0] != "png" || src.Extensions[1] != "jpg" {
+		t.Errorf("extensions: got %v, want [png jpg]", src.Extensions)
+	}
+	if src.MaxFileSize != "50MB" {
+		t.Errorf("max_file_size: got %q, want %q", src.MaxFileSize, "50MB")
+	}
+	if src.GenerateThumbnails == nil || !*src.GenerateThumbnails {
+		t.Errorf("generate_thumbnails: got %v, want true", src.GenerateThumbnails)
+	}
+	if src.ThumbnailMaxDim != 512 {
+		t.Errorf("thumbnail_max_dim: got %d, want 512", src.ThumbnailMaxDim)
+	}
+	if !src.Watch {
+		t.Error("watch: got false, want true")
+	}
+
+	if cfg.ObjectStore == nil {
+		t.Fatal("object_store: got nil, want non-nil")
+	}
+	if cfg.ObjectStore.Bucket != "semsource-media" {
+		t.Errorf("object_store.bucket: got %q, want %q", cfg.ObjectStore.Bucket, "semsource-media")
+	}
+	if cfg.ObjectStore.TTL != "720h" {
+		t.Errorf("object_store.ttl: got %q, want %q", cfg.ObjectStore.TTL, "720h")
+	}
+}
+
+func TestLoadConfigFromReader_ImageMissingPaths(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "image"}
+  ],
+  "object_store": {"bucket": "semsource-media"}
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for image source missing paths, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_ImageMissingObjectStore(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "image", "paths": ["assets/"]}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for image source without object_store, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_ObjectStoreMissingBucket(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "url": "github.com/acme/repo"}
+  ],
+  "object_store": {"bucket": "", "ttl": "720h"}
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for object_store with empty bucket, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_ImageEmptyExtension(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "image", "paths": ["assets/"], "extensions": ["png", ""]}
+  ],
+  "object_store": {"bucket": "semsource-media"}
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for image source with empty extension string, got nil")
+	}
+}

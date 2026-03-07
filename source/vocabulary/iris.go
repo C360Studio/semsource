@@ -18,6 +18,35 @@ const (
 	DcType = "http://purl.org/dc/terms/type"
 )
 
+// W3C Media Ontology namespace and class IRIs.
+const (
+	// MaNamespace is the W3C Media Ontology namespace prefix.
+	MaNamespace = "http://www.w3.org/ns/ma-ont#"
+
+	// ClassImage represents a static image media resource.
+	// Mapped to the W3C Media Ontology Image class.
+	ClassImage = MaNamespace + "Image"
+
+	// ClassVideo represents a video media resource.
+	// Mapped to the W3C Media Ontology VideoTrack class.
+	ClassVideo = MaNamespace + "VideoTrack"
+
+	// ClassKeyframe represents an extracted video frame.
+	// Semsource-specific; no standard ontology equivalent.
+	ClassKeyframe = Namespace + "Keyframe"
+)
+
+// FOAF depiction IRIs for image-entity relationships.
+// Used on edges that link a media image entity to the subject it depicts,
+// e.g. a diagram depicting an architecture component.
+const (
+	// FoafDepicts is the FOAF depicts property (subject → image direction).
+	FoafDepicts = "http://xmlns.com/foaf/0.1/depicts"
+
+	// FoafDepiction is the FOAF depiction property (image → subject direction).
+	FoafDepiction = "http://xmlns.com/foaf/0.1/depiction"
+)
+
 // Class IRIs define the types of source entities.
 const (
 	// ClassDocument represents an ingested document source.

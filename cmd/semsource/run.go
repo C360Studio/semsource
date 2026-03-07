@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semsource/handler/cfgfile"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	githandler "github.com/c360studio/semsource/handler/git"
+	imghandler "github.com/c360studio/semsource/handler/image"
 	urlhandler "github.com/c360studio/semsource/handler/url"
 	"github.com/c360studio/semsource/normalizer"
 )
@@ -51,6 +52,7 @@ func runCmd(args []string) error {
 	eng.RegisterHandler(dochandler.New())
 	eng.RegisterHandler(cfgfile.New(nil))
 	eng.RegisterHandler(urlhandler.New(logger))
+	eng.RegisterHandler(imghandler.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

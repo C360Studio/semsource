@@ -13,6 +13,7 @@ const (
 	SourceTypeDoc    = "doc"
 	SourceTypeConfig = "config"
 	SourceTypeURL    = "url"
+	SourceTypeImage  = "image"
 )
 
 // Domain constants for entity domain classification.
@@ -21,6 +22,7 @@ const (
 	DomainGit    = "git"
 	DomainWeb    = "web"
 	DomainConfig = "config"
+	DomainMedia  = "media"
 )
 
 // RawEntity is a pre-normalization entity extracted by a source handler.

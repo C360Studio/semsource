@@ -11,40 +11,66 @@ import (
 )
 
 // buildInitInput constructs terminal input for the Init wizard.
-// It simulates:
+// Since tests run from a temp dir with no detectable project files,
+// nothing is pre-selected. We must toggle sources on manually.
+//
+// Registration order (alphabetical by filename):
+//
+//	1. wizard_ast.go   → Code (AST)
+//	2. wizard_cfg.go   → Config files
+//	3. wizard_doc.go   → Documentation
+//	4. wizard_git.go   → Git history
+//	5. wizard_image.go → Images
+//	6. wizard_url.go   → URLs
+//	7. wizard_video.go → Video stream (unavailable)
+//
+// Simulates:
 //   - namespace entry
 //   - graph stream address (default)
-//   - toggle menu: type "done" to accept defaults (all available selected)
+//   - toggle menu: toggle on sources 1-6, then "done"
 //   - AST wizard prompts: path (default "."), language index 1 (auto-detect), watch yes
-//   - Git wizard prompts: url, branch (default "main"), watch yes
-//   - Doc wizard prompts: one path, watch yes
 //   - Config wizard prompts: one path, watch yes
+//   - Doc wizard prompts: one path, watch yes
+//   - Git wizard prompts: url, branch (default "main"), watch yes
+//   - Image wizard prompts: one path, max file size (default "50MB"), generate thumbnails yes
 //   - URL wizard prompts: one URL, poll interval (default "5m")
 func buildInitInput() string {
 	lines := []string{
-		"testorg",    // namespace
-		"",           // graph stream address (default localhost:7890)
-		"done",       // source menu: accept defaults (all available toggled on)
+		"testorg", // namespace (no auto-detected default in temp dir)
+		"",        // graph stream address (default localhost:7890)
+		// Source menu: toggle on each source type (none pre-selected in temp dir).
+		"1",    // toggle Code (AST)
+		"2",    // toggle Config files
+		"3",    // toggle Documentation
+		"4",    // toggle Git history
+		"5",    // toggle Images
+		"6",    // toggle URLs
+		"done", // finish source selection
 		// AST wizard
-		"",           // path (default ".")
-		"1",          // language: auto-detect
-		"y",          // watch
+		"",  // path (default ".")
+		"1", // language: auto-detect
+		"y", // watch
+		// Config wizard
+		"go.mod", // path
+		"",       // end multi-line
+		"y",      // watch
+		// Doc wizard
+		"docs/", // path
+		"",      // end multi-line
+		"y",     // watch
 		// Git wizard
 		"https://github.com/example/repo", // url
-		"",           // branch (default "main")
-		"y",          // watch
-		// Doc wizard
-		"docs/",      // path
-		"",           // end multi-line
-		"y",          // watch
-		// Config wizard
-		"go.mod",     // path
-		"",           // end multi-line
-		"y",          // watch
+		"",                                // branch (default "main")
+		"y",                               // watch
+		// Image wizard
+		"assets/", // path
+		"",        // end multi-line
+		"",        // max file size (default "50MB")
+		"y",       // generate thumbnails
 		// URL wizard
 		"https://example.com", // url
-		"",           // end multi-line
-		"",           // poll interval (default "5m")
+		"",                    // end multi-line
+		"",                    // poll interval (default "5m")
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
@@ -56,7 +82,9 @@ func TestInitWritesValidConfig(t *testing.T) {
 	input := buildInitInput()
 	term, _ := newTestTerm(input)
 
-	if err := Init(term, cfgPath); err != nil {
+	// Pass empty ProjectInfo so nothing is pre-detected (test controls all input).
+	noDetection := &ProjectInfo{}
+	if err := Init(term, cfgPath, noDetection); err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
 
@@ -83,12 +111,12 @@ func TestInitWritesValidConfig(t *testing.T) {
 		t.Error("expected at least one source")
 	}
 
-	// Verify at least ast and git sources are present.
+	// Verify all toggled source types are present.
 	typesSeen := map[string]bool{}
 	for _, s := range cfg.Sources {
 		typesSeen[s.Type] = true
 	}
-	for _, want := range []string{"ast", "git", "docs", "config", "url"} {
+	for _, want := range []string{"ast", "git", "docs", "config", "url", "image"} {
 		if !typesSeen[want] {
 			t.Errorf("expected source type %q in config, got types: %v", want, typesSeen)
 		}
@@ -119,9 +147,10 @@ func TestInitRequiresNamespace(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "semsource.json")
 
-	// Empty namespace → error.
+	// Pass empty ProjectInfo (no namespace default) and empty input.
+	noDetection := &ProjectInfo{}
 	term, _ := newTestTerm("\n")
-	err := Init(term, cfgPath)
+	err := Init(term, cfgPath, noDetection)
 	if err == nil {
 		t.Fatal("expected error when namespace is empty")
 	}
@@ -175,6 +204,97 @@ func TestAddUnknownType(t *testing.T) {
 	err := Add(term, cfgPath, []string{"bogus"})
 	if err == nil {
 		t.Fatal("expected error for unknown type")
+	}
+}
+
+func TestInitQuickWithDetectedProject(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "semsource.json")
+
+	// Simulate a Go project with git and docs.
+	info := &ProjectInfo{
+		HasGit:      true,
+		GitRemote:   "https://github.com/acme/myapp.git",
+		Language:    "go",
+		HasDocs:     true,
+		DocPaths:    []string{"docs/", "README.md"},
+		ConfigFiles: []string{"go.mod"},
+		DirName:     "myapp",
+		Namespace:   "acme",
+	}
+
+	// InitQuick should not need any input.
+	term, _ := newTestTerm("")
+	if err := InitQuick(term, cfgPath, info); err != nil {
+		t.Fatalf("InitQuick failed: %v", err)
+	}
+
+	cfg := loadConfig(t, cfgPath)
+
+	if cfg.Namespace != "acme" {
+		t.Errorf("expected namespace 'acme', got %q", cfg.Namespace)
+	}
+	if len(cfg.Sources) < 3 {
+		t.Errorf("expected at least 3 sources (git, ast, docs), got %d", len(cfg.Sources))
+	}
+
+	typesSeen := map[string]bool{}
+	for _, s := range cfg.Sources {
+		typesSeen[s.Type] = true
+	}
+	for _, want := range []string{"git", "ast", "docs", "config"} {
+		if !typesSeen[want] {
+			t.Errorf("expected source type %q, got types: %v", want, typesSeen)
+		}
+	}
+}
+
+func TestInitQuickFallsBackWhenNothingDetected(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "semsource.json")
+
+	// Empty detection — should fall back to interactive (and fail on EOF).
+	info := &ProjectInfo{}
+	term, _ := newTestTerm("")
+	err := InitQuick(term, cfgPath, info)
+	// Expect failure since interactive mode gets no input.
+	if err == nil {
+		t.Fatal("expected error when falling back to interactive with no input")
+	}
+}
+
+func TestShouldPreselect(t *testing.T) {
+	info := &ProjectInfo{
+		HasGit:      true,
+		Language:    "go",
+		HasDocs:     false,
+		ConfigFiles: []string{"go.mod"},
+		HasImages:   true,
+		ImagePaths:  []string{"assets/"},
+	}
+
+	if !shouldPreselect("git", info) {
+		t.Error("expected git to be preselected")
+	}
+	if !shouldPreselect("ast", info) {
+		t.Error("expected ast to be preselected")
+	}
+	if shouldPreselect("docs", info) {
+		t.Error("expected docs to NOT be preselected")
+	}
+	if !shouldPreselect("config", info) {
+		t.Error("expected config to be preselected")
+	}
+	if shouldPreselect("url", info) {
+		t.Error("expected url to NOT be preselected")
+	}
+	if !shouldPreselect("image", info) {
+		t.Error("expected image to be preselected when HasImages is true")
+	}
+	// Image should NOT be preselected when HasImages is false.
+	infoNoImages := &ProjectInfo{}
+	if shouldPreselect("image", infoNoImages) {
+		t.Error("expected image to NOT be preselected when HasImages is false")
 	}
 }
 

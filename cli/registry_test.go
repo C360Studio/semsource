@@ -17,6 +17,7 @@ func TestRegistryContainsExpectedWizards(t *testing.T) {
 		"docs":   false,
 		"config": false,
 		"url":    false,
+		"image":  false,
 		"video":  false,
 	}
 	for _, w := range wizards {

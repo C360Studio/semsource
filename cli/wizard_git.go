@@ -1,6 +1,10 @@
 package cli
 
-import "github.com/c360studio/semsource/config"
+import (
+	"os"
+
+	"github.com/c360studio/semsource/config"
+)
 
 func init() {
 	RegisterSourceWizard(&gitWizard{})
@@ -16,9 +20,15 @@ func (w *gitWizard) Available() (bool, string) { return true, "" }
 func (w *gitWizard) Prompts(term *Term) (*config.SourceEntry, error) {
 	term.Header("Git history source")
 
+	// Default to "." (current repo) if we're in a git repo.
+	defaultURL := ""
+	if _, err := os.Stat(".git"); err == nil {
+		defaultURL = "."
+	}
+
 	var repoURL string
 	for repoURL == "" {
-		repoURL = term.Prompt("Repository path or URL", "")
+		repoURL = term.Prompt("Repository path or URL", defaultURL)
 		if repoURL == "" {
 			term.Info("  A repository path or URL is required.")
 		}

@@ -35,10 +35,18 @@ func main() {
 
 func dispatch() error {
 	if len(os.Args) < 2 {
-		// No subcommand: run if config exists, otherwise show usage.
+		// No subcommand: run if config exists, otherwise offer setup.
 		if _, err := os.Stat("semsource.json"); err == nil {
 			return runCmd(nil)
 		}
+		term := cli.NewTerm(os.Stdin, os.Stdout)
+		term.Header("Welcome to SemSource")
+		term.Info("No semsource.json found in the current directory.")
+		fmt.Fprintln(os.Stdout)
+		if term.Confirm("Run the setup wizard?", true) {
+			return cli.Init(term, "semsource.json")
+		}
+		fmt.Fprintln(os.Stdout)
 		usage()
 		return nil
 	}
@@ -87,10 +95,14 @@ Run 'semsource <command> -h' for command-specific options.
 func initCmd(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	configPath := fs.String("config", "semsource.json", "path to write config file")
+	quick := fs.Bool("quick", false, "accept all auto-detected defaults with zero prompts")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	term := cli.NewTerm(os.Stdin, os.Stdout)
+	if *quick {
+		return cli.InitQuick(term, *configPath)
+	}
 	return cli.Init(term, *configPath)
 }
 

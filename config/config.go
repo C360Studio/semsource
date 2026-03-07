@@ -3,6 +3,16 @@ package config
 
 import "fmt"
 
+// ObjectStoreConfig configures the NATS ObjectStore connection for binary content.
+type ObjectStoreConfig struct {
+	// Bucket is the NATS JetStream ObjectStore bucket name.
+	Bucket string `json:"bucket"`
+
+	// TTL is the retention period for stored objects (Go duration string).
+	// Empty means no expiration.
+	TTL string `json:"ttl"`
+}
+
 // OutputConfig describes a single output endpoint for the flow.
 type OutputConfig struct {
 	// Name is a human-readable identifier for this output.
@@ -39,6 +49,10 @@ type Config struct {
 
 	// Sources lists all ingestion sources.
 	Sources []SourceEntry `json:"sources"`
+
+	// ObjectStore configures binary content storage.
+	// Required when using media sources (image, video).
+	ObjectStore *ObjectStoreConfig `json:"object_store,omitempty"`
 }
 
 // applyDefaults fills in omitted fields with their documented defaults.
@@ -67,6 +81,20 @@ func (c *Config) Validate() error {
 		if err := src.Validate(); err != nil {
 			return fmt.Errorf("config: sources[%d]: %w", i, err)
 		}
+	}
+
+	// Media sources require an ObjectStore to be configured for binary content.
+	for _, src := range c.Sources {
+		if src.Type == "image" || src.Type == "video" {
+			if c.ObjectStore == nil {
+				return fmt.Errorf("config: object_store is required when using %q sources", src.Type)
+			}
+			break
+		}
+	}
+
+	if c.ObjectStore != nil && c.ObjectStore.Bucket == "" {
+		return fmt.Errorf("config: object_store.bucket is required")
 	}
 
 	return nil

@@ -1,0 +1,179 @@
+package source
+
+import "github.com/c360studio/semstreams/vocabulary"
+
+// Media predicates for image and video resources ingested by SemSource.
+// Phase 1 covers image support. Phase 2 (video + keyframe) predicates are
+// defined and registered here but remain unused until the media handler lands.
+const (
+	// MediaType is the media entity type discriminator.
+	// Values: "image", "video", "keyframe" (see MediaTypeValue)
+	MediaType = "source.media.type"
+
+	// MediaMimeType is the MIME type of the media file.
+	// Values: image/jpeg, image/png, image/webp, image/gif, video/mp4, etc.
+	MediaMimeType = "source.media.mime_type"
+
+	// MediaWidth is the pixel width of the image or video frame.
+	MediaWidth = "source.media.width"
+
+	// MediaHeight is the pixel height of the image or video frame.
+	MediaHeight = "source.media.height"
+
+	// MediaFilePath is the original file path of the media asset.
+	MediaFilePath = "source.media.file_path"
+
+	// MediaFileHash is the content hash of the media file for staleness detection.
+	// Format: hex-encoded SHA256.
+	MediaFileHash = "source.media.file_hash"
+
+	// MediaFileSize is the file size in bytes.
+	MediaFileSize = "source.media.file_size"
+
+	// MediaFormat is the container or encoding format.
+	// Values: jpeg, png, webp, gif, mp4, webm, mov, etc.
+	MediaFormat = "source.media.format"
+
+	// MediaStorageRef is the storage URL or object key where the media asset is stored.
+	// For local deployments this is a file:// URI; for cloud it is a bucket URL.
+	MediaStorageRef = "source.media.storage_ref"
+
+	// MediaThumbnailRef is the storage URL or object key for the generated thumbnail.
+	// Present on image and video entities; absent on keyframe entities.
+	MediaThumbnailRef = "source.media.thumbnail_ref"
+)
+
+// Video predicates — Phase 2.
+// These constants and registrations are defined now for schema stability
+// but are not consumed until the video ingestion handler is implemented.
+const (
+	// MediaDuration is the video duration in seconds.
+	// Phase 2: video ingestion only.
+	MediaDuration = "source.media.duration"
+
+	// MediaFrameRate is the video frame rate in frames per second.
+	// Phase 2: video ingestion only.
+	MediaFrameRate = "source.media.frame_rate"
+
+	// MediaCodec is the video codec identifier.
+	// Values: h264, h265, vp9, av1, etc.
+	// Phase 2: video ingestion only.
+	MediaCodec = "source.media.codec"
+
+	// MediaBitrate is the average bitrate in kilobits per second.
+	// Phase 2: video ingestion only.
+	MediaBitrate = "source.media.bitrate"
+
+	// MediaKeyframeCount is the number of keyframes extracted from the video.
+	// Phase 2: video ingestion only.
+	MediaKeyframeCount = "source.media.keyframe_count"
+)
+
+// Keyframe predicates — Phase 2.
+// Used on entities of type MediaTypeKeyframe extracted from video assets.
+const (
+	// MediaTimestamp is the position in the video at which this keyframe occurs (seconds).
+	// Phase 2: keyframe extraction only.
+	MediaTimestamp = "source.media.timestamp"
+
+	// MediaFrameIndex is the zero-based frame index within the video.
+	// Phase 2: keyframe extraction only.
+	MediaFrameIndex = "source.media.frame_index"
+)
+
+// registerMediaPredicates registers all media predicates with the vocabulary.
+// Called from the init() in predicates.go so that all source predicates are
+// initialised in a single well-known location.
+func registerMediaPredicates() {
+	// --- Phase 1: image predicates ---
+
+	vocabulary.Register(MediaType,
+		vocabulary.WithDescription("Media entity type discriminator: image, video, keyframe"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(MaNamespace+"hasMediaType"))
+
+	vocabulary.Register(MediaMimeType,
+		vocabulary.WithDescription("MIME type of the media file (image/jpeg, video/mp4, etc.)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(DcFormat))
+
+	vocabulary.Register(MediaWidth,
+		vocabulary.WithDescription("Pixel width of the image or video frame"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI("https://schema.org/width"))
+
+	vocabulary.Register(MediaHeight,
+		vocabulary.WithDescription("Pixel height of the image or video frame"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI("https://schema.org/height"))
+
+	vocabulary.Register(MediaFilePath,
+		vocabulary.WithDescription("Original file path of the media asset"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"mediaFilePath"))
+
+	vocabulary.Register(MediaFileHash,
+		vocabulary.WithDescription("Hex-encoded SHA256 content hash for staleness detection"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"mediaFileHash"))
+
+	vocabulary.Register(MediaFileSize,
+		vocabulary.WithDescription("File size in bytes"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI("https://schema.org/contentSize"))
+
+	vocabulary.Register(MediaFormat,
+		vocabulary.WithDescription("Container or encoding format: jpeg, png, webp, mp4, webm, etc."),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(MaNamespace+"hasFormat"))
+
+	vocabulary.Register(MediaStorageRef,
+		vocabulary.WithDescription("Storage URL or object key where the media asset is persisted"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("https://schema.org/contentUrl"))
+
+	vocabulary.Register(MediaThumbnailRef,
+		vocabulary.WithDescription("Storage URL or object key for the generated thumbnail"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("https://schema.org/thumbnail"))
+
+	// --- Phase 2: video predicates ---
+	// Registered now for schema stability; unused until video handler is implemented.
+
+	vocabulary.Register(MediaDuration,
+		vocabulary.WithDescription("Video duration in seconds (Phase 2: video ingestion only)"),
+		vocabulary.WithDataType("float"),
+		vocabulary.WithIRI(MaNamespace+"duration"))
+
+	vocabulary.Register(MediaFrameRate,
+		vocabulary.WithDescription("Video frame rate in frames per second (Phase 2: video ingestion only)"),
+		vocabulary.WithDataType("float"),
+		vocabulary.WithIRI(MaNamespace+"frameRate"))
+
+	vocabulary.Register(MediaCodec,
+		vocabulary.WithDescription("Video codec identifier: h264, h265, vp9, av1, etc. (Phase 2: video ingestion only)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(MaNamespace+"hasCompression"))
+
+	vocabulary.Register(MediaBitrate,
+		vocabulary.WithDescription("Average bitrate in kilobits per second (Phase 2: video ingestion only)"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI(MaNamespace+"averageBitRate"))
+
+	vocabulary.Register(MediaKeyframeCount,
+		vocabulary.WithDescription("Number of keyframes extracted from the video (Phase 2: video ingestion only)"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI(Namespace+"keyframeCount"))
+
+	// --- Phase 2: keyframe predicates ---
+
+	vocabulary.Register(MediaTimestamp,
+		vocabulary.WithDescription("Position in the video where this keyframe occurs, in seconds (Phase 2: keyframe extraction only)"),
+		vocabulary.WithDataType("float"),
+		vocabulary.WithIRI(Namespace+"mediaTimestamp"))
+
+	vocabulary.Register(MediaFrameIndex,
+		vocabulary.WithDescription("Zero-based frame index within the video (Phase 2: keyframe extraction only)"),
+		vocabulary.WithDataType("int"),
+		vocabulary.WithIRI(Namespace+"mediaFrameIndex"))
+}

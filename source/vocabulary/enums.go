@@ -138,6 +138,24 @@ const (
 	DomainConfig DomainType = "config"
 )
 
+// MediaTypeValue represents the media entity type discriminator.
+// Used as the value for the MediaType predicate to distinguish image, video,
+// and keyframe entities stored in the same graph.
+type MediaTypeValue string
+
+const (
+	// MediaTypeImage identifies a static image entity.
+	MediaTypeImage MediaTypeValue = "image"
+
+	// MediaTypeVideo identifies a video media entity.
+	// Phase 2: video ingestion only.
+	MediaTypeVideo MediaTypeValue = "video"
+
+	// MediaTypeKeyframe identifies a keyframe extracted from a video.
+	// Phase 2: keyframe extraction only.
+	MediaTypeKeyframe MediaTypeValue = "keyframe"
+)
+
 // RelatedDomains maps domains to conceptually related domains.
 // Used for cross-domain SOP inclusion during code review.
 var RelatedDomains = map[DomainType][]DomainType{
