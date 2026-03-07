@@ -5,6 +5,9 @@ import "fmt"
 
 // ObjectStoreConfig configures the NATS ObjectStore connection for binary content.
 type ObjectStoreConfig struct {
+	// NATSUrl is the NATS server URL (e.g., "nats://localhost:4222").
+	NATSUrl string `json:"nats_url"`
+
 	// Bucket is the NATS JetStream ObjectStore bucket name.
 	Bucket string `json:"bucket"`
 
@@ -83,9 +86,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Media sources require an ObjectStore to be configured for binary content.
+	// Video sources require an ObjectStore; image sources work without one
+	// (metadata-only mode) but benefit from binary storage when configured.
 	for _, src := range c.Sources {
-		if src.Type == "image" || src.Type == "video" {
+		if src.Type == "video" {
 			if c.ObjectStore == nil {
 				return fmt.Errorf("config: object_store is required when using %q sources", src.Type)
 			}
@@ -93,8 +97,13 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.ObjectStore != nil && c.ObjectStore.Bucket == "" {
-		return fmt.Errorf("config: object_store.bucket is required")
+	if c.ObjectStore != nil {
+		if c.ObjectStore.Bucket == "" {
+			return fmt.Errorf("config: object_store.bucket is required")
+		}
+		if c.ObjectStore.NATSUrl == "" {
+			return fmt.Errorf("config: object_store.nats_url is required")
+		}
 	}
 
 	return nil

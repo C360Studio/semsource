@@ -54,7 +54,7 @@ func (h *ImageHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-c
 				if !ok {
 					return
 				}
-				enriched := enrichEvent(ev, root)
+				enriched := h.enrichEvent(ctx, ev, root)
 				select {
 				case out <- enriched:
 				case <-ctx.Done():
@@ -70,7 +70,7 @@ func (h *ImageHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-c
 
 // enrichEvent re-reads the changed file and populates ev.Entities.
 // For delete events the file is gone, so Entities remains empty.
-func enrichEvent(ev handler.ChangeEvent, root string) handler.ChangeEvent {
+func (h *ImageHandler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
 		return ev
@@ -83,7 +83,7 @@ func enrichEvent(ev handler.ChangeEvent, root string) handler.ChangeEvent {
 		return ev
 	}
 
-	entity, err := ingestFile(ev.Path, root)
+	entity, err := h.ingestFile(ctx, ev.Path, root)
 	if err == nil {
 		ev.Entities = []handler.RawEntity{entity}
 	}

@@ -11,6 +11,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/storage"
 )
 
 // sourceTypeKey is the config source type key for image sources.
@@ -36,11 +38,37 @@ var defaultExtensions = map[string]bool{
 
 // ImageHandler handles image file sources.
 // It implements handler.SourceHandler.
-type ImageHandler struct{}
+type ImageHandler struct {
+	store  storage.Store // nil = no binary storage (metadata only)
+	logger *slog.Logger
+}
 
-// New returns a ready-to-use ImageHandler.
-func New() *ImageHandler {
-	return &ImageHandler{}
+// Option is a functional option for configuring an ImageHandler.
+type Option func(*ImageHandler)
+
+// WithStore sets the binary storage backend. When nil (the default), the
+// handler records metadata triples only and skips binary storage.
+func WithStore(s storage.Store) Option {
+	return func(h *ImageHandler) { h.store = s }
+}
+
+// WithLogger sets a custom structured logger on the handler.
+func WithLogger(l *slog.Logger) Option {
+	return func(h *ImageHandler) { h.logger = l }
+}
+
+// New returns a ready-to-use ImageHandler configured by the provided options.
+// Calling New() with no options is equivalent to the former New() behaviour:
+// metadata-only mode with the default slog logger.
+func New(opts ...Option) *ImageHandler {
+	h := &ImageHandler{}
+	for _, opt := range opts {
+		opt(h)
+	}
+	if h.logger == nil {
+		h.logger = slog.Default()
+	}
+	return h
 }
 
 // SourceType returns the handler type identifier as used in semsource.json.
@@ -79,7 +107,7 @@ func (h *ImageHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]
 			return nil
 		}
 
-		entity, err := ingestFile(path, root)
+		entity, err := h.ingestFile(ctx, path, root)
 		if err != nil {
 			// Non-fatal: skip unreadable or malformed files and continue.
 			return nil
@@ -95,7 +123,9 @@ func (h *ImageHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]
 }
 
 // ingestFile reads a single image file and constructs its RawEntity.
-func ingestFile(path, root string) (handler.RawEntity, error) {
+// When the handler has a store configured, it also persists the binary content
+// and attempts to generate and store a thumbnail.
+func (h *ImageHandler) ingestFile(ctx context.Context, path, root string) (handler.RawEntity, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return handler.RawEntity{}, fmt.Errorf("read %q: %w", path, err)
@@ -181,7 +211,7 @@ func ingestFile(path, root string) (handler.RawEntity, error) {
 		},
 	}
 
-	return handler.RawEntity{
+	entity := handler.RawEntity{
 		SourceType: handler.SourceTypeImage,
 		Domain:     handler.DomainMedia,
 		System:     slugify(root),
@@ -197,7 +227,40 @@ func ingestFile(path, root string) (handler.RawEntity, error) {
 			"format":       format,
 		},
 		Triples: triples,
-	}, nil
+	}
+
+	// When a store is configured, persist the binary content and attempt
+	// thumbnail generation. Both operations are non-fatal: failures are logged
+	// and the entity is still returned with its metadata triples intact.
+	if h.store != nil {
+		storageKey := fmt.Sprintf("images/%s/%s/original", slugify(root), instance)
+		if err := h.store.Put(ctx, storageKey, content); err != nil {
+			h.logger.Warn("failed to store image binary", "path", path, "error", err)
+		} else {
+			entity.Triples = append(entity.Triples, message.Triple{
+				Subject:    "",
+				Predicate:  source.MediaStorageRef,
+				Object:     storageKey,
+				Source:     handler.SourceTypeImage,
+				Timestamp:  now,
+				Confidence: 1.0,
+			})
+
+			thumbKey, err := h.generateAndStoreThumbnail(ctx, content, path, root, instance)
+			if err == nil && thumbKey != "" {
+				entity.Triples = append(entity.Triples, message.Triple{
+					Subject:    "",
+					Predicate:  source.MediaThumbnailRef,
+					Object:     thumbKey,
+					Source:     handler.SourceTypeImage,
+					Timestamp:  now,
+					Confidence: 1.0,
+				})
+			}
+		}
+	}
+
+	return entity, nil
 }
 
 // imageDimensions returns the pixel width and height of the image at path.

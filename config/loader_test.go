@@ -355,6 +355,7 @@ func TestLoadConfigFromReader_ImageSource(t *testing.T) {
     }
   ],
   "object_store": {
+    "nats_url": "nats://localhost:4222",
     "bucket": "semsource-media",
     "ttl": "720h"
   }
@@ -390,6 +391,9 @@ func TestLoadConfigFromReader_ImageSource(t *testing.T) {
 	if cfg.ObjectStore == nil {
 		t.Fatal("object_store: got nil, want non-nil")
 	}
+	if cfg.ObjectStore.NATSUrl != "nats://localhost:4222" {
+		t.Errorf("object_store.nats_url: got %q, want %q", cfg.ObjectStore.NATSUrl, "nats://localhost:4222")
+	}
 	if cfg.ObjectStore.Bucket != "semsource-media" {
 		t.Errorf("object_store.bucket: got %q, want %q", cfg.ObjectStore.Bucket, "semsource-media")
 	}
@@ -409,7 +413,7 @@ func TestLoadConfigFromReader_ImageMissingPaths(t *testing.T) {
   "sources": [
     {"type": "image"}
   ],
-  "object_store": {"bucket": "semsource-media"}
+  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
@@ -417,7 +421,8 @@ func TestLoadConfigFromReader_ImageMissingPaths(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_ImageMissingObjectStore(t *testing.T) {
+func TestLoadConfigFromReader_ImageWithoutObjectStore(t *testing.T) {
+	// Image sources work in metadata-only mode without an ObjectStore.
 	input := `{
   "namespace": "acme",
   "flow": {
@@ -430,8 +435,8 @@ func TestLoadConfigFromReader_ImageMissingObjectStore(t *testing.T) {
   ]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error for image source without object_store, got nil")
+	if err != nil {
+		t.Fatalf("image sources should work without object_store (metadata-only mode): %v", err)
 	}
 }
 
@@ -465,10 +470,29 @@ func TestLoadConfigFromReader_ImageEmptyExtension(t *testing.T) {
   "sources": [
     {"type": "image", "paths": ["assets/"], "extensions": ["png", ""]}
   ],
-  "object_store": {"bucket": "semsource-media"}
+  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected validation error for image source with empty extension string, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_ObjectStoreMissingNATSUrl(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "url": "github.com/acme/repo"}
+  ],
+  "object_store": {"bucket": "semsource-media", "ttl": "720h"}
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for object_store with empty nats_url, got nil")
 	}
 }
