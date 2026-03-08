@@ -46,6 +46,14 @@ type FlowConfig struct {
 	AckTimeout string `json:"ack_timeout"`
 }
 
+// EntityStoreConfig configures persistent graph storage via NATS KV.
+// When present, entities are persisted to the shared ENTITY_STATES bucket.
+// When absent, entities are stored in-memory only.
+type EntityStoreConfig struct {
+	// NATSUrl is the NATS server URL (e.g., "nats://localhost:4222").
+	NATSUrl string `json:"nats_url"`
+}
+
 // Config is the top-level semsource configuration.
 type Config struct {
 	// Namespace is the org identifier used in entity ID construction (e.g., "acme").
@@ -56,6 +64,10 @@ type Config struct {
 
 	// Sources lists all ingestion sources.
 	Sources []SourceEntry `json:"sources"`
+
+	// EntityStore configures persistent graph storage.
+	// When set, entities are persisted to the NATS KV ENTITY_STATES bucket.
+	EntityStore *EntityStoreConfig `json:"entity_store,omitempty"`
 
 	// ObjectStore configures binary content storage.
 	// Required when using media sources (image, video).
@@ -69,6 +81,11 @@ type Config struct {
 	// for authenticating HTTPS clones of private repositories.
 	// Can also be set via the SEMSOURCE_GIT_TOKEN environment variable.
 	GitToken string `json:"git_token,omitempty"`
+
+	// MediaStoreDir is the root directory used by media source components
+	// (image, video, audio) to store binary content on the local filesystem.
+	// When empty, media processors operate in metadata-only mode.
+	MediaStoreDir string `json:"media_store_dir,omitempty"`
 }
 
 // applyDefaults fills in omitted fields with their documented defaults.
@@ -105,17 +122,6 @@ func (c *Config) Validate() error {
 	for i, src := range c.Sources {
 		if err := src.Validate(); err != nil {
 			return fmt.Errorf("config: sources[%d]: %w", i, err)
-		}
-	}
-
-	// Video sources require an ObjectStore; image sources work without one
-	// (metadata-only mode) but benefit from binary storage when configured.
-	for _, src := range c.Sources {
-		if src.Type == "video" {
-			if c.ObjectStore == nil {
-				return fmt.Errorf("config: object_store is required when using %q sources", src.Type)
-			}
-			break
 		}
 	}
 

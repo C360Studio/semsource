@@ -86,8 +86,8 @@ public class Calculator {
 	}
 
 	// Check entity ID format
-	if !strings.HasPrefix(calcClass.ID, "acme.semspec.code.class.test.") {
-		t.Errorf("ID = %q, want prefix 'acme.semspec.code.class.test.'", calcClass.ID)
+	if !strings.HasPrefix(calcClass.ID, "acme.semsource.java.test.class.") {
+		t.Errorf("ID = %q, want prefix 'acme.semsource.java.test.class.'", calcClass.ID)
 	}
 }
 
@@ -781,8 +781,8 @@ func TestTypeNameToEntityID_LocalType(t *testing.T) {
 	p := NewParser("acme", "myproject", "/tmp")
 
 	result := p.typeNameToEntityID("User", "models/User.java")
-	if !strings.HasPrefix(result, "acme.semspec.code.type.myproject.") {
-		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semspec.code.type.myproject.'", result)
+	if !strings.HasPrefix(result, "acme.semsource.java.myproject.type.") {
+		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semsource.java.myproject.type.'", result)
 	}
 	if !strings.Contains(result, "User") {
 		t.Errorf("typeNameToEntityID(User) = %q, want to contain 'User'", result)

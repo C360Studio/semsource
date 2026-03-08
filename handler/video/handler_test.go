@@ -686,6 +686,112 @@ func TestVideoHandler_Ingest_MultiplePaths(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// IngestEntityStates — normalizer-free typed entity production
+// ---------------------------------------------------------------------------
+
+func TestVideoHandler_IngestEntityStates_EmptyDirReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	h := videohandler.New()
+	cfg := sourceConfig{typ: "video", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 0 {
+		t.Errorf("entity state count: got %d, want 0 for empty dir", len(states))
+	}
+}
+
+func TestVideoHandler_IngestEntityStates_WithFFmpeg(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg/ffprobe not available in PATH")
+	}
+
+	dir := t.TempDir()
+	videoPath := filepath.Join(dir, "test.mp4")
+	cmd := exec.Command("ffmpeg",
+		"-f", "lavfi", "-i", "color=c=red:s=160x120:d=1",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-y", videoPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v\n%s", err, out)
+	}
+
+	h := videohandler.New()
+	cfg := sourceConfig{
+		typ:              "video",
+		path:             dir,
+		keyframeMode:     "interval",
+		keyframeInterval: "1s",
+	}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("IngestEntityStates() returned no states")
+	}
+
+	// First state must be the video entity with a 6-part ID.
+	video := states[0]
+	parts := strings.Split(video.ID, ".")
+	if len(parts) != 6 {
+		t.Errorf("video ID %q has %d parts, want 6", video.ID, len(parts))
+	}
+	if parts[0] != "acme" {
+		t.Errorf("video ID org segment = %q, want %q", parts[0], "acme")
+	}
+
+	// Verify the video entity carries the required vocabulary predicates.
+	predicates := make(map[string]bool)
+	for _, tr := range video.Triples {
+		predicates[tr.Predicate] = true
+	}
+	for _, p := range []string{
+		"source.media.type",
+		"source.media.file_path",
+		"source.media.mime_type",
+		"source.media.file_hash",
+		"source.media.format",
+		"source.media.duration",
+		"source.media.frame_rate",
+		"source.media.codec",
+	} {
+		if !predicates[p] {
+			t.Errorf("missing required predicate %q in video triples", p)
+		}
+	}
+
+	// Verify the media.type triple is "video".
+	for _, tr := range video.Triples {
+		if tr.Predicate == "source.media.type" && tr.Object != "video" {
+			t.Errorf("video media.type = %v, want %q", tr.Object, "video")
+		}
+	}
+
+	// Keyframe entities (if any) must have a keyframe_of relationship triple
+	// pointing back to the video entity ID.
+	for _, state := range states[1:] {
+		var hasKeyframeOf bool
+		for _, tr := range state.Triples {
+			if tr.Predicate == "source.media.keyframe_of" {
+				hasKeyframeOf = true
+				if tr.Object != video.ID {
+					t.Errorf("keyframe_of Object = %q, want video ID %q", tr.Object, video.ID)
+				}
+			}
+		}
+		if !hasKeyframeOf {
+			t.Errorf("keyframe entity %q missing source.media.keyframe_of triple", state.ID)
+		}
+	}
+}
+
 // TestVideoHandler_Ingest_NoPathsError verifies that Ingest returns an error
 // when neither GetPath nor GetPaths is configured.
 func TestVideoHandler_Ingest_NoPathsError(t *testing.T) {

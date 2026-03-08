@@ -263,6 +263,7 @@ func init() {
 	registerRepoPredicates()
 	registerSourcePredicates()
 	registerMediaPredicates()
+	registerConfigPredicates()
 }
 
 func registerStructurePredicates() {

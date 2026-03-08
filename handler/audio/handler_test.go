@@ -479,6 +479,162 @@ func TestAudioHandler_Ingest_NoPathsError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// IngestEntityStates — normalizer-free typed entity production
+// ---------------------------------------------------------------------------
+
+// writeMinimalMP3 writes a minimal valid MP3 stub file (ID3v2 header only).
+// Not a playable file, but enough for the hash/stat path without ffprobe.
+func writeMinimalMP3(t *testing.T, dir, name string) string {
+	t.Helper()
+	// Minimal ID3v2 tag: "ID3" + version byte + flags + 4-byte syncsafe size (all zero).
+	stub := []byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, stub, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func TestAudioHandler_IngestEntityStates_ReturnsEntityStates(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalMP3(t, dir, "track.mp3")
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("entity state count: got %d, want 1", len(states))
+	}
+}
+
+func TestAudioHandler_IngestEntityStates_IDContainsOrg(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalMP3(t, dir, "track.mp3")
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	if !strings.HasPrefix(states[0].ID, "acme.") {
+		t.Errorf("ID %q does not start with org prefix %q", states[0].ID, "acme.")
+	}
+}
+
+func TestAudioHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalMP3(t, dir, "track.mp3")
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	parts := strings.Split(states[0].ID, ".")
+	if len(parts) != 6 {
+		t.Errorf("ID %q has %d parts, want 6", states[0].ID, len(parts))
+	}
+}
+
+func TestAudioHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalMP3(t, dir, "track.mp3")
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	predicates := make(map[string]bool)
+	for _, tr := range states[0].Triples {
+		predicates[tr.Predicate] = true
+	}
+
+	required := []string{
+		"source.media.type",
+		"source.media.file_path",
+		"source.media.mime_type",
+		"source.media.file_hash",
+		"source.media.file_size",
+		"source.media.format",
+		"source.media.duration",
+		"source.media.codec",
+		"source.media.bitrate",
+		"source.media.sample_rate",
+		"source.media.channels",
+		"source.media.bit_depth",
+	}
+	for _, p := range required {
+		if !predicates[p] {
+			t.Errorf("missing required predicate %q in triples", p)
+		}
+	}
+}
+
+func TestAudioHandler_IngestEntityStates_MediaTypeTripleIsAudio(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalMP3(t, dir, "track.mp3")
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	for _, tr := range states[0].Triples {
+		if tr.Predicate == "source.media.type" {
+			if tr.Object != "audio" {
+				t.Errorf("media.type triple Object = %v, want %q", tr.Object, "audio")
+			}
+			return
+		}
+	}
+	t.Error("source.media.type triple not found")
+}
+
+func TestAudioHandler_IngestEntityStates_EmptyDirReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 0 {
+		t.Errorf("entity state count: got %d, want 0 for empty dir", len(states))
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Unused import guard for time (used in ParseProbeOutput test)
 // ---------------------------------------------------------------------------
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // ---------------------------------------------------------------------------
@@ -370,5 +371,169 @@ func TestDocHandler_Watch_WatchDisabledReturnsNil(t *testing.T) {
 	}
 	if ch != nil {
 		t.Error("Watch() should return nil channel when watch is disabled")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// IngestEntityStates — normalizer-free path
+// ---------------------------------------------------------------------------
+
+func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "readme.md", "# Hello\n\nContent here.")
+	writeMD(t, dir, "notes.txt", "Plain text.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 2 {
+		t.Fatalf("state count: got %d, want 2", len(states))
+	}
+}
+
+func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "doc.md", "# Title\nBody.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	parts := strings.Split(states[0].ID, ".")
+	if len(parts) != 6 {
+		t.Errorf("entity ID has %d parts, want 6: %q", len(parts), states[0].ID)
+	}
+	if parts[0] != "acme" {
+		t.Errorf("ID org segment = %q, want %q", parts[0], "acme")
+	}
+	if parts[2] != "web" {
+		t.Errorf("ID domain segment = %q, want %q", parts[2], "web")
+	}
+	if parts[4] != "doc" {
+		t.Errorf("ID type segment = %q, want %q", parts[4], "doc")
+	}
+}
+
+func TestDocHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "doc.md", "# My Doc\nSome content.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	predicates := make(map[string]bool)
+	for _, tr := range states[0].Triples {
+		predicates[tr.Predicate] = true
+	}
+
+	wantPredicates := []string{
+		source.DocType,
+		source.DocFilePath,
+		source.DocMimeType,
+		source.DocFileHash,
+		source.DocContent,
+		source.DocSummary,
+	}
+	for _, p := range wantPredicates {
+		if !predicates[p] {
+			t.Errorf("missing triple with predicate %q", p)
+		}
+	}
+}
+
+func TestDocHandler_IngestEntityStates_DeterministicID(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "doc.md", "# Title\nContent.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("first IngestEntityStates() error: %v", err)
+	}
+	states2, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("second IngestEntityStates() error: %v", err)
+	}
+	if len(states1) == 0 || len(states2) == 0 {
+		t.Fatal("expected states from both calls")
+	}
+	if states1[0].ID != states2[0].ID {
+		t.Errorf("entity ID not deterministic: %q vs %q", states1[0].ID, states2[0].ID)
+	}
+}
+
+func TestDocHandler_IngestEntityStates_IDChangesOnContentChange(t *testing.T) {
+	dir := t.TempDir()
+	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states1, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+
+	if err := os.WriteFile(path, []byte("# Second\nDifferent content."), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	states2, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+
+	if len(states1) == 0 || len(states2) == 0 {
+		t.Fatal("expected states from both ingests")
+	}
+	// Instance (sha256 prefix in ID) must change when content changes.
+	if states1[0].ID == states2[0].ID {
+		t.Error("entity ID should change when file content changes")
+	}
+}
+
+func TestDocHandler_IngestEntityStates_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 0 {
+		t.Errorf("state count: got %d, want 0 for empty dir", len(states))
+	}
+}
+
+func TestDocHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "doc.md", "# Title\nContent.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+
+	_, err := h.IngestEntityStates(ctx, cfg, "acme")
+	if err == nil {
+		t.Error("expected error on cancelled context")
 	}
 }

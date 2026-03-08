@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/javascript"
@@ -101,9 +102,8 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	// Create file entity
-	fileEntity := ast.NewCodeEntity(p.org, p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Hash = hash
-	fileEntity.Language = lang
 	fileEntity.StartLine = 1
 	fileEntity.EndLine = countLines(content)
 
@@ -309,8 +309,7 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeClass, name, filePath)
-	entity.Language = lang
+	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeClass, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -402,8 +401,7 @@ func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang,
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeMethod, name, filePath)
-	entity.Language = lang
+	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeMethod, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -433,8 +431,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeInterface, name, filePath)
-	entity.Language = lang
+	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeInterface, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -470,8 +467,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeType, name, filePath)
-	entity.Language = lang
+	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeType, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -491,8 +487,7 @@ func (p *Parser) extractEnum(node *sitter.Node, source []byte, filePath, lang, p
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeEnum, name, filePath)
-	entity.Language = lang
+	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeEnum, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -512,8 +507,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeFunction, name, filePath)
-	entity.Language = lang
+	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeFunction, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -590,7 +584,7 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 	var entity *ast.CodeEntity
 	if isArrowFunc {
 		// Create function entity for arrow functions
-		entity = ast.NewCodeEntity(p.org, p.project, ast.TypeFunction, name, filePath)
+		entity = ast.NewCodeEntity(p.org, lang, p.project, ast.TypeFunction, name, filePath)
 
 		// Check for async arrow function
 		if valueNode != nil {
@@ -610,12 +604,11 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 			p.extractFunctionSignature(valueNode, source, entity)
 		}
 	} else if kind == "const" {
-		entity = ast.NewCodeEntity(p.org, p.project, ast.TypeConst, name, filePath)
+		entity = ast.NewCodeEntity(p.org, lang, p.project, ast.TypeConst, name, filePath)
 	} else {
-		entity = ast.NewCodeEntity(p.org, p.project, ast.TypeVar, name, filePath)
+		entity = ast.NewCodeEntity(p.org, lang, p.project, ast.TypeVar, name, filePath)
 	}
 
-	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -801,8 +794,9 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	}
 
 	// Local type: create entity ID within current project
+	// Use typescript as the language domain for type references (JS files may also reference TS-style types)
 	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return fmt.Sprintf("%s.semspec.code.type.%s.%s", p.org, p.project, instance)
+	return entityid.Build(p.org, entityid.PlatformSemsource, "typescript", p.project, "type", instance)
 }
 
 // isTSBuiltinType returns true if the type is a TypeScript/JavaScript built-in type

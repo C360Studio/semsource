@@ -66,6 +66,7 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 	for i, w := range watchers {
 		wg.Add(1)
 		root := roots[i]
+		org := h.org
 		go func(w *fswatcher.FSWatcher, root string) {
 			defer wg.Done()
 			defer func() { _ = w.Stop() }()
@@ -77,7 +78,7 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 					if !ok {
 						return
 					}
-					enriched := enrichEvent(ev, root)
+					enriched := enrichEvent(ev, root, org)
 					select {
 					case out <- enriched:
 					case <-ctx.Done():
@@ -96,9 +97,10 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 	return out, nil
 }
 
-// enrichEvent re-reads the changed file and populates ev.Entities.
-// For delete events the file is gone, so Entities remains empty.
-func enrichEvent(ev handler.ChangeEvent, root string) handler.ChangeEvent {
+// enrichEvent re-reads the changed file and populates ev.Entities and, when
+// org is set, ev.EntityStates. For delete events the file is gone, so both
+// slices remain empty.
+func enrichEvent(ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
 		return ev
@@ -115,6 +117,10 @@ func enrichEvent(ev handler.ChangeEvent, root string) handler.ChangeEvent {
 	if err == nil {
 		ev.Entities = []handler.RawEntity{entity}
 	}
+
+	// Populate EntityStates for the normalizer-free processor path.
+	ev = enrichEventEntityStates(ev, root, org)
+
 	ev.Timestamp = time.Now()
 	return ev
 }

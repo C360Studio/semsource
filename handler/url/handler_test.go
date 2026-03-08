@@ -4,12 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	urlhandler "github.com/c360studio/semsource/handler/url"
 	"github.com/c360studio/semsource/handler"
+	urlhandler "github.com/c360studio/semsource/handler/url"
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // stubSourceConfig adapts test values to handler.SourceConfig.
@@ -350,3 +352,160 @@ type stubURLSourceConfig struct {
 }
 
 func (s *stubURLSourceConfig) GetPollInterval() string { return s.pollInterval }
+
+// ---------------------------------------------------------------------------
+// IngestEntityStates — normalizer-free path
+// ---------------------------------------------------------------------------
+
+func TestURLHandler_IngestEntityStates_ReturnsState(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html><body>Hello</body></html>"))
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("state count: got %d, want 1", len(states))
+	}
+}
+
+func TestURLHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	parts := strings.Split(states[0].ID, ".")
+	if len(parts) != 6 {
+		t.Errorf("entity ID has %d parts, want 6: %q", len(parts), states[0].ID)
+	}
+	if parts[0] != "acme" {
+		t.Errorf("ID org segment = %q, want %q", parts[0], "acme")
+	}
+	if parts[2] != "web" {
+		t.Errorf("ID domain segment = %q, want %q", parts[2], "web")
+	}
+	if parts[4] != "page" {
+		t.Errorf("ID type segment = %q, want %q", parts[4], "page")
+	}
+}
+
+func TestURLHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("ETag", `"etag-val"`)
+		_, _ = w.Write([]byte("<html>content</html>"))
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	predicates := make(map[string]bool)
+	for _, tr := range states[0].Triples {
+		predicates[tr.Predicate] = true
+	}
+
+	wantPredicates := []string{
+		source.WebType,
+		source.WebURL,
+		source.WebContentType,
+		source.WebDomain,
+		source.WebETag,
+		source.WebContentHash,
+	}
+	for _, p := range wantPredicates {
+		if !predicates[p] {
+			t.Errorf("missing triple with predicate %q", p)
+		}
+	}
+}
+
+func TestURLHandler_IngestEntityStates_DeterministicID(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	states1, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states2, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+
+	if len(states1) == 0 || len(states2) == 0 {
+		t.Skip("no states returned")
+	}
+	if states1[0].ID != states2[0].ID {
+		t.Errorf("entity ID not deterministic: %q vs %q", states1[0].ID, states2[0].ID)
+	}
+}
+
+func TestURLHandler_IngestEntityStates_NoETagTripleWhenAbsent(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// No ETag header set.
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	for _, tr := range states[0].Triples {
+		if tr.Predicate == source.WebETag {
+			t.Errorf("unexpected %q triple when no ETag returned by server", source.WebETag)
+		}
+	}
+}
+
+func TestURLHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := h.IngestEntityStates(ctx, cfg, "acme")
+	if err == nil {
+		t.Error("expected error on cancelled context")
+	}
+}

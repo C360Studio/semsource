@@ -7,6 +7,7 @@ import (
 
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
+	"github.com/c360studio/semstreams/message"
 )
 
 // --------------------------------------------------------------------------
@@ -167,5 +168,164 @@ func TestBuildBranchEntity(t *testing.T) {
 	}
 	if e.Instance != "main" {
 		t.Errorf("Instance = %q, want main", e.Instance)
+	}
+}
+
+// --------------------------------------------------------------------------
+// Typed entity struct tests (normalizer-free path)
+// --------------------------------------------------------------------------
+
+// findPredicate returns the first Triple with the given predicate from ts, or nil.
+func findPredicate(ts []message.Triple, predicate string) *message.Triple {
+	for i := range ts {
+		if ts[i].Predicate == predicate {
+			return &ts[i]
+		}
+	}
+	return nil
+}
+
+func TestCommitEntity_Triples(t *testing.T) {
+	h := githandler.New(githandler.Config{Org: "acme"})
+	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
+		typ:  "git",
+		path: ".", // current repo — always has at least one commit in CI
+	}, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error = %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("IngestEntityStates() returned no states")
+	}
+
+	// Find the first commit state by looking for the sha predicate.
+	var commitState *handler.EntityState
+	for _, s := range states {
+		if findPredicate(s.Triples, "source.git.commit.sha") != nil {
+			commitState = s
+			break
+		}
+	}
+	if commitState == nil {
+		t.Fatal("no commit entity state found in results")
+	}
+
+	// ID must be a non-empty 6-part dot-delimited string starting with org.
+	parts := strings.Split(commitState.ID, ".")
+	if len(parts) < 6 {
+		t.Errorf("commit entity ID %q has fewer than 6 parts", commitState.ID)
+	}
+	if parts[0] != "acme" {
+		t.Errorf("commit entity ID org = %q, want acme", parts[0])
+	}
+	if parts[2] != "git" {
+		t.Errorf("commit entity ID domain = %q, want git", parts[2])
+	}
+	if parts[4] != "commit" {
+		t.Errorf("commit entity ID type = %q, want commit", parts[4])
+	}
+
+	// Required predicates must be present.
+	for _, pred := range []string{
+		"source.git.commit.sha",
+		"source.git.commit.short_sha",
+		"source.git.commit.author",
+		"source.git.commit.subject",
+	} {
+		if findPredicate(commitState.Triples, pred) == nil {
+			t.Errorf("commit entity missing predicate %q", pred)
+		}
+	}
+}
+
+func TestAuthorEntity_Triples(t *testing.T) {
+	h := githandler.New(githandler.Config{Org: "acme"})
+	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
+		typ:  "git",
+		path: ".",
+	}, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error = %v", err)
+	}
+
+	var authorState *handler.EntityState
+	for _, s := range states {
+		if findPredicate(s.Triples, "source.git.author.email") != nil {
+			authorState = s
+			break
+		}
+	}
+	if authorState == nil {
+		t.Fatal("no author entity state found in results")
+	}
+
+	parts := strings.Split(authorState.ID, ".")
+	if len(parts) < 6 {
+		t.Errorf("author entity ID %q has fewer than 6 parts", authorState.ID)
+	}
+	if parts[4] != "author" {
+		t.Errorf("author entity ID type = %q, want author", parts[4])
+	}
+
+	for _, pred := range []string{"source.git.author.name", "source.git.author.email"} {
+		if findPredicate(authorState.Triples, pred) == nil {
+			t.Errorf("author entity missing predicate %q", pred)
+		}
+	}
+}
+
+func TestBranchEntity_Triples(t *testing.T) {
+	h := githandler.New(githandler.Config{Org: "acme"})
+	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
+		typ:  "git",
+		path: ".",
+	}, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error = %v", err)
+	}
+
+	var branchState *handler.EntityState
+	for _, s := range states {
+		if findPredicate(s.Triples, "source.git.branch.name") != nil {
+			branchState = s
+			break
+		}
+	}
+	if branchState == nil {
+		t.Fatal("no branch entity state found in results")
+	}
+
+	parts := strings.Split(branchState.ID, ".")
+	if len(parts) < 6 {
+		t.Errorf("branch entity ID %q has fewer than 6 parts", branchState.ID)
+	}
+	if parts[4] != "branch" {
+		t.Errorf("branch entity ID type = %q, want branch", parts[4])
+	}
+
+	for _, pred := range []string{"source.git.branch.name", "source.git.branch.head_sha"} {
+		if findPredicate(branchState.Triples, pred) == nil {
+			t.Errorf("branch entity missing predicate %q", pred)
+		}
+	}
+}
+
+func TestIngestEntityStates_NoOrg_ReturnsError(t *testing.T) {
+	h := githandler.New(githandler.DefaultConfig())
+	// No path or URL — should fail at repo resolution, not org.
+	_, err := h.IngestEntityStates(context.Background(), &srcCfg{typ: "git"}, "acme")
+	if err == nil {
+		t.Error("IngestEntityStates() with no path/url should return error")
+	}
+}
+
+func TestIngestEntityStates_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	h := githandler.New(githandler.DefaultConfig())
+	_, err := h.IngestEntityStates(ctx, &srcCfg{typ: "git", path: "."}, "acme")
+	if err == nil {
+		t.Error("IngestEntityStates() with cancelled context should return error")
 	}
 }

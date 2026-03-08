@@ -6,125 +6,91 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semstreams/federation"
 	"github.com/c360studio/semstreams/message"
 )
 
-func TestGraphEventPayload_JSONRoundTrip(t *testing.T) {
+func TestEntityPayload_JSONRoundTrip(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
-	original := &graph.GraphEventPayload{
-		Event: federation.Event{
-			Type:      federation.EventTypeDELTA,
-			SourceID:  "my-source",
-			Namespace: "acme",
-			Timestamp: now,
-			Entity: federation.Entity{
-				ID: "acme.semsource.git.my-repo.commit.a1b2c3",
-				Triples: []message.Triple{
-					{
-						Subject:   "acme.semsource.git.my-repo.commit.a1b2c3",
-						Predicate: "git.commit.sha",
-						Object:    "a1b2c3",
-						Timestamp: now,
-					},
-				},
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "my-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
+	original := &graph.EntityPayload{
+		ID: "acme.semsource.git.my-repo.commit.a1b2c3",
+		TripleData: []message.Triple{
+			{
+				Subject:    "acme.semsource.git.my-repo.commit.a1b2c3",
+				Predicate:  "git.commit.sha",
+				Object:     "a1b2c3",
+				Source:     "semsource",
+				Timestamp:  now,
+				Confidence: 1.0,
 			},
+		},
+		UpdatedAt: now,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	restored := &graph.EntityPayload{}
+	if err := json.Unmarshal(data, restored); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
+	if restored.ID != original.ID {
+		t.Errorf("ID = %q, want %q", restored.ID, original.ID)
+	}
+	if len(restored.TripleData) != len(original.TripleData) {
+		t.Fatalf("TripleData len = %d, want %d", len(restored.TripleData), len(original.TripleData))
+	}
+	if restored.TripleData[0].Predicate != "git.commit.sha" {
+		t.Errorf("Triple predicate = %q, want %q", restored.TripleData[0].Predicate, "git.commit.sha")
+	}
+}
+
+func TestEntityPayload_Graphable(t *testing.T) {
+	p := &graph.EntityPayload{
+		ID: "acme.semsource.golang.my-repo.function.New",
+		TripleData: []message.Triple{
+			{Subject: "acme.semsource.golang.my-repo.function.New", Predicate: "golang.function.name", Object: "New"},
 		},
 	}
 
-	data, err := original.MarshalJSON()
-	if err != nil {
-		t.Fatalf("MarshalJSON() error = %v", err)
+	if p.EntityID() != p.ID {
+		t.Errorf("EntityID() = %q, want %q", p.EntityID(), p.ID)
 	}
-
-	restored := &graph.GraphEventPayload{}
-	if err := restored.UnmarshalJSON(data); err != nil {
-		t.Fatalf("UnmarshalJSON() error = %v", err)
-	}
-
-	if restored.Event.Type != original.Event.Type {
-		t.Errorf("Type mismatch: got %v, want %v", restored.Event.Type, original.Event.Type)
-	}
-	if restored.Event.SourceID != original.Event.SourceID {
-		t.Errorf("SourceID mismatch: got %v, want %v", restored.Event.SourceID, original.Event.SourceID)
-	}
-	if restored.Event.Entity.ID != original.Event.Entity.ID {
-		t.Errorf("Entity ID mismatch: got %v, want %v", restored.Event.Entity.ID, original.Event.Entity.ID)
+	if len(p.Triples()) != 1 {
+		t.Errorf("Triples() len = %d, want 1", len(p.Triples()))
 	}
 }
 
-func TestGraphEventPayload_Schema(t *testing.T) {
-	p := &graph.GraphEventPayload{}
+func TestEntityPayload_Schema(t *testing.T) {
+	p := &graph.EntityPayload{}
 	schema := p.Schema()
 
 	if schema.Domain != "semsource" {
-		t.Errorf("Schema Domain = %q, want %q", schema.Domain, "semsource")
+		t.Errorf("Domain = %q, want %q", schema.Domain, "semsource")
 	}
-	if schema.Category != "graph_event" {
-		t.Errorf("Schema Category = %q, want %q", schema.Category, "graph_event")
+	if schema.Category != "entity" {
+		t.Errorf("Category = %q, want %q", schema.Category, "entity")
 	}
 	if schema.Version != "v1" {
-		t.Errorf("Schema Version = %q, want %q", schema.Version, "v1")
+		t.Errorf("Version = %q, want %q", schema.Version, "v1")
 	}
 }
 
-func TestGraphEventPayload_Validate(t *testing.T) {
-	now := time.Now()
-
-	t.Run("valid payload", func(t *testing.T) {
-		p := &graph.GraphEventPayload{
-			Event: federation.Event{
-				Type:      federation.EventTypeSEED,
-				SourceID:  "my-source",
-				Namespace: "acme",
-				Timestamp: now,
-			},
-		}
+func TestEntityPayload_Validate(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		p := &graph.EntityPayload{ID: "acme.semsource.git.repo.commit.abc"}
 		if err := p.Validate(); err != nil {
-			t.Errorf("Validate() unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("invalid event", func(t *testing.T) {
-		p := &graph.GraphEventPayload{
-			Event: federation.Event{},
-		}
+	t.Run("empty ID", func(t *testing.T) {
+		p := &graph.EntityPayload{}
 		if err := p.Validate(); err == nil {
-			t.Error("Validate() expected error for empty event")
+			t.Error("expected error for empty ID")
 		}
 	})
-}
-
-func TestGraphEventPayload_PayloadRegistration(t *testing.T) {
-	p := &graph.GraphEventPayload{}
-	schema := p.Schema()
-
-	event := federation.Event{
-		Type:      federation.EventTypeHEARTBEAT,
-		SourceID:  "heartbeat-source",
-		Namespace: "acme",
-		Timestamp: time.Now(),
-	}
-
-	payload := &graph.GraphEventPayload{Event: event}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("json.Marshal() error = %v", err)
-	}
-
-	restored := &graph.GraphEventPayload{}
-	if err := json.Unmarshal(data, restored); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
-	}
-
-	if restored.Schema() != schema {
-		t.Errorf("Schema mismatch after round-trip")
-	}
 }

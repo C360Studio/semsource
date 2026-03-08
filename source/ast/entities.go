@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -15,7 +16,7 @@ import (
 // It provides methods to convert to graph triples for storage.
 type CodeEntity struct {
 	// ID is the 6-part entity identifier
-	// Format: {org}.semspec.code.{type}.{project}.{instance}
+	// Format: {org}.semsource.{language}.{system}.{type}.{instance}
 	ID string
 
 	// Type classifies the code entity
@@ -84,16 +85,18 @@ type CapabilityInfo struct {
 }
 
 // NewCodeEntity creates a new code entity with the given parameters.
-// The project parameter is used to construct the 6-part entity ID.
-func NewCodeEntity(org, project string, entityType CodeEntityType, name, path string) *CodeEntity {
+// The language and project parameters are used to construct the 6-part entity ID.
+// language should be the domain name (e.g. "golang", "typescript", "java", "python", "svelte").
+func NewCodeEntity(org, language, project string, entityType CodeEntityType, name, path string) *CodeEntity {
 	// Build instance identifier from path and name
 	instance := BuildInstanceID(path, name, entityType)
 
 	return &CodeEntity{
-		ID:         fmt.Sprintf("%s.semspec.code.%s.%s.%s", org, entityType, project, instance),
+		ID:         entityid.Build(org, entityid.PlatformSemsource, language, project, string(entityType), instance),
 		Type:       entityType,
 		Name:       name,
 		Path:       path,
+		Language:   language,
 		Visibility: determineVisibility(name),
 		IndexedAt:  time.Now(),
 	}
@@ -161,7 +164,7 @@ func (e *CodeEntity) identityTriples() []message.Triple {
 	}
 	lang := e.Language
 	if lang == "" {
-		lang = "go" // default for backward compatibility
+		lang = "golang" // default for backward compatibility
 	}
 	triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeLanguage, Object: lang})
 	if e.Framework != "" {

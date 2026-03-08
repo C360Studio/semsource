@@ -11,6 +11,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/python"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -79,10 +80,9 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	// Create file entity
-	fileEntity := ast.NewCodeEntity(p.org, p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.org, "python", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Package = moduleName
 	fileEntity.Hash = hash
-	fileEntity.Language = "python"
 	fileEntity.StartLine = 1
 	fileEntity.EndLine = int(rootNode.EndPoint().Row) + 1
 
@@ -271,8 +271,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeClass, name, filePath)
-	entity.Language = "python"
+	entity := ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.determineVisibility(name)
@@ -349,8 +348,7 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 		entityType = ast.TypeMethod
 	}
 
-	entity := ast.NewCodeEntity(p.org, p.project, entityType, name, filePath)
-	entity.Language = "python"
+	entity := ast.NewCodeEntity(p.org, "python", p.project, entityType, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.determineVisibility(name)
@@ -440,8 +438,7 @@ func (p *Parser) extractAssignment(node *sitter.Node, content []byte, filePath s
 				entityType = ast.TypeConst
 			}
 
-			entity := ast.NewCodeEntity(p.org, p.project, entityType, name, filePath)
-			entity.Language = "python"
+			entity := ast.NewCodeEntity(p.org, "python", p.project, entityType, name, filePath)
 			entity.StartLine = int(node.StartPoint().Row) + 1
 			entity.EndLine = int(node.EndPoint().Row) + 1
 			entity.Visibility = p.determineVisibility(name)
@@ -600,7 +597,7 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 
 	// Local type - create entity ID within current project
 	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return fmt.Sprintf("%s.semspec.code.type.%s.%s", p.org, p.project, instance)
+	return entityid.Build(p.org, entityid.PlatformSemsource, "python", p.project, "type", instance)
 }
 
 // isBuiltinType returns true if the type is a Python built-in type.

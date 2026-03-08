@@ -100,6 +100,46 @@ const (
 	FileOperationRename FileOperationType = "rename"
 )
 
+// Git entity predicates describe commit, author, and branch entities emitted
+// by the GitHandler. These are data-level predicates on the entities
+// themselves, distinct from the decision-tracking predicates above which
+// model the "git-as-memory" pattern.
+const (
+	// GitCommitSHA is the full 40-character commit hash.
+	GitCommitSHA = "source.git.commit.sha"
+
+	// GitCommitShortSHA is the abbreviated 7-character commit hash.
+	// Used as the entity instance identifier for deterministic identity.
+	GitCommitShortSHA = "source.git.commit.short_sha"
+
+	// GitCommitAuthor is the combined "Name <email>" author string.
+	GitCommitAuthor = "source.git.commit.author"
+
+	// GitCommitSubject is the first line of the commit message.
+	GitCommitSubject = "source.git.commit.subject"
+
+	// GitCommitTouches is a relationship predicate: commit → file path touched.
+	// Object is the file path string, not an entity ID.
+	GitCommitTouches = "source.git.commit.touches"
+
+	// GitCommitAuthoredBy is a relationship predicate linking a commit entity
+	// to its author entity.
+	GitCommitAuthoredBy = "source.git.commit.authored_by"
+
+	// GitAuthorName is the display name of a git author.
+	GitAuthorName = "source.git.author.name"
+
+	// GitAuthorEmail is the email address of a git author.
+	// Also used as the stable instance identifier for author entities.
+	GitAuthorEmail = "source.git.author.email"
+
+	// GitBranchName is the ref name of a git branch.
+	GitBranchName = "source.git.branch.name"
+
+	// GitBranchHeadSHA is the abbreviated SHA of the branch's HEAD commit.
+	GitBranchHeadSHA = "source.git.branch.head_sha"
+)
+
 // Git decision class IRIs for RDF mapping.
 const (
 	// ClassDecision represents a git-tracked decision entity.
@@ -110,6 +150,8 @@ const (
 )
 
 func init() {
+	registerGitEntityPredicates()
+
 	// Register decision type predicate
 	vocabulary.Register(DecisionType,
 		vocabulary.WithDescription("Decision category from conventional commit prefix (feat, fix, refactor, etc.)"),
@@ -175,4 +217,58 @@ func init() {
 		vocabulary.WithDescription("Type of file operation: add, modify, delete, rename"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(Namespace+"decisionOperation"))
+}
+
+// registerGitEntityPredicates registers predicates for the commit, author,
+// and branch entities emitted by the GitHandler.
+func registerGitEntityPredicates() {
+	vocabulary.Register(GitCommitSHA,
+		vocabulary.WithDescription("Full 40-character git commit hash"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"commitSHA"))
+
+	vocabulary.Register(GitCommitShortSHA,
+		vocabulary.WithDescription("Abbreviated 7-character commit hash used as the entity instance"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"commitShortSHA"))
+
+	vocabulary.Register(GitCommitAuthor,
+		vocabulary.WithDescription("Combined 'Name <email>' author string from the commit"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"commitAuthor"))
+
+	vocabulary.Register(GitCommitSubject,
+		vocabulary.WithDescription("First line of the commit message"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"commitSubject"))
+
+	vocabulary.Register(GitCommitTouches,
+		vocabulary.WithDescription("Relationship: commit touches a file path (object is the file path string)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"commitTouches"))
+
+	vocabulary.Register(GitCommitAuthoredBy,
+		vocabulary.WithDescription("Relationship: commit was authored by a git author entity"),
+		vocabulary.WithDataType("entity_id"),
+		vocabulary.WithIRI(vocabulary.ProvWasAttributedTo))
+
+	vocabulary.Register(GitAuthorName,
+		vocabulary.WithDescription("Display name of a git author"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"authorName"))
+
+	vocabulary.Register(GitAuthorEmail,
+		vocabulary.WithDescription("Email address of a git author; also the stable instance identifier"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"authorEmail"))
+
+	vocabulary.Register(GitBranchName,
+		vocabulary.WithDescription("Ref name of a git branch"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"branchName"))
+
+	vocabulary.Register(GitBranchHeadSHA,
+		vocabulary.WithDescription("Abbreviated SHA of the branch's HEAD commit"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"branchHeadSHA"))
 }

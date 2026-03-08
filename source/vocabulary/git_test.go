@@ -145,3 +145,83 @@ func TestDecisionClassIRIs(t *testing.T) {
 		t.Errorf("ClassFileDecision should be '%sFileDecision', got '%s'", Namespace, ClassFileDecision)
 	}
 }
+
+func TestGitEntityPredicatesRegistered(t *testing.T) {
+	predicates := []string{
+		GitCommitSHA,
+		GitCommitShortSHA,
+		GitCommitAuthor,
+		GitCommitSubject,
+		GitCommitTouches,
+		GitCommitAuthoredBy,
+		GitAuthorName,
+		GitAuthorEmail,
+		GitBranchName,
+		GitBranchHeadSHA,
+	}
+
+	for _, pred := range predicates {
+		t.Run(pred, func(t *testing.T) {
+			meta := vocabulary.GetPredicateMetadata(pred)
+			if meta == nil {
+				t.Fatalf("predicate %s not registered", pred)
+			}
+			if meta.Description == "" {
+				t.Errorf("predicate %s missing description", pred)
+			}
+		})
+	}
+}
+
+func TestGitEntityPredicateDataTypes(t *testing.T) {
+	tests := []struct {
+		predicate    string
+		expectedType string
+	}{
+		{GitCommitSHA, "string"},
+		{GitCommitShortSHA, "string"},
+		{GitCommitAuthor, "string"},
+		{GitCommitSubject, "string"},
+		{GitCommitTouches, "string"},
+		{GitCommitAuthoredBy, "entity_id"},
+		{GitAuthorName, "string"},
+		{GitAuthorEmail, "string"},
+		{GitBranchName, "string"},
+		{GitBranchHeadSHA, "string"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.predicate, func(t *testing.T) {
+			meta := vocabulary.GetPredicateMetadata(tt.predicate)
+			if meta == nil {
+				t.Fatalf("predicate %s not registered", tt.predicate)
+			}
+			if meta.DataType != tt.expectedType {
+				t.Errorf("predicate %s: expected type %s, got %s", tt.predicate, tt.expectedType, meta.DataType)
+			}
+		})
+	}
+}
+
+func TestGitEntityPredicateIRIMappings(t *testing.T) {
+	tests := []struct {
+		predicate   string
+		expectedIRI string
+	}{
+		{GitCommitAuthoredBy, vocabulary.ProvWasAttributedTo},
+		{GitCommitSHA, Namespace + "commitSHA"},
+		{GitBranchName, Namespace + "branchName"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.predicate, func(t *testing.T) {
+			meta := vocabulary.GetPredicateMetadata(tt.predicate)
+			if meta == nil {
+				t.Fatalf("predicate %s not registered", tt.predicate)
+			}
+			if meta.StandardIRI != tt.expectedIRI {
+				t.Errorf("predicate %s: expected IRI %s, got %s", tt.predicate, tt.expectedIRI, meta.StandardIRI)
+			}
+		})
+	}
+}

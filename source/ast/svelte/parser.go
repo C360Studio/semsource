@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/svelte"
@@ -102,8 +103,8 @@ func (p *Parser) populateEntities(ctx context.Context, parseResult *ast.ParseRes
 		scriptLang = "typescript" // default for Svelte 5 projects
 	}
 
-	// Create file entity with actual script language + svelte framework
-	fileEntity := ast.NewCodeEntity(p.org, p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	// Create file entity with svelte as the domain; the script language is stored in Language field
+	fileEntity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Hash = hash
 	fileEntity.Language = scriptLang
 	fileEntity.Framework = "svelte"
@@ -200,9 +201,9 @@ func (p *Parser) ParseDirectory(ctx context.Context, dirPath string) ([]*ast.Par
 
 // createComponentEntity creates a component entity for a Svelte file
 func (p *Parser) createComponentEntity(name, path, lang string) *ast.CodeEntity {
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeComponent, name, path)
-	entity.Language = lang                   // typescript or javascript
-	entity.Framework = "svelte"              // Svelte is the framework
+	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeComponent, name, path)
+	entity.Language = lang      // typescript or javascript (script block language)
+	entity.Framework = "svelte" // Svelte is the framework
 	entity.Visibility = ast.VisibilityPublic // Svelte components are typically public
 	return entity
 }
@@ -409,7 +410,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeFunction, name, filePath)
+	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFunction, name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -435,7 +436,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeInterface, name, filePath)
+	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeInterface, name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -456,7 +457,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeType, name, filePath)
+	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeType, name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -516,12 +517,12 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 
 	var entity *ast.CodeEntity
 	if isArrowFunc {
-		entity = ast.NewCodeEntity(p.org, p.project, ast.TypeFunction, name, filePath)
+		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFunction, name, filePath)
 		entity.DocComment = "Arrow function"
 	} else if kind == "const" {
-		entity = ast.NewCodeEntity(p.org, p.project, ast.TypeConst, name, filePath)
+		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeConst, name, filePath)
 	} else {
-		entity = ast.NewCodeEntity(p.org, p.project, ast.TypeVar, name, filePath)
+		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeVar, name, filePath)
 	}
 
 	entity.Language = lang
@@ -595,7 +596,7 @@ func (p *Parser) componentNameToEntityID(componentName, filePath string) string 
 
 	// Create entity ID within current project
 	instance := ast.BuildInstanceID(filePath, componentName, ast.TypeComponent)
-	return fmt.Sprintf("%s.semspec.code.component.%s.%s", p.org, p.project, instance)
+	return entityid.Build(p.org, entityid.PlatformSemsource, "svelte", p.project, "component", instance)
 }
 
 // hasModifier checks if a node has a specific modifier

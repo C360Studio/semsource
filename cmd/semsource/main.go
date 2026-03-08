@@ -38,7 +38,7 @@ func dispatch() error {
 	if len(os.Args) < 2 {
 		// No subcommand: run if config exists, otherwise offer setup.
 		if _, err := os.Stat("semsource.json"); err == nil {
-			return runCmd(nil)
+			return runV2Cmd(nil)
 		}
 		term := cli.NewTerm(os.Stdin, os.Stdout)
 		term.Header("Welcome to SemSource")
@@ -56,7 +56,7 @@ func dispatch() error {
 	case "init":
 		return initCmd(os.Args[2:])
 	case "run":
-		return runCmd(os.Args[2:])
+		return runV2Cmd(os.Args[2:])
 	case "add":
 		return addCmd(os.Args[2:])
 	case "remove":

@@ -32,6 +32,11 @@ var configFileNames = map[string]bool{
 type Config struct {
 	// WatchConfig is forwarded to the underlying FSWatcher.
 	Watch fswatcher.WatchConfig
+
+	// Org is the organisation namespace used when building typed EntityState
+	// values via IngestEntityStates and Watch. Required for the normalizer-free
+	// processor path.
+	Org string
 }
 
 // ConfigHandler implements handler.SourceHandler for go.mod, package.json,
@@ -112,6 +117,55 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 	}
 
 	return entities, nil
+}
+
+// IngestEntityStates walks all configured paths, parses recognised config
+// files, and returns fully-typed entity states that embed vocabulary-predicate
+// triples directly — bypassing the normalizer entirely. The org parameter is
+// the organisation namespace (e.g. "acme") used in the 6-part entity ID.
+func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+	paths := resolvePaths(cfg)
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("cfgfile: at least one path is required")
+	}
+
+	now := time.Now().UTC()
+	var states []*handler.EntityState
+
+	for _, root := range paths {
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			if info.IsDir() {
+				return nil
+			}
+			base := filepath.Base(path)
+			if !configFileNames[base] {
+				return nil
+			}
+
+			content, readErr := os.ReadFile(path)
+			if readErr != nil {
+				h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
+				return nil
+			}
+
+			parsed := h.parseFileEntityStates(base, path, content, root, org, now)
+			states = append(states, parsed...)
+			return nil
+		})
+		if err != nil && err != context.Canceled {
+			return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
+		}
+	}
+
+	return states, nil
 }
 
 // Watch implements handler.SourceHandler.
@@ -206,12 +260,16 @@ func (h *ConfigHandler) fanOut(ctx context.Context, root string, in <-chan handl
 					"path", ev.Path, "error", err)
 				continue
 			}
+			now := time.Now()
 			entities := h.parseFile(base, ev.Path, content, root)
 			enriched := handler.ChangeEvent{
 				Path:      ev.Path,
 				Operation: ev.Operation,
-				Timestamp: time.Now(),
+				Timestamp: now,
 				Entities:  entities,
+			}
+			if h.cfg.Org != "" {
+				enriched.EntityStates = h.parseFileEntityStates(base, ev.Path, content, root, h.cfg.Org, now.UTC())
 			}
 			select {
 			case out <- enriched:

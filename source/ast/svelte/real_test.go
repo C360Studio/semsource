@@ -23,7 +23,7 @@ func TestParser_RealPlanCard(t *testing.T) {
 	projectRoot := filepath.Join(filepath.Dir(currentFile), "..", "..", "..")
 	planCardPath := filepath.Join(projectRoot, "ui", "src", "lib", "components", "board", "PlanCard.svelte")
 
-	parser := NewParser("semspec", "ui", filepath.Join(projectRoot, "ui"))
+	parser := NewParser("testorg", "ui", filepath.Join(projectRoot, "ui"))
 	result, err := parser.ParseFile(context.Background(), planCardPath)
 	if err != nil {
 		t.Skipf("PlanCard.svelte not found or cannot be parsed: %v", err)

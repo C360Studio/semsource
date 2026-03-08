@@ -51,6 +51,49 @@ func EnsureRepo(ctx context.Context, repoURL, branch, baseDir string, opts ...Op
 	return localPath, clone(ctx, repoURL, branch, localPath, opt.Token)
 }
 
+// IsRepoReady checks whether a directory is ready for ingestion.
+// It returns nil if the path is usable:
+//   - Path has no .git directory (not a git repo — ready as-is)
+//   - Path has .git/HEAD (clone complete)
+//
+// It returns an error if:
+//   - Path does not exist
+//   - Path has .git but no HEAD (clone in progress)
+func IsRepoReady(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("path not available: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory: %s", path)
+	}
+
+	gitDir := filepath.Join(path, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		// No .git directory — not a git repo, ready to use.
+		return nil
+	}
+
+	// .git exists — check for HEAD to confirm clone is initialized.
+	head := filepath.Join(gitDir, "HEAD")
+	if _, err := os.Stat(head); err != nil {
+		return fmt.Errorf("git clone in progress: %s (.git exists but HEAD missing)", path)
+	}
+
+	// HEAD can exist before checkout completes. Verify the working tree has
+	// at least one entry beyond .git to confirm the checkout is done.
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return fmt.Errorf("git clone in progress: %s: %w", path, err)
+	}
+	for _, e := range entries {
+		if e.Name() != ".git" {
+			return nil // Working tree has content — checkout complete.
+		}
+	}
+	return fmt.Errorf("git clone in progress: %s (working tree empty)", path)
+}
+
 // URLToSlug converts a git URL to a filesystem-safe slug.
 // Example: "https://github.com/opensensorhub/osh-core" → "github-com-opensensorhub-osh-core"
 func URLToSlug(rawURL string) string {
@@ -80,7 +123,7 @@ func clone(ctx context.Context, repoURL, branch, dest, token string) error {
 		return fmt.Errorf("workspace: mkdir: %w", err)
 	}
 
-	args := []string{"clone"}
+	args := []string{"clone", "--depth", "1"}
 	if branch != "" {
 		if err := validateBranchName(branch); err != nil {
 			return err

@@ -37,6 +37,9 @@ var defaultExtensions = map[string]bool{
 type ImageHandler struct {
 	store  storage.Store // nil = no binary storage (metadata only)
 	logger *slog.Logger
+	// org is the organisation namespace used when building EntityState values
+	// via IngestEntityStates and enrichEvent. Empty disables the typed path.
+	org string
 }
 
 // Option is a functional option for configuring an ImageHandler.
@@ -51,6 +54,12 @@ func WithStore(s storage.Store) Option {
 // WithLogger sets a custom structured logger on the handler.
 func WithLogger(l *slog.Logger) Option {
 	return func(h *ImageHandler) { h.logger = l }
+}
+
+// WithOrg sets the organisation namespace used when building typed EntityState
+// values via IngestEntityStates and Watch enrichment.
+func WithOrg(org string) Option {
+	return func(h *ImageHandler) { h.org = org }
 }
 
 // New returns a ready-to-use ImageHandler configured by the provided options.

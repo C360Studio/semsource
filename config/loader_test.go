@@ -634,7 +634,10 @@ func TestLoadConfigFromReader_VideoMissingPaths(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_VideoMissingObjectStore(t *testing.T) {
+func TestLoadConfigFromReader_VideoWithoutMediaStoreDir_MetadataOnlyIsValid(t *testing.T) {
+	// Video sources no longer require an objectstore or media_store_dir.
+	// Omitting both causes the handler to run in metadata-only mode, which is
+	// explicitly supported after the migration from objectstore to filestore.
 	input := `{
   "namespace": "acme",
   "flow": {
@@ -647,8 +650,8 @@ func TestLoadConfigFromReader_VideoMissingObjectStore(t *testing.T) {
   ]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error for video source without object_store, got nil")
+	if err != nil {
+		t.Fatalf("expected valid config for video source in metadata-only mode, got: %v", err)
 	}
 }
 

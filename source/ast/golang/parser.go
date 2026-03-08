@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -103,7 +104,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	// Create file entity
-	fileEntity := ast.NewCodeEntity(p.org, p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Package = file.Name.Name
 	fileEntity.Hash = hash
 	fileEntity.Imports = result.Imports
@@ -239,7 +240,7 @@ func (p *Parser) extractFunction(fset *token.FileSet, fn *goast.FuncDecl, filePa
 		receiverType = p.extractTypeName(fn.Recv.List[0].Type)
 	}
 
-	entity := ast.NewCodeEntity(p.org, p.project, entityType, name, filePath)
+	entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
 	entity.StartLine = fset.Position(fn.Pos()).Line
 	entity.EndLine = fset.Position(fn.End()).Line
 
@@ -299,7 +300,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 	switch t := ts.Type.(type) {
 	case *goast.StructType:
 		entityType = ast.TypeStruct
-		entity := ast.NewCodeEntity(p.org, p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
 		entity.StartLine = fset.Position(ts.Pos()).Line
 		entity.EndLine = fset.Position(ts.End()).Line
 
@@ -325,7 +326,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 
 	case *goast.InterfaceType:
 		entityType = ast.TypeInterface
-		entity := ast.NewCodeEntity(p.org, p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
 		entity.StartLine = fset.Position(ts.Pos()).Line
 		entity.EndLine = fset.Position(ts.End()).Line
 
@@ -351,7 +352,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 	default:
 		// Type alias or other type definition
 		entityType = ast.TypeType
-		entity := ast.NewCodeEntity(p.org, p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
 		entity.StartLine = fset.Position(ts.Pos()).Line
 		entity.EndLine = fset.Position(ts.End()).Line
 
@@ -371,7 +372,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 
 // extractValueSpec extracts a const or var entity
 func (p *Parser) extractValueSpec(fset *token.FileSet, name *goast.Ident, vs *goast.ValueSpec, doc *goast.CommentGroup, entityType ast.CodeEntityType, filePath string) *ast.CodeEntity {
-	entity := ast.NewCodeEntity(p.org, p.project, entityType, name.Name, filePath)
+	entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name.Name, filePath)
 	entity.StartLine = fset.Position(name.Pos()).Line
 	entity.EndLine = fset.Position(vs.End()).Line
 
@@ -490,7 +491,7 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 
 	// Local function: create entity ID within current project
 	instance := ast.BuildInstanceID(filePath, callName, ast.TypeFunction)
-	return fmt.Sprintf("%s.semspec.code.function.%s.%s", p.org, p.project, instance)
+	return entityid.Build(p.org, entityid.PlatformSemsource, "golang", p.project, "function", instance)
 }
 
 // isBuiltinFunc returns true if the function is a Go built-in function
@@ -538,7 +539,7 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// Local type: create entity ID within current project
 	// Build instance ID from file path and type name
 	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return fmt.Sprintf("%s.semspec.code.type.%s.%s", p.org, p.project, instance)
+	return entityid.Build(p.org, entityid.PlatformSemsource, "golang", p.project, "type", instance)
 }
 
 // isBuiltinType returns true if the type is a Go built-in type

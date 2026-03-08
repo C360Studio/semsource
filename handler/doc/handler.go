@@ -23,11 +23,22 @@ var docExtensions = map[string]bool{
 
 // DocHandler handles document sources (markdown, plain text).
 // It implements handler.SourceHandler.
-type DocHandler struct{}
+type DocHandler struct {
+	// org is the organisation namespace used when building typed EntityState
+	// values via IngestEntityStates and enrichEventEntityStates. When empty,
+	// EntityStates are not populated on watch events.
+	org string
+}
 
 // New returns a ready-to-use DocHandler.
 func New() *DocHandler {
 	return &DocHandler{}
+}
+
+// NewWithOrg returns a DocHandler that will populate EntityStates on watch
+// events using the given org namespace.
+func NewWithOrg(org string) *DocHandler {
+	return &DocHandler{org: org}
 }
 
 // sourceTypeKey is the config source type key for doc sources.

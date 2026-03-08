@@ -42,6 +42,10 @@ type Config struct {
 	// it is passed to the workspace package via GIT_CONFIG environment
 	// variables. SSH URLs ignore the token and rely on the user's SSH agent.
 	Token string
+
+	// Org is the organisation namespace used when building typed EntityState values
+	// via IngestEntityStates. Required for the git-source processor's normalizer-free path.
+	Org string
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -141,6 +145,60 @@ func (h *GitHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]ha
 	return entities, nil
 }
 
+// IngestEntityStates resolves the repo path, walks commit history, and returns
+// fully-typed entity states that embed vocabulary-predicate triples directly —
+// bypassing the normalizer entirely. The org parameter is the organisation
+// namespace (e.g. "acme") used in the 6-part entity ID.
+func (h *GitHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	repoPath, err := h.resolveRepoPath(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	system := h.systemSlug(cfg)
+	now := time.Now().UTC()
+
+	branch, err := currentBranch(ctx, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("git handler: get branch: %w", err)
+	}
+
+	head, err := headCommitSHA(ctx, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("git handler: get HEAD: %w", err)
+	}
+
+	commits, err := listCommits(ctx, repoPath, h.cfg.MaxCommits)
+	if err != nil {
+		return nil, fmt.Errorf("git handler: list commits: %w", err)
+	}
+
+	var states []*handler.EntityState
+	seenAuthors := make(map[string]bool)
+
+	for _, c := range commits {
+		ce := newCommitEntity(org, c.sha, c.authorFull, c.subject, system, now)
+		ce.TouchedFiles = c.files
+		ce.AuthorEmail = c.authorEmail
+		states = append(states, ce.EntityState())
+
+		if !seenAuthors[c.authorEmail] {
+			seenAuthors[c.authorEmail] = true
+			ae := newAuthorEntity(org, c.authorName, c.authorEmail, system, now)
+			states = append(states, ae.EntityState())
+		}
+	}
+
+	be := newBranchEntity(org, branch, head, system, now)
+	states = append(states, be.EntityState())
+
+	return states, nil
+}
+
 // Watch starts a polling loop that emits a ChangeEvent whenever the HEAD
 // commit SHA changes. Returns (nil, nil) when watching is not enabled.
 // The returned channel is closed when ctx is cancelled.
@@ -181,17 +239,25 @@ func (h *GitHandler) pollLoop(ctx context.Context, repoPath string, ch chan<- ha
 			lastSHA = currentSHA
 
 			// Re-ingest the repo to get updated entities.
-			entities, err := h.Ingest(ctx, &localCfg{path: repoPath})
+			// Populate both Entities (for backward compat) and EntityStates
+			// (for the normalizer-free processor path).
+			lc := &localCfg{path: repoPath}
+			entities, err := h.Ingest(ctx, lc)
 			if err != nil {
 				continue
+			}
+			var entityStates []*handler.EntityState
+			if h.cfg.Org != "" {
+				entityStates, _ = h.IngestEntityStates(ctx, lc, h.cfg.Org)
 			}
 
 			select {
 			case ch <- handler.ChangeEvent{
-				Path:      repoPath,
-				Operation: handler.OperationModify,
-				Timestamp: time.Now(),
-				Entities:  entities,
+				Path:         repoPath,
+				Operation:    handler.OperationModify,
+				Timestamp:    time.Now(),
+				Entities:     entities,
+				EntityStates: entityStates,
 			}:
 			case <-ctx.Done():
 				return

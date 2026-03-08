@@ -1,6 +1,10 @@
 package handler
 
-import "time"
+import (
+	"time"
+
+	"github.com/c360studio/semstreams/message"
+)
 
 // SourceType constants for supported handler kinds.
 const (
@@ -89,6 +93,20 @@ const (
 	OperationDelete ChangeOperation = "delete"
 )
 
+// EntityState is a handler-level entity ready for direct graph publication.
+// Handlers that build typed entity structs (bypassing the normalizer) populate
+// this type so processors can convert directly to graph.EntityPayload.
+type EntityState struct {
+	// ID is the fully-qualified 6-part entity identifier.
+	ID string
+
+	// Triples are the semantic property and relationship triples for this entity.
+	Triples []message.Triple
+
+	// UpdatedAt is when the entity was last observed / indexed.
+	UpdatedAt time.Time
+}
+
 // ChangeEvent is emitted by a handler's Watch channel when a source change is detected.
 type ChangeEvent struct {
 	// Path is the filesystem path or URL that changed.
@@ -103,4 +121,9 @@ type ChangeEvent struct {
 	// Entities are the raw entities extracted from the changed source.
 	// May be empty for delete operations, where the path itself is the signal.
 	Entities []RawEntity
+
+	// EntityStates holds pre-built typed entities for handlers that bypass the
+	// normalizer (e.g. git-source). When populated, processors should prefer
+	// EntityStates over Entities to avoid a redundant normalizer pass.
+	EntityStates []*EntityState
 }

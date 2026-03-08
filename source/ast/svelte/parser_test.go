@@ -406,7 +406,7 @@ func TestParser_Integration_RealComponent(t *testing.T) {
 	err := os.WriteFile(testFile, []byte(svelteContent), 0o644)
 	require.NoError(t, err)
 
-	parser := NewParser("semspec", "ui", tmpDir)
+	parser := NewParser("testorg", "ui", tmpDir)
 	result, err := parser.ParseFile(context.Background(), testFile)
 	require.NoError(t, err)
 

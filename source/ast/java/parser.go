@@ -11,6 +11,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/java"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -79,10 +80,9 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	// Create file entity
-	fileEntity := ast.NewCodeEntity(p.org, p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Package = packageName
 	fileEntity.Hash = hash
-	fileEntity.Language = "java"
 	fileEntity.StartLine = 1
 	fileEntity.EndLine = int(rootNode.EndPoint().Row) + 1
 
@@ -265,8 +265,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeClass, name, filePath)
-	entity.Language = "java"
+	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeClass, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -317,8 +316,7 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeInterface, name, filePath)
-	entity.Language = "java"
+	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeInterface, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -370,8 +368,7 @@ func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string)
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeEnum, name, filePath)
-	entity.Language = "java"
+	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeEnum, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -405,8 +402,7 @@ func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath strin
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeStruct, name, filePath)
-	entity.Language = "java"
+	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeStruct, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -440,8 +436,7 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeMethod, name, filePath)
-	entity.Language = "java"
+	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeMethod, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -505,8 +500,7 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 			}
 			name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-			entity := ast.NewCodeEntity(p.org, p.project, ast.TypeVar, name, filePath)
-			entity.Language = "java"
+			entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeVar, name, filePath)
 			entity.StartLine = int(node.StartPoint().Row) + 1
 			entity.EndLine = int(node.EndPoint().Row) + 1
 			entity.Visibility = visibility
@@ -600,8 +594,7 @@ func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath 
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, p.project, ast.TypeMethod, name, filePath)
-	entity.Language = "java"
+	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeMethod, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -779,7 +772,7 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 
 	// Local type - create entity ID within current project
 	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return fmt.Sprintf("%s.semspec.code.type.%s.%s", p.org, p.project, instance)
+	return entityid.Build(p.org, entityid.PlatformSemsource, "java", p.project, "type", instance)
 }
 
 // isBuiltinType returns true if the type is a Java built-in type.

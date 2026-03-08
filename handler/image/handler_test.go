@@ -701,6 +701,145 @@ func TestImageHandler_Ingest_WithoutStore_NoStorageTriples(t *testing.T) {
 // Multi-path Ingest
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// IngestEntityStates — normalizer-free typed entity production
+// ---------------------------------------------------------------------------
+
+func TestImageHandler_IngestEntityStates_ReturnsEntityStates(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("entity state count: got %d, want 1", len(states))
+	}
+}
+
+func TestImageHandler_IngestEntityStates_IDContainsOrg(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	if !strings.HasPrefix(states[0].ID, "acme.") {
+		t.Errorf("ID %q does not start with org prefix %q", states[0].ID, "acme.")
+	}
+}
+
+func TestImageHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	parts := strings.Split(states[0].ID, ".")
+	if len(parts) != 6 {
+		t.Errorf("ID %q has %d parts, want 6", states[0].ID, len(parts))
+	}
+}
+
+func TestImageHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	predicates := make(map[string]bool)
+	for _, tr := range states[0].Triples {
+		predicates[tr.Predicate] = true
+	}
+
+	required := []string{
+		"source.media.type",
+		"source.media.file_path",
+		"source.media.mime_type",
+		"source.media.file_hash",
+		"source.media.file_size",
+		"source.media.format",
+		"source.media.width",
+		"source.media.height",
+	}
+	for _, p := range required {
+		if !predicates[p] {
+			t.Errorf("missing required predicate %q in triples", p)
+		}
+	}
+}
+
+func TestImageHandler_IngestEntityStates_MediaTypeTripleIsImage(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	for _, tr := range states[0].Triples {
+		if tr.Predicate == "source.media.type" {
+			if tr.Object != "image" {
+				t.Errorf("media.type triple Object = %v, want %q", tr.Object, "image")
+			}
+			return
+		}
+	}
+	t.Error("source.media.type triple not found")
+}
+
+func TestImageHandler_IngestEntityStates_EmptyDirReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 0 {
+		t.Errorf("entity state count: got %d, want 0 for empty dir", len(states))
+	}
+}
+
 func TestImageHandler_Ingest_MultiplePaths(t *testing.T) {
 	dirA := t.TempDir()
 	dirB := t.TempDir()

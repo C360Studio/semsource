@@ -83,8 +83,8 @@ func Add(a, b int) int {
 	}
 
 	// Check entity ID format
-	if !strings.HasPrefix(addFunc.ID, "acme.semspec.code.function.test.") {
-		t.Errorf("ID = %q, want prefix 'acme.semspec.code.function.test.'", addFunc.ID)
+	if !strings.HasPrefix(addFunc.ID, "acme.semsource.golang.test.function.") {
+		t.Errorf("ID = %q, want prefix 'acme.semsource.golang.test.function.'", addFunc.ID)
 	}
 }
 
@@ -527,8 +527,8 @@ func TestTypeNameToEntityID_LocalType(t *testing.T) {
 	p.importMap = make(map[string]string)
 
 	result := p.typeNameToEntityID("User", "models/user.go")
-	if !strings.HasPrefix(result, "acme.semspec.code.type.myproject.") {
-		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semspec.code.type.myproject.'", result)
+	if !strings.HasPrefix(result, "acme.semsource.golang.myproject.type.") {
+		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semsource.golang.myproject.type.'", result)
 	}
 	if !strings.Contains(result, "User") {
 		t.Errorf("typeNameToEntityID(User) = %q, want to contain 'User'", result)
@@ -614,8 +614,8 @@ func TestCallNameToEntityID_LocalFunc(t *testing.T) {
 	p.importMap = make(map[string]string)
 
 	result := p.callNameToEntityID("helper", "utils/helper.go")
-	if !strings.HasPrefix(result, "acme.semspec.code.function.myproject.") {
-		t.Errorf("callNameToEntityID(helper) = %q, want prefix 'acme.semspec.code.function.myproject.'", result)
+	if !strings.HasPrefix(result, "acme.semsource.golang.myproject.function.") {
+		t.Errorf("callNameToEntityID(helper) = %q, want prefix 'acme.semsource.golang.myproject.function.'", result)
 	}
 	if !strings.Contains(result, "helper") {
 		t.Errorf("callNameToEntityID(helper) = %q, want to contain 'helper'", result)

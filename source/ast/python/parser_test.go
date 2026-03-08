@@ -81,8 +81,8 @@ def add(a: int, b: int) -> int:
 	}
 
 	// Check entity ID format
-	if !strings.HasPrefix(addFunc.ID, "acme.semspec.code.function.test.") {
-		t.Errorf("ID = %q, want prefix 'acme.semspec.code.function.test.'", addFunc.ID)
+	if !strings.HasPrefix(addFunc.ID, "acme.semsource.python.test.function.") {
+		t.Errorf("ID = %q, want prefix 'acme.semsource.python.test.function.'", addFunc.ID)
 	}
 }
 
@@ -562,8 +562,8 @@ func TestTypeNameToEntityID_LocalType(t *testing.T) {
 	p := NewParser("acme", "myproject", "/tmp")
 
 	result := p.typeNameToEntityID("User", "models/user.py")
-	if !strings.HasPrefix(result, "acme.semspec.code.type.myproject.") {
-		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semspec.code.type.myproject.'", result)
+	if !strings.HasPrefix(result, "acme.semsource.python.myproject.type.") {
+		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semsource.python.myproject.type.'", result)
 	}
 	if !strings.Contains(result, "User") {
 		t.Errorf("typeNameToEntityID(User) = %q, want to contain 'User'", result)

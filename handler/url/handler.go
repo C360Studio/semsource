@@ -35,6 +35,10 @@ type URLSourceConfig interface {
 type URLHandler struct {
 	fetcher *SafeFetcher
 	logger  *slog.Logger
+	// org is the organisation namespace used when building typed EntityState
+	// values via IngestEntityStates and Watch. When empty, EntityStates are not
+	// populated on watch events.
+	org string
 }
 
 // New creates a URLHandler with a default SSRF-safe HTTP client.
@@ -46,6 +50,19 @@ func New(logger *slog.Logger) *URLHandler {
 	return &URLHandler{
 		fetcher: NewSafeFetcher(nil),
 		logger:  logger,
+	}
+}
+
+// NewWithOrg creates a URLHandler that will populate EntityStates on watch
+// events using the given org namespace.
+func NewWithOrg(logger *slog.Logger, org string) *URLHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &URLHandler{
+		fetcher: NewSafeFetcher(nil),
+		logger:  logger,
+		org:     org,
 	}
 }
 
@@ -120,13 +137,18 @@ func (h *URLHandler) pollLoop(ctx context.Context, rawURL string, interval time.
 	} else {
 		lastETag = result.ETag
 		if len(result.Body) > 0 {
+			now := time.Now()
 			lastHash = contentHash(result.Body)
 			entity := h.buildPageEntity(rawURL, result)
 			ev := handler.ChangeEvent{
 				Path:      rawURL,
 				Operation: handler.OperationCreate,
-				Timestamp: time.Now(),
+				Timestamp: now,
 				Entities:  []handler.RawEntity{entity},
+			}
+			// Populate EntityStates for the normalizer-free processor path.
+			if h.org != "" {
+				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.org, now.UTC())}
 			}
 			select {
 			case out <- ev:
@@ -169,12 +191,17 @@ func (h *URLHandler) pollLoop(ctx context.Context, rawURL string, interval time.
 			lastHash = newHash
 			lastETag = result.ETag
 
+			now := time.Now()
 			entity := h.buildPageEntity(rawURL, result)
 			ev := handler.ChangeEvent{
 				Path:      rawURL,
 				Operation: handler.OperationModify,
-				Timestamp: time.Now(),
+				Timestamp: now,
 				Entities:  []handler.RawEntity{entity},
+			}
+			// Populate EntityStates for the normalizer-free processor path.
+			if h.org != "" {
+				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.org, now.UTC())}
 			}
 			select {
 			case out <- ev:

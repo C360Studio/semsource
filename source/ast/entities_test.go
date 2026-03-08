@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewCodeEntity(t *testing.T) {
-	entity := NewCodeEntity("acme", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 
 	if entity.Type != TypeFunction {
 		t.Errorf("Type = %q, want %q", entity.Type, TypeFunction)
@@ -18,6 +18,9 @@ func TestNewCodeEntity(t *testing.T) {
 	if entity.Path != "pkg/foo.go" {
 		t.Errorf("Path = %q, want %q", entity.Path, "pkg/foo.go")
 	}
+	if entity.Language != "golang" {
+		t.Errorf("Language = %q, want %q", entity.Language, "golang")
+	}
 	if entity.Visibility != VisibilityPublic {
 		t.Errorf("Visibility = %q, want %q", entity.Visibility, VisibilityPublic)
 	}
@@ -25,15 +28,15 @@ func TestNewCodeEntity(t *testing.T) {
 		t.Error("IndexedAt should not be zero")
 	}
 
-	// Check entity ID format
-	expectedPrefix := "acme.semspec.code.function.myproject."
+	// Check entity ID format: {org}.semsource.{language}.{system}.{type}.{instance}
+	expectedPrefix := "acme.semsource.golang.myproject.function."
 	if !strings.HasPrefix(entity.ID, expectedPrefix) {
 		t.Errorf("ID = %q, want prefix %q", entity.ID, expectedPrefix)
 	}
 }
 
 func TestNewCodeEntity_PrivateVisibility(t *testing.T) {
-	entity := NewCodeEntity("acme", "myproject", TypeFunction, "foo", "pkg/foo.go")
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "foo", "pkg/foo.go")
 
 	if entity.Visibility != VisibilityPrivate {
 		t.Errorf("Visibility = %q, want %q", entity.Visibility, VisibilityPrivate)
@@ -41,7 +44,7 @@ func TestNewCodeEntity_PrivateVisibility(t *testing.T) {
 }
 
 func TestNewCodeEntity_FileType(t *testing.T) {
-	entity := NewCodeEntity("acme", "myproject", TypeFile, "foo.go", "pkg/foo.go")
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeFile, "foo.go", "pkg/foo.go")
 
 	// File entities don't append name to instance ID
 	if !strings.Contains(entity.ID, "pkg-foo-go") {
@@ -97,13 +100,13 @@ func TestComputeHash(t *testing.T) {
 }
 
 func TestCodeEntity_Triples(t *testing.T) {
-	entity := NewCodeEntity("acme", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 	entity.Package = "pkg"
 	entity.Hash = "abc123"
 	entity.StartLine = 10
 	entity.EndLine = 20
 	entity.DocComment = "Foo does something."
-	entity.ContainedBy = "acme.semspec.code.file.myproject.pkg-foo-go"
+	entity.ContainedBy = "acme.semsource.golang.myproject.file.pkg-foo-go"
 	entity.Calls = []string{"helper", "fmt.Println"}
 	entity.Returns = []string{"error"}
 
@@ -144,8 +147,8 @@ func TestCodeEntity_Triples(t *testing.T) {
 	if predicateMap[DcTitle] != "Foo" {
 		t.Errorf("DcTitle = %v, want %q", predicateMap[DcTitle], "Foo")
 	}
-	if predicateMap[CodeLanguage] != "go" {
-		t.Errorf("CodeLanguage = %v, want %q", predicateMap[CodeLanguage], "go")
+	if predicateMap[CodeLanguage] != "golang" {
+		t.Errorf("CodeLanguage = %v, want %q", predicateMap[CodeLanguage], "golang")
 	}
 	if predicateMap[CodeLines] != 11 {
 		t.Errorf("CodeLines = %v, want 11", predicateMap[CodeLines])
@@ -171,7 +174,7 @@ func TestCodeEntity_Triples(t *testing.T) {
 }
 
 func TestCodeEntity_EntityState(t *testing.T) {
-	entity := NewCodeEntity("acme", "myproject", TypeStruct, "User", "pkg/user.go")
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeStruct, "User", "pkg/user.go")
 	entity.Package = "pkg"
 	entity.DocComment = "User represents a user."
 
@@ -191,9 +194,9 @@ func TestCodeEntity_EntityState(t *testing.T) {
 func TestParseResult_AllTriples(t *testing.T) {
 	result := &ParseResult{
 		Entities: []*CodeEntity{
-			NewCodeEntity("acme", "test", TypeFile, "foo.go", "foo.go"),
-			NewCodeEntity("acme", "test", TypeFunction, "Foo", "foo.go"),
-			NewCodeEntity("acme", "test", TypeStruct, "Bar", "foo.go"),
+			NewCodeEntity("acme", "golang", "test", TypeFile, "foo.go", "foo.go"),
+			NewCodeEntity("acme", "golang", "test", TypeFunction, "Foo", "foo.go"),
+			NewCodeEntity("acme", "golang", "test", TypeStruct, "Bar", "foo.go"),
 		},
 	}
 
@@ -211,8 +214,8 @@ func TestParseResult_AllTriples(t *testing.T) {
 func TestParseResult_AllEntityStates(t *testing.T) {
 	result := &ParseResult{
 		Entities: []*CodeEntity{
-			NewCodeEntity("acme", "test", TypeFile, "foo.go", "foo.go"),
-			NewCodeEntity("acme", "test", TypeFunction, "Foo", "foo.go"),
+			NewCodeEntity("acme", "golang", "test", TypeFile, "foo.go", "foo.go"),
+			NewCodeEntity("acme", "golang", "test", TypeFunction, "Foo", "foo.go"),
 		},
 	}
 
@@ -249,12 +252,12 @@ func TestBuildInstanceID(t *testing.T) {
 func TestEntityState_Fields(t *testing.T) {
 	now := time.Now()
 	state := &EntityState{
-		ID:        "acme.semspec.code.function.test.foo",
+		ID:        "acme.semsource.golang.test.function.foo",
 		UpdatedAt: now,
 	}
 
-	if state.ID != "acme.semspec.code.function.test.foo" {
-		t.Errorf("ID = %q, want %q", state.ID, "acme.semspec.code.function.test.foo")
+	if state.ID != "acme.semsource.golang.test.function.foo" {
+		t.Errorf("ID = %q, want %q", state.ID, "acme.semsource.golang.test.function.foo")
 	}
 	if !state.UpdatedAt.Equal(now) {
 		t.Errorf("UpdatedAt = %v, want %v", state.UpdatedAt, now)
@@ -262,7 +265,7 @@ func TestEntityState_Fields(t *testing.T) {
 }
 
 func TestCodeEntity_MethodWithReceiver(t *testing.T) {
-	entity := NewCodeEntity("acme", "test", TypeMethod, "String", "user.go")
+	entity := NewCodeEntity("acme", "golang", "test", TypeMethod, "String", "user.go")
 	entity.Receiver = "User"
 
 	triples := entity.Triples()
@@ -280,7 +283,7 @@ func TestCodeEntity_MethodWithReceiver(t *testing.T) {
 }
 
 func TestCodeEntity_StructWithEmbeds(t *testing.T) {
-	entity := NewCodeEntity("acme", "test", TypeStruct, "Derived", "types.go")
+	entity := NewCodeEntity("acme", "golang", "test", TypeStruct, "Derived", "types.go")
 	entity.Embeds = []string{"Base", "io.Reader"}
 	entity.References = []string{"string", "int"}
 
@@ -306,10 +309,10 @@ func TestCodeEntity_StructWithEmbeds(t *testing.T) {
 }
 
 func TestCodeEntity_FileWithContains(t *testing.T) {
-	entity := NewCodeEntity("acme", "test", TypeFile, "main.go", "main.go")
+	entity := NewCodeEntity("acme", "golang", "test", TypeFile, "main.go", "main.go")
 	entity.Contains = []string{
-		"acme.semspec.code.function.test.main-go-main",
-		"acme.semspec.code.function.test.main-go-helper",
+		"acme.semsource.golang.test.function.main-go-main",
+		"acme.semsource.golang.test.function.main-go-helper",
 	}
 	entity.Imports = []string{"fmt", "context"}
 

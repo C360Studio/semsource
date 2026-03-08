@@ -38,6 +38,9 @@ var defaultExtensions = map[string]bool{
 type VideoHandler struct {
 	store  storage.Store // nil = no binary storage (metadata only)
 	logger *slog.Logger
+	// org is the organisation namespace used when building EntityState values
+	// via IngestEntityStates and enrichEvent. Empty disables the typed path.
+	org string
 }
 
 // Option is a functional option for configuring a VideoHandler.
@@ -52,6 +55,12 @@ func WithStore(s storage.Store) Option {
 // WithLogger sets a custom structured logger on the handler.
 func WithLogger(l *slog.Logger) Option {
 	return func(h *VideoHandler) { h.logger = l }
+}
+
+// WithOrg sets the organisation namespace used when building typed EntityState
+// values via IngestEntityStates and Watch enrichment.
+func WithOrg(org string) Option {
+	return func(h *VideoHandler) { h.org = org }
 }
 
 // New returns a ready-to-use VideoHandler configured by the provided options.
