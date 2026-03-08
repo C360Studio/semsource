@@ -1,10 +1,7 @@
 // Package ast implements the SourceHandler for AST-based code entity extraction.
 // It delegates parsing to the semsource ast package and its registered language parsers.
 //
-// Language parsers register themselves via init() through blank imports:
-//
-//	import _ "github.com/c360studio/semsource/source/ast/golang"
-//	import _ "github.com/c360studio/semsource/source/ast/ts"
+// Language parsers register themselves via init() through blank imports.
 package ast
 
 import (
@@ -19,6 +16,9 @@ import (
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Register Go and TypeScript/JavaScript language parsers.
 	_ "github.com/c360studio/semsource/source/ast/golang"
+	_ "github.com/c360studio/semsource/source/ast/java"
+	_ "github.com/c360studio/semsource/source/ast/python"
+	_ "github.com/c360studio/semsource/source/ast/svelte"
 	_ "github.com/c360studio/semsource/source/ast/ts"
 
 	"github.com/c360studio/semsource/handler"
@@ -214,6 +214,12 @@ func langToExtensions(lang string) []string {
 	switch lang {
 	case "ts", "typescript", "javascript":
 		return []string{".ts", ".tsx", ".js", ".jsx"}
+	case "java":
+		return []string{".java"}
+	case "python":
+		return []string{".py"}
+	case "svelte":
+		return []string{".svelte"}
 	default: // "go"
 		return []string{".go"}
 	}

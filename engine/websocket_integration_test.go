@@ -173,14 +173,16 @@ func TestWebSocketIntegration_SEEDEvent(t *testing.T) {
 		t.Errorf("event.Type = %q, want %q", event.Type, federation.EventTypeSEED)
 	}
 
-	if len(event.Entities) == 0 {
-		t.Error("SEED event has no entities; expected at least one from hello.md")
-	}
-
 	if event.Namespace != "testorg" {
 		t.Errorf("event.Namespace = %q, want %q", event.Namespace, "testorg")
 	}
 
-	t.Logf("received SEED event with %d entities, namespace=%q",
-		len(event.Entities), event.Namespace)
+	// Each event now carries a single entity. The hello.md doc should produce
+	// at least one SEED event with a non-empty entity ID.
+	if event.Entity.ID == "" {
+		t.Error("SEED event has empty entity ID; expected at least one entity from hello.md")
+	}
+
+	t.Logf("received SEED event with entity=%q, namespace=%q",
+		event.Entity.ID, event.Namespace)
 }
