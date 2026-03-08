@@ -25,6 +25,7 @@ func (c *srcCfg) GetType() string            { return c.typ }
 func (c *srcCfg) GetPath() string            { return c.path }
 func (c *srcCfg) GetPaths() []string         { return nil }
 func (c *srcCfg) GetURL() string             { return c.url }
+func (c *srcCfg) GetBranch() string          { return "" }
 func (c *srcCfg) IsWatchEnabled() bool       { return c.watch }
 func (c *srcCfg) GetKeyframeMode() string    { return "" }
 func (c *srcCfg) GetKeyframeInterval() string { return "" }

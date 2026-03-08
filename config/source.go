@@ -1,10 +1,14 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // validSourceTypes lists all supported source handler types.
 var validSourceTypes = map[string]bool{
 	"git":    true,
+	"repo":   true,
 	"ast":    true,
 	"docs":   true,
 	"config": true,
@@ -78,11 +82,15 @@ type SourceEntry struct {
 // Validate checks that the SourceEntry has the required fields for its type.
 func (s SourceEntry) Validate() error {
 	if !validSourceTypes[s.Type] {
-		return fmt.Errorf("source: unknown type %q (valid: git, ast, docs, config, url, image, video, audio)", s.Type)
+		return fmt.Errorf("source: unknown type %q (valid: git, repo, ast, docs, config, url, image, video, audio)", s.Type)
 	}
 
 	switch s.Type {
 	case "git":
+		if s.URL == "" {
+			return fmt.Errorf("source type %q: url is required", s.Type)
+		}
+	case "repo":
 		if s.URL == "" {
 			return fmt.Errorf("source type %q: url is required", s.Type)
 		}
@@ -113,6 +121,12 @@ func (s SourceEntry) Validate() error {
 		}
 		if s.KeyframeMode != "" && s.KeyframeMode != "interval" && s.KeyframeMode != "scene" && s.KeyframeMode != "iframes" {
 			return fmt.Errorf("source type %q: keyframe_mode must be interval, scene, or iframes", s.Type)
+		}
+		if math.IsNaN(s.SceneThreshold) || math.IsInf(s.SceneThreshold, 0) {
+			return fmt.Errorf("source type %q: scene_threshold must be a finite number", s.Type)
+		}
+		if s.SceneThreshold < 0 || s.SceneThreshold > 1 {
+			return fmt.Errorf("source type %q: scene_threshold must be between 0 and 1", s.Type)
 		}
 	case "audio":
 		if len(s.Paths) == 0 {

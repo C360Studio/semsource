@@ -21,6 +21,7 @@ func (s *stubSourceConfig) GetType() string            { return s.sourceType }
 func (s *stubSourceConfig) GetPath() string            { return s.path }
 func (s *stubSourceConfig) GetPaths() []string         { return nil }
 func (s *stubSourceConfig) GetURL() string             { return "" }
+func (s *stubSourceConfig) GetBranch() string          { return "" }
 func (s *stubSourceConfig) IsWatchEnabled() bool       { return s.watch }
 func (s *stubSourceConfig) GetKeyframeMode() string    { return "" }
 func (s *stubSourceConfig) GetKeyframeInterval() string { return "" }
@@ -38,6 +39,7 @@ func (s *stubMultiPathSourceConfig) GetType() string             { return s.sour
 func (s *stubMultiPathSourceConfig) GetPath() string             { return "" }
 func (s *stubMultiPathSourceConfig) GetPaths() []string          { return s.paths }
 func (s *stubMultiPathSourceConfig) GetURL() string              { return "" }
+func (s *stubMultiPathSourceConfig) GetBranch() string           { return "" }
 func (s *stubMultiPathSourceConfig) IsWatchEnabled() bool        { return s.watch }
 func (s *stubMultiPathSourceConfig) GetKeyframeMode() string     { return "" }
 func (s *stubMultiPathSourceConfig) GetKeyframeInterval() string { return "" }
@@ -296,6 +298,146 @@ func TestConfigHandler_Ingest_EntityIDs_Deterministic(t *testing.T) {
 		if e1.Instance != e2.Instance {
 			t.Errorf("entity[%d] Instance not deterministic: %q vs %q", i, e1.Instance, e2.Instance)
 		}
+	}
+}
+
+func TestConfigHandler_Ingest_PomXml(t *testing.T) {
+	dir := t.TempDir()
+	pom := `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-core</artifactId>
+      <version>5.3.21</version>
+    </dependency>
+  </dependencies>
+</project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pom), 0644); err != nil {
+		t.Fatalf("write pom.xml: %v", err)
+	}
+
+	h := cfgfile.New(nil)
+	cfg := &stubSourceConfig{sourceType: "config", path: dir}
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+
+	// Expect a project entity.
+	var projectEntity *handler.RawEntity
+	for i := range entities {
+		if entities[i].EntityType == "project" {
+			projectEntity = &entities[i]
+			break
+		}
+	}
+	if projectEntity == nil {
+		t.Fatal("expected a 'project' entity from pom.xml")
+	}
+	if projectEntity.Instance == "" {
+		t.Error("project entity Instance must not be empty")
+	}
+	if projectEntity.Domain != handler.DomainConfig {
+		t.Errorf("Domain = %q, want %q", projectEntity.Domain, handler.DomainConfig)
+	}
+	if projectEntity.System == "" {
+		t.Error("System must not be empty")
+	}
+
+	// Expect two dependency entities.
+	var depCount int
+	for _, e := range entities {
+		if e.EntityType == "dependency" {
+			depCount++
+		}
+	}
+	if depCount != 2 {
+		t.Errorf("expected 2 dependency entities, got %d", depCount)
+	}
+
+	// Edges should be on the project entity, not on dependencies.
+	if len(projectEntity.Edges) < 2 {
+		t.Errorf("project entity should have at least 2 edges, got %d", len(projectEntity.Edges))
+	}
+}
+
+func TestConfigHandler_Ingest_BuildGradle(t *testing.T) {
+	dir := t.TempDir()
+	gradle := `plugins {
+    id 'java'
+}
+
+dependencies {
+    implementation 'org.springframework:spring-core:5.3.21'
+    testImplementation 'junit:junit:4.13'
+    api 'com.google.guava:guava:31.1-jre'
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(gradle), 0644); err != nil {
+		t.Fatalf("write build.gradle: %v", err)
+	}
+
+	h := cfgfile.New(nil)
+	cfg := &stubSourceConfig{sourceType: "config", path: dir}
+	entities, err := h.Ingest(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+
+	// Expect a project entity.
+	var projectEntity *handler.RawEntity
+	for i := range entities {
+		if entities[i].EntityType == "project" {
+			projectEntity = &entities[i]
+			break
+		}
+	}
+	if projectEntity == nil {
+		t.Fatal("expected a 'project' entity from build.gradle")
+	}
+	if projectEntity.Instance == "" {
+		t.Error("project entity Instance must not be empty")
+	}
+
+	// Expect three dependency entities.
+	var depCount int
+	for _, e := range entities {
+		if e.EntityType == "dependency" {
+			depCount++
+		}
+	}
+	if depCount != 3 {
+		t.Errorf("expected 3 dependency entities, got %d", depCount)
+	}
+
+	// Edges should be on the project entity, not on dependencies.
+	if len(projectEntity.Edges) < 3 {
+		t.Errorf("project entity should have at least 3 edges, got %d", len(projectEntity.Edges))
+	}
+}
+
+func TestConfigHandler_Supports_PomXml(t *testing.T) {
+	dir := t.TempDir()
+	pom := `<?xml version="1.0"?><project><groupId>g</groupId><artifactId>a</artifactId><version>1</version></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pom), 0644); err != nil {
+		t.Fatalf("write pom.xml: %v", err)
+	}
+
+	h := cfgfile.New(nil)
+	cfg := &stubSourceConfig{sourceType: "config", path: dir}
+	if !h.Supports(cfg) {
+		t.Error("Supports() = false, want true when pom.xml exists in path")
 	}
 }
 

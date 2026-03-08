@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -141,22 +142,27 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 	return nil
 }
 
-// ingestFile reads a single video file, probes its metadata, extracts
-// keyframes, and returns the video RawEntity plus one RawEntity per keyframe.
+// ingestFile streams a single video file to compute its hash, probes metadata,
+// extracts keyframes, and returns the video RawEntity plus one RawEntity per keyframe.
 func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg handler.SourceConfig) (handler.RawEntity, []handler.RawEntity, error) {
-	content, err := os.ReadFile(path)
+	// Stream hash computation — avoid loading the entire video file into memory.
+	f, err := os.Open(path)
 	if err != nil {
-		return handler.RawEntity{}, nil, fmt.Errorf("read %q: %w", path, err)
+		return handler.RawEntity{}, nil, fmt.Errorf("open %q: %w", path, err)
 	}
-
-	hash := contentHash(content)
+	hasher := sha256.New()
+	fileSize, err := io.Copy(hasher, f)
+	f.Close()
+	if err != nil {
+		return handler.RawEntity{}, nil, fmt.Errorf("hash %q: %w", path, err)
+	}
+	hash := hex.EncodeToString(hasher.Sum(nil))
 	instance := hash[:6]
 
 	relPath, _ := filepath.Rel(root, path)
 	ext := strings.ToLower(filepath.Ext(path))
 	mimeType := mimeForExt(ext)
 	format := formatForExt(ext)
-	fileSize := int64(len(content))
 	system := slugify(root)
 
 	// Extract video metadata via ffprobe. Non-fatal on failure.
@@ -178,7 +184,7 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 		{Predicate: source.MediaFileHash, Object: hash, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
 		{Predicate: source.MediaFileSize, Object: fileSize, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
 		{Predicate: source.MediaFormat, Object: format, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaDuration, Object: formatTimestamp(pr.Duration), Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
+		{Predicate: source.MediaDuration, Object: pr.Duration.Seconds(), Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
 		{Predicate: source.MediaFrameRate, Object: pr.FrameRate, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
 		{Predicate: source.MediaCodec, Object: pr.Codec, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
 		{Predicate: source.MediaBitrate, Object: pr.Bitrate, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
@@ -191,6 +197,7 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 		EntityType: "video",
 		Instance:   instance,
 		Properties: map[string]any{
+			"media_type":   "video",
 			"file_path":    relPath,
 			"mime_type":    mimeType,
 			"content_hash": hash,
@@ -198,7 +205,7 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 			"height":       pr.Height,
 			"file_size":    fileSize,
 			"format":       format,
-			"duration":     formatTimestamp(pr.Duration),
+			"duration":     pr.Duration.Seconds(),
 			"frame_rate":   pr.FrameRate,
 			"codec":        pr.Codec,
 			"bitrate":      pr.Bitrate,
@@ -206,21 +213,26 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 		Triples: triples,
 	}
 
-	// When a store is configured, persist the original video binary. Non-fatal.
+	// Only read full file content when a store is configured for binary persistence.
 	if h.store != nil {
-		storageKey := fmt.Sprintf("videos/%s/%s/original", system, instance)
-		if err := h.store.Put(ctx, storageKey, content); err != nil {
-			h.logger.Warn("video handler: failed to store video binary",
-				"path", path, "error", err)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			h.logger.Warn("video handler: failed to read file for storage", "path", path, "error", err)
 		} else {
-			videoEntity.Triples = append(videoEntity.Triples, message.Triple{
-				Predicate:  source.MediaStorageRef,
-				Object:     storageKey,
-				Source:     handler.SourceTypeVideo,
-				Timestamp:  now,
-				Confidence: 1.0,
-			})
-			videoEntity.Properties["storage_ref"] = storageKey
+			storageKey := fmt.Sprintf("videos/%s/%s/original", system, instance)
+			if err := h.store.Put(ctx, storageKey, content); err != nil {
+				h.logger.Warn("video handler: failed to store video binary",
+					"path", path, "error", err)
+			} else {
+				videoEntity.Triples = append(videoEntity.Triples, message.Triple{
+					Predicate:  source.MediaStorageRef,
+					Object:     storageKey,
+					Source:     handler.SourceTypeVideo,
+					Timestamp:  now,
+					Confidence: 1.0,
+				})
+				videoEntity.Properties["storage_ref"] = storageKey
+			}
 		}
 	}
 
@@ -247,7 +259,7 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 	// Build a RawEntity per keyframe.
 	var keyframeEntities []handler.RawEntity
 	for _, kf := range keyframes {
-		kfInstance := fmt.Sprintf("%s-%s", hash[:4], formatTimestamp(kf.Timestamp))
+		kfInstance := fmt.Sprintf("%s-%s", hash[:6], formatTimestamp(kf.Timestamp))
 
 		kfTriples := []message.Triple{
 			{Predicate: source.MediaType, Object: "keyframe", Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
@@ -258,6 +270,7 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 		}
 
 		kfProps := map[string]any{
+			"media_type":  "keyframe",
 			"timestamp":   formatTimestamp(kf.Timestamp),
 			"frame_index": kf.Index,
 			"width":       kf.Width,
@@ -291,7 +304,7 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 			Properties: kfProps,
 			Triples:    kfTriples,
 			Edges: []handler.RawEdge{
-				{FromHint: kfInstance, ToHint: instance, EdgeType: "keyframe_of"},
+				{FromHint: kfInstance, ToHint: instance, EdgeType: "keyframe_of", ToType: "video"},
 			},
 		}
 		keyframeEntities = append(keyframeEntities, kfEntity)
@@ -547,18 +560,14 @@ func keyframeInterval(cfg handler.SourceConfig) string {
 }
 
 // sceneThreshold returns the scene-change sensitivity from the source config.
-// Falls back to 0.3 when not configured.
+// Falls back to 0.3 when not configured or when the value is out of the
+// valid range (0, 1].
 func sceneThreshold(cfg handler.SourceConfig) float64 {
-	if t := cfg.GetSceneThreshold(); t > 0 {
-		return t
+	t := cfg.GetSceneThreshold()
+	if t <= 0 || t > 1 {
+		return 0.3
 	}
-	return 0.3
-}
-
-// contentHash returns the hex-encoded SHA-256 of b.
-func contentHash(b []byte) string {
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
+	return t
 }
 
 // mimeForExt returns the MIME type for known video extensions.

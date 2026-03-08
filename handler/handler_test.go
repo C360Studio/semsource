@@ -20,6 +20,7 @@ func (m *mockConfig) GetType() string            { return m.sourceType }
 func (m *mockConfig) GetPath() string            { return m.path }
 func (m *mockConfig) GetPaths() []string         { return nil }
 func (m *mockConfig) GetURL() string             { return m.url }
+func (m *mockConfig) GetBranch() string          { return "" }
 func (m *mockConfig) IsWatchEnabled() bool       { return m.watchEnabled }
 func (m *mockConfig) GetKeyframeMode() string    { return "" }
 func (m *mockConfig) GetKeyframeInterval() string { return "" }

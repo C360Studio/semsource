@@ -21,9 +21,11 @@ import (
 
 // configFileNames is the set of file names that this handler processes.
 var configFileNames = map[string]bool{
-	"go.mod":       true,
-	"package.json": true,
-	"Dockerfile":   true,
+	"go.mod":        true,
+	"package.json":  true,
+	"Dockerfile":    true,
+	"pom.xml":       true,
+	"build.gradle":  true,
 }
 
 // Config controls optional ConfigHandler behaviour.
@@ -131,7 +133,7 @@ func (h *ConfigHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-
 	watchCfg.Enabled = true
 	// Watch recognised config file extensions; Dockerfile is extensionless but
 	// the fanOut filter catches it by base name regardless.
-	watchCfg.FileExtensions = []string{".mod", ".json"}
+	watchCfg.FileExtensions = []string{".mod", ".json", ".xml", ".gradle"}
 
 	out := make(chan handler.ChangeEvent, 64*len(paths))
 
@@ -155,17 +157,20 @@ func (h *ConfigHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-
 	}
 
 	// Fan all per-root event streams into out; close out when every stream ends.
+	// Each goroutine is responsible for stopping its own watcher on exit.
+	var wg sync.WaitGroup
+	for i, fsw := range watchers {
+		wg.Add(1)
+		go func(w *fswatcher.FSWatcher, root string, events <-chan handler.ChangeEvent) {
+			defer wg.Done()
+			defer func() { _ = w.Stop() }()
+			h.fanOut(ctx, root, events, out)
+		}(fsw, paths[i], fsw.Events())
+	}
+
 	go func() {
-		defer close(out)
-		var wg sync.WaitGroup
-		for i, fsw := range watchers {
-			wg.Add(1)
-			go func(root string, events <-chan handler.ChangeEvent) {
-				defer wg.Done()
-				h.fanOut(ctx, root, events, out)
-			}(paths[i], fsw.Events())
-		}
 		wg.Wait()
+		close(out)
 	}()
 
 	return out, nil
@@ -228,6 +233,10 @@ func (h *ConfigHandler) parseFile(base, path string, content []byte, root string
 		return h.packageJSONEntities(content, path, system)
 	case "Dockerfile":
 		return h.dockerfileEntities(content, path, system)
+	case "pom.xml":
+		return h.pomEntities(content, path, system)
+	case "build.gradle":
+		return h.gradleEntities(content, path, system)
 	}
 	return nil
 }
@@ -257,7 +266,8 @@ func (h *ConfigHandler) goModEntities(content []byte, path, system string) []han
 		},
 	})
 
-	// Dependency entities — instance is content hash of (module+version)
+	// Dependency entities — instance is content hash of (module+version).
+	// Edges live on the module entity so the normalizer uses the module's ID as FromID.
 	for _, dep := range result.Deps {
 		instance := contentHashShort(dep.Path + "@" + dep.Version)
 		entities = append(entities, handler.RawEntity{
@@ -272,13 +282,13 @@ func (h *ConfigHandler) goModEntities(content []byte, path, system string) []han
 				"indirect": dep.Indirect,
 				"kind":     "go",
 			},
-			Edges: []handler.RawEdge{
-				{
-					FromHint: modInstance,
-					ToHint:   instance,
-					EdgeType: "requires",
-				},
-			},
+		})
+		// Add requires edge on the module entity (first entity in slice).
+		entities[0].Edges = append(entities[0].Edges, handler.RawEdge{
+			FromHint: modInstance,
+			ToHint:   instance,
+			EdgeType: "requires",
+			ToType:   "dependency",
 		})
 	}
 
@@ -313,7 +323,8 @@ func (h *ConfigHandler) packageJSONEntities(content []byte, path, system string)
 		},
 	})
 
-	// Dependency entities
+	// Dependency entities.
+	// Edges live on the package entity so the normalizer uses the package's ID as FromID.
 	for _, dep := range result.Deps {
 		instance := contentHashShort(dep.Name + "@" + dep.Version)
 		depKind := "prod"
@@ -331,13 +342,12 @@ func (h *ConfigHandler) packageJSONEntities(content []byte, path, system string)
 				"version": dep.Version,
 				"kind":    "npm-" + depKind,
 			},
-			Edges: []handler.RawEdge{
-				{
-					FromHint: pkgInstance,
-					ToHint:   instance,
-					EdgeType: "depends",
-				},
-			},
+		})
+		entities[0].Edges = append(entities[0].Edges, handler.RawEdge{
+			FromHint: pkgInstance,
+			ToHint:   instance,
+			EdgeType: "depends",
+			ToType:   "dependency",
 		})
 	}
 
@@ -367,6 +377,139 @@ func (h *ConfigHandler) dockerfileEntities(content []byte, path, system string) 
 				"exposed_ports": result.ExposedPorts,
 				"file_path":    path,
 			},
+		})
+	}
+
+	return entities
+}
+
+// pomEntities converts a ParsePOM result to RawEntity values.
+// A project entity is always emitted; dependency and module child entities
+// follow with appropriate edges.
+func (h *ConfigHandler) pomEntities(content []byte, path, system string) []handler.RawEntity {
+	result, err := ParsePOM(content)
+	if err != nil {
+		h.logger.Warn("cfgfile: parse pom.xml failed", "path", path, "error", err)
+		return nil
+	}
+
+	var entities []handler.RawEntity
+
+	// Project entity — instance is the slugified "groupId:artifactId" coordinate.
+	projectInstance := slugify(result.GroupID + ":" + result.ArtifactID)
+	if projectInstance == "" {
+		projectInstance = contentHashShort(path)
+	}
+	entities = append(entities, handler.RawEntity{
+		SourceType: handler.SourceTypeConfig,
+		Domain:     handler.DomainConfig,
+		System:     system,
+		EntityType: "project",
+		Instance:   projectInstance,
+		Properties: map[string]any{
+			"group_id":    result.GroupID,
+			"artifact_id": result.ArtifactID,
+			"version":     result.Version,
+			"packaging":   result.Packaging,
+			"file_path":   path,
+		},
+	})
+
+	// Dependency entities — edges live on the project entity.
+	for _, dep := range result.Deps {
+		instance := contentHashShort(dep.GroupID + ":" + dep.ArtifactID + "@" + dep.Version)
+		entities = append(entities, handler.RawEntity{
+			SourceType: handler.SourceTypeConfig,
+			Domain:     handler.DomainConfig,
+			System:     system,
+			EntityType: "dependency",
+			Instance:   instance,
+			Properties: map[string]any{
+				"name":    dep.GroupID + ":" + dep.ArtifactID,
+				"version": dep.Version,
+				"scope":   dep.Scope,
+				"kind":    "maven",
+			},
+		})
+		entities[0].Edges = append(entities[0].Edges, handler.RawEdge{
+			FromHint: projectInstance, ToHint: instance, EdgeType: "requires", ToType: "dependency",
+		})
+	}
+
+	// Module entities for multi-module POMs — edges live on the project entity.
+	for _, mod := range result.Modules {
+		modInstance := slugify(mod)
+		if modInstance == "" {
+			modInstance = contentHashShort(mod)
+		}
+		entities = append(entities, handler.RawEntity{
+			SourceType: handler.SourceTypeConfig,
+			Domain:     handler.DomainConfig,
+			System:     system,
+			EntityType: "module",
+			Instance:   modInstance,
+			Properties: map[string]any{
+				"name":      mod,
+				"file_path": path,
+			},
+		})
+		entities[0].Edges = append(entities[0].Edges, handler.RawEdge{
+			FromHint: projectInstance, ToHint: modInstance, EdgeType: "contains", ToType: "module",
+		})
+	}
+
+	return entities
+}
+
+// gradleEntities converts a ParseGradle result to RawEntity values.
+// A project entity is derived from the directory name since build.gradle files
+// do not always declare a project name inline.
+func (h *ConfigHandler) gradleEntities(content []byte, path, system string) []handler.RawEntity {
+	result, err := ParseGradle(content)
+	if err != nil {
+		h.logger.Warn("cfgfile: parse build.gradle failed", "path", path, "error", err)
+		return nil
+	}
+
+	var entities []handler.RawEntity
+
+	// Project entity — instance derived from the containing directory name.
+	dirName := filepath.Base(filepath.Dir(path))
+	projectInstance := slugify(dirName)
+	if projectInstance == "" {
+		projectInstance = contentHashShort(path)
+	}
+	entities = append(entities, handler.RawEntity{
+		SourceType: handler.SourceTypeConfig,
+		Domain:     handler.DomainConfig,
+		System:     system,
+		EntityType: "project",
+		Instance:   projectInstance,
+		Properties: map[string]any{
+			"name":      dirName,
+			"file_path": path,
+			"build":     "gradle",
+		},
+	})
+
+	// Dependency entities — edges live on the project entity.
+	for _, dep := range result.Deps {
+		instance := contentHashShort(dep.Group + ":" + dep.Name + "@" + dep.Version)
+		entities = append(entities, handler.RawEntity{
+			SourceType: handler.SourceTypeConfig,
+			Domain:     handler.DomainConfig,
+			System:     system,
+			EntityType: "dependency",
+			Instance:   instance,
+			Properties: map[string]any{
+				"name":          dep.Group + ":" + dep.Name,
+				"version":       dep.Version,
+				"configuration": dep.Configuration,
+				"kind":          "gradle",
+			},
+		})
+		entities[0].Edges = append(entities[0].Edges, handler.RawEdge{
+			FromHint: projectInstance, ToHint: instance, EdgeType: "requires", ToType: "dependency",
 		})
 	}
 

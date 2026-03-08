@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/workspace"
 )
 
 // allowedProtocols lists git URL schemes that are permitted.
@@ -30,6 +31,17 @@ type Config struct {
 	// MaxCommits caps the number of commits ingested per Ingest call.
 	// 0 means unlimited.
 	MaxCommits int
+
+	// WorkspaceDir is the base directory used when auto-cloning remote
+	// repositories. Required when a source provides only a URL (no local path).
+	// Defaults to the value inherited from config.Config.WorkspaceDir.
+	WorkspaceDir string
+
+	// Token is a personal access token or GitHub App installation token
+	// for authenticating HTTPS clones of private repositories. When set,
+	// it is passed to the workspace package via GIT_CONFIG environment
+	// variables. SSH URLs ignore the token and rely on the user's SSH agent.
+	Token string
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -59,23 +71,23 @@ func (h *GitHandler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == handler.SourceTypeGit
 }
 
-// Ingest opens the local repo at cfg.GetPath(), walks its commit log, and
-// returns RawEntity values for commits, authors, and the current branch.
-// For remote URLs (cfg.GetURL() set) it uses the path as the local clone
-// destination if populated; otherwise returns an error asking for a local
-// path (cloning at runtime is outside the MVP scope).
+// Ingest resolves the local repo path (cloning if necessary), walks its commit
+// log, and returns RawEntity values for commits, authors, and the current branch.
+// When a URL is configured without a local path, EnsureRepo clones the repository
+// into WorkspaceDir on the first call and pulls on subsequent calls.
 func (h *GitHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	repoPath := cfg.GetPath()
-	if repoPath == "" {
-		return nil, fmt.Errorf("git handler: path is required for local repo ingestion")
+	repoPath, err := h.resolveRepoPath(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
 
-	// Derive a system slug from the repo path.
-	system := repoSlug(repoPath)
+	// Derive a stable system slug — from the URL when available so entity IDs
+	// are identical across machines regardless of where the repo was cloned.
+	system := h.systemSlug(cfg)
 
 	// Get current branch.
 	branch, err := currentBranch(ctx, repoPath)
@@ -137,9 +149,9 @@ func (h *GitHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 		return nil, nil
 	}
 
-	repoPath := cfg.GetPath()
-	if repoPath == "" {
-		return nil, fmt.Errorf("git handler: path is required for watch")
+	repoPath, err := h.resolveRepoPath(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	ch := make(chan handler.ChangeEvent, 4)
@@ -191,14 +203,45 @@ func (h *GitHandler) pollLoop(ctx context.Context, repoPath string, ch chan<- ha
 // localCfg is a minimal SourceConfig used internally by pollLoop.
 type localCfg struct{ path string }
 
-func (c *localCfg) GetType() string            { return handler.SourceTypeGit }
-func (c *localCfg) GetPath() string            { return c.path }
-func (c *localCfg) GetPaths() []string         { return nil }
-func (c *localCfg) GetURL() string             { return "" }
-func (c *localCfg) IsWatchEnabled() bool       { return false }
-func (c *localCfg) GetKeyframeMode() string    { return "" }
+func (c *localCfg) GetType() string             { return handler.SourceTypeGit }
+func (c *localCfg) GetPath() string             { return c.path }
+func (c *localCfg) GetPaths() []string          { return nil }
+func (c *localCfg) GetURL() string              { return "" }
+func (c *localCfg) GetBranch() string           { return "" }
+func (c *localCfg) IsWatchEnabled() bool        { return false }
+func (c *localCfg) GetKeyframeMode() string     { return "" }
 func (c *localCfg) GetKeyframeInterval() string { return "" }
-func (c *localCfg) GetSceneThreshold() float64 { return 0 }
+func (c *localCfg) GetSceneThreshold() float64  { return 0 }
+
+// resolveRepoPath returns the local filesystem path to the repository.
+// When a local path is configured, it is returned directly.
+// When only a URL is configured, EnsureRepo clones or pulls the repository
+// into WorkspaceDir and returns the resulting path.
+func (h *GitHandler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig) (string, error) {
+	if p := cfg.GetPath(); p != "" {
+		return p, nil
+	}
+	repoURL := cfg.GetURL()
+	if repoURL == "" {
+		return "", fmt.Errorf("git handler: either path or url is required")
+	}
+	if h.cfg.WorkspaceDir == "" {
+		return "", fmt.Errorf("git handler: workspace_dir required for remote repos (no local path set)")
+	}
+	opts := workspace.Options{Token: h.cfg.Token}
+	return workspace.EnsureRepo(ctx, repoURL, cfg.GetBranch(), h.cfg.WorkspaceDir, opts)
+}
+
+// systemSlug returns the system slug for entity ID construction.
+// When a URL is configured, the slug is derived from the URL so that
+// entity IDs remain stable across machines and clone locations.
+// Falls back to the local path when no URL is available.
+func (h *GitHandler) systemSlug(cfg handler.SourceConfig) string {
+	if u := cfg.GetURL(); u != "" {
+		return workspace.URLToSlug(u)
+	}
+	return repoSlug(cfg.GetPath())
+}
 
 // --------------------------------------------------------------------------
 // Git primitives

@@ -27,6 +27,10 @@ type SourceConfig interface {
 	// Returns empty string for filesystem-based sources.
 	GetURL() string
 
+	// GetBranch returns the git branch to track.
+	// Returns empty string when not configured (use remote default).
+	GetBranch() string
+
 	// IsWatchEnabled reports whether real-time watching is enabled for this source.
 	IsWatchEnabled() bool
 

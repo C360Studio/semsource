@@ -2,7 +2,6 @@
 package image
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -234,6 +233,7 @@ func (h *ImageHandler) ingestFile(ctx context.Context, path, root string) (handl
 		EntityType: "image",
 		Instance:   instance,
 		Properties: map[string]any{
+			"media_type":   "image",
 			"file_path":    relPath,
 			"mime_type":    mimeType,
 			"content_hash": hash,
@@ -344,15 +344,3 @@ func slugify(path string) string {
 	return strings.ReplaceAll(s, "/", "-")
 }
 
-// imageDimensionsFromBytes decodes image config from a byte slice.
-// Used in tests where a file does not yet exist on disk.
-func imageDimensionsFromBytes(b []byte, ext string) (width, height int) {
-	if ext == ".svg" || ext == ".webp" {
-		return 0, 0
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(b))
-	if err != nil {
-		return 0, 0
-	}
-	return cfg.Width, cfg.Height
-}

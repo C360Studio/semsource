@@ -113,6 +113,25 @@ func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, erro
 			Watch:  *watch,
 		}, nil
 
+	case "repo":
+		url := fs.String("url", "", "remote repository URL to clone and analyze")
+		branch := fs.String("branch", "", "branch (default: remote default)")
+		language := fs.String("language", "", "primary language (go, java, python, typescript, or leave blank to auto-detect)")
+		watch := fs.Bool("watch", true, "watch for changes")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *url == "" {
+			return nil, fmt.Errorf("repo source requires --url")
+		}
+		return &config.SourceEntry{
+			Type:     "repo",
+			URL:      *url,
+			Branch:   *branch,
+			Language: *language,
+			Watch:    *watch,
+		}, nil
+
 	case "docs":
 		paths := fs.String("paths", "", "comma-separated list of paths")
 		watch := fs.Bool("watch", true, "watch for changes")
@@ -214,7 +233,7 @@ func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, erro
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, docs, config, url, image, video, audio)", typeKey)
+		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, repo, docs, config, url, image, video, audio)", typeKey)
 	}
 }
 

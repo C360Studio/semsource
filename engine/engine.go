@@ -422,6 +422,7 @@ func (a sourceConfigAdapter) GetURL() string {
 	return ""
 }
 
+func (a sourceConfigAdapter) GetBranch() string   { return a.entry.Branch }
 func (a sourceConfigAdapter) GetPaths() []string { return a.entry.Paths }
 
 func (a sourceConfigAdapter) IsWatchEnabled() bool { return a.entry.Watch }
@@ -429,3 +430,11 @@ func (a sourceConfigAdapter) IsWatchEnabled() bool { return a.entry.Watch }
 func (a sourceConfigAdapter) GetKeyframeMode() string      { return a.entry.KeyframeMode }
 func (a sourceConfigAdapter) GetKeyframeInterval() string   { return a.entry.KeyframeInterval }
 func (a sourceConfigAdapter) GetSceneThreshold() float64    { return a.entry.SceneThreshold }
+
+// GetLanguage implements the optional ASTConfig interface consumed by the AST handler.
+func (a sourceConfigAdapter) GetLanguage() string { return a.entry.Language }
+
+// GetOrg and GetProject are required by ASTConfig. Return empty strings to let
+// the AST handler apply its own defaults.
+func (a sourceConfigAdapter) GetOrg() string     { return "" }
+func (a sourceConfigAdapter) GetProject() string { return "" }

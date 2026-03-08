@@ -1,7 +1,11 @@
 // Package config loads and validates the semsource.json configuration file.
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
 
 // ObjectStoreConfig configures the NATS ObjectStore connection for binary content.
 type ObjectStoreConfig struct {
@@ -56,6 +60,15 @@ type Config struct {
 	// ObjectStore configures binary content storage.
 	// Required when using media sources (image, video).
 	ObjectStore *ObjectStoreConfig `json:"object_store,omitempty"`
+
+	// WorkspaceDir is the base directory where remote git repositories are
+	// cloned. Defaults to ~/.semsource/repos when empty.
+	WorkspaceDir string `json:"workspace_dir,omitempty"`
+
+	// GitToken is a personal access token or GitHub App installation token
+	// for authenticating HTTPS clones of private repositories.
+	// Can also be set via the SEMSOURCE_GIT_TOKEN environment variable.
+	GitToken string `json:"git_token,omitempty"`
 }
 
 // applyDefaults fills in omitted fields with their documented defaults.
@@ -65,6 +78,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Flow.AckTimeout == "" {
 		c.Flow.AckTimeout = "5s"
+	}
+	if c.WorkspaceDir == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			c.WorkspaceDir = filepath.Join(home, ".semsource", "repos")
+		}
+	}
+	// Allow token to be set via environment variable (avoids putting secrets in config files).
+	if c.GitToken == "" {
+		c.GitToken = os.Getenv("SEMSOURCE_GIT_TOKEN")
 	}
 }
 

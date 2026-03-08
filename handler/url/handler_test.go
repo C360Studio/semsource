@@ -24,6 +24,7 @@ func (s *stubSourceConfig) GetType() string            { return s.sourceType }
 func (s *stubSourceConfig) GetPath() string            { return "" }
 func (s *stubSourceConfig) GetPaths() []string         { return nil }
 func (s *stubSourceConfig) GetURL() string             { return s.url }
+func (s *stubSourceConfig) GetBranch() string          { return "" }
 func (s *stubSourceConfig) IsWatchEnabled() bool       { return s.watch }
 func (s *stubSourceConfig) GetKeyframeMode() string    { return "" }
 func (s *stubSourceConfig) GetKeyframeInterval() string { return "" }

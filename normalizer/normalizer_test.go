@@ -436,6 +436,93 @@ func TestNormalize_PublicNamespaceOverride(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Edges — ToType overrides target entity type in ToID
+// ---------------------------------------------------------------------------
+
+// TestNormalize_EdgeToTypeOverride verifies that when RawEdge.ToType is set,
+// the target entity ID uses that type rather than the source entity's EntityType.
+// This is required for cross-type edges such as keyframe→video where the source
+// entity type is "keyframe" but the target is "video".
+func TestNormalize_EdgeToTypeOverride(t *testing.T) {
+	n := makeNormalizer("acme")
+
+	raw := handler.RawEntity{
+		SourceType: handler.SourceTypeVideo,
+		Domain:     handler.DomainMedia,
+		System:     "media-root",
+		EntityType: "keyframe",
+		Instance:   "abc123-15s",
+		Edges: []handler.RawEdge{
+			{
+				FromHint: "abc123-15s",
+				ToHint:   "abc123",
+				EdgeType: "keyframe_of",
+				ToType:   "video",
+			},
+		},
+	}
+
+	got, err := n.Normalize(raw)
+	if err != nil {
+		t.Fatalf("Normalize() error: %v", err)
+	}
+
+	if len(got.Edges) != 1 {
+		t.Fatalf("edges count: got %d, want 1", len(got.Edges))
+	}
+	edge := got.Edges[0]
+
+	// The ToID must use "video" as the entity type, not "keyframe".
+	wantToID := "acme.semsource.media.media-root.video.abc123"
+	if edge.ToID != wantToID {
+		t.Errorf("ToID = %q, want %q", edge.ToID, wantToID)
+	}
+
+	// Sanity-check: FromID must still use the source entity's "keyframe" type.
+	wantFromID := "acme.semsource.media.media-root.keyframe.abc123-15s"
+	if edge.FromID != wantFromID {
+		t.Errorf("FromID = %q, want %q", edge.FromID, wantFromID)
+	}
+}
+
+// TestNormalize_EdgeToTypeEmpty verifies that omitting ToType preserves the
+// existing same-type behaviour — the target ID inherits the source EntityType.
+func TestNormalize_EdgeToTypeEmpty(t *testing.T) {
+	n := makeNormalizer("acme")
+
+	raw := handler.RawEntity{
+		SourceType: handler.SourceTypeAST,
+		Domain:     handler.DomainGolang,
+		System:     "github.com-acme-gcs",
+		EntityType: "function",
+		Instance:   "NewController",
+		Edges: []handler.RawEdge{
+			{
+				FromHint: "NewController",
+				ToHint:   "NewService",
+				EdgeType: "calls",
+				// ToType intentionally empty — should default to "function".
+			},
+		},
+	}
+
+	got, err := n.Normalize(raw)
+	if err != nil {
+		t.Fatalf("Normalize() error: %v", err)
+	}
+
+	if len(got.Edges) != 1 {
+		t.Fatalf("edges count: got %d, want 1", len(got.Edges))
+	}
+	edge := got.Edges[0]
+
+	wantToID := "acme.semsource.golang.github.com-acme-gcs.function.NewService"
+	if edge.ToID != wantToID {
+		t.Errorf("ToID = %q, want %q", edge.ToID, wantToID)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Type assertion — Normalize returns *federation.Entity
 // ---------------------------------------------------------------------------
 

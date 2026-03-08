@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -141,22 +142,27 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 	return nil
 }
 
-// ingestFile reads a single audio file, probes its metadata, and returns
-// the audio RawEntity.
+// ingestFile streams a single audio file to compute its hash, probes metadata,
+// and returns the audio RawEntity.
 func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handler.RawEntity, error) {
-	content, err := os.ReadFile(path)
+	// Stream hash computation — avoid loading the entire audio file into memory.
+	f, err := os.Open(path)
 	if err != nil {
-		return handler.RawEntity{}, fmt.Errorf("read %q: %w", path, err)
+		return handler.RawEntity{}, fmt.Errorf("open %q: %w", path, err)
 	}
-
-	hash := contentHash(content)
+	hasher := sha256.New()
+	fileSize, err := io.Copy(hasher, f)
+	f.Close()
+	if err != nil {
+		return handler.RawEntity{}, fmt.Errorf("hash %q: %w", path, err)
+	}
+	hash := hex.EncodeToString(hasher.Sum(nil))
 	instance := hash[:6]
 
 	relPath, _ := filepath.Rel(root, path)
 	ext := strings.ToLower(filepath.Ext(path))
 	mimeType := mimeForExt(ext)
 	format := formatForExt(ext)
-	fileSize := int64(len(content))
 	system := slugify(root)
 
 	// Extract audio metadata via ffprobe. Non-fatal on failure.
@@ -191,6 +197,7 @@ func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handl
 		EntityType: "audio",
 		Instance:   instance,
 		Properties: map[string]any{
+			"media_type":   "audio",
 			"file_path":    relPath,
 			"mime_type":    mimeType,
 			"content_hash": hash,
@@ -206,21 +213,26 @@ func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handl
 		Triples: triples,
 	}
 
-	// When a store is configured, persist the original audio binary. Non-fatal.
+	// Only read full file content when a store is configured for binary persistence.
 	if h.store != nil {
-		storageKey := fmt.Sprintf("audio/%s/%s/original", system, instance)
-		if err := h.store.Put(ctx, storageKey, content); err != nil {
-			h.logger.Warn("audio handler: failed to store audio binary",
-				"path", path, "error", err)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			h.logger.Warn("audio handler: failed to read file for storage", "path", path, "error", err)
 		} else {
-			audioEntity.Triples = append(audioEntity.Triples, message.Triple{
-				Predicate:  source.MediaStorageRef,
-				Object:     storageKey,
-				Source:     handler.SourceTypeAudio,
-				Timestamp:  now,
-				Confidence: 1.0,
-			})
-			audioEntity.Properties["storage_ref"] = storageKey
+			storageKey := fmt.Sprintf("audio/%s/%s/original", system, instance)
+			if err := h.store.Put(ctx, storageKey, content); err != nil {
+				h.logger.Warn("audio handler: failed to store audio binary",
+					"path", path, "error", err)
+			} else {
+				audioEntity.Triples = append(audioEntity.Triples, message.Triple{
+					Predicate:  source.MediaStorageRef,
+					Object:     storageKey,
+					Source:     handler.SourceTypeAudio,
+					Timestamp:  now,
+					Confidence: 1.0,
+				})
+				audioEntity.Properties["storage_ref"] = storageKey
+			}
 		}
 	}
 
@@ -319,12 +331,6 @@ func parseProbeOutput(data []byte) (*ProbeResult, error) {
 	}
 
 	return pr, nil
-}
-
-// contentHash returns the hex-encoded SHA-256 of b.
-func contentHash(b []byte) string {
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
 }
 
 // mimeForExt returns the MIME type for known audio extensions.

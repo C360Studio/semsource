@@ -157,7 +157,11 @@ func buildEdges(entityID string, raw handler.RawEntity) []federation.Edge {
 
 	edges := make([]federation.Edge, 0, len(raw.Edges))
 	for _, re := range raw.Edges {
-		toID := BuildEntityID(org, PlatformSemsource, raw.Domain, raw.System, raw.EntityType, re.ToHint)
+		targetType := raw.EntityType
+		if re.ToType != "" {
+			targetType = re.ToType
+		}
+		toID := BuildEntityID(org, PlatformSemsource, raw.Domain, raw.System, targetType, re.ToHint)
 		edges = append(edges, federation.Edge{
 			FromID:   entityID,
 			ToID:     toID,

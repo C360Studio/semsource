@@ -239,6 +239,8 @@ func shouldPreselect(typeKey string, info *ProjectInfo) bool {
 		return info.HasDocs
 	case "config":
 		return len(info.ConfigFiles) > 0
+	case "repo":
+		return false // Repos are never auto-detected; use git/ast/docs/config individually
 	case "url":
 		return false // URLs are never auto-detected
 	case "image":

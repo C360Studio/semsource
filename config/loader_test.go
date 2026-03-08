@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +140,59 @@ func TestLoadConfigFromReader_ValidJSON(t *testing.T) {
 	}
 	if url.PollInterval != "300s" {
 		t.Errorf("source[4] poll_interval: got %q, want %q", url.PollInterval, "300s")
+	}
+}
+
+func TestLoadConfigFromReader_WorkspaceDirDefault(t *testing.T) {
+	// When workspace_dir is absent, applyDefaults should set it to
+	// ~/.semsource/repos derived from os.UserHomeDir().
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo"}
+  ]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir: %v", err)
+	}
+	want := filepath.Join(home, ".semsource", "repos")
+	if cfg.WorkspaceDir != want {
+		t.Errorf("WorkspaceDir default: got %q, want %q", cfg.WorkspaceDir, want)
+	}
+}
+
+func TestLoadConfigFromReader_WorkspaceDirExplicit(t *testing.T) {
+	// When workspace_dir is provided, it must not be overridden by the default.
+	input := `{
+  "namespace": "myorg",
+  "flow": {
+    "outputs": [
+      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
+    ]
+  },
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo"}
+  ],
+  "workspace_dir": "/custom/workspace"
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.WorkspaceDir != "/custom/workspace" {
+		t.Errorf("WorkspaceDir: got %q, want %q", cfg.WorkspaceDir, "/custom/workspace")
 	}
 }
 

@@ -71,6 +71,10 @@ type RawEdge struct {
 	// EdgeType describes the relationship (calls, imports, depends, documents, etc.).
 	EdgeType string
 
+	// ToType overrides the target entity type when constructing the ToID.
+	// When empty, the source entity's EntityType is used (same-type edge).
+	ToType string
+
 	// Weight is an optional edge strength. Zero means unweighted.
 	Weight float64
 }

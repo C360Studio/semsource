@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/engine"
@@ -36,6 +37,13 @@ func runCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config %q: %w", *configPath, err)
 	}
+
+	expanded, err := config.ExpandRepoSources(cfg.Sources, cfg.WorkspaceDir)
+	if err != nil {
+		return fmt.Errorf("expand repo sources: %w", err)
+	}
+	cfg.Sources = expanded
+
 	logger.Info("configuration loaded",
 		"namespace", cfg.Namespace,
 		"sources", len(cfg.Sources),
@@ -52,7 +60,10 @@ func runCmd(args []string) error {
 	)
 
 	eng.RegisterHandler(asthandler.New(logger))
-	eng.RegisterHandler(githandler.New(githandler.Config{}))
+	eng.RegisterHandler(githandler.New(githandler.Config{
+		WorkspaceDir: cfg.WorkspaceDir,
+		Token:        cfg.GitToken,
+	}))
 	eng.RegisterHandler(dochandler.New())
 	eng.RegisterHandler(cfgfile.New(nil))
 	eng.RegisterHandler(urlhandler.New(logger))
@@ -67,7 +78,7 @@ func runCmd(args []string) error {
 		}
 		natsClient = client
 
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 10_000_000_000) // 10s
+		connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if connectErr = natsClient.Connect(connectCtx); connectErr != nil {
 			connectCancel()
 			return fmt.Errorf("objectstore: connect to NATS: %w", connectErr)

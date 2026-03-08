@@ -59,19 +59,16 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 	out := make(chan handler.ChangeEvent, 64*len(watchers))
 
 	// Launch one fan-in goroutine per watcher. Each goroutine knows its root
-	// so enrichEvent can compute the correct relative path.
-	stopAll := func() {
-		for _, w := range watchers {
-			_ = w.Stop()
-		}
-	}
-
+	// so enrichEvent can compute the correct relative path. Each goroutine
+	// stops its own watcher on exit so out is closed as soon as all streams end,
+	// regardless of whether ctx was cancelled.
 	var wg sync.WaitGroup
 	for i, w := range watchers {
 		wg.Add(1)
 		root := roots[i]
 		go func(w *fswatcher.FSWatcher, root string) {
 			defer wg.Done()
+			defer func() { _ = w.Stop() }()
 			for {
 				select {
 				case <-ctx.Done():
@@ -91,13 +88,9 @@ func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 		}(w, root)
 	}
 
-	// Closer goroutine: waits for all fan-in goroutines then closes out and
-	// stops any watchers still running.
 	go func() {
-		defer close(out)
-		<-ctx.Done()
-		stopAll()
 		wg.Wait()
+		close(out)
 	}()
 
 	return out, nil

@@ -34,6 +34,12 @@ var wantedTestSources = map[string][]string{
 		"",                                // branch (default "main")
 		"y",                               // watch
 	},
+	"repo": {
+		"https://github.com/example/repo", // url
+		"",                                // branch (default: remote default)
+		"",                                // language (default: auto-detect)
+		"y",                               // watch
+	},
 	"image": {
 		"assets/", // path
 		"",        // end multi-line

@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -186,5 +188,156 @@ func ParseDockerfile(content []byte) (*DockerfileResult, error) {
 		}
 	}
 
+	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Maven POM parser
+// ---------------------------------------------------------------------------
+
+// POMResult holds parsed data from a Maven pom.xml file.
+type POMResult struct {
+	// GroupID is the Maven group identifier (e.g. "org.example").
+	GroupID string
+	// ArtifactID is the Maven artifact identifier (e.g. "my-app").
+	ArtifactID string
+	// Version is the declared project version.
+	Version string
+	// Packaging is the declared packaging type (e.g. "jar", "war", "pom").
+	// Defaults to "jar" when absent per Maven convention.
+	Packaging string
+	// Deps is the list of declared dependencies.
+	Deps []POMDep
+	// Modules is the list of child module names for multi-module POMs.
+	Modules []string
+}
+
+// POMDep is a single <dependency> entry from a pom.xml file.
+type POMDep struct {
+	// GroupID is the dependency group identifier.
+	GroupID string
+	// ArtifactID is the dependency artifact identifier.
+	ArtifactID string
+	// Version is the dependency version (may be empty when managed by a BOM).
+	Version string
+	// Scope is the Maven dependency scope: compile, test, provided, runtime, system.
+	// Defaults to "compile" when absent.
+	Scope string
+}
+
+// pomXML mirrors the pom.xml structure for xml.Unmarshal.
+type pomXML struct {
+	XMLName    xml.Name    `xml:"project"`
+	GroupID    string      `xml:"groupId"`
+	ArtifactID string      `xml:"artifactId"`
+	Version    string      `xml:"version"`
+	Packaging  string      `xml:"packaging"`
+	Modules    pomModules  `xml:"modules"`
+	Deps       pomDepsList `xml:"dependencies"`
+}
+
+type pomModules struct {
+	Module []string `xml:"module"`
+}
+
+type pomDepsList struct {
+	Dependency []pomDepXML `xml:"dependency"`
+}
+
+type pomDepXML struct {
+	GroupID    string `xml:"groupId"`
+	ArtifactID string `xml:"artifactId"`
+	Version    string `xml:"version"`
+	Scope      string `xml:"scope"`
+}
+
+// ParsePOM parses the content of a Maven pom.xml file.
+// Returns an error if content is empty or XML cannot be decoded.
+func ParsePOM(content []byte) (*POMResult, error) {
+	if len(bytes.TrimSpace(content)) == 0 {
+		return nil, fmt.Errorf("pom.xml: empty content")
+	}
+
+	var raw pomXML
+	if err := xml.Unmarshal(content, &raw); err != nil {
+		return nil, fmt.Errorf("pom.xml: %w", err)
+	}
+
+	result := &POMResult{
+		GroupID:    raw.GroupID,
+		ArtifactID: raw.ArtifactID,
+		Version:    raw.Version,
+		Packaging:  raw.Packaging,
+		Modules:    raw.Modules.Module,
+	}
+
+	for _, d := range raw.Deps.Dependency {
+		scope := d.Scope
+		if scope == "" {
+			scope = "compile"
+		}
+		result.Deps = append(result.Deps, POMDep{
+			GroupID:    d.GroupID,
+			ArtifactID: d.ArtifactID,
+			Version:    d.Version,
+			Scope:      scope,
+		})
+	}
+
+	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Gradle build file parser (MVP regex-based)
+// ---------------------------------------------------------------------------
+
+// GradleResult holds parsed data from a build.gradle file.
+type GradleResult struct {
+	// Deps is the list of parsed dependency declarations.
+	Deps []GradleDep
+}
+
+// GradleDep is a single dependency declaration from a build.gradle file.
+type GradleDep struct {
+	// Configuration is the Gradle configuration name
+	// (e.g. "implementation", "testImplementation", "api").
+	Configuration string
+	// Group is the Maven group identifier portion of the dependency notation.
+	Group string
+	// Name is the Maven artifact identifier portion of the dependency notation.
+	Name string
+	// Version is the declared version string.
+	Version string
+}
+
+// gradleDepRE matches lines of the form:
+//
+//	<configuration> '<group>:<name>:<version>'
+//	<configuration> "<group>:<name>:<version>"
+//
+// Supported configurations: implementation, testImplementation, api,
+// compileOnly, runtimeOnly.
+var gradleDepRE = regexp.MustCompile(
+	`^\s*(implementation|testImplementation|api|compileOnly|runtimeOnly)\s+['"]([^:'"]+):([^:'"]+):([^'"]+)['"]`,
+)
+
+// ParseGradle parses the content of a Gradle build file using regex matching.
+// It never returns an error; an empty file yields an empty GradleResult.
+func ParseGradle(content []byte) (*GradleResult, error) {
+	result := &GradleResult{}
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		m := gradleDepRE.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		result.Deps = append(result.Deps, GradleDep{
+			Configuration: m[1],
+			Group:         m[2],
+			Name:          m[3],
+			Version:       strings.TrimSpace(m[4]),
+		})
+	}
 	return result, nil
 }
