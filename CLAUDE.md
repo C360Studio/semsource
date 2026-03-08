@@ -21,12 +21,15 @@ Part of the Complete 360 Studio ecosystem. MIT licensed.
 semsource init              # Interactive setup wizard → writes semsource.json
 semsource run               # Start the ingestion engine
 semsource add [type]        # Add a source (interactive or with flags)
+semsource remove            # Remove a source (interactive or --index N)
 semsource sources           # List configured sources
 semsource validate          # Check config without starting
 semsource version           # Print version
 ```
 
-Non-interactive add: `semsource add ast --path ./src --language go --watch`
+Non-interactive examples:
+- `semsource add ast --path ./src --language go --watch`
+- `semsource remove --index 2`
 
 Bare `semsource` with no args auto-runs if `semsource.json` exists.
 
@@ -36,6 +39,7 @@ Bare `semsource` with no args auto-runs if `semsource.json` exists.
 go build ./...
 go test ./...                              # unit tests only
 go test -tags=integration ./...            # include integration tests
+go test -tags=e2e ./test/e2e/              # black-box binary tests
 go test -run TestName ./path/to/package    # single test
 go test -race -tags=integration ./...      # race detection
 ```

@@ -10,6 +10,7 @@
 //	semsource init        Interactive setup wizard
 //	semsource run         Start the ingestion engine
 //	semsource add         Add a source to existing config
+//	semsource remove      Remove a source from config
 //	semsource sources     List configured sources
 //	semsource validate    Check config without starting
 //	semsource version     Print version
@@ -58,6 +59,8 @@ func dispatch() error {
 		return runCmd(os.Args[2:])
 	case "add":
 		return addCmd(os.Args[2:])
+	case "remove":
+		return removeCmd(os.Args[2:])
 	case "sources":
 		return sourcesCmd(os.Args[2:])
 	case "validate":
@@ -83,9 +86,18 @@ Commands:
   init        Interactive setup wizard — creates semsource.json
   run         Start the ingestion engine
   add         Add a source to an existing config
+  remove      Remove a source from the config
   sources     List configured sources
   validate    Check config without starting
   version     Print version
+
+Examples:
+  semsource init --quick              Auto-detect and configure with defaults
+  semsource add ast --path ./src --language go
+  semsource add repo --url github.com/org/repo
+  semsource remove                    Interactive source removal
+  semsource sources                   Show what's configured
+  semsource run --log-level debug     Start with verbose logging
 
 Run 'semsource <command> -h' for command-specific options.
 `)
@@ -115,6 +127,20 @@ func addCmd(args []string) error {
 	remaining := parseGlobalFlag(args, fs)
 	term := cli.NewTerm(os.Stdin, os.Stdout)
 	return cli.Add(term, *configPath, remaining)
+}
+
+// removeCmd removes a source from the config.
+func removeCmd(args []string) error {
+	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
+	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
+	index := fs.Int("index", -1, "source index to remove (1-based, from 'semsource sources')")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	term := cli.NewTerm(os.Stdin, os.Stdout)
+	// Convert from 1-based (user-facing) to 0-based (internal).
+	idx := *index - 1
+	return cli.Remove(term, *configPath, idx)
 }
 
 // sourcesCmd lists configured sources.
