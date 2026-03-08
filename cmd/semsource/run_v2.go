@@ -48,7 +48,7 @@ import (
 //  5. Create ServiceManager, configure, start
 //  6. Block on SIGINT/SIGTERM, then shut down cleanly
 func runV2Cmd(args []string) error {
-	fs := flag.NewFlagSet("run-v2", flag.ContinueOnError)
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	natsURL := fs.String("nats-url", "", "NATS server URL (overrides NATS_URL env and config)")
@@ -366,10 +366,79 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		}
 	}
 
-	// WebSocket output — broadcasts graph entities to connected consumers
-	// (SemSpec, SemDragon). Uses a JetStream consumer on the GRAPH stream
-	// for replay-on-reconnect and ack-based backpressure. Serves on port
-	// 7890 at /graph.
+	// --- Graph subsystem components ---
+	// These are built-in semstreams components (registered by componentregistry.Register).
+	// They form the read path: ingest → index → query → gateway.
+
+	// graph-ingest: consumes entity payloads from the GRAPH stream, writes to
+	// ENTITY_STATES KV bucket. Override default subject from entity.> to match
+	// our publishing subject.
+	graphIngestCfg := map[string]any{
+		"ports": map[string]any{
+			"inputs": []map[string]any{
+				{
+					"name":        "entity_stream",
+					"type":        "jetstream",
+					"subject":     "graph.ingest.entity",
+					"stream_name": "GRAPH",
+					"config": map[string]any{
+						"deliver_policy": "all",
+					},
+				},
+			},
+		},
+	}
+	rawGraphIngestCfg, err := json.Marshal(graphIngestCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal graph-ingest config: %w", err)
+	}
+	components["graph-ingest"] = types.ComponentConfig{
+		Name:    "graph-ingest",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  rawGraphIngestCfg,
+	}
+
+	// graph-index: watches ENTITY_STATES KV, maintains relationship indexes
+	// (OUTGOING_INDEX, INCOMING_INDEX, ALIAS_INDEX, PREDICATE_INDEX).
+	// Defaults are fine — KV bucket names are hardcoded constants.
+	components["graph-index"] = types.ComponentConfig{
+		Name:    "graph-index",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  json.RawMessage(`{}`),
+	}
+
+	// graph-query: NATS request/reply coordinator for entity, relationship,
+	// and path search queries. Defaults are fine.
+	components["graph-query"] = types.ComponentConfig{
+		Name:    "graph-query",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  json.RawMessage(`{}`),
+	}
+
+	// graph-gateway: HTTP GraphQL endpoint for semstreams-ui.
+	// Bind to 0.0.0.0 for Docker access, enable playground for dev.
+	graphGatewayCfg := map[string]any{
+		"bind_address":      "0.0.0.0:8080",
+		"enable_playground": true,
+	}
+	rawGraphGatewayCfg, err := json.Marshal(graphGatewayCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal graph-gateway config: %w", err)
+	}
+	components["graph-gateway"] = types.ComponentConfig{
+		Name:    "graph-gateway",
+		Type:    types.ComponentTypeGateway,
+		Enabled: true,
+		Config:  rawGraphGatewayCfg,
+	}
+
+	// --- WebSocket output ---
+	// Broadcasts graph entities to connected consumers (SemSpec, SemDragon).
+	// Uses a JetStream consumer on the GRAPH stream for replay-on-reconnect
+	// and ack-based backpressure. Serves on port 7890 at /graph.
 	wsConfig := map[string]any{
 		"ports": map[string]any{
 			"inputs": []map[string]any{
@@ -425,7 +494,23 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		NATS: semconfig.NATSConfig{
 			JetStream: semconfig.JetStreamConfig{Enabled: true},
 		},
-		Services:   make(types.ServiceConfigs),
+		Services: types.ServiceConfigs{
+			"component-manager": types.ServiceConfig{
+				Name:    "component-manager",
+				Enabled: true,
+				Config:  json.RawMessage(`{}`),
+			},
+			"metrics": types.ServiceConfig{
+				Name:    "metrics",
+				Enabled: true,
+				Config:  json.RawMessage(`{"port": 9091, "path": "/metrics"}`),
+			},
+			"heartbeat": types.ServiceConfig{
+				Name:    "heartbeat",
+				Enabled: true,
+				Config:  json.RawMessage(`{}`),
+			},
+		},
 		Components: components,
 		Streams:    streams,
 	}, nil
