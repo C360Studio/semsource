@@ -421,7 +421,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	// graph-gateway: HTTP GraphQL endpoint for semstreams-ui.
 	// Bind to 0.0.0.0 for Docker access, enable playground for dev.
 	graphGatewayCfg := map[string]any{
-		"bind_address":      "0.0.0.0:8080",
+		"bind_address":      "0.0.0.0:8082",
 		"enable_playground": true,
 	}
 	rawGraphGatewayCfg, err := json.Marshal(graphGatewayCfg)
