@@ -1,8 +1,8 @@
 # SemSource
 
-Graph-first knowledge ingestion for the [SemStream](https://github.com/C360Studio/semstreams) platform. Point it at code, docs, configs, URLs, or media — it builds a normalized knowledge graph and streams it to downstream consumers via WebSocket.
+Graph-first knowledge ingestion for the [SemStreams](https://github.com/C360Studio/semstreams) ecosystem. Point it at code, docs, configs, URLs, or media — it builds a normalized knowledge graph and streams it to downstream consumers via WebSocket.
 
-Part of the [Complete 360 Studio](https://github.com/C360Studio) ecosystem.
+Drop a SemSource instance next to any project you want to index. Run one or many — each produces a deterministic graph stream that any SemStreams app (SemSpec, SemDragon, or your own) can consume. Multiple SemSource instances feeding multiple consumers is the intended topology. The federation model ensures `public.*` entities merge cleanly across instances while `{org}.*` entities stay sovereign.
 
 ## Quick Start
 
@@ -28,14 +28,14 @@ semsource init
 SemSource ingests heterogeneous sources and emits a continuously updated knowledge graph stream:
 
 ```
-[Your Code] ─┐
-[Your Docs] ─┤
-[Config]    ─┼─→ [SemSource Engine] ─→ WebSocket :7890/graph ─→ [Consumers]
-[URLs]      ─┤
-[Media]     ─┘
+[Your Code] ─┐                                              ┌─→ [SemSpec]
+[Your Docs] ─┤                                              │
+[Config]    ─┼─→ [SemSource] ─→ WebSocket :7890/graph ──────┼─→ [SemDragon]
+[URLs]      ─┤                                              │
+[Media]     ─┘                                              └─→ [Your App]
 ```
 
-Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`) and a set of semantic triples. Consumers (SemSpec, SemDragon) receive SEED, DELTA, RETRACT, and HEARTBEAT events.
+Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`) and a set of semantic triples. Consumers receive SEED, DELTA, RETRACT, and HEARTBEAT events. Multiple SemSource instances can feed the same consumer — federation merges the graphs automatically.
 
 ## Source Types
 
@@ -123,7 +123,7 @@ docker compose --profile nats up
 
 ### Port Map
 
-Ports are chosen to avoid clashes when running alongside other C360 services:
+Ports are chosen to avoid clashes when running alongside other SemStreams services:
 
 | Port | Service | Notes |
 |------|---------|-------|
