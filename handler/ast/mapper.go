@@ -138,6 +138,12 @@ func langToDomain(lang string) string {
 	switch lang {
 	case "ts", "typescript", "javascript":
 		return "typescript"
+	case "java":
+		return "java"
+	case "python":
+		return "python"
+	case "svelte":
+		return "svelte"
 	default: // "go"
 		return handler.DomainGolang
 	}
