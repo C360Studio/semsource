@@ -510,6 +510,11 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 				Enabled: true,
 				Config:  json.RawMessage(`{}`),
 			},
+			"flow-builder": types.ServiceConfig{
+				Name:    "flow-builder",
+				Enabled: true,
+				Config:  json.RawMessage(`{}`),
+			},
 		},
 		Components: components,
 		Streams:    streams,
