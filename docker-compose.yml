@@ -1,0 +1,114 @@
+# C360 SemSource Stack
+#
+# Runs semsource (graph ingestion), semstreams-ui (monitoring dashboard),
+# and Caddy (reverse proxy) with optional NATS for media object storage.
+#
+# Port map:
+#   3000  — Caddy entry point (UI + graph WebSocket)
+#   7890  — semsource graph WebSocket (internal, proxied via Caddy)
+#   5173  — semstreams-ui Vite dev (internal, proxied via Caddy)
+#   4222  — NATS (internal, only with --profile nats)
+#
+# Usage:
+#   docker compose up                    # semsource + UI + Caddy
+#   docker compose --profile nats up     # include NATS for object store
+#
+# Access:
+#   http://localhost:3000       — SemStreams UI dashboard
+#   ws://localhost:3000/graph   — Graph WebSocket (for consumers)
+
+services:
+  # SemSource — graph ingestion engine
+  semsource:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: c360-semsource
+    volumes:
+      - ./configs:/etc/semsource:ro
+      # Mount source directories for ingestion (adjust to your project)
+      - ${SEMSOURCE_TARGET:-.}:/workspace:ro
+    environment:
+      - SEMSOURCE_LOG_LEVEL=${LOG_LEVEL:-info}
+    command:
+      - run
+      - --config
+      - /etc/semsource/${SEMSOURCE_CONFIG:-semsource.json}
+      - --log-level
+      - ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "semsource", "version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - c360
+    restart: unless-stopped
+
+  # SemStreams UI — monitoring dashboard and flow builder
+  ui:
+    build:
+      context: ${UI_CONTEXT:-../semstreams-ui}
+      dockerfile: Dockerfile.dev
+    container_name: c360-ui
+    volumes:
+      - ${UI_CONTEXT:-../semstreams-ui}/src:/app/src
+      - ${UI_CONTEXT:-../semstreams-ui}/static:/app/static
+      - ${UI_CONTEXT:-../semstreams-ui}/svelte.config.js:/app/svelte.config.js
+      - ${UI_CONTEXT:-../semstreams-ui}/vite.config.ts:/app/vite.config.ts
+      - ${UI_CONTEXT:-../semstreams-ui}/tsconfig.json:/app/tsconfig.json
+      - ui-node-modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      # Backend not wired yet — UI runs in standalone/monitor mode
+      - BACKEND_HOST=${BACKEND_HOST:-host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - c360
+    restart: unless-stopped
+
+  # Caddy — single entry point for the stack
+  caddy:
+    image: caddy:2-alpine
+    container_name: c360-caddy
+    depends_on:
+      - semsource
+      - ui
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "${C360_PORT:-3000}:3000"
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - c360
+    restart: unless-stopped
+
+  # NATS — required only for media object storage (image, video, audio handlers)
+  nats:
+    image: nats:2.10-alpine
+    container_name: c360-nats
+    command: ["-js", "-m", "8222", "--name", "c360-nats"]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - c360
+    profiles: ["nats"]
+
+networks:
+  c360:
+    driver: bridge
+
+volumes:
+  ui-node-modules:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
