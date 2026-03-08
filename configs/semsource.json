@@ -1,16 +1,5 @@
 {
   "namespace": "c360",
-  "flow": {
-    "outputs": [
-      {
-        "name": "graph_stream",
-        "type": "network",
-        "subject": "http://0.0.0.0:7890/graph"
-      }
-    ],
-    "delivery_mode": "at-least-once",
-    "ack_timeout": "5s"
-  },
   "sources": [
     {
       "type": "ast",

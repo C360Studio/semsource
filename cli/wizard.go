@@ -46,10 +46,7 @@ func Init(term *Term, configPath string, overrides ...*ProjectInfo) error {
 		return fmt.Errorf("namespace is required")
 	}
 
-	// Step 2: graph stream address.
-	graphAddr := term.Prompt("Graph stream address", "localhost:7890")
-
-	// Step 3: source type multi-select (pre-selected based on detection).
+	// Step 2: source type multi-select (pre-selected based on detection).
 	sources, err := runSourceMenu(term, info)
 	if err != nil {
 		return err
@@ -59,7 +56,7 @@ func Init(term *Term, configPath string, overrides ...*ProjectInfo) error {
 		return fmt.Errorf("at least one source is required")
 	}
 
-	cfg := buildConfig(namespace, graphAddr, sources)
+	cfg := buildConfig(namespace, sources)
 
 	return writeAndSummarize(term, configPath, cfg)
 }
@@ -104,7 +101,7 @@ func InitQuick(term *Term, configPath string, overrides ...*ProjectInfo) error {
 		return Init(term, configPath)
 	}
 
-	cfg := buildConfig(info.Namespace, "localhost:7890", sources)
+	cfg := buildConfig(info.Namespace, sources)
 
 	return writeAndSummarize(term, configPath, cfg)
 }
@@ -281,21 +278,10 @@ func printDetectionSummary(term *Term, info *ProjectInfo) {
 	fmt.Fprintln(term.out)
 }
 
-func buildConfig(namespace, graphAddr string, sources []config.SourceEntry) *config.Config {
+func buildConfig(namespace string, sources []config.SourceEntry) *config.Config {
 	return &config.Config{
 		Namespace: namespace,
-		Flow: config.FlowConfig{
-			Outputs: []config.OutputConfig{
-				{
-					Name:    "graph-stream",
-					Type:    "network",
-					Subject: "http://" + graphAddr + "/graph",
-				},
-			},
-			DeliveryMode: "at-least-once",
-			AckTimeout:   "5s",
-		},
-		Sources: sources,
+		Sources:   sources,
 	}
 }
 
@@ -317,9 +303,7 @@ func writeAndSummarize(term *Term, configPath string, cfg *config.Config) error 
 func printSummary(term *Term, cfg *config.Config) {
 	term.Header("Summary")
 	term.Info(fmt.Sprintf("  Namespace : %s", cfg.Namespace))
-	if len(cfg.Flow.Outputs) > 0 {
-		term.Info(fmt.Sprintf("  Output    : %s", cfg.Flow.Outputs[0].Subject))
-	}
+	term.Info("  NATS      : localhost:4222 (default, override with --nats-url)")
 	term.Info(fmt.Sprintf("  Sources   : %d configured", len(cfg.Sources)))
 	for _, s := range cfg.Sources {
 		term.Info(fmt.Sprintf("    - %s", s.Type))

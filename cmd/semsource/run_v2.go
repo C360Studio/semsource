@@ -205,7 +205,7 @@ func runV2Cmd(args []string) error {
 // resolveNATSURL picks the NATS URL in priority order:
 //  1. Explicit --nats-url flag
 //  2. NATS_URL environment variable
-//  3. EntityStore / ObjectStore config (if present, reuse their URL)
+//  3. EntityStore config (if present, reuse its URL)
 //  4. Default localhost
 func resolveNATSURL(flagValue string, cfg *config.Config) string {
 	if flagValue != "" {
@@ -216,9 +216,6 @@ func resolveNATSURL(flagValue string, cfg *config.Config) string {
 	}
 	if cfg.EntityStore != nil && cfg.EntityStore.NATSUrl != "" {
 		return cfg.EntityStore.NATSUrl
-	}
-	if cfg.ObjectStore != nil && cfg.ObjectStore.NATSUrl != "" {
-		return cfg.ObjectStore.NATSUrl
 	}
 	return "nats://localhost:4222"
 }

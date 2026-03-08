@@ -60,7 +60,6 @@ var wantedTestSources = map[string][]string{
 func buildInitInput() string {
 	lines := []string{
 		"testorg", // namespace
-		"",        // graph stream address (default)
 	}
 
 	// Determine which menu positions to toggle — only the source types we
@@ -112,9 +111,6 @@ func TestInitWritesValidConfig(t *testing.T) {
 	// Basic assertions.
 	if cfg.Namespace != "testorg" {
 		t.Errorf("expected namespace 'testorg', got %q", cfg.Namespace)
-	}
-	if len(cfg.Flow.Outputs) == 0 {
-		t.Error("expected at least one flow output")
 	}
 	if len(cfg.Sources) == 0 {
 		t.Error("expected at least one source")
@@ -312,13 +308,6 @@ func writeMinimalConfig(t *testing.T, path, namespace string) {
 	t.Helper()
 	cfg := config.Config{
 		Namespace: namespace,
-		Flow: config.FlowConfig{
-			Outputs: []config.OutputConfig{
-				{Name: "out", Type: "network", Subject: "http://localhost:7890/graph"},
-			},
-			DeliveryMode: "at-least-once",
-			AckTimeout:   "5s",
-		},
 		Sources: []config.SourceEntry{
 			{Type: "ast", Path: "."},
 		},

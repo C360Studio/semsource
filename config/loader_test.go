@@ -12,17 +12,6 @@ import (
 
 const validJSON = `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {
-        "name": "graph_stream",
-        "type": "network",
-        "subject": "http://0.0.0.0:7890/graph"
-      }
-    ],
-    "delivery_mode": "at-least-once",
-    "ack_timeout": "5s"
-  },
   "sources": [
     {
       "type": "git",
@@ -62,27 +51,6 @@ func TestLoadConfigFromReader_ValidJSON(t *testing.T) {
 
 	if cfg.Namespace != "acme" {
 		t.Errorf("namespace: got %q, want %q", cfg.Namespace, "acme")
-	}
-
-	// Flow assertions
-	if cfg.Flow.DeliveryMode != "at-least-once" {
-		t.Errorf("delivery_mode: got %q, want %q", cfg.Flow.DeliveryMode, "at-least-once")
-	}
-	if cfg.Flow.AckTimeout != "5s" {
-		t.Errorf("ack_timeout: got %q, want %q", cfg.Flow.AckTimeout, "5s")
-	}
-	if len(cfg.Flow.Outputs) != 1 {
-		t.Fatalf("outputs count: got %d, want 1", len(cfg.Flow.Outputs))
-	}
-	out := cfg.Flow.Outputs[0]
-	if out.Name != "graph_stream" {
-		t.Errorf("output name: got %q, want %q", out.Name, "graph_stream")
-	}
-	if out.Type != "network" {
-		t.Errorf("output type: got %q, want %q", out.Type, "network")
-	}
-	if out.Subject != "http://0.0.0.0:7890/graph" {
-		t.Errorf("output subject: got %q, want %q", out.Subject, "http://0.0.0.0:7890/graph")
 	}
 
 	// Sources assertions
@@ -148,11 +116,6 @@ func TestLoadConfigFromReader_WorkspaceDirDefault(t *testing.T) {
 	// ~/.semsource/repos derived from os.UserHomeDir().
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "git", "url": "github.com/myorg/repo"}
   ]
@@ -176,11 +139,6 @@ func TestLoadConfigFromReader_WorkspaceDirExplicit(t *testing.T) {
 	// When workspace_dir is provided, it must not be overridden by the default.
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "git", "url": "github.com/myorg/repo"}
   ],
@@ -196,38 +154,8 @@ func TestLoadConfigFromReader_WorkspaceDirExplicit(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_Defaults(t *testing.T) {
-	input := `{
-  "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
-  "sources": [
-    {"type": "git", "url": "github.com/myorg/repo", "branch": "main"}
-  ]
-}`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.Flow.DeliveryMode != "at-least-once" {
-		t.Errorf("default delivery_mode: got %q, want %q", cfg.Flow.DeliveryMode, "at-least-once")
-	}
-	if cfg.Flow.AckTimeout != "5s" {
-		t.Errorf("default ack_timeout: got %q, want %q", cfg.Flow.AckTimeout, "5s")
-	}
-}
-
 func TestLoadConfigFromReader_MissingNamespace(t *testing.T) {
 	input := `{
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "git", "url": "github.com/myorg/repo", "branch": "main"}
   ]
@@ -238,28 +166,9 @@ func TestLoadConfigFromReader_MissingNamespace(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_NoOutputs(t *testing.T) {
-	input := `{
-  "namespace": "myorg",
-  "flow": {"outputs": []},
-  "sources": [
-    {"type": "git", "url": "github.com/myorg/repo", "branch": "main"}
-  ]
-}`
-	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error for empty outputs, got nil")
-	}
-}
-
 func TestLoadConfigFromReader_NoSources(t *testing.T) {
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": []
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
@@ -271,11 +180,6 @@ func TestLoadConfigFromReader_NoSources(t *testing.T) {
 func TestLoadConfigFromReader_InvalidSourceType(t *testing.T) {
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "database", "url": "postgres://localhost/mydb"}
   ]
@@ -289,11 +193,6 @@ func TestLoadConfigFromReader_InvalidSourceType(t *testing.T) {
 func TestLoadConfigFromReader_GitMissingURL(t *testing.T) {
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "git", "branch": "main"}
   ]
@@ -307,11 +206,6 @@ func TestLoadConfigFromReader_GitMissingURL(t *testing.T) {
 func TestLoadConfigFromReader_ASTMissingPath(t *testing.T) {
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "ast", "language": "go"}
   ]
@@ -325,11 +219,6 @@ func TestLoadConfigFromReader_ASTMissingPath(t *testing.T) {
 func TestLoadConfigFromReader_URLMissingURLs(t *testing.T) {
 	input := `{
   "namespace": "myorg",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://localhost:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "url", "poll_interval": "60s"}
   ]
@@ -351,22 +240,6 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 	_, err := config.LoadConfig("/nonexistent/path/semsource.json")
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
-	}
-}
-
-// TestAckTimeoutDuration verifies the AckTimeout can be parsed as a Go duration.
-func TestAckTimeoutDuration(t *testing.T) {
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(validJSON))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	d, err := time.ParseDuration(cfg.Flow.AckTimeout)
-	if err != nil {
-		t.Fatalf("AckTimeout %q is not a valid Go duration: %v", cfg.Flow.AckTimeout, err)
-	}
-	if d != 5*time.Second {
-		t.Errorf("AckTimeout duration: got %v, want 5s", d)
 	}
 }
 
@@ -393,11 +266,6 @@ func TestLoadConfigFromReader_ImageSource(t *testing.T) {
 
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {
       "type": "image",
@@ -408,12 +276,7 @@ func TestLoadConfigFromReader_ImageSource(t *testing.T) {
       "thumbnail_max_dim": 512,
       "watch": true
     }
-  ],
-  "object_store": {
-    "nats_url": "nats://localhost:4222",
-    "bucket": "semsource-media",
-    "ttl": "720h"
-  }
+  ]
 }`
 	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err != nil {
@@ -442,33 +305,14 @@ func TestLoadConfigFromReader_ImageSource(t *testing.T) {
 	if !src.Watch {
 		t.Error("watch: got false, want true")
 	}
-
-	if cfg.ObjectStore == nil {
-		t.Fatal("object_store: got nil, want non-nil")
-	}
-	if cfg.ObjectStore.NATSUrl != "nats://localhost:4222" {
-		t.Errorf("object_store.nats_url: got %q, want %q", cfg.ObjectStore.NATSUrl, "nats://localhost:4222")
-	}
-	if cfg.ObjectStore.Bucket != "semsource-media" {
-		t.Errorf("object_store.bucket: got %q, want %q", cfg.ObjectStore.Bucket, "semsource-media")
-	}
-	if cfg.ObjectStore.TTL != "720h" {
-		t.Errorf("object_store.ttl: got %q, want %q", cfg.ObjectStore.TTL, "720h")
-	}
 }
 
 func TestLoadConfigFromReader_ImageMissingPaths(t *testing.T) {
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "image"}
-  ],
-  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
+  ]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
@@ -480,11 +324,6 @@ func TestLoadConfigFromReader_ImageWithoutObjectStore(t *testing.T) {
 	// Image sources work in metadata-only mode without an ObjectStore.
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "image", "paths": ["assets/"]}
   ]
@@ -495,37 +334,12 @@ func TestLoadConfigFromReader_ImageWithoutObjectStore(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_ObjectStoreMissingBucket(t *testing.T) {
-	input := `{
-  "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
-  "sources": [
-    {"type": "git", "url": "github.com/acme/repo"}
-  ],
-  "object_store": {"bucket": "", "ttl": "720h"}
-}`
-	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error for object_store with empty bucket, got nil")
-	}
-}
-
 func TestLoadConfigFromReader_ImageEmptyExtension(t *testing.T) {
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "image", "paths": ["assets/"], "extensions": ["png", ""]}
-  ],
-  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
+  ]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
@@ -533,33 +347,9 @@ func TestLoadConfigFromReader_ImageEmptyExtension(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_ObjectStoreMissingNATSUrl(t *testing.T) {
-	input := `{
-  "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
-  "sources": [
-    {"type": "git", "url": "github.com/acme/repo"}
-  ],
-  "object_store": {"bucket": "semsource-media", "ttl": "720h"}
-}`
-	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error for object_store with empty nats_url, got nil")
-	}
-}
-
 func TestLoadConfigFromReader_VideoSource(t *testing.T) {
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {
       "type": "video",
@@ -569,12 +359,7 @@ func TestLoadConfigFromReader_VideoSource(t *testing.T) {
       "max_file_size": "2GB",
       "watch": true
     }
-  ],
-  "object_store": {
-    "nats_url": "nats://localhost:4222",
-    "bucket": "semsource-media",
-    "ttl": "720h"
-  }
+  ]
 }`
 	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err != nil {
@@ -601,10 +386,6 @@ func TestLoadConfigFromReader_VideoSource(t *testing.T) {
 		t.Error("watch: got false, want true")
 	}
 
-	if cfg.ObjectStore == nil {
-		t.Fatal("object_store: got nil, want non-nil")
-	}
-
 	// Verify keyframe_interval is a valid Go duration.
 	d, err := time.ParseDuration(src.KeyframeInterval)
 	if err != nil {
@@ -618,15 +399,9 @@ func TestLoadConfigFromReader_VideoSource(t *testing.T) {
 func TestLoadConfigFromReader_VideoMissingPaths(t *testing.T) {
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "video"}
-  ],
-  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
+  ]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
@@ -640,11 +415,6 @@ func TestLoadConfigFromReader_VideoWithoutMediaStoreDir_MetadataOnlyIsValid(t *t
 	// explicitly supported after the migration from objectstore to filestore.
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "video", "paths": ["recordings/"]}
   ]
@@ -658,15 +428,9 @@ func TestLoadConfigFromReader_VideoWithoutMediaStoreDir_MetadataOnlyIsValid(t *t
 func TestLoadConfigFromReader_VideoInvalidKeyframeMode(t *testing.T) {
 	input := `{
   "namespace": "acme",
-  "flow": {
-    "outputs": [
-      {"name": "out", "type": "network", "subject": "http://0.0.0.0:7890/graph"}
-    ]
-  },
   "sources": [
     {"type": "video", "paths": ["recordings/"], "keyframe_mode": "magic"}
-  ],
-  "object_store": {"nats_url": "nats://localhost:4222", "bucket": "semsource-media"}
+  ]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {

@@ -143,13 +143,6 @@ func writeConfig(t *testing.T, dir string) string {
 	root := repoRoot(t)
 	cfg := map[string]any{
 		"namespace": "e2etest",
-		"flow": map[string]any{
-			"outputs": []map[string]any{{
-				"name": "log", "type": "log", "subject": "test",
-			}},
-			"delivery_mode": "at-least-once",
-			"ack_timeout":   "5s",
-		},
 		"sources": []map[string]any{
 			{"type": "ast", "path": root, "language": "go", "watch": false},
 			{"type": "docs", "paths": []string{filepath.Join(root, "docs")}, "watch": false},
@@ -457,13 +450,6 @@ func writeOSHConfig(t *testing.T, dir, workspaceDir string) string {
 	cfg := map[string]any{
 		"namespace":     "oshtest",
 		"workspace_dir": workspaceDir,
-		"flow": map[string]any{
-			"outputs": []map[string]any{{
-				"name": "log", "type": "log", "subject": "test",
-			}},
-			"delivery_mode": "at-least-once",
-			"ack_timeout":   "5s",
-		},
 		"sources": []map[string]any{
 			{
 				"type":     "repo",
