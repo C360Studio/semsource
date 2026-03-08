@@ -1,10 +1,6 @@
 package handler
 
-import (
-	"time"
-
-	"github.com/c360studio/semstreams/message"
-)
+import "time"
 
 // SourceType constants for supported handler kinds.
 const (
@@ -48,13 +44,12 @@ type RawEntity struct {
 	Instance string
 
 	// Properties holds source-specific metadata. Values must be JSON-serializable.
+	// The normalizer converts these to triples with Subject=entityID and
+	// Predicate="{domain}.{entityType}.{key}".
 	Properties map[string]any
 
-	// Triples are pre-formed RDF-style triples the handler has already resolved.
-	// Optional — handlers may emit triples directly instead of relying on the normalizer.
-	Triples []message.Triple
-
-	// Edges are raw directed edges to be resolved by the normalizer into graph edges.
+	// Edges are raw directed relationships to be resolved by the normalizer
+	// into relationship triples (where Object is the target entity ID).
 	Edges []RawEdge
 }
 

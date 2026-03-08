@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/handler"
-	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
 )
 
@@ -173,23 +171,6 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 		pr = &ProbeResult{}
 	}
 
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{Predicate: source.MediaType, Object: "video", Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaMimeType, Object: mimeType, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaWidth, Object: pr.Width, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaHeight, Object: pr.Height, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFilePath, Object: relPath, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFileHash, Object: hash, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFileSize, Object: fileSize, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFormat, Object: format, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaDuration, Object: pr.Duration.Seconds(), Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFrameRate, Object: pr.FrameRate, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaCodec, Object: pr.Codec, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaBitrate, Object: pr.Bitrate, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-	}
-
 	videoEntity := handler.RawEntity{
 		SourceType: handler.SourceTypeVideo,
 		Domain:     handler.DomainMedia,
@@ -197,20 +178,19 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 		EntityType: "video",
 		Instance:   instance,
 		Properties: map[string]any{
-			"media_type":   "video",
-			"file_path":    relPath,
-			"mime_type":    mimeType,
-			"content_hash": hash,
-			"width":        pr.Width,
-			"height":       pr.Height,
-			"file_size":    fileSize,
-			"format":       format,
-			"duration":     pr.Duration.Seconds(),
-			"frame_rate":   pr.FrameRate,
-			"codec":        pr.Codec,
-			"bitrate":      pr.Bitrate,
+			"media_type": "video",
+			"file_path":  relPath,
+			"mime_type":  mimeType,
+			"file_hash":  hash,
+			"file_size":  fileSize,
+			"format":     format,
+			"duration":   pr.Duration.Seconds(),
+			"frame_rate": pr.FrameRate,
+			"width":      pr.Width,
+			"height":     pr.Height,
+			"codec":      pr.Codec,
+			"bitrate":    pr.Bitrate,
 		},
-		Triples: triples,
 	}
 
 	// Only read full file content when a store is configured for binary persistence.
@@ -224,13 +204,6 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 				h.logger.Warn("video handler: failed to store video binary",
 					"path", path, "error", err)
 			} else {
-				videoEntity.Triples = append(videoEntity.Triples, message.Triple{
-					Predicate:  source.MediaStorageRef,
-					Object:     storageKey,
-					Source:     handler.SourceTypeVideo,
-					Timestamp:  now,
-					Confidence: 1.0,
-				})
 				videoEntity.Properties["storage_ref"] = storageKey
 			}
 		}
@@ -246,28 +219,13 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 			"path", path, "error", kfErr)
 	}
 
-	// Append the keyframe count triple now that we know the count.
-	videoEntity.Triples = append(videoEntity.Triples, message.Triple{
-		Predicate:  source.MediaKeyframeCount,
-		Object:     len(keyframes),
-		Source:     handler.SourceTypeVideo,
-		Timestamp:  now,
-		Confidence: 1.0,
-	})
+	// Record the keyframe count now that we know it.
 	videoEntity.Properties["keyframe_count"] = len(keyframes)
 
 	// Build a RawEntity per keyframe.
 	var keyframeEntities []handler.RawEntity
 	for _, kf := range keyframes {
 		kfInstance := fmt.Sprintf("%s-%s", hash[:6], formatTimestamp(kf.Timestamp))
-
-		kfTriples := []message.Triple{
-			{Predicate: source.MediaType, Object: "keyframe", Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-			{Predicate: source.MediaTimestamp, Object: formatTimestamp(kf.Timestamp), Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-			{Predicate: source.MediaFrameIndex, Object: kf.Index, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-			{Predicate: source.MediaWidth, Object: kf.Width, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-			{Predicate: source.MediaHeight, Object: kf.Height, Source: handler.SourceTypeVideo, Timestamp: now, Confidence: 1.0},
-		}
 
 		kfProps := map[string]any{
 			"media_type":  "keyframe",
@@ -284,13 +242,6 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 				h.logger.Warn("video handler: failed to store keyframe",
 					"path", path, "frame", kf.Index, "error", err)
 			} else {
-				kfTriples = append(kfTriples, message.Triple{
-					Predicate:  source.MediaStorageRef,
-					Object:     kfKey,
-					Source:     handler.SourceTypeVideo,
-					Timestamp:  now,
-					Confidence: 1.0,
-				})
 				kfProps["storage_ref"] = kfKey
 			}
 		}
@@ -302,7 +253,6 @@ func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg ha
 			EntityType: "keyframe",
 			Instance:   kfInstance,
 			Properties: kfProps,
-			Triples:    kfTriples,
 			Edges: []handler.RawEdge{
 				{FromHint: kfInstance, ToHint: instance, EdgeType: "keyframe_of", ToType: "video"},
 			},

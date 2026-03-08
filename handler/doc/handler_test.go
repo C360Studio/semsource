@@ -166,16 +166,9 @@ func TestDocHandler_Ingest_TripleContentHash(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	// Expect a triple with predicate containing "content_hash".
-	found := false
-	for _, tr := range entities[0].Triples {
-		if strings.Contains(tr.Predicate, "content_hash") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected triple with predicate containing 'content_hash'")
+	// Expect a Properties entry for "content_hash".
+	if _, ok := entities[0].Properties["content_hash"]; !ok {
+		t.Error("expected Properties[\"content_hash\"] to be set")
 	}
 }
 
@@ -194,15 +187,8 @@ func TestDocHandler_Ingest_TripleFilePath(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	found := false
-	for _, tr := range entities[0].Triples {
-		if strings.Contains(tr.Predicate, "file_path") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected triple with predicate containing 'file_path'")
+	if _, ok := entities[0].Properties["file_path"]; !ok {
+		t.Error("expected Properties[\"file_path\"] to be set")
 	}
 }
 
@@ -221,15 +207,9 @@ func TestDocHandler_Ingest_TripleTitleFromFirstHeading(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	var titleValue interface{}
-	for _, tr := range entities[0].Triples {
-		if strings.Contains(tr.Predicate, "title") {
-			titleValue = tr.Object
-			break
-		}
-	}
-	if titleValue == nil {
-		t.Fatal("expected a title triple, got none")
+	titleValue, ok := entities[0].Properties["title"]
+	if !ok {
+		t.Fatal("expected Properties[\"title\"] to be set, got none")
 	}
 	if titleValue != "My Great Doc" {
 		t.Errorf("title = %q, want %q", titleValue, "My Great Doc")
@@ -252,16 +232,9 @@ func TestDocHandler_Ingest_NoTitleFallback(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	// Title triple should still be present, falling back to filename.
-	found := false
-	for _, tr := range entities[0].Triples {
-		if strings.Contains(tr.Predicate, "title") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected title triple even without markdown heading")
+	// Properties["title"] should still be present, falling back to filename.
+	if _, ok := entities[0].Properties["title"]; !ok {
+		t.Error("expected Properties[\"title\"] even without markdown heading")
 	}
 }
 
@@ -366,16 +339,14 @@ func TestDocHandler_Ingest_MultiplePaths(t *testing.T) {
 	// directories contributed files.
 	seenPaths := make(map[string]bool)
 	for _, e := range entities {
-		for _, tr := range e.Triples {
-			if strings.Contains(tr.Predicate, "file_path") {
-				seenPaths[tr.Object.(string)] = true
-			}
+		if fp, ok := e.Properties["file_path"].(string); ok {
+			seenPaths[fp] = true
 		}
 	}
 
 	for _, want := range []string{"alpha.md", "beta.txt", "gamma.md"} {
 		if !seenPaths[want] {
-			t.Errorf("expected file_path %q in triples, not found; seen: %v", want, seenPaths)
+			t.Errorf("expected file_path %q in Properties, not found; seen: %v", want, seenPaths)
 		}
 	}
 }

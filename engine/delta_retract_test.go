@@ -116,8 +116,8 @@ func TestEngine_Watch_EmitsDELTA_OnCreate(t *testing.T) {
 	if ev == nil {
 		t.Fatal("no DELTA event emitted after create ChangeEvent")
 	}
-	if len(ev.Entities) == 0 {
-		t.Error("DELTA event has no entities")
+	if ev.Entity.ID == "" {
+		t.Error("DELTA event has empty entity ID")
 	}
 	if ev.Namespace != "acme" {
 		t.Errorf("DELTA namespace = %q, want %q", ev.Namespace, "acme")
@@ -266,13 +266,10 @@ func TestEngine_Watch_DELTA_EntityHasCorrectID(t *testing.T) {
 	if ev == nil {
 		t.Fatal("no DELTA event")
 	}
-	if len(ev.Entities) == 0 {
-		t.Fatal("DELTA has no entities")
-	}
 	// ID must follow 6-part scheme: acme.semsource.golang.tmp-test.function.Qux
 	wantID := "acme.semsource.golang.tmp-test.function.Qux"
-	if ev.Entities[0].ID != wantID {
-		t.Errorf("entity ID = %q, want %q", ev.Entities[0].ID, wantID)
+	if ev.Entity.ID != wantID {
+		t.Errorf("entity ID = %q, want %q", ev.Entity.ID, wantID)
 	}
 }
 

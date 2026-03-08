@@ -6,23 +6,18 @@ import (
 	"github.com/c360studio/semstreams/federation"
 )
 
-// buildDeltaEvent constructs a DELTA event for a set of changed entities.
-func (e *Engine) buildDeltaEvent(entities []*federation.Entity) *federation.Event {
-	flat := make([]federation.Entity, len(entities))
-	for i, ptr := range entities {
-		flat[i] = *ptr
+// buildDeltaEvents constructs one DELTA event per changed entity.
+func (e *Engine) buildDeltaEvents(entities []*federation.Entity) []*federation.Event {
+	now := time.Now()
+	events := make([]*federation.Event, len(entities))
+	for i, ent := range entities {
+		events[i] = &federation.Event{
+			Type:      federation.EventTypeDELTA,
+			SourceID:  "semsource",
+			Namespace: e.cfg.Namespace,
+			Timestamp: now,
+			Entity:    *ent,
+		}
 	}
-	return &federation.Event{
-		Type:      federation.EventTypeDELTA,
-		SourceID:  "semsource",
-		Namespace: e.cfg.Namespace,
-		Timestamp: time.Now(),
-		Entities:  flat,
-		Provenance: federation.Provenance{
-			SourceType: "engine",
-			SourceID:   "semsource",
-			Timestamp:  time.Now(),
-			Handler:    "engine",
-		},
-	}
+	return events
 }

@@ -19,38 +19,22 @@ func TestGraphEventPayload_JSONRoundTrip(t *testing.T) {
 			SourceID:  "my-source",
 			Namespace: "acme",
 			Timestamp: now,
-			Entities: []federation.Entity{
-				{
-					ID: "acme.semsource.git.my-repo.commit.a1b2c3",
-					Triples: []message.Triple{
-						{
-							Subject:   "acme.semsource.git.my-repo.commit.a1b2c3",
-							Predicate: "git.commit.sha",
-							Object:    "a1b2c3",
-							Timestamp: now,
-						},
-					},
-					Edges: []federation.Edge{
-						{
-							FromID:   "acme.semsource.git.my-repo.commit.a1b2c3",
-							ToID:     "acme.semsource.git.my-repo.author.alice",
-							EdgeType: "authored_by",
-							Weight:   1.0,
-						},
-					},
-					Provenance: federation.Provenance{
-						SourceType: "git",
-						SourceID:   "my-source",
-						Timestamp:  now,
-						Handler:    "GitHandler",
+			Entity: federation.Entity{
+				ID: "acme.semsource.git.my-repo.commit.a1b2c3",
+				Triples: []message.Triple{
+					{
+						Subject:   "acme.semsource.git.my-repo.commit.a1b2c3",
+						Predicate: "git.commit.sha",
+						Object:    "a1b2c3",
+						Timestamp: now,
 					},
 				},
-			},
-			Provenance: federation.Provenance{
-				SourceType: "git",
-				SourceID:   "my-source",
-				Timestamp:  now,
-				Handler:    "GitHandler",
+				Provenance: federation.Provenance{
+					SourceType: "git",
+					SourceID:   "my-source",
+					Timestamp:  now,
+					Handler:    "GitHandler",
+				},
 			},
 		},
 	}
@@ -71,11 +55,8 @@ func TestGraphEventPayload_JSONRoundTrip(t *testing.T) {
 	if restored.Event.SourceID != original.Event.SourceID {
 		t.Errorf("SourceID mismatch: got %v, want %v", restored.Event.SourceID, original.Event.SourceID)
 	}
-	if len(restored.Event.Entities) != len(original.Event.Entities) {
-		t.Fatalf("Entities count mismatch: got %d, want %d", len(restored.Event.Entities), len(original.Event.Entities))
-	}
-	if restored.Event.Entities[0].ID != original.Event.Entities[0].ID {
-		t.Errorf("Entity ID mismatch: got %v, want %v", restored.Event.Entities[0].ID, original.Event.Entities[0].ID)
+	if restored.Event.Entity.ID != original.Event.Entity.ID {
+		t.Errorf("Entity ID mismatch: got %v, want %v", restored.Event.Entity.ID, original.Event.Entity.ID)
 	}
 }
 
@@ -104,12 +85,6 @@ func TestGraphEventPayload_Validate(t *testing.T) {
 				SourceID:  "my-source",
 				Namespace: "acme",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "my-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
 			},
 		}
 		if err := p.Validate(); err != nil {
@@ -136,12 +111,6 @@ func TestGraphEventPayload_PayloadRegistration(t *testing.T) {
 		SourceID:  "heartbeat-source",
 		Namespace: "acme",
 		Timestamp: time.Now(),
-		Provenance: federation.Provenance{
-			SourceType: "internal",
-			SourceID:   "heartbeat-source",
-			Timestamp:  time.Now(),
-			Handler:    "Engine",
-		},
 	}
 
 	payload := &graph.GraphEventPayload{Event: event}

@@ -38,6 +38,10 @@ func New(cfg Config) *Normalizer {
 // where org defaults to cfg.Org but may be overridden to "public" via
 // Properties["org"] to signal an open-source / intrinsic entity.
 //
+// Properties are converted to triples with Subject=entityID and
+// Predicate="{domain}.{entityType}.{key}". Edges are converted to
+// relationship triples where Object is the target entity ID.
+//
 // Required fields: Domain, System, EntityType, Instance.
 // Returns an error if any required field is empty or the resulting ID
 // fails NATS KV key validation.
@@ -55,12 +59,10 @@ func (n *Normalizer) Normalize(raw handler.RawEntity) (*federation.Entity, error
 	}
 
 	triples := n.buildTriples(id, raw)
-	edges := buildEdges(id, raw)
 
 	entity := &federation.Entity{
 		ID:      id,
 		Triples: triples,
-		Edges:   edges,
 		Provenance: federation.Provenance{
 			SourceType: raw.SourceType,
 			SourceID:   raw.System,
@@ -104,18 +106,17 @@ func (n *Normalizer) resolveOrg(raw handler.RawEntity) string {
 	return n.cfg.Org
 }
 
-// buildTriples merges any pre-formed triples from the handler with triples
-// generated from the Properties map. Pre-formed triples take precedence and
-// are included as-is; generated triples use the normalized entity ID as subject.
+// buildTriples converts Properties and Edges into triples.
+//
+// Property triples use Predicate format "{domain}.{entityType}.{key}".
+// Relationship triples (from Edges) use Predicate = edge type and
+// Object = target entity ID, making them detectable via Triple.IsRelationship().
 func (n *Normalizer) buildTriples(entityID string, raw handler.RawEntity) []message.Triple {
 	now := time.Now().UTC()
 
-	// Start with pre-formed triples the handler already resolved.
-	triples := make([]message.Triple, len(raw.Triples))
-	copy(triples, raw.Triples)
+	triples := make([]message.Triple, 0, len(raw.Properties)+len(raw.Edges))
 
-	// Generate triples from the unstructured Properties map.
-	// Each key becomes a predicate of the form "{domain}.property.{key}".
+	// Property triples from the Properties map.
 	for k, v := range raw.Properties {
 		// Skip the internal org override key — it is not a semantic property.
 		if k == "org" {
@@ -123,7 +124,7 @@ func (n *Normalizer) buildTriples(entityID string, raw handler.RawEntity) []mess
 		}
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
-			Predicate:  raw.Domain + ".property." + k,
+			Predicate:  raw.Domain + "." + raw.EntityType + "." + k,
 			Object:     v,
 			Source:     PlatformSemsource,
 			Timestamp:  now,
@@ -131,45 +132,29 @@ func (n *Normalizer) buildTriples(entityID string, raw handler.RawEntity) []mess
 		})
 	}
 
-	return triples
-}
-
-// buildEdges converts RawEdge values into GraphEdge values.
-// The FromID is the normalized entity ID. The ToID is constructed as a
-// same-domain/same-system entity using ToHint as the instance — a best-effort
-// resolution for intra-system edges. Cross-system edges require a full registry
-// and are not yet supported.
-//
-// Edges whose target org cannot be resolved (malformed entityID) are silently
-// dropped; this is a programming error in the handler, not a runtime condition.
-func buildEdges(entityID string, raw handler.RawEntity) []federation.Edge {
-	if len(raw.Edges) == 0 {
-		return nil
-	}
-
-	// Derive the org from the source entity's ID — all sibling edges share it.
-	// entityID format: org.semsource.domain.system.type.instance (6 segments).
-	org := orgFromID(entityID)
-	if org == "" {
-		// entityID is malformed; cannot construct valid target IDs.
-		return nil
-	}
-
-	edges := make([]federation.Edge, 0, len(raw.Edges))
-	for _, re := range raw.Edges {
-		targetType := raw.EntityType
-		if re.ToType != "" {
-			targetType = re.ToType
+	// Relationship triples from Edges.
+	if len(raw.Edges) > 0 {
+		org := orgFromID(entityID)
+		if org != "" {
+			for _, re := range raw.Edges {
+				targetType := raw.EntityType
+				if re.ToType != "" {
+					targetType = re.ToType
+				}
+				toID := BuildEntityID(org, PlatformSemsource, raw.Domain, raw.System, targetType, re.ToHint)
+				triples = append(triples, message.Triple{
+					Subject:    entityID,
+					Predicate:  raw.Domain + "." + raw.EntityType + "." + re.EdgeType,
+					Object:     toID,
+					Source:     PlatformSemsource,
+					Timestamp:  now,
+					Confidence: 1.0,
+				})
+			}
 		}
-		toID := BuildEntityID(org, PlatformSemsource, raw.Domain, raw.System, targetType, re.ToHint)
-		edges = append(edges, federation.Edge{
-			FromID:   entityID,
-			ToID:     toID,
-			EdgeType: re.EdgeType,
-			Weight:   re.Weight,
-		})
 	}
-	return edges
+
+	return triples
 }
 
 // orgFromID extracts the first segment (org) from a dot-delimited entity ID.

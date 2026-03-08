@@ -11,10 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/c360studio/semsource/handler"
-	"github.com/c360studio/semstreams/message"
 )
 
 // docExtensions lists the file extensions DocHandler will process.
@@ -123,51 +121,6 @@ func ingestFile(path, root string) (handler.RawEntity, error) {
 	title := extractTitle(content, filepath.Base(path))
 	mimeType := mimeForExt(filepath.Ext(path))
 
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{
-			Subject:    "", // filled by normalizer after ID assignment
-			Predicate:  handler.DomainWeb + ".doc.title",
-			Object:     title,
-			Source:     handler.SourceTypeDoc,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  handler.DomainWeb + ".doc.file_path",
-			Object:     relPath,
-			Source:     handler.SourceTypeDoc,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  handler.DomainWeb + ".doc.mime_type",
-			Object:     mimeType,
-			Source:     handler.SourceTypeDoc,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  handler.DomainWeb + ".doc.content_hash",
-			Object:     hash,
-			Source:     handler.SourceTypeDoc,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  handler.DomainWeb + ".doc.content",
-			Object:     string(content),
-			Source:     handler.SourceTypeDoc,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-	}
-
 	return handler.RawEntity{
 		SourceType: handler.SourceTypeDoc,
 		Domain:     handler.DomainWeb,
@@ -182,8 +135,8 @@ func ingestFile(path, root string) (handler.RawEntity, error) {
 			"file_path":    relPath,
 			"mime_type":    mimeType,
 			"content_hash": hash,
+			"content":      string(content),
 		},
-		Triples: triples,
 	}, nil
 }
 

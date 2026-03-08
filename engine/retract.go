@@ -14,11 +14,5 @@ func (e *Engine) buildRetractEvent(entityIDs []string) *federation.Event {
 		Namespace:   e.cfg.Namespace,
 		Timestamp:   time.Now(),
 		Retractions: entityIDs,
-		Provenance: federation.Provenance{
-			SourceType: "engine",
-			SourceID:   "semsource",
-			Timestamp:  time.Now(),
-			Handler:    "engine",
-		},
 	}
 }

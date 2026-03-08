@@ -11,7 +11,6 @@ import (
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/processor/vision"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 )
 
 // ---------------------------------------------------------------------------
@@ -115,20 +114,19 @@ func seedStore(t *testing.T, store *memStore, key string, size int) {
 	}
 }
 
-// findTriple returns the first triple in entity.Triples whose Predicate
-// matches predicate, or nil when absent.
-func findTriple(entity handler.RawEntity, predicate string) *struct{ obj any } {
-	for _, tr := range entity.Triples {
-		if tr.Predicate == predicate {
-			return &struct{ obj any }{tr.Object}
-		}
+// findProp returns a pointer to the value stored in entity.Properties under key,
+// or nil when the key is absent.
+func findProp(entity handler.RawEntity, key string) *struct{ val any } {
+	v, ok := entity.Properties[key]
+	if !ok {
+		return nil
 	}
-	return nil
+	return &struct{ val any }{v}
 }
 
-// hasTriple reports whether entity has a triple with the given predicate.
-func hasTriple(entity handler.RawEntity, predicate string) bool {
-	return findTriple(entity, predicate) != nil
+// hasProp reports whether entity.Properties contains key.
+func hasProp(entity handler.RawEntity, key string) bool {
+	return findProp(entity, key) != nil
 }
 
 // defaultResult returns a non-trivial VisionResult for use in tests.
@@ -164,62 +162,62 @@ func TestProcessor_Process_EnrichesImageEntity(t *testing.T) {
 	}
 	enriched := out[0]
 
-	// Labels triple must be present and be a JSON array.
-	tr := findTriple(enriched, source.MediaVisionLabels)
-	if tr == nil {
-		t.Fatal("expected vision labels triple, got none")
+	// Labels property must be present and be a JSON array.
+	lp := findProp(enriched, source.MediaVisionLabels)
+	if lp == nil {
+		t.Fatal("expected vision_labels property, got none")
 	}
 	var labels []string
-	if err := json.Unmarshal([]byte(tr.obj.(string)), &labels); err != nil {
-		t.Fatalf("labels triple is not valid JSON array: %v", err)
+	if err := json.Unmarshal([]byte(lp.val.(string)), &labels); err != nil {
+		t.Fatalf("vision_labels is not a valid JSON array: %v", err)
 	}
 	if len(labels) != 3 || labels[0] != "cat" {
 		t.Errorf("labels = %v, want [cat indoor animal]", labels)
 	}
 
-	// Description triple.
-	dtr := findTriple(enriched, source.MediaVisionDescription)
-	if dtr == nil {
-		t.Fatal("expected vision description triple")
+	// Description property.
+	dp := findProp(enriched, source.MediaVisionDescription)
+	if dp == nil {
+		t.Fatal("expected vision_description property")
 	}
-	if dtr.obj != "A cat sitting on a couch" {
-		t.Errorf("description = %v, want 'A cat sitting on a couch'", dtr.obj)
-	}
-
-	// Confidence triple.
-	ctr := findTriple(enriched, source.MediaVisionConfidence)
-	if ctr == nil {
-		t.Fatal("expected vision confidence triple")
-	}
-	if ctr.obj != 0.92 {
-		t.Errorf("confidence = %v, want 0.92", ctr.obj)
+	if dp.val != "A cat sitting on a couch" {
+		t.Errorf("description = %v, want 'A cat sitting on a couch'", dp.val)
 	}
 
-	// Model triple.
-	mtr := findTriple(enriched, source.MediaVisionModel)
-	if mtr == nil {
-		t.Fatal("expected vision model triple")
+	// Confidence property — stored as a string via fmt.Sprintf("%g", ...).
+	cp := findProp(enriched, source.MediaVisionConfidence)
+	if cp == nil {
+		t.Fatal("expected vision_confidence property")
 	}
-	if mtr.obj != "claude-3-5-sonnet-20241022" {
-		t.Errorf("model = %v, want 'claude-3-5-sonnet-20241022'", mtr.obj)
+	if cp.val != "0.92" {
+		t.Errorf("confidence = %v, want \"0.92\"", cp.val)
 	}
 
-	// Objects triple — JSON array.
-	otr := findTriple(enriched, source.MediaVisionObjects)
-	if otr == nil {
-		t.Fatal("expected vision objects triple")
+	// Model property.
+	mp := findProp(enriched, source.MediaVisionModel)
+	if mp == nil {
+		t.Fatal("expected vision_model property")
+	}
+	if mp.val != "claude-3-5-sonnet-20241022" {
+		t.Errorf("model = %v, want 'claude-3-5-sonnet-20241022'", mp.val)
+	}
+
+	// Objects property — JSON array.
+	op := findProp(enriched, source.MediaVisionObjects)
+	if op == nil {
+		t.Fatal("expected vision_objects property")
 	}
 	var objs []vision.DetectedObject
-	if err := json.Unmarshal([]byte(otr.obj.(string)), &objs); err != nil {
-		t.Fatalf("objects triple is not valid JSON: %v", err)
+	if err := json.Unmarshal([]byte(op.val.(string)), &objs); err != nil {
+		t.Fatalf("vision_objects is not valid JSON: %v", err)
 	}
 	if len(objs) != 1 || objs[0].Label != "cat" {
 		t.Errorf("objects = %v, want [{cat 0.95 ...}]", objs)
 	}
 
-	// Text triple should NOT be present (result.Text == "").
-	if hasTriple(enriched, source.MediaVisionText) {
-		t.Error("expected no vision text triple when result.Text is empty")
+	// Text property should NOT be present (result.Text == "").
+	if hasProp(enriched, source.MediaVisionText) {
+		t.Error("expected no vision_text property when result.Text is empty")
 	}
 
 	if provider.calls != 1 {
@@ -243,15 +241,15 @@ func TestProcessor_Process_SkipsNonMediaEntity(t *testing.T) {
 			"file": "main.go",
 		},
 	}
-	before := len(entity.Triples)
+	before := len(entity.Properties)
 
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
 	if len(out) != 1 {
 		t.Fatalf("Process returned %d entities, want 1", len(out))
 	}
-	if len(out[0].Triples) != before {
-		t.Errorf("non-media entity was modified: triples %d → %d", before, len(out[0].Triples))
+	if len(out[0].Properties) != before {
+		t.Errorf("non-media entity was modified: properties %d → %d", before, len(out[0].Properties))
 	}
 	if provider.calls != 0 {
 		t.Errorf("provider should not be called for non-media entity; got %d calls", provider.calls)
@@ -279,8 +277,8 @@ func TestProcessor_Process_SkipsWithoutStorageRef(t *testing.T) {
 
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
-	if hasTriple(out[0], source.MediaVisionLabels) {
-		t.Error("entity without storage_ref should not have vision triples")
+	if hasProp(out[0], source.MediaVisionLabels) {
+		t.Error("entity without storage_ref should not have vision properties")
 	}
 	if provider.calls != 0 {
 		t.Errorf("provider should not be called; got %d calls", provider.calls)
@@ -299,8 +297,8 @@ func TestProcessor_Process_Disabled(t *testing.T) {
 	entity := makeMediaEntity("image", "images/test/abc123/original", "image/png")
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
-	if hasTriple(out[0], source.MediaVisionLabels) {
-		t.Error("disabled processor should not add vision triples")
+	if hasProp(out[0], source.MediaVisionLabels) {
+		t.Error("disabled processor should not add vision properties")
 	}
 	if provider.calls != 0 {
 		t.Errorf("disabled processor should not call provider; got %d calls", provider.calls)
@@ -320,8 +318,8 @@ func TestProcessor_Process_MaxFileSizeExceeded(t *testing.T) {
 	entity := makeMediaEntity("image", "images/test/large/original", "image/png")
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
-	if hasTriple(out[0], source.MediaVisionLabels) {
-		t.Error("entity exceeding MaxFileSize should not have vision triples")
+	if hasProp(out[0], source.MediaVisionLabels) {
+		t.Error("entity exceeding MaxFileSize should not have vision properties")
 	}
 	if provider.calls != 0 {
 		t.Errorf("provider should not be called for oversized binary; got %d calls", provider.calls)
@@ -336,17 +334,17 @@ func TestProcessor_Process_ProviderError(t *testing.T) {
 	proc := vision.New(provider, store)
 
 	entity := makeMediaEntity("image", "images/test/abc123/original", "image/png")
-	beforeTriples := len(entity.Triples)
+	beforeProps := len(entity.Properties)
 
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
 	// Entity should be returned unchanged — provider error is non-fatal.
-	if len(out[0].Triples) != beforeTriples {
-		t.Errorf("provider error should leave entity triples unchanged: before=%d after=%d",
-			beforeTriples, len(out[0].Triples))
+	if len(out[0].Properties) != beforeProps {
+		t.Errorf("provider error should leave entity properties unchanged: before=%d after=%d",
+			beforeProps, len(out[0].Properties))
 	}
-	if hasTriple(out[0], source.MediaVisionLabels) {
-		t.Error("entity should not have vision triples after provider error")
+	if hasProp(out[0], source.MediaVisionLabels) {
+		t.Error("entity should not have vision properties after provider error")
 	}
 }
 
@@ -380,10 +378,10 @@ func TestProcessor_Process_MediaTypeFiltering(t *testing.T) {
 	if len(out) != 2 {
 		t.Fatalf("expected 2 entities out, got %d", len(out))
 	}
-	if hasTriple(out[0], source.MediaVisionLabels) {
+	if hasProp(out[0], source.MediaVisionLabels) {
 		t.Error("audio entity should not be vision-enriched")
 	}
-	if !hasTriple(out[1], source.MediaVisionLabels) {
+	if !hasProp(out[1], source.MediaVisionLabels) {
 		t.Error("image entity should be vision-enriched")
 	}
 	if provider.calls != 1 {
@@ -411,14 +409,14 @@ func TestProcessor_ProcessSingle_Keyframe(t *testing.T) {
 	entity := makeMediaEntity("keyframe", "keyframes/video1/frame042/original", "image/jpeg")
 	out := proc.ProcessSingle(context.Background(), entity)
 
-	if !hasTriple(out, source.MediaVisionLabels) {
-		t.Error("keyframe entity should have vision labels triple")
+	if !hasProp(out, source.MediaVisionLabels) {
+		t.Error("keyframe entity should have vision_labels property")
 	}
-	if !hasTriple(out, source.MediaVisionDescription) {
-		t.Error("keyframe entity should have vision description triple")
+	if !hasProp(out, source.MediaVisionDescription) {
+		t.Error("keyframe entity should have vision_description property")
 	}
-	if !hasTriple(out, source.MediaVisionModel) {
-		t.Error("keyframe entity should have vision model triple")
+	if !hasProp(out, source.MediaVisionModel) {
+		t.Error("keyframe entity should have vision_model property")
 	}
 
 	if provider.calls != 1 {
@@ -444,16 +442,10 @@ func TestProcessor_Process_OCRText(t *testing.T) {
 	entity := makeMediaEntity("image", "images/test/screenshot/original", "image/png")
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
-	// Text triple MUST be present when result.Text is non-empty.
-	ttr := findTriple(out[0], source.MediaVisionText)
-	if ttr == nil {
-		t.Fatal("expected vision text triple when result.Text is non-empty")
+	// Text property MUST be present when result.Text is non-empty.
+	if !hasProp(out[0], source.MediaVisionText) {
+		t.Fatal("expected vision_text property when result.Text is non-empty")
 	}
-	if ttr.obj != "Username\nPassword\nLogin" {
-		t.Errorf("text triple Object = %v, want 'Username\\nPassword\\nLogin'", ttr.obj)
-	}
-
-	// Text property should also be in Properties map.
 	if out[0].Properties[source.MediaVisionText] != "Username\nPassword\nLogin" {
 		t.Errorf("Properties[MediaVisionText] = %v, want 'Username\\nPassword\\nLogin'",
 			out[0].Properties[source.MediaVisionText])
@@ -481,22 +473,22 @@ func TestVisionResult_Empty(t *testing.T) {
 
 	enriched := out[0]
 
-	// All non-text triples must still be added (even with zero values).
-	for _, pred := range []string{
+	// All non-text properties must still be set (even with zero values).
+	for _, key := range []string{
 		source.MediaVisionLabels,
 		source.MediaVisionDescription,
 		source.MediaVisionConfidence,
 		source.MediaVisionObjects,
 		source.MediaVisionModel,
 	} {
-		if !hasTriple(enriched, pred) {
-			t.Errorf("expected triple for predicate %s even with empty result", pred)
+		if !hasProp(enriched, key) {
+			t.Errorf("expected property %s even with empty result", key)
 		}
 	}
 
-	// Text triple must NOT be added for empty text.
-	if hasTriple(enriched, source.MediaVisionText) {
-		t.Error("expected no vision text triple for empty result.Text")
+	// Text property must NOT be set for empty text.
+	if hasProp(enriched, source.MediaVisionText) {
+		t.Error("expected no vision_text property for empty result.Text")
 	}
 }
 
@@ -507,26 +499,22 @@ func TestProcessor_Process_PreservesExistingTriples(t *testing.T) {
 	provider := &mockProvider{result: defaultResult()}
 	proc := vision.New(provider, store)
 
-	// Entity already has some triples from the ingest handler (e.g. mime_type, file_path).
+	// Entity already has some properties from the ingest handler (e.g. mime_type).
 	entity := makeMediaEntity("image", "images/test/abc123/original", "image/png")
-	entity.Triples = append(entity.Triples, message.Triple{
-		Predicate:  source.MediaMimeType,
-		Object:     "image/png",
-		Source:     "image-handler",
-		Confidence: 1.0,
-	})
-	initialCount := len(entity.Triples)
+	// makeMediaEntity already sets mime_type in Properties; record the count before enrichment.
+	initialCount := len(entity.Properties)
 
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
-	finalCount := len(out[0].Triples)
+	finalCount := len(out[0].Properties)
 
-	// Process must append vision triples without dropping the existing one.
+	// Process must add vision properties without dropping existing ones.
 	if finalCount <= initialCount {
-		t.Errorf("Process should have appended vision triples: before=%d after=%d", initialCount, finalCount)
+		t.Errorf("Process should have added vision properties: before=%d after=%d", initialCount, finalCount)
 	}
-	// Confirm the original triple survives.
-	if !hasTriple(out[0], source.MediaMimeType) {
-		t.Error("original MediaMimeType triple was lost after vision enrichment")
+	// Confirm the original mime_type property survives.
+	if out[0].Properties["mime_type"] != "image/png" {
+		t.Errorf("original mime_type property was lost after vision enrichment: got %v",
+			out[0].Properties["mime_type"])
 	}
 }
 
@@ -540,8 +528,8 @@ func TestProcessor_Process_MissingStorageKeyInStore(t *testing.T) {
 	entity := makeMediaEntity("image", "images/nonexistent/original", "image/png")
 	out := proc.Process(context.Background(), []handler.RawEntity{entity})
 
-	if hasTriple(out[0], source.MediaVisionLabels) {
-		t.Error("entity with missing storage key should not have vision triples")
+	if hasProp(out[0], source.MediaVisionLabels) {
+		t.Error("entity with missing storage key should not have vision properties")
 	}
 	if provider.calls != 0 {
 		t.Errorf("provider should not be called when store.Get fails; got %d calls", provider.calls)
@@ -576,10 +564,10 @@ func TestProcessor_Process_CustomMediaTypes(t *testing.T) {
 
 	out := proc.Process(context.Background(), []handler.RawEntity{videoEntity, imageEntity})
 
-	if !hasTriple(out[0], source.MediaVisionLabels) {
+	if !hasProp(out[0], source.MediaVisionLabels) {
 		t.Error("video entity should be vision-enriched with custom MediaTypes config")
 	}
-	if hasTriple(out[1], source.MediaVisionLabels) {
+	if hasProp(out[1], source.MediaVisionLabels) {
 		t.Error("image entity should NOT be vision-enriched when MediaTypes=[video]")
 	}
 }

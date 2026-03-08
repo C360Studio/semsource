@@ -26,32 +26,65 @@ func mapParseResult(result *semsourceast.ParseResult, lang, system string) []han
 }
 
 // mapCodeEntity converts a single CodeEntity to a RawEntity.
+// All scalar fields from CodeEntity are mapped to Properties. Relationship
+// fields (calls, implements, imports, embeds, etc.) are expressed as RawEdge
+// values so the normalizer can resolve full entity IDs from instance hints.
 func mapCodeEntity(ce *semsourceast.CodeEntity, domain, system string) handler.RawEntity {
+	props := map[string]any{
+		"path":       ce.Path,
+		"package":    ce.Package,
+		"language":   ce.Language,
+		"visibility": string(ce.Visibility),
+	}
+
+	if ce.StartLine > 0 {
+		props["start_line"] = ce.StartLine
+	}
+	if ce.EndLine > 0 {
+		props["end_line"] = ce.EndLine
+	}
+	if ce.StartLine > 0 && ce.EndLine > 0 {
+		props["line_count"] = ce.EndLine - ce.StartLine + 1
+	}
+	if ce.DocComment != "" {
+		props["doc_comment"] = ce.DocComment
+	}
+	if ce.Hash != "" {
+		props["hash"] = ce.Hash
+	}
+	if ce.Framework != "" {
+		props["framework"] = ce.Framework
+	}
+	if ce.Receiver != "" {
+		props["receiver"] = ce.Receiver
+	}
+
+	// Capability metadata is flattened into properties with a "capability." prefix.
+	if cap := ce.Capability; cap != nil {
+		if cap.Name != "" {
+			props["capability.name"] = cap.Name
+		}
+		if cap.Description != "" {
+			props["capability.description"] = cap.Description
+		}
+		if len(cap.Tools) > 0 {
+			props["capability.tools"] = cap.Tools
+		}
+		if len(cap.Inputs) > 0 {
+			props["capability.inputs"] = cap.Inputs
+		}
+		if len(cap.Outputs) > 0 {
+			props["capability.outputs"] = cap.Outputs
+		}
+	}
+
 	raw := handler.RawEntity{
 		SourceType: handler.SourceTypeAST,
 		Domain:     domain,
 		System:     system,
 		EntityType: string(ce.Type),
 		Instance:   ce.Name,
-		Properties: map[string]any{
-			"path":       ce.Path,
-			"package":    ce.Package,
-			"language":   ce.Language,
-			"visibility": string(ce.Visibility),
-		},
-		// Carry the pre-formed triples from the entity directly.
-		// The normalizer will merge these with any properties-derived triples.
-		Triples: ce.Triples(),
-	}
-
-	if ce.StartLine > 0 {
-		raw.Properties["start_line"] = ce.StartLine
-	}
-	if ce.EndLine > 0 {
-		raw.Properties["end_line"] = ce.EndLine
-	}
-	if ce.DocComment != "" {
-		raw.Properties["doc_comment"] = ce.DocComment
+		Properties: props,
 	}
 
 	// Map structural edges from the CodeEntity to RawEdge values.

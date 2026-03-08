@@ -37,7 +37,7 @@ func (e *LogEmitter) Emit(_ context.Context, event *federation.Event) error {
 		"type", event.Type,
 		"namespace", event.Namespace,
 		"source_id", event.SourceID,
-		"entity_count", len(event.Entities),
+		"entity_id", event.Entity.ID,
 		"retraction_count", len(event.Retractions),
 	)
 	return nil

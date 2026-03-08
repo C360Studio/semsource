@@ -14,11 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/c360studio/semsource/handler"
-	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
 )
 
@@ -157,75 +154,6 @@ func (h *ImageHandler) ingestFile(ctx context.Context, path, root string) (handl
 
 	width, height := imageDimensions(path)
 
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{
-			Subject:    "", // filled by normalizer after ID assignment
-			Predicate:  source.MediaType,
-			Object:     "image",
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaMimeType,
-			Object:     mimeType,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaWidth,
-			Object:     width,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaHeight,
-			Object:     height,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaFilePath,
-			Object:     relPath,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaFileHash,
-			Object:     hash,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaFileSize,
-			Object:     fileSize,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-		{
-			Subject:    "",
-			Predicate:  source.MediaFormat,
-			Object:     format,
-			Source:     handler.SourceTypeImage,
-			Timestamp:  now,
-			Confidence: 1.0,
-		},
-	}
-
 	entity := handler.RawEntity{
 		SourceType: handler.SourceTypeImage,
 		Domain:     handler.DomainMedia,
@@ -233,45 +161,30 @@ func (h *ImageHandler) ingestFile(ctx context.Context, path, root string) (handl
 		EntityType: "image",
 		Instance:   instance,
 		Properties: map[string]any{
-			"media_type":   "image",
-			"file_path":    relPath,
-			"mime_type":    mimeType,
-			"content_hash": hash,
-			"width":        width,
-			"height":       height,
-			"file_size":    fileSize,
-			"format":       format,
+			"media_type": "image",
+			"file_path":  relPath,
+			"mime_type":  mimeType,
+			"file_hash":  hash,
+			"width":      width,
+			"height":     height,
+			"file_size":  fileSize,
+			"format":     format,
 		},
-		Triples: triples,
 	}
 
 	// When a store is configured, persist the binary content and attempt
 	// thumbnail generation. Both operations are non-fatal: failures are logged
-	// and the entity is still returned with its metadata triples intact.
+	// and the entity is still returned with its metadata properties intact.
 	if h.store != nil {
 		storageKey := fmt.Sprintf("images/%s/%s/original", slugify(root), instance)
 		if err := h.store.Put(ctx, storageKey, content); err != nil {
 			h.logger.Warn("failed to store image binary", "path", path, "error", err)
 		} else {
-			entity.Triples = append(entity.Triples, message.Triple{
-				Subject:    "",
-				Predicate:  source.MediaStorageRef,
-				Object:     storageKey,
-				Source:     handler.SourceTypeImage,
-				Timestamp:  now,
-				Confidence: 1.0,
-			})
+			entity.Properties["storage_ref"] = storageKey
 
 			thumbKey, err := h.generateAndStoreThumbnail(ctx, content, path, root, instance)
 			if err == nil && thumbKey != "" {
-				entity.Triples = append(entity.Triples, message.Triple{
-					Subject:    "",
-					Predicate:  source.MediaThumbnailRef,
-					Object:     thumbKey,
-					Source:     handler.SourceTypeImage,
-					Timestamp:  now,
-					Confidence: 1.0,
-				})
+				entity.Properties["thumbnail_ref"] = thumbKey
 			}
 		}
 	}

@@ -54,7 +54,7 @@ type Engine struct {
 	cfg        *config.Config
 	handlers   []handler.SourceHandler
 	normalizer Normalizer // nil = passthrough (scaffold mode)
-	store      *federation.Store
+	store      *entityStore
 	emitter    Emitter
 	logger     *slog.Logger
 
@@ -85,7 +85,7 @@ type Engine struct {
 func NewEngine(cfg *config.Config, emitter Emitter, logger *slog.Logger, opts ...Option) *Engine {
 	e := &Engine{
 		cfg:               cfg,
-		store:             federation.NewStore(),
+		store:             newEntityStore(),
 		emitter:           emitter,
 		logger:            logger,
 		heartbeatInterval: 30 * time.Second,
@@ -194,9 +194,10 @@ func (e *Engine) seed(ctx context.Context) error {
 		}
 	}
 
-	event := e.buildSeedEvent()
-	if err := e.emitter.Emit(ctx, event); err != nil {
-		return fmt.Errorf("emit SEED: %w", err)
+	for _, event := range e.buildSeedEvents() {
+		if err := e.emitter.Emit(ctx, event); err != nil {
+			return fmt.Errorf("emit SEED: %w", err)
+		}
 	}
 	e.touchLastEmit()
 	return nil
@@ -213,8 +214,7 @@ func (e *Engine) normalizeAll(raws []handler.RawEntity) ([]*federation.Entity, e
 	for i := range raws {
 		raw := &raws[i]
 		entity := &federation.Entity{
-			ID:      fmt.Sprintf("%s.semsource.%s.%s.%s.%s", e.cfg.Namespace, raw.Domain, raw.System, raw.EntityType, raw.Instance),
-			Triples: raw.Triples,
+			ID: fmt.Sprintf("%s.semsource.%s.%s.%s.%s", e.cfg.Namespace, raw.Domain, raw.System, raw.EntityType, raw.Instance),
 			Provenance: federation.Provenance{
 				SourceType: raw.SourceType,
 				SourceID:   raw.System,
@@ -285,9 +285,10 @@ func (e *Engine) handleChange(ctx context.Context, ev handler.ChangeEvent) {
 			e.indexPath(ev.Path, entities)
 		}
 		if len(changed) > 0 {
-			event := e.buildDeltaEvent(changed)
-			if err := e.emitter.Emit(ctx, event); err != nil {
-				e.logger.Error("emit DELTA failed", "error", err)
+			for _, event := range e.buildDeltaEvents(changed) {
+				if err := e.emitter.Emit(ctx, event); err != nil {
+					e.logger.Error("emit DELTA failed", "error", err)
+				}
 			}
 			e.touchLastEmit()
 		}
@@ -327,9 +328,10 @@ func (e *Engine) runReseed(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			event := e.buildSeedEvent()
-			if err := e.emitter.Emit(ctx, event); err != nil {
-				e.logger.Error("emit periodic SEED failed", "error", err)
+			for _, event := range e.buildSeedEvents() {
+				if err := e.emitter.Emit(ctx, event); err != nil {
+					e.logger.Error("emit periodic SEED failed", "error", err)
+				}
 			}
 			e.touchLastEmit()
 		}

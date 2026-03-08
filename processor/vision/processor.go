@@ -6,16 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
 )
-
-// processorSource is the source label stamped on vision triples for provenance.
-const processorSource = "vision-processor"
 
 // Config holds VisionProcessor configuration.
 type Config struct {
@@ -164,79 +159,19 @@ func (p *Processor) ProcessSingle(ctx context.Context, entity handler.RawEntity)
 // applyResult appends vision triples and properties to entity based on result.
 // It never modifies the original entity's slice headers — a fresh copy is built.
 func (p *Processor) applyResult(entity handler.RawEntity, result *VisionResult) handler.RawEntity {
-	now := time.Now().UTC()
-	confidence := result.Confidence
-
-	// Encode labels as a JSON array string for the triple Object.
+	// Encode labels as a JSON array string.
 	labelsJSON, err := json.Marshal(result.Labels)
 	if err != nil {
-		// Fallback: comma-separated list.
 		labelsJSON = []byte(`"` + strings.Join(result.Labels, ",") + `"`)
 	}
 
-	newTriples := []message.Triple{
-		{
-			Predicate:  source.MediaVisionLabels,
-			Object:     string(labelsJSON),
-			Source:     processorSource,
-			Timestamp:  now,
-			Confidence: confidence,
-		},
-		{
-			Predicate:  source.MediaVisionDescription,
-			Object:     result.Description,
-			Source:     processorSource,
-			Timestamp:  now,
-			Confidence: confidence,
-		},
-		{
-			Predicate:  source.MediaVisionConfidence,
-			Object:     result.Confidence,
-			Source:     processorSource,
-			Timestamp:  now,
-			Confidence: confidence,
-		},
-		{
-			Predicate:  source.MediaVisionModel,
-			Object:     result.Model,
-			Source:     processorSource,
-			Timestamp:  now,
-			Confidence: confidence,
-		},
-	}
-
-	// Objects triple — always present (may be an empty JSON array).
+	// Encode objects as a JSON array string.
 	objectsJSON, err := json.Marshal(result.Objects)
 	if err != nil {
 		objectsJSON = []byte("[]")
 	}
-	newTriples = append(newTriples, message.Triple{
-		Predicate:  source.MediaVisionObjects,
-		Object:     string(objectsJSON),
-		Source:     processorSource,
-		Timestamp:  now,
-		Confidence: confidence,
-	})
 
-	// Text triple — only when the model returned non-empty OCR text.
-	if result.Text != "" {
-		newTriples = append(newTriples, message.Triple{
-			Predicate:  source.MediaVisionText,
-			Object:     result.Text,
-			Source:     processorSource,
-			Timestamp:  now,
-			Confidence: confidence,
-		})
-	}
-
-	// Copy existing triples and append new ones.
-	merged := make([]message.Triple, len(entity.Triples), len(entity.Triples)+len(newTriples))
-	copy(merged, entity.Triples)
-	merged = append(merged, newTriples...)
-	entity.Triples = merged
-
-	// Mirror vision results into the Properties map so downstream consumers
-	// can read them without scanning the triple list.
+	// Store vision results in Properties — normalizer converts to triples.
 	if entity.Properties == nil {
 		entity.Properties = make(map[string]any)
 	}

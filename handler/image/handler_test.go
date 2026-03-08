@@ -266,32 +266,7 @@ func TestImageHandler_Ingest_PNGDimensions(t *testing.T) {
 		t.Errorf("Properties[height] = %v, want 1", h2)
 	}
 
-	// Confirm triples carry the same values.
-	var wTriple, hTriple *tripleValue
-	for _, tr := range e.Triples {
-		switch tr.Predicate {
-		case "source.media.width":
-			v := tr.Object
-			wTriple = &tripleValue{v: v}
-		case "source.media.height":
-			v := tr.Object
-			hTriple = &tripleValue{v: v}
-		}
-	}
-	if wTriple == nil {
-		t.Error("missing width triple")
-	} else if wTriple.v != 1 {
-		t.Errorf("width triple Object = %v, want 1", wTriple.v)
-	}
-	if hTriple == nil {
-		t.Error("missing height triple")
-	} else if hTriple.v != 1 {
-		t.Errorf("height triple Object = %v, want 1", hTriple.v)
-	}
 }
-
-// tripleValue is a small helper to hold a Triple Object value for assertion.
-type tripleValue struct{ v any }
 
 func TestImageHandler_Ingest_SVGDimensionsAreZero(t *testing.T) {
 	dir := t.TempDir()
@@ -336,18 +311,6 @@ func TestImageHandler_Ingest_MimeType(t *testing.T) {
 	if mt, ok := e.Properties["mime_type"]; !ok || mt != "image/png" {
 		t.Errorf("mime_type = %v, want image/png", mt)
 	}
-
-	// Confirm mime_type triple is present.
-	found := false
-	for _, tr := range e.Triples {
-		if tr.Predicate == "source.media.mime_type" && tr.Object == "image/png" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected mime_type triple with value 'image/png'")
-	}
 }
 
 func TestImageHandler_Ingest_Format(t *testing.T) {
@@ -370,7 +333,7 @@ func TestImageHandler_Ingest_Format(t *testing.T) {
 	}
 }
 
-func TestImageHandler_Ingest_FilePathTriple(t *testing.T) {
+func TestImageHandler_Ingest_FilePathProperty(t *testing.T) {
 	dir := t.TempDir()
 	write1x1PNG(t, dir, "photo.png")
 
@@ -385,19 +348,12 @@ func TestImageHandler_Ingest_FilePathTriple(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	found := false
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.file_path" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected triple with predicate source.media.file_path")
+	if fp, ok := entities[0].Properties["file_path"]; !ok || fp == "" {
+		t.Errorf("Properties[file_path] = %v, want non-empty string", fp)
 	}
 }
 
-func TestImageHandler_Ingest_ContentHashTriple(t *testing.T) {
+func TestImageHandler_Ingest_ContentHashProperty(t *testing.T) {
 	dir := t.TempDir()
 	write1x1PNG(t, dir, "photo.png")
 
@@ -412,19 +368,12 @@ func TestImageHandler_Ingest_ContentHashTriple(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	found := false
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.file_hash" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected triple with predicate source.media.file_hash")
+	if fh, ok := entities[0].Properties["file_hash"]; !ok || fh == "" {
+		t.Errorf("Properties[file_hash] = %v, want non-empty string", fh)
 	}
 }
 
-func TestImageHandler_Ingest_FileSizeTriple(t *testing.T) {
+func TestImageHandler_Ingest_FileSizeProperty(t *testing.T) {
 	dir := t.TempDir()
 	write1x1PNG(t, dir, "photo.png")
 
@@ -439,18 +388,12 @@ func TestImageHandler_Ingest_FileSizeTriple(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	found := false
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.file_size" {
-			found = true
-			if tr.Object.(int64) <= 0 {
-				t.Errorf("file_size triple Object = %v, want > 0", tr.Object)
-			}
-			break
-		}
+	fs, ok := entities[0].Properties["file_size"]
+	if !ok {
+		t.Fatal("Properties[file_size] missing")
 	}
-	if !found {
-		t.Error("expected triple with predicate source.media.file_size")
+	if fs.(int64) <= 0 {
+		t.Errorf("Properties[file_size] = %v, want > 0", fs)
 	}
 }
 
@@ -609,7 +552,7 @@ func TestImageHandler_Ingest_WithStore_StoresOriginal(t *testing.T) {
 	}
 }
 
-func TestImageHandler_Ingest_WithStore_StorageRefTriple(t *testing.T) {
+func TestImageHandler_Ingest_WithStore_StorageRefProperty(t *testing.T) {
 	dir := t.TempDir()
 	write1x1PNG(t, dir, "photo.png")
 
@@ -625,18 +568,13 @@ func TestImageHandler_Ingest_WithStore_StorageRefTriple(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	found := false
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.storage_ref" {
-			found = true
-			key, ok := tr.Object.(string)
-			if !ok || !strings.Contains(key, "/original") {
-				t.Errorf("storage_ref triple Object = %v, expected string containing '/original'", tr.Object)
-			}
-		}
+	ref, ok := entities[0].Properties["storage_ref"]
+	if !ok {
+		t.Fatal("Properties[storage_ref] missing")
 	}
-	if !found {
-		t.Error("expected triple with predicate source.media.storage_ref")
+	key, ok := ref.(string)
+	if !ok || !strings.Contains(key, "/original") {
+		t.Errorf("Properties[storage_ref] = %v, expected string containing '/original'", ref)
 	}
 }
 
@@ -663,11 +601,9 @@ func TestImageHandler_Ingest_WithStore_NoThumbnailForSmallImage(t *testing.T) {
 		}
 	}
 
-	// No thumbnail_ref triple should exist.
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.thumbnail_ref" {
-			t.Error("unexpected thumbnail_ref triple for 1x1 image")
-		}
+	// No thumbnail_ref property should exist.
+	if _, ok := entities[0].Properties["thumbnail_ref"]; ok {
+		t.Error("unexpected thumbnail_ref property for 1x1 image")
 	}
 }
 
@@ -726,19 +662,14 @@ func TestImageHandler_Ingest_WithStore_ThumbnailForLargeImage(t *testing.T) {
 		t.Error("expected thumbnail in store for 1024x768 image")
 	}
 
-	// Should have thumbnail_ref triple.
-	found := false
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.thumbnail_ref" {
-			found = true
-			key, ok := tr.Object.(string)
-			if !ok || !strings.Contains(key, "/thumbnail") {
-				t.Errorf("thumbnail_ref = %v, expected string containing '/thumbnail'", tr.Object)
-			}
-		}
+	// Should have thumbnail_ref property.
+	ref, ok := entities[0].Properties["thumbnail_ref"]
+	if !ok {
+		t.Fatal("Properties[thumbnail_ref] missing")
 	}
-	if !found {
-		t.Error("expected triple with predicate source.media.thumbnail_ref")
+	key, ok := ref.(string)
+	if !ok || !strings.Contains(key, "/thumbnail") {
+		t.Errorf("Properties[thumbnail_ref] = %v, expected string containing '/thumbnail'", ref)
 	}
 }
 
@@ -758,10 +689,11 @@ func TestImageHandler_Ingest_WithoutStore_NoStorageTriples(t *testing.T) {
 		t.Fatal("no entities")
 	}
 
-	for _, tr := range entities[0].Triples {
-		if tr.Predicate == "source.media.storage_ref" || tr.Predicate == "source.media.thumbnail_ref" {
-			t.Errorf("unexpected storage triple %q in metadata-only mode", tr.Predicate)
-		}
+	if _, ok := entities[0].Properties["storage_ref"]; ok {
+		t.Error("unexpected storage_ref property in metadata-only mode")
+	}
+	if _, ok := entities[0].Properties["thumbnail_ref"]; ok {
+		t.Error("unexpected thumbnail_ref property in metadata-only mode")
 	}
 }
 

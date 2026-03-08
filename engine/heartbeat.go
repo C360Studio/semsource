@@ -13,11 +13,5 @@ func (e *Engine) buildHeartbeatEvent() *federation.Event {
 		SourceID:  "semsource",
 		Namespace: e.cfg.Namespace,
 		Timestamp: time.Now(),
-		Provenance: federation.Provenance{
-			SourceType: "engine",
-			SourceID:   "semsource",
-			Timestamp:  time.Now(),
-			Handler:    "engine",
-		},
 	}
 }

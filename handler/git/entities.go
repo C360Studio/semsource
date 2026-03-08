@@ -2,10 +2,8 @@ package git
 
 import (
 	"strings"
-	"time"
 
 	"github.com/c360studio/semsource/handler"
-	"github.com/c360studio/semstreams/message"
 )
 
 // BuildCommitEntity constructs a RawEntity for a git commit.
@@ -13,14 +11,6 @@ import (
 // Exported for white-box testing.
 func BuildCommitEntity(fullSHA, authorFull, subject, system string) handler.RawEntity {
 	sha := shortSHA(fullSHA)
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{Subject: sha, Predicate: "git.commit.sha", Object: fullSHA, Source: "git", Timestamp: now, Confidence: 1.0},
-		{Subject: sha, Predicate: "git.commit.short_sha", Object: sha, Source: "git", Timestamp: now, Confidence: 1.0},
-		{Subject: sha, Predicate: "git.commit.author", Object: authorFull, Source: "git", Timestamp: now, Confidence: 1.0},
-		{Subject: sha, Predicate: "git.commit.subject", Object: subject, Source: "git", Timestamp: now, Confidence: 1.0},
-	}
 
 	return handler.RawEntity{
 		SourceType: handler.SourceTypeGit,
@@ -28,7 +18,12 @@ func BuildCommitEntity(fullSHA, authorFull, subject, system string) handler.RawE
 		System:     system,
 		EntityType: "commit",
 		Instance:   sha,
-		Triples:    triples,
+		Properties: map[string]any{
+			"sha":       fullSHA,
+			"short_sha": sha,
+			"author":    authorFull,
+			"subject":   subject,
+		},
 	}
 }
 
@@ -38,12 +33,6 @@ func BuildCommitEntity(fullSHA, authorFull, subject, system string) handler.RawE
 func BuildAuthorEntity(name, email, system string) handler.RawEntity {
 	// Use email as the instance identifier — stable and unique per person.
 	instance := sanitizeInstance(email)
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{Subject: instance, Predicate: "git.author.name", Object: name, Source: "git", Timestamp: now, Confidence: 1.0},
-		{Subject: instance, Predicate: "git.author.email", Object: email, Source: "git", Timestamp: now, Confidence: 1.0},
-	}
 
 	return handler.RawEntity{
 		SourceType: handler.SourceTypeGit,
@@ -51,7 +40,10 @@ func BuildAuthorEntity(name, email, system string) handler.RawEntity {
 		System:     system,
 		EntityType: "author",
 		Instance:   instance,
-		Triples:    triples,
+		Properties: map[string]any{
+			"name":  name,
+			"email": email,
+		},
 	}
 }
 
@@ -60,12 +52,6 @@ func BuildAuthorEntity(name, email, system string) handler.RawEntity {
 // Exported for white-box testing.
 func BuildBranchEntity(branchName, headSHA, system string) handler.RawEntity {
 	sha := shortSHA(headSHA)
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{Subject: branchName, Predicate: "git.branch.name", Object: branchName, Source: "git", Timestamp: now, Confidence: 1.0},
-		{Subject: branchName, Predicate: "git.branch.head_sha", Object: sha, Source: "git", Timestamp: now, Confidence: 1.0},
-	}
 
 	return handler.RawEntity{
 		SourceType: handler.SourceTypeGit,
@@ -73,7 +59,10 @@ func BuildBranchEntity(branchName, headSHA, system string) handler.RawEntity {
 		System:     system,
 		EntityType: "branch",
 		Instance:   branchName,
-		Triples:    triples,
+		Properties: map[string]any{
+			"name":     branchName,
+			"head_sha": sha,
+		},
 	}
 }
 

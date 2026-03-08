@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/handler"
-	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
 )
 
@@ -173,23 +171,6 @@ func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handl
 		pr = &ProbeResult{}
 	}
 
-	now := time.Now().UTC()
-
-	triples := []message.Triple{
-		{Predicate: source.MediaType, Object: "audio", Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaMimeType, Object: mimeType, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFilePath, Object: relPath, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFileHash, Object: hash, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFileSize, Object: fileSize, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaFormat, Object: format, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaDuration, Object: pr.Duration.Seconds(), Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaCodec, Object: pr.Codec, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaBitrate, Object: pr.Bitrate, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaSampleRate, Object: pr.SampleRate, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaChannels, Object: pr.Channels, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-		{Predicate: source.MediaBitDepth, Object: pr.BitDepth, Source: handler.SourceTypeAudio, Timestamp: now, Confidence: 1.0},
-	}
-
 	audioEntity := handler.RawEntity{
 		SourceType: handler.SourceTypeAudio,
 		Domain:     handler.DomainMedia,
@@ -197,20 +178,19 @@ func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handl
 		EntityType: "audio",
 		Instance:   instance,
 		Properties: map[string]any{
-			"media_type":   "audio",
-			"file_path":    relPath,
-			"mime_type":    mimeType,
-			"content_hash": hash,
-			"file_size":    fileSize,
-			"format":       format,
-			"duration":     pr.Duration.Seconds(),
-			"codec":        pr.Codec,
-			"bitrate":      pr.Bitrate,
-			"sample_rate":  pr.SampleRate,
-			"channels":     pr.Channels,
-			"bit_depth":    pr.BitDepth,
+			"media_type":  "audio",
+			"file_path":   relPath,
+			"mime_type":   mimeType,
+			"file_hash":   hash,
+			"file_size":   fileSize,
+			"format":      format,
+			"duration":    pr.Duration.Seconds(),
+			"codec":       pr.Codec,
+			"bitrate":     pr.Bitrate,
+			"sample_rate": pr.SampleRate,
+			"channels":    pr.Channels,
+			"bit_depth":   pr.BitDepth,
 		},
-		Triples: triples,
 	}
 
 	// Only read full file content when a store is configured for binary persistence.
@@ -224,13 +204,6 @@ func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handl
 				h.logger.Warn("audio handler: failed to store audio binary",
 					"path", path, "error", err)
 			} else {
-				audioEntity.Triples = append(audioEntity.Triples, message.Triple{
-					Predicate:  source.MediaStorageRef,
-					Object:     storageKey,
-					Source:     handler.SourceTypeAudio,
-					Timestamp:  now,
-					Confidence: 1.0,
-				})
 				audioEntity.Properties["storage_ref"] = storageKey
 			}
 		}
