@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
-	github.com/c360studio/semstreams v1.0.0-alpha.15
+	github.com/c360studio/semstreams v1.0.0-alpha.18
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82

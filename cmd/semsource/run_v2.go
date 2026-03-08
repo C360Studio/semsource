@@ -366,12 +366,51 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		}
 	}
 
+	// WebSocket output — broadcasts graph entities to connected consumers
+	// (SemSpec, SemDragon). Uses a JetStream consumer on the GRAPH stream
+	// for replay-on-reconnect and ack-based backpressure. Serves on port
+	// 7890 at /graph.
+	wsConfig := map[string]any{
+		"ports": map[string]any{
+			"inputs": []map[string]any{
+				{
+					"name":        "graph_entities",
+					"type":        "jetstream",
+					"subject":     "graph.ingest.entity",
+					"stream_name": "GRAPH",
+					"required":    true,
+					"description": "Entity payloads from source components",
+				},
+			},
+			"outputs": []map[string]any{
+				{
+					"name":        "websocket_server",
+					"type":        "network",
+					"subject":     "http://0.0.0.0:7890/graph",
+					"description": "WebSocket server for downstream consumers",
+				},
+			},
+		},
+		"delivery_mode": "at-most-once",
+	}
+	rawWSCfg, err := json.Marshal(wsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal websocket config: %w", err)
+	}
+	components["websocket-output"] = types.ComponentConfig{
+		Name:    "websocket",
+		Type:    types.ComponentTypeOutput,
+		Enabled: true,
+		Config:  rawWSCfg,
+	}
+
 	// Ensure the GRAPH stream is defined explicitly so EnsureStreams creates it.
 	streams := semconfig.StreamConfigs{
 		"GRAPH": semconfig.StreamConfig{
 			Subjects: []string{"graph.ingest.>"},
 			Storage:  "memory",
-			MaxAge:   "24h",
+			MaxBytes: 256 * 1024 * 1024, // 256MB cap — prevents runaway memory if consumers lag
+			MaxAge:   "1h",
 			Replicas: 1,
 		},
 	}
