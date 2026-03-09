@@ -422,14 +422,29 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		Config:  rawGraphIngestCfg,
 	}
 
-	// graph-index: watches ENTITY_STATES KV, maintains relationship indexes
-	// (OUTGOING_INDEX, INCOMING_INDEX, ALIAS_INDEX, PREDICATE_INDEX).
-	// Defaults are fine — KV bucket names are hardcoded constants.
+	// graph-index: watches ENTITY_STATES KV, maintains relationship indexes.
+	graphIndexCfg := map[string]any{
+		"ports": map[string]any{
+			"inputs": []map[string]any{
+				{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+			},
+			"outputs": []map[string]any{
+				{"name": "outgoing_index", "type": "kv-write", "subject": "OUTGOING_INDEX"},
+				{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
+				{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
+				{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
+			},
+		},
+	}
+	rawGraphIndexCfg, err := json.Marshal(graphIndexCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal graph-index config: %w", err)
+	}
 	components["graph-index"] = types.ComponentConfig{
 		Name:    "graph-index",
 		Type:    types.ComponentTypeProcessor,
 		Enabled: true,
-		Config:  json.RawMessage(`{}`),
+		Config:  rawGraphIndexCfg,
 	}
 
 	// graph-query: NATS request/reply coordinator for entity, relationship,
@@ -457,6 +472,14 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	// graph-gateway: HTTP GraphQL endpoint for semstreams-ui.
 	// Bind to 0.0.0.0 for Docker access, enable playground for dev.
 	graphGatewayCfg := map[string]any{
+		"ports": map[string]any{
+			"inputs": []map[string]any{
+				{"name": "http", "type": "http", "subject": "/graphql"},
+			},
+			"outputs": []map[string]any{
+				{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
+			},
+		},
 		"bind_address":      "0.0.0.0:8082",
 		"enable_playground": true,
 	}
@@ -557,6 +580,25 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}, nil
 }
 
+// sourceOutputPorts returns the standard output port config shared by all source
+// components. The flow engine reads ports from the config JSON to discover
+// connections — without explicit ports in the config, the flow graph shows 0
+// connections even though components use DefaultConfig at runtime.
+func sourceOutputPorts() map[string]any {
+	return map[string]any{
+		"outputs": []map[string]any{
+			{
+				"name":        "graph.ingest",
+				"type":        "jetstream",
+				"subject":     "graph.ingest.entity",
+				"stream_name": "GRAPH",
+				"required":    true,
+				"description": "Entity state updates for graph ingestion",
+			},
+		},
+	}
+}
+
 // astSourceComponentConfig builds a component instance name and config map for
 // an AST source entry. The instance name is derived from the path so multiple
 // AST sources produce distinct component instances.
@@ -579,6 +621,7 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 	instanceName := fmt.Sprintf("ast-source-%s", slug)
 
 	compCfg := map[string]any{
+		"ports": sourceOutputPorts(),
 		"watch_paths": []map[string]any{
 			{
 				"path":      path,
@@ -617,6 +660,7 @@ func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg
 	}
 
 	compCfg := map[string]any{
+		"ports":          sourceOutputPorts(),
 		"org":            org,
 		"repo_path":      src.Path,
 		"repo_url":       src.URL,
@@ -644,6 +688,7 @@ func docSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 		}
 	}
 	return fmt.Sprintf("doc-source-%s", slug), map[string]any{
+		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
@@ -664,6 +709,7 @@ func cfgfileSourceComponentConfig(src config.SourceEntry, org string, index int)
 		}
 	}
 	return fmt.Sprintf("cfgfile-source-%s", slug), map[string]any{
+		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
@@ -684,6 +730,7 @@ func urlSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 		}
 	}
 	return fmt.Sprintf("url-source-%s", slug), map[string]any{
+		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"urls":          urls,
 		"poll_interval": "300s",
@@ -706,6 +753,7 @@ func mediaSourceComponentConfig(src config.SourceEntry, org string, index int, c
 	instanceName := fmt.Sprintf("%s-source-%s", src.Type, slug)
 
 	compCfg := map[string]any{
+		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
