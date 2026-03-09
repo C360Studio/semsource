@@ -180,6 +180,22 @@ func runV2Cmd(args []string) error {
 		return fmt.Errorf("configure service manager: %w", err)
 	}
 
+	// Create each configured service. ConfigureFromServices only configures the
+	// service manager itself — individual services must be explicitly created.
+	for name, svcConfig := range ssCfg.Services {
+		if name == "service-manager" {
+			continue
+		}
+		if !svcConfig.Enabled {
+			logger.Info("service disabled, skipping", "name", name)
+			continue
+		}
+		if _, err := manager.CreateService(name, svcConfig.Config, svcDeps); err != nil {
+			return fmt.Errorf("create service %s: %w", name, err)
+		}
+		logger.Debug("created service", "name", name)
+	}
+
 	// Signal context for graceful shutdown.
 	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer signalCancel()
