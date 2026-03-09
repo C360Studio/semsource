@@ -80,6 +80,10 @@ func TestSystemSlug(t *testing.T) {
 		{"stdlib/net/http", "stdlib-net-http"},
 		{"pkg.go.dev", "pkg.go.dev"},
 		{"my-repo", "my-repo"},
+		{"/data/fixture", "data-fixture"},
+		{"/tmp/test-workspace/src", "tmp-test-workspace-src"},
+		{"./src", "src"},
+		{"///leading-slashes///", "leading-slashes"},
 		{"", ""},
 	}
 

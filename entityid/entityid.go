@@ -40,8 +40,10 @@ func SystemSlug(canonicalPath string) string {
 		canonicalPath = parsed.Host + parsed.Path
 	}
 	canonicalPath = strings.TrimSuffix(canonicalPath, ".git")
+	canonicalPath = strings.TrimPrefix(canonicalPath, "./")
 	slug := strings.ReplaceAll(canonicalPath, "/", "-")
 	slug = strings.ReplaceAll(slug, ":", "-")
+	slug = strings.Trim(slug, "-")
 	return slug
 }
 
