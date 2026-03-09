@@ -386,6 +386,13 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 					},
 				},
 			},
+			"outputs": []map[string]any{
+				{
+					"name":    "entity_states",
+					"type":    "kv-write",
+					"subject": "ENTITY_STATES",
+				},
+			},
 		},
 	}
 	rawGraphIngestCfg, err := json.Marshal(graphIngestCfg)
@@ -410,12 +417,25 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}
 
 	// graph-query: NATS request/reply coordinator for entity, relationship,
-	// and path search queries. Defaults are fine.
+	// and path search queries.
+	graphQueryCfg := map[string]any{
+		"ports": map[string]any{
+			"inputs": []map[string]any{
+				{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
+				{"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
+				{"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
+			},
+		},
+	}
+	rawGraphQueryCfg, err := json.Marshal(graphQueryCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal graph-query config: %w", err)
+	}
 	components["graph-query"] = types.ComponentConfig{
 		Name:    "graph-query",
 		Type:    types.ComponentTypeProcessor,
 		Enabled: true,
-		Config:  json.RawMessage(`{}`),
+		Config:  rawGraphQueryCfg,
 	}
 
 	// graph-gateway: HTTP GraphQL endpoint for semstreams-ui.
