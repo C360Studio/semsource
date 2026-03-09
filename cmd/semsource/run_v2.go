@@ -512,7 +512,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	// Ensure the GRAPH stream is defined explicitly so EnsureStreams creates it.
 	streams := semconfig.StreamConfigs{
 		"GRAPH": semconfig.StreamConfig{
-			Subjects: []string{"graph.ingest.>"},
+			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch"},
 			Storage:  "memory",
 			MaxBytes: 256 * 1024 * 1024, // 256MB cap — prevents runaway memory if consumers lag
 			MaxAge:   "1h",
