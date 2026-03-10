@@ -655,14 +655,30 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	collectCtx, collectCancel := context.WithTimeout(ctx, 180*time.Second)
 	defer collectCancel()
 
+	// stabilityTimeout: after all domains are present, wait for the stream
+	// to go quiet (no new entities for this duration) before stopping.
+	const stabilityTimeout = 5 * time.Second
+
 	fetchDone := make(chan struct{})
 	go func() {
 		defer close(fetchDone)
+		lastActivity := time.Now()
+		allDomainsPresent := false
+
 		for {
 			if collectCtx.Err() != nil {
 				return
 			}
-			msgs, err := cons.Fetch(50, jetstream.FetchMaxWait(3*time.Second))
+
+			// Once all domains are present, check if stream has stabilised.
+			if allDomainsPresent && time.Since(lastActivity) >= stabilityTimeout {
+				mu.Lock()
+				t.Logf("entity stream stabilised after %d entities (quiet for %s)", len(allEntities), stabilityTimeout)
+				mu.Unlock()
+				return
+			}
+
+			msgs, err := cons.Fetch(50, jetstream.FetchMaxWait(2*time.Second))
 			if err != nil {
 				continue
 			}
@@ -700,31 +716,23 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 
 				mu.Lock()
 				allEntities = append(allEntities, payload)
+				lastActivity = time.Now()
 				if domains[domain] == nil {
 					domains[domain] = &domainEntities{}
 					t.Logf("domain %q first entity: %s (total so far: %d)", domain, payload.ID, len(allEntities))
 				}
 				domains[domain].entities = append(domains[domain].entities, payload)
 
-				// Check if all wanted domains have at least some entities.
-				// For java we want a meaningful sample (>= 10).
-				allSatisfied := true
-				for d := range wantDomains {
-					de := domains[d]
-					if de == nil {
-						allSatisfied = false
-						break
-					}
-					if d == "java" && len(de.entities) < 10 {
-						allSatisfied = false
-						break
+				if !allDomainsPresent {
+					allDomainsPresent = true
+					for d := range wantDomains {
+						if domains[d] == nil {
+							allDomainsPresent = false
+							break
+						}
 					}
 				}
 				mu.Unlock()
-
-				if allSatisfied {
-					return
-				}
 			}
 		}
 	}()
