@@ -154,6 +154,70 @@ func TestLoadConfigFromReader_WorkspaceDirExplicit(t *testing.T) {
 	}
 }
 
+func TestLoadConfigFromReader_WebSocketDefaults(t *testing.T) {
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo"}
+  ]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WebSocketBind != "0.0.0.0:7890" {
+		t.Errorf("WebSocketBind default: got %q, want %q", cfg.WebSocketBind, "0.0.0.0:7890")
+	}
+	if cfg.WebSocketPath != "/graph" {
+		t.Errorf("WebSocketPath default: got %q, want %q", cfg.WebSocketPath, "/graph")
+	}
+}
+
+func TestLoadConfigFromReader_WebSocketExplicit(t *testing.T) {
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo"}
+  ],
+  "websocket_bind": "0.0.0.0:9999",
+  "websocket_path": "/ws"
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WebSocketBind != "0.0.0.0:9999" {
+		t.Errorf("WebSocketBind: got %q, want %q", cfg.WebSocketBind, "0.0.0.0:9999")
+	}
+	if cfg.WebSocketPath != "/ws" {
+		t.Errorf("WebSocketPath: got %q, want %q", cfg.WebSocketPath, "/ws")
+	}
+}
+
+func TestLoadConfigFromReader_WebSocketEnvOverride(t *testing.T) {
+	t.Setenv("SEMSOURCE_WS_BIND", "0.0.0.0:8888")
+	t.Setenv("SEMSOURCE_WS_PATH", "/stream")
+
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "git", "url": "github.com/myorg/repo"}
+  ],
+  "websocket_bind": "0.0.0.0:9999",
+  "websocket_path": "/ws"
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WebSocketBind != "0.0.0.0:8888" {
+		t.Errorf("WebSocketBind env override: got %q, want %q", cfg.WebSocketBind, "0.0.0.0:8888")
+	}
+	if cfg.WebSocketPath != "/stream" {
+		t.Errorf("WebSocketPath env override: got %q, want %q", cfg.WebSocketPath, "/stream")
+	}
+}
+
 func TestLoadConfigFromReader_MissingNamespace(t *testing.T) {
 	input := `{
   "sources": [

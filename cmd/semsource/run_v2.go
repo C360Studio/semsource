@@ -546,7 +546,9 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	// --- WebSocket output ---
 	// Broadcasts graph entities to connected consumers (SemSpec, SemDragon).
 	// Uses a JetStream consumer on the GRAPH stream for replay-on-reconnect
-	// and ack-based backpressure. Serves on port 7890 at /graph.
+	// and ack-based backpressure. Bind address and path are configurable via
+	// SEMSOURCE_WS_BIND / SEMSOURCE_WS_PATH env vars or config file fields.
+	wsAddr := fmt.Sprintf("http://%s%s", cfg.WebSocketBind, cfg.WebSocketPath)
 	wsConfig := map[string]any{
 		"ports": map[string]any{
 			"inputs": []map[string]any{
@@ -563,7 +565,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 				{
 					"name":        "websocket_server",
 					"type":        "network",
-					"subject":     "http://0.0.0.0:7890/graph",
+					"subject":     wsAddr,
 					"description": "WebSocket server for downstream consumers",
 				},
 			},

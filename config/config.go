@@ -40,6 +40,16 @@ type Config struct {
 	// (image, video, audio) to store binary content on the local filesystem.
 	// When empty, media processors operate in metadata-only mode.
 	MediaStoreDir string `json:"media_store_dir,omitempty"`
+
+	// WebSocketBind is the host:port for the WebSocket output server.
+	// Can also be set via the SEMSOURCE_WS_BIND environment variable.
+	// Defaults to "0.0.0.0:7890".
+	WebSocketBind string `json:"websocket_bind,omitempty"`
+
+	// WebSocketPath is the URL path for the WebSocket endpoint.
+	// Can also be set via the SEMSOURCE_WS_PATH environment variable.
+	// Defaults to "/graph".
+	WebSocketPath string `json:"websocket_path,omitempty"`
 }
 
 // applyDefaults fills in omitted fields with their documented defaults.
@@ -52,6 +62,19 @@ func (c *Config) applyDefaults() {
 	// Allow token to be set via environment variable (avoids putting secrets in config files).
 	if c.GitToken == "" {
 		c.GitToken = os.Getenv("SEMSOURCE_GIT_TOKEN")
+	}
+	// WebSocket bind: env var takes precedence, then config, then default.
+	if v := os.Getenv("SEMSOURCE_WS_BIND"); v != "" {
+		c.WebSocketBind = v
+	}
+	if c.WebSocketBind == "" {
+		c.WebSocketBind = "0.0.0.0:7890"
+	}
+	if v := os.Getenv("SEMSOURCE_WS_PATH"); v != "" {
+		c.WebSocketPath = v
+	}
+	if c.WebSocketPath == "" {
+		c.WebSocketPath = "/graph"
 	}
 }
 
