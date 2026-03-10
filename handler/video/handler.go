@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semstreams/storage"
 )
@@ -170,7 +171,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler
 	ext := strings.ToLower(filepath.Ext(path))
 	mimeType := mimeForExt(ext)
 	format := formatForExt(ext)
-	system := slugify(root)
+	system := entityid.SystemSlug(root)
 
 	// Extract video metadata via ffprobe. Non-fatal on failure.
 	pr, probeErr := probe(ctx, path)

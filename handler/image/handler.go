@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semstreams/storage"
 )
@@ -166,7 +167,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 	entity := handler.RawEntity{
 		SourceType: handler.SourceTypeImage,
 		Domain:     handler.DomainMedia,
-		System:     slugify(root),
+		System:     entityid.SystemSlug(root),
 		EntityType: "image",
 		Instance:   instance,
 		Properties: map[string]any{

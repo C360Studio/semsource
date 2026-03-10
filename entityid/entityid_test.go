@@ -80,8 +80,11 @@ func TestSystemSlug(t *testing.T) {
 		{"stdlib/net/http", "stdlib-net-http"},
 		{"pkg.go.dev", "pkg.go.dev"},
 		{"my-repo", "my-repo"},
-		{"/data/fixture", "data-fixture"},
-		{"/tmp/test-workspace/src", "tmp-test-workspace-src"},
+		// Absolute paths use only the base name to avoid encoding
+		// deep directory hierarchies into entity IDs.
+		{"/data/fixture", "fixture"},
+		{"/tmp/test-workspace/src", "src"},
+		{"/var/folders/db/long-temp-path/github-com-opensensorhub-osh-core", "github-com-opensensorhub-osh-core"},
 		{"./src", "src"},
 		{"///leading-slashes///", "leading-slashes"},
 		{"", ""},
@@ -92,6 +95,19 @@ func TestSystemSlug(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("SystemSlug(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestSystemSlug_MaxLength(t *testing.T) {
+	// A very long directory name should be capped.
+	long := strings.Repeat("a", 120)
+	got := entityid.SystemSlug(long)
+	if len(got) > 80 {
+		t.Errorf("SystemSlug(120-char input) length = %d, want <= 80", len(got))
+	}
+	// Still produces a non-empty slug.
+	if got == "" {
+		t.Error("SystemSlug(120-char input) should not be empty")
 	}
 }
 

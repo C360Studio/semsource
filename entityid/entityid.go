@@ -9,8 +9,11 @@
 package entityid
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,9 +27,16 @@ func Build(org, platform, domain, system, entityType, instance string) string {
 	return fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, domain, system, entityType, instance)
 }
 
+// maxSystemSlugLen caps the system slug length. Entity IDs have a 255-char
+// limit and six dot-separated segments — keeping the system segment compact
+// leaves room for the other five.
+const maxSystemSlugLen = 80
+
 // SystemSlug converts a canonical path, URL, or module string into a NATS-safe
 // system segment. URLs have their scheme stripped; all forward slashes and
-// colons are replaced with hyphens.
+// colons are replaced with hyphens. Absolute filesystem paths are reduced to
+// their base name so that deep temp-directory hierarchies don't bloat entity
+// IDs. A safety cap truncates slugs that still exceed maxSystemSlugLen.
 //
 // Examples:
 //
@@ -34,6 +44,7 @@ func Build(org, platform, domain, system, entityType, instance string) string {
 //	"https://github.com/opensensorhub/osh-core"    → "github.com-opensensorhub-osh-core"
 //	"stdlib/net/http"                               → "stdlib-net-http"
 //	"pkg.go.dev"                                    → "pkg.go.dev"  (no slashes, unchanged)
+//	"/tmp/workspace/github-com-acme-gcs"           → "github-com-acme-gcs"
 func SystemSlug(canonicalPath string) string {
 	// Strip URL scheme if present so "https://host/path" becomes "host/path".
 	if parsed, err := url.Parse(canonicalPath); err == nil && parsed.Host != "" {
@@ -41,9 +52,27 @@ func SystemSlug(canonicalPath string) string {
 	}
 	canonicalPath = strings.TrimSuffix(canonicalPath, ".git")
 	canonicalPath = strings.TrimPrefix(canonicalPath, "./")
+
+	// For absolute filesystem paths, use only the base name. Workspace-
+	// cloned repos already have a meaningful slug as their directory name
+	// (e.g. "github-com-opensensorhub-osh-core"), so the parent hierarchy
+	// (temp dirs, user home, etc.) is noise that inflates entity IDs.
+	if filepath.IsAbs(canonicalPath) {
+		canonicalPath = filepath.Base(canonicalPath)
+	}
+
 	slug := strings.ReplaceAll(canonicalPath, "/", "-")
 	slug = strings.ReplaceAll(slug, ":", "-")
 	slug = strings.Trim(slug, "-")
+
+	// Safety cap: truncate and append a short content hash when the slug
+	// still exceeds the limit (e.g. extremely long directory names).
+	if len(slug) > maxSystemSlugLen {
+		h := sha256.Sum256([]byte(slug))
+		suffix := hex.EncodeToString(h[:3]) // 6 hex chars
+		slug = slug[:maxSystemSlugLen-7] + "-" + suffix
+	}
+
 	return slug
 }
 

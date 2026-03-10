@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 )
 
@@ -138,7 +139,7 @@ func ingestFile(path, root string) (handler.RawEntity, error) {
 		// System is the relative directory path of the doc root, slugified.
 		// Left to the caller (Normalizer) to further qualify; we set it to
 		// the root path base so the normalizer has something to work with.
-		System:     slugify(root),
+		System:     entityid.SystemSlug(root),
 		EntityType: "doc",
 		Instance:   instance,
 		Properties: map[string]any{

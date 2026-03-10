@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Register Go and TypeScript/JavaScript language parsers.
 	_ "github.com/c360studio/semsource/source/ast/golang"
@@ -226,11 +227,16 @@ func langToExtensions(lang string) []string {
 }
 
 // pathToSystemSlug converts a filesystem path to a NATS-safe system slug.
-// "/Users/coby/Code/acme/gcs" → "Users-coby-Code-acme-gcs"
+// Absolute paths are reduced to their base name to avoid encoding deep
+// directory hierarchies (temp dirs, home dirs) into entity IDs.
+//
+//	"/tmp/workspace/github-com-acme-gcs" → "github-com-acme-gcs"
+//	"./src"                               → "src"
 func pathToSystemSlug(path string) string {
-	path = filepath.ToSlash(path)
-	path = strings.TrimPrefix(path, "/")
-	path = strings.ReplaceAll(path, "/", "-")
-	path = strings.ReplaceAll(path, ".", "-")
-	return path
+	// Delegate to entityid.SystemSlug for consistent base-name extraction
+	// and length capping, then replace dots (which are entity-ID segment
+	// separators) with hyphens.
+	slug := entityid.SystemSlug(path)
+	slug = strings.ReplaceAll(slug, ".", "-")
+	return slug
 }

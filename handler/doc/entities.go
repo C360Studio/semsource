@@ -90,7 +90,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 			return nil, err
 		}
 
-		system := entityid.SystemSlug(slugify(root))
+		system := entityid.SystemSlug(root)
 
 		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
@@ -151,7 +151,7 @@ func enrichEventEntityStates(ev handler.ChangeEvent, root, org string) handler.C
 	}
 
 	now := time.Now().UTC()
-	system := entityid.SystemSlug(slugify(root))
+	system := entityid.SystemSlug(root)
 
 	state, err := ingestFileEntityState(ev.Path, root, system, org, now)
 	if err == nil {

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/handler/internal/fswatcher"
 )
@@ -589,16 +590,12 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 }
 
 // systemSlug returns a NATS-safe system slug derived from the root directory path.
-// Dots and slashes are replaced with dashes.
+// Delegates to entityid.SystemSlug for consistent base-name extraction on
+// absolute paths, then replaces dots (entity-ID segment separators) with hyphens.
 func systemSlug(root string) string {
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		abs = root
-	}
-	slug := strings.ToLower(abs)
-	slug = strings.ReplaceAll(slug, string(filepath.Separator), "-")
+	slug := entityid.SystemSlug(root)
+	slug = strings.ToLower(slug)
 	slug = strings.ReplaceAll(slug, ".", "-")
-	slug = strings.Trim(slug, "-")
 	return slug
 }
 
