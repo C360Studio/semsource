@@ -14,9 +14,9 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
-// DocEntity is a fully-typed document entity that builds triples directly
+// Entity is a fully-typed document entity that builds triples directly
 // using canonical vocabulary predicates, bypassing the normalizer.
-type DocEntity struct {
+type Entity struct {
 	ID          string
 	Title       string
 	FilePath    string
@@ -28,15 +28,15 @@ type DocEntity struct {
 	IndexedAt   time.Time
 }
 
-// newDocEntity constructs a DocEntity with a deterministic 6-part ID.
+// newEntity constructs a Entity with a deterministic 6-part ID.
 // The instance is the first 6 hex chars of the content hash — matching the
 // RawEntity path so normalizer and direct paths produce identical IDs.
-func newDocEntity(org, title, filePath, mimeType, contentHash, content, system string, indexedAt time.Time) *DocEntity {
+func newEntity(org, title, filePath, mimeType, contentHash, content, system string, indexedAt time.Time) *Entity {
 	instance := contentHash
 	if len(instance) > 6 {
 		instance = instance[:6]
 	}
-	return &DocEntity{
+	return &Entity{
 		ID:          entityid.Build(org, entityid.PlatformSemsource, "web", system, "doc", instance),
 		Title:       title,
 		FilePath:    filePath,
@@ -49,9 +49,9 @@ func newDocEntity(org, title, filePath, mimeType, contentHash, content, system s
 	}
 }
 
-// Triples converts the DocEntity to a slice of message.Triple using canonical
+// Triples converts the Entity to a slice of message.Triple using canonical
 // vocabulary predicates from source/vocabulary.
-func (e *DocEntity) Triples() []message.Triple {
+func (e *Entity) Triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
 		{Subject: e.ID, Predicate: source.DocType, Object: "document", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -63,8 +63,8 @@ func (e *DocEntity) Triples() []message.Triple {
 	}
 }
 
-// EntityState converts the DocEntity to a handler.EntityState for direct graph publication.
-func (e *DocEntity) EntityState() *handler.EntityState {
+// EntityState converts the Entity to a handler.EntityState for direct graph publication.
+func (e *Entity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
@@ -76,7 +76,7 @@ func (e *DocEntity) EntityState() *handler.EntityState {
 // states that embed vocabulary-predicate triples directly, bypassing the
 // normalizer entirely. org is the organisation namespace (e.g. "acme") used
 // in the 6-part entity ID.
-func (h *DocHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
 	roots, err := resolvePaths(cfg)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func (h *DocHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceC
 	return states, nil
 }
 
-// ingestFileEntityState reads a single document file and builds a DocEntity,
+// ingestFileEntityState reads a single document file and builds a Entity,
 // returning its EntityState. Mirrors ingestFile but produces typed triples.
 func ingestFileEntityState(path, root, system, org string, now time.Time) (*handler.EntityState, error) {
 	content, err := os.ReadFile(path)
@@ -137,7 +137,7 @@ func ingestFileEntityState(path, root, system, org string, now time.Time) (*hand
 	title := extractTitle(content, filepath.Base(path))
 	mime := mimeForExt(filepath.Ext(path))
 
-	e := newDocEntity(org, title, relPath, mime, hash, string(content), system, now)
+	e := newEntity(org, title, relPath, mime, hash, string(content), system, now)
 	return e.EntityState(), nil
 }
 

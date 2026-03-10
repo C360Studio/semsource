@@ -55,7 +55,7 @@ type Component struct {
 	logger    *slog.Logger
 	platform  component.PlatformMeta
 
-	handler   *urlhandler.URLHandler
+	handler *urlhandler.URLHandler
 
 	// Lifecycle
 	running   bool

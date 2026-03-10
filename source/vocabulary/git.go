@@ -101,7 +101,7 @@ const (
 )
 
 // Git entity predicates describe commit, author, and branch entities emitted
-// by the GitHandler. These are data-level predicates on the entities
+// by the git.Handler. These are data-level predicates on the entities
 // themselves, distinct from the decision-tracking predicates above which
 // model the "git-as-memory" pattern.
 const (
@@ -220,7 +220,7 @@ func init() {
 }
 
 // registerGitEntityPredicates registers predicates for the commit, author,
-// and branch entities emitted by the GitHandler.
+// and branch entities emitted by the git.Handler.
 func registerGitEntityPredicates() {
 	vocabulary.Register(GitCommitSHA,
 		vocabulary.WithDescription("Full 40-character git commit hash"),

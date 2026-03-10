@@ -1,8 +1,8 @@
 package ast
 
 import (
-	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/handler"
+	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
 // mapParseResult converts a ParseResult into a slice of RawEntity values.
@@ -60,21 +60,21 @@ func mapCodeEntity(ce *semsourceast.CodeEntity, domain, system string) handler.R
 	}
 
 	// Capability metadata is flattened into properties with a "capability." prefix.
-	if cap := ce.Capability; cap != nil {
-		if cap.Name != "" {
-			props["capability.name"] = cap.Name
+	if capability := ce.Capability; capability != nil {
+		if capability.Name != "" {
+			props["capability.name"] = capability.Name
 		}
-		if cap.Description != "" {
-			props["capability.description"] = cap.Description
+		if capability.Description != "" {
+			props["capability.description"] = capability.Description
 		}
-		if len(cap.Tools) > 0 {
-			props["capability.tools"] = cap.Tools
+		if len(capability.Tools) > 0 {
+			props["capability.tools"] = capability.Tools
 		}
-		if len(cap.Inputs) > 0 {
-			props["capability.inputs"] = cap.Inputs
+		if len(capability.Inputs) > 0 {
+			props["capability.inputs"] = capability.Inputs
 		}
-		if len(cap.Outputs) > 0 {
-			props["capability.outputs"] = cap.Outputs
+		if len(capability.Outputs) > 0 {
+			props["capability.outputs"] = capability.Outputs
 		}
 	}
 

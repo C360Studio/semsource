@@ -24,10 +24,10 @@ import (
 	"github.com/c360studio/semsource/handler"
 )
 
-// ASTConfig is an optional extended interface that SourceConfig implementations
+// Config is an optional extended interface that SourceConfig implementations
 // may satisfy to provide AST-specific configuration. When not implemented,
 // sensible defaults are used.
-type ASTConfig interface {
+type Config interface {
 	handler.SourceConfig
 	// GetLanguage returns the source language (e.g. "go", "ts"). Defaults to "go".
 	GetLanguage() string
@@ -97,13 +97,13 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 	}
 
 	wcfg := semsourceast.WatcherConfig{
-		RepoRoot:      root,
-		Org:           org,
-		Project:       project,
-		DebounceDelay: 100 * time.Millisecond,
-		Logger:        h.logger,
+		RepoRoot:       root,
+		Org:            org,
+		Project:        project,
+		DebounceDelay:  100 * time.Millisecond,
+		Logger:         h.logger,
 		FileExtensions: langToExtensions(lang),
-		ExcludeDirs:   []string{"vendor", "node_modules", ".git"},
+		ExcludeDirs:    []string{"vendor", "node_modules", ".git"},
 	}
 
 	watcher, err := semsourceast.NewWatcherWithParser(wcfg, parser)
@@ -188,14 +188,14 @@ func parseDirectory(ctx context.Context, parser semsourceast.FileParser, root st
 }
 
 // resolveConfig extracts language, org, project, and root path from a SourceConfig,
-// applying defaults when the optional ASTConfig interface is not implemented.
+// applying defaults when the optional Config interface is not implemented.
 func resolveConfig(cfg handler.SourceConfig) (lang, org, project, root string) {
 	root = cfg.GetPath()
 	lang = "go"
 	org = "public"
 	project = pathToSystemSlug(root)
 
-	if ac, ok := cfg.(ASTConfig); ok {
+	if ac, ok := cfg.(Config); ok {
 		if l := ac.GetLanguage(); l != "" {
 			lang = l
 		}

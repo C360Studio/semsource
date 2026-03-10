@@ -52,7 +52,7 @@ type Component struct {
 	logger    *slog.Logger
 	platform  component.PlatformMeta
 
-	handler   *githandler.GitHandler
+	handler   *githandler.Handler
 	sourceCfg *sourceCfg
 
 	// Lifecycle
@@ -179,9 +179,9 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 
 	for _, state := range states {
 		payload := &graph.EntityPayload{
-			ID:        state.ID,
+			ID:         state.ID,
 			TripleData: state.Triples,
-			UpdatedAt: state.UpdatedAt,
+			UpdatedAt:  state.UpdatedAt,
 		}
 
 		if err := c.publishEntity(ctx, payload); err != nil {
@@ -254,9 +254,9 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 
 	for _, state := range event.EntityStates {
 		payload := &graph.EntityPayload{
-			ID:        state.ID,
+			ID:         state.ID,
 			TripleData: state.Triples,
-			UpdatedAt: state.UpdatedAt,
+			UpdatedAt:  state.UpdatedAt,
 		}
 
 		if err := c.publishEntity(ctx, payload); err != nil {

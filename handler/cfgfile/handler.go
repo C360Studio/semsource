@@ -21,11 +21,11 @@ import (
 
 // configFileNames is the set of file names that this handler processes.
 var configFileNames = map[string]bool{
-	"go.mod":        true,
-	"package.json":  true,
-	"Dockerfile":    true,
-	"pom.xml":       true,
-	"build.gradle":  true,
+	"go.mod":       true,
+	"package.json": true,
+	"Dockerfile":   true,
+	"pom.xml":      true,
+	"build.gradle": true,
 }
 
 // Config controls optional ConfigHandler behaviour.
@@ -431,9 +431,9 @@ func (h *ConfigHandler) dockerfileEntities(content []byte, path, system string) 
 			EntityType: "image",
 			Instance:   instance,
 			Properties: map[string]any{
-				"image":        img,
+				"image":         img,
 				"exposed_ports": result.ExposedPorts,
-				"file_path":    path,
+				"file_path":     path,
 			},
 		})
 	}

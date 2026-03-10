@@ -11,9 +11,9 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// ImageEntity is a fully-typed image entity that produces triples using
+// Entity is a fully-typed image entity that produces triples using
 // canonical vocabulary predicates, bypassing the normalizer entirely.
-type ImageEntity struct {
+type Entity struct {
 	ID         string
 	FilePath   string
 	MimeType   string
@@ -29,8 +29,8 @@ type ImageEntity struct {
 	IndexedAt  time.Time
 }
 
-// Triples converts the ImageEntity to a slice of message.Triple for graph storage.
-func (e *ImageEntity) Triples() []message.Triple {
+// Triples converts the Entity to a slice of message.Triple for graph storage.
+func (e *Entity) Triples() []message.Triple {
 	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	triples := []message.Triple{
@@ -58,8 +58,8 @@ func (e *ImageEntity) Triples() []message.Triple {
 	return triples
 }
 
-// EntityState converts the ImageEntity to a handler.EntityState for graph publication.
-func (e *ImageEntity) EntityState() *handler.EntityState {
+// EntityState converts the Entity to a handler.EntityState for graph publication.
+func (e *Entity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
@@ -68,10 +68,10 @@ func (e *ImageEntity) EntityState() *handler.EntityState {
 }
 
 // imageEntityFromRaw converts a RawEntity produced by ingestFile into a typed
-// ImageEntity using canonical vocabulary predicates. The system slug is derived
+// Entity using canonical vocabulary predicates. The system slug is derived
 // from the root path that produced the entity (stored in RawEntity.System).
-func imageEntityFromRaw(org string, r handler.RawEntity, now time.Time) *ImageEntity {
-	ie := &ImageEntity{
+func imageEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity {
+	ie := &Entity{
 		// RawEntity.System already holds slugify(root) set by ingestFile.
 		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "image", r.Instance),
 		System:    r.System,
@@ -112,7 +112,7 @@ func imageEntityFromRaw(org string, r handler.RawEntity, now time.Time) *ImageEn
 // and returns fully-typed EntityState values with vocabulary-predicate triples —
 // bypassing the normalizer entirely. The org parameter is the organisation
 // namespace used in the 6-part entity ID.
-func (h *ImageHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
 	rawEntities, err := h.Ingest(ctx, cfg)
 	if err != nil {
 		return nil, err

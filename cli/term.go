@@ -11,10 +11,10 @@ import (
 
 // ANSI escape codes for minimal terminal styling.
 const (
-	ansiReset  = "\033[0m"
-	ansiBold   = "\033[1m"
-	ansiDim    = "\033[2m"
-	ansiGreen  = "\033[32m"
+	ansiReset = "\033[0m"
+	ansiBold  = "\033[1m"
+	ansiDim   = "\033[2m"
+	ansiGreen = "\033[32m"
 )
 
 // Term wraps terminal I/O so prompts are testable via piped input.

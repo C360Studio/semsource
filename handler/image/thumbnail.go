@@ -26,7 +26,7 @@ const (
 // h.store. It returns the storage key on success, or an empty string when no
 // thumbnail is applicable (SVG, WebP, already-small images). The error return
 // is non-nil only for unexpected failures; callers should treat it as advisory.
-func (h *ImageHandler) generateAndStoreThumbnail(ctx context.Context, content []byte, path, root, instance string) (string, error) {
+func (h *Handler) generateAndStoreThumbnail(ctx context.Context, content []byte, path, root, instance string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	// SVG is XML-based; WebP requires a non-standard decoder. Skip both.
 	if ext == ".svg" || ext == ".webp" {

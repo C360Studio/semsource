@@ -17,7 +17,7 @@ import (
 // channel so callers see a unified stream.
 //
 // Returns (nil, nil) when cfg.IsWatchEnabled() is false — callers must check.
-func (h *DocHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
+func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
 	if !cfg.IsWatchEnabled() {
 		return nil, nil
 	}

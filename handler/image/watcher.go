@@ -16,7 +16,7 @@ import (
 // owns the changed file so relative paths and entity IDs remain correct.
 //
 // Returns (nil, nil) when cfg.IsWatchEnabled() is false — callers must check.
-func (h *ImageHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
+func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
 	if !cfg.IsWatchEnabled() {
 		return nil, nil
 	}
@@ -100,7 +100,7 @@ func (h *ImageHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-c
 // enrichEvent re-reads the changed file and populates ev.Entities.
 // When h.org is set it also populates ev.EntityStates for the normalizer-free
 // processor path. For delete events the file is gone, so both slices remain empty.
-func (h *ImageHandler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string) handler.ChangeEvent {
+func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
 		return ev

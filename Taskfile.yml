@@ -1,0 +1,40 @@
+version: "3"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build semsource binary
+    cmds:
+      - go build -o bin/semsource ./cmd/semsource
+
+  lint:
+    desc: Run Go linters (vet, fmt check, revive)
+    cmds:
+      - go vet ./...
+      - test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - revive -config revive.toml -formatter friendly ./...
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run unit tests with race detector
+    cmds:
+      - go test -race ./...
+
+  test:e2e:
+    desc: Run e2e tests (requires Docker)
+    cmds:
+      - go test -tags=e2e -timeout 300s ./test/e2e/
+
+  check:
+    desc: Run all checks (lint + test)
+    cmds:
+      - task: lint
+      - task: test

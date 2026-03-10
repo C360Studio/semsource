@@ -1,4 +1,4 @@
-// Package image implements the ImageHandler for image file sources.
+// Package image implements the Handler for image file sources.
 package image
 
 import (
@@ -7,9 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	_ "image/gif"  // register GIF decoder
+	_ "image/jpeg" // register JPEG decoder
+	_ "image/png"  // register PNG decoder
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,7 +22,7 @@ import (
 // sourceTypeKey is the config source type key for image sources.
 const sourceTypeKey = "image"
 
-// defaultExtensions lists the file extensions ImageHandler will process.
+// defaultExtensions lists the file extensions Handler will process.
 var defaultExtensions = map[string]bool{
 	".png":  true,
 	".jpg":  true,
@@ -32,9 +32,9 @@ var defaultExtensions = map[string]bool{
 	".svg":  true,
 }
 
-// ImageHandler handles image file sources.
+// Handler handles image file sources.
 // It implements handler.SourceHandler.
-type ImageHandler struct {
+type Handler struct {
 	store  storage.Store // nil = no binary storage (metadata only)
 	logger *slog.Logger
 	// org is the organisation namespace used when building EntityState values
@@ -42,31 +42,31 @@ type ImageHandler struct {
 	org string
 }
 
-// Option is a functional option for configuring an ImageHandler.
-type Option func(*ImageHandler)
+// Option is a functional option for configuring an Handler.
+type Option func(*Handler)
 
 // WithStore sets the binary storage backend. When nil (the default), the
 // handler records metadata triples only and skips binary storage.
 func WithStore(s storage.Store) Option {
-	return func(h *ImageHandler) { h.store = s }
+	return func(h *Handler) { h.store = s }
 }
 
 // WithLogger sets a custom structured logger on the handler.
 func WithLogger(l *slog.Logger) Option {
-	return func(h *ImageHandler) { h.logger = l }
+	return func(h *Handler) { h.logger = l }
 }
 
 // WithOrg sets the organisation namespace used when building typed EntityState
 // values via IngestEntityStates and Watch enrichment.
 func WithOrg(org string) Option {
-	return func(h *ImageHandler) { h.org = org }
+	return func(h *Handler) { h.org = org }
 }
 
-// New returns a ready-to-use ImageHandler configured by the provided options.
+// New returns a ready-to-use Handler configured by the provided options.
 // Calling New() with no options is equivalent to the former New() behaviour:
 // metadata-only mode with the default slog logger.
-func New(opts ...Option) *ImageHandler {
-	h := &ImageHandler{}
+func New(opts ...Option) *Handler {
+	h := &Handler{}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -77,12 +77,12 @@ func New(opts ...Option) *ImageHandler {
 }
 
 // SourceType returns the handler type identifier as used in semsource.json.
-func (h *ImageHandler) SourceType() string {
+func (h *Handler) SourceType() string {
 	return sourceTypeKey
 }
 
 // Supports returns true when cfg describes an "image" source.
-func (h *ImageHandler) Supports(cfg handler.SourceConfig) bool {
+func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
@@ -103,7 +103,7 @@ func resolvePaths(cfg handler.SourceConfig) ([]string, error) {
 
 // Ingest walks every path in cfg, reads each supported image file, and
 // returns a RawEntity per file. It respects ctx cancellation.
-func (h *ImageHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	roots, err := resolvePaths(cfg)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func (h *ImageHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]
 // ingestFile reads a single image file and constructs its RawEntity.
 // When the handler has a store configured, it also persists the binary content
 // and attempts to generate and store a thumbnail.
-func (h *ImageHandler) ingestFile(ctx context.Context, path, root string) (handler.RawEntity, error) {
+func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.RawEntity, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return handler.RawEntity{}, fmt.Errorf("read %q: %w", path, err)
@@ -265,4 +265,3 @@ func slugify(path string) string {
 	s = strings.TrimPrefix(s, "/")
 	return strings.ReplaceAll(s, "/", "-")
 }
-

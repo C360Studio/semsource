@@ -51,7 +51,7 @@ type Component struct {
 	logger    *slog.Logger
 	platform  component.PlatformMeta
 
-	handler   *dochandler.DocHandler
+	handler   *dochandler.Handler
 	sourceCfg *sourceCfg
 
 	// Lifecycle

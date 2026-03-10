@@ -37,19 +37,16 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// runV2Cmd is the new semstreams-native entry point for semsource.
-// It replaces the engine-based runCmd for sources that have been migrated to
-// semstreams processor components. Sources that have not yet been migrated
-// log a warning and are skipped.
+// runCmd is the semstreams-native entry point for semsource.
 //
-// Wire-up sequence mirrors the semspec bootstrap pattern:
+// Wire-up sequence:
 //  1. Parse flags, load semsource config
 //  2. Connect to NATS, ensure streams exist
 //  3. Build semstreams config.Config (platform identity + component map)
 //  4. Create component registry, register all factories
 //  5. Create ServiceManager, configure, start
 //  6. Block on SIGINT/SIGTERM, then shut down cleanly
-func runV2Cmd(args []string) error {
+func runCmd(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
@@ -61,21 +58,12 @@ func runV2Cmd(args []string) error {
 	logger := buildLogger(*logLevel)
 	slog.SetDefault(logger)
 
-	// Load semsource config.
-	semsourceCfg, err := config.LoadConfig(*configPath)
+	semsourceCfg, err := loadAndExpandConfig(*configPath)
 	if err != nil {
-		return fmt.Errorf("load config %q: %w", *configPath, err)
+		return err
 	}
 
-	// Expand "repo" meta-sources into their component sources (git, ast, docs, config)
-	// before anything else reads the source list.
-	expandedSources, err := config.ExpandRepoSources(semsourceCfg.Sources, semsourceCfg.WorkspaceDir)
-	if err != nil {
-		return fmt.Errorf("expand repo sources: %w", err)
-	}
-	semsourceCfg.Sources = expandedSources
-
-	logger.Info("semsource v2 starting",
+	logger.Info("semsource starting",
 		"version", version,
 		"namespace", semsourceCfg.Namespace,
 		"sources", len(semsourceCfg.Sources),
@@ -83,7 +71,6 @@ func runV2Cmd(args []string) error {
 
 	ctx := context.Background()
 
-	// Connect to NATS.
 	natsAddr := resolveNATSURL(*natsURL, semsourceCfg)
 	nc, err := connectNATS(ctx, natsAddr, logger)
 	if err != nil {
@@ -91,21 +78,17 @@ func runV2Cmd(args []string) error {
 	}
 	defer nc.Close(context.Background())
 
-	// Build the semstreams config.Config that ServiceManager expects.
-	// We derive it from the semsource config rather than loading a separate file.
 	ssCfg, err := buildSemstreamsConfig(semsourceCfg, semsourceCfg.Namespace)
 	if err != nil {
 		return fmt.Errorf("build semstreams config: %w", err)
 	}
 
-	// Ensure required JetStream streams exist before starting components.
 	streamsManager := semconfig.NewStreamsManager(nc, logger)
 	if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
 		return fmt.Errorf("ensure JetStream streams: %w", err)
 	}
 	logger.Info("JetStream streams ready")
 
-	// Config manager — required by ServiceManager for dynamic config watch.
 	configMgr, err := semconfig.NewConfigManager(ssCfg, nc, logger)
 	if err != nil {
 		return fmt.Errorf("create config manager: %w", err)
@@ -115,78 +98,120 @@ func runV2Cmd(args []string) error {
 	}
 	defer configMgr.Stop(5 * time.Second)
 
-	// Component registry — holds all factories.
-	componentRegistry := component.NewRegistry()
+	registry := component.NewRegistry()
+	if err := registerComponentFactories(registry); err != nil {
+		return err
+	}
 
-	logger.Debug("registering semstreams built-in component factories")
-	if err := componentregistry.Register(componentRegistry); err != nil {
+	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, configMgr, logger)
+	if err != nil {
+		configMgr.Stop(5 * time.Second)
+		return err
+	}
+
+	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer signalCancel()
+
+	if err := manager.StartAll(signalCtx); err != nil {
+		return fmt.Errorf("start services: %w", err)
+	}
+
+	logger.Info("semsource running — waiting for shutdown signal")
+	<-signalCtx.Done()
+	logger.Info("shutdown signal received")
+
+	if err := manager.StopAll(30 * time.Second); err != nil {
+		logger.Error("error stopping services", "error", err)
+		return fmt.Errorf("stop services: %w", err)
+	}
+
+	logger.Info("semsource stopped")
+	return nil
+}
+
+// loadAndExpandConfig loads the semsource config and expands "repo" meta-sources
+// into their component sources (git, ast, docs, config).
+func loadAndExpandConfig(path string) (*config.Config, error) {
+	cfg, err := config.LoadConfig(path)
+	if err != nil {
+		return nil, fmt.Errorf("load config %q: %w", path, err)
+	}
+	expanded, err := config.ExpandRepoSources(cfg.Sources, cfg.WorkspaceDir)
+	if err != nil {
+		return nil, fmt.Errorf("expand repo sources: %w", err)
+	}
+	cfg.Sources = expanded
+	return cfg, nil
+}
+
+// registerComponentFactories registers all semstreams built-in and semsource
+// component factories in the given registry.
+func registerComponentFactories(registry *component.Registry) error {
+	if err := componentregistry.Register(registry); err != nil {
 		return fmt.Errorf("register semstreams components: %w", err)
 	}
+	if err := registerSemsourceFactories(registry); err != nil {
+		return err
+	}
+	slog.Info("component factories registered", "count", len(registry.ListFactories()))
+	return nil
+}
 
-	logger.Debug("registering semsource component factories")
-	if err := astsource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register ast-source component: %w", err)
+// registerSemsourceFactories registers all semsource-specific component factories.
+func registerSemsourceFactories(registry *component.Registry) error {
+	for name, fn := range map[string]func() error{
+		"ast-source":      func() error { return astsource.Register(registry) },
+		"git-source":      func() error { return gitsource.Register(registry) },
+		"doc-source":      func() error { return docsource.Register(registry) },
+		"cfgfile-source":  func() error { return cfgfilesource.Register(registry) },
+		"url-source":      func() error { return urlsource.Register(registry) },
+		"image-source":    func() error { return imagesource.Register(registry) },
+		"video-source":    func() error { return videosource.Register(registry) },
+		"audio-source":    func() error { return audiosource.Register(registry) },
+		"filestore":       func() error { return filestore.Register(registry) },
+		"source-manifest": func() error { return sourcemanifest.Register(registry) },
+	} {
+		if err := fn(); err != nil {
+			return fmt.Errorf("register %s component: %w", name, err)
+		}
 	}
-	if err := gitsource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register git-source component: %w", err)
-	}
-	if err := docsource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register doc-source component: %w", err)
-	}
-	if err := cfgfilesource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register cfgfile-source component: %w", err)
-	}
-	if err := urlsource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register url-source component: %w", err)
-	}
-	if err := imagesource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register image-source component: %w", err)
-	}
-	if err := videosource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register video-source component: %w", err)
-	}
-	if err := audiosource.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register audio-source component: %w", err)
-	}
-	if err := filestore.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register filestore component: %w", err)
-	}
-	if err := sourcemanifest.Register(componentRegistry); err != nil {
-		return fmt.Errorf("register source-manifest component: %w", err)
-	}
+	return nil
+}
 
-	factories := componentRegistry.ListFactories()
-	logger.Info("component factories registered", "count", len(factories))
-
-	// Service infrastructure.
+// createServiceManager builds the ServiceManager with all configured services.
+func createServiceManager(
+	cfg *config.Config,
+	ssCfg *semconfig.Config,
+	nc *natsclient.Client,
+	registry *component.Registry,
+	configMgr *semconfig.Manager,
+	logger *slog.Logger,
+) (*service.Manager, error) {
 	metricsRegistry := metric.NewMetricsRegistry()
 	platform := types.PlatformMeta{
-		Org:      semsourceCfg.Namespace,
+		Org:      cfg.Namespace,
 		Platform: "semsource",
 	}
 
 	serviceRegistry := service.NewServiceRegistry()
 	if err := service.RegisterAll(serviceRegistry); err != nil {
-		configMgr.Stop(5 * time.Second)
-		return fmt.Errorf("register services: %w", err)
+		return nil, fmt.Errorf("register services: %w", err)
 	}
 
 	manager := service.NewServiceManager(serviceRegistry)
-	svcDeps := &service.Dependencies{
+	deps := &service.Dependencies{
 		NATSClient:        nc,
 		MetricsRegistry:   metricsRegistry,
 		Logger:            logger,
 		Platform:          platform,
 		Manager:           configMgr,
-		ComponentRegistry: componentRegistry,
+		ComponentRegistry: registry,
 	}
 
-	if err := manager.ConfigureFromServices(ssCfg.Services, svcDeps); err != nil {
-		return fmt.Errorf("configure service manager: %w", err)
+	if err := manager.ConfigureFromServices(ssCfg.Services, deps); err != nil {
+		return nil, fmt.Errorf("configure service manager: %w", err)
 	}
 
-	// Create each configured service. ConfigureFromServices only configures the
-	// service manager itself — individual services must be explicitly created.
 	for name, svcConfig := range ssCfg.Services {
 		if name == "service-manager" {
 			continue
@@ -195,32 +220,13 @@ func runV2Cmd(args []string) error {
 			logger.Info("service disabled, skipping", "name", name)
 			continue
 		}
-		if _, err := manager.CreateService(name, svcConfig.Config, svcDeps); err != nil {
-			return fmt.Errorf("create service %s: %w", name, err)
+		if _, err := manager.CreateService(name, svcConfig.Config, deps); err != nil {
+			return nil, fmt.Errorf("create service %s: %w", name, err)
 		}
 		logger.Debug("created service", "name", name)
 	}
 
-	// Signal context for graceful shutdown.
-	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-	defer signalCancel()
-
-	if err := manager.StartAll(signalCtx); err != nil {
-		return fmt.Errorf("start services: %w", err)
-	}
-
-	logger.Info("semsource v2 running — waiting for shutdown signal")
-	<-signalCtx.Done()
-	logger.Info("shutdown signal received")
-
-	shutdownTimeout := 30 * time.Second
-	if err := manager.StopAll(shutdownTimeout); err != nil {
-		logger.Error("error stopping services", "error", err)
-		return fmt.Errorf("stop services: %w", err)
-	}
-
-	logger.Info("semsource v2 stopped")
-	return nil
+	return manager, nil
 }
 
 // resolveNATSURL picks the NATS URL in priority order:
@@ -284,10 +290,65 @@ func wrapNATSConnError(err error, url string) error {
 }
 
 // buildSemstreamsConfig constructs a semstreams config.Config from the semsource
-// config. It translates each AST source entry into an ast-source component config.
-// Non-AST source types emit a warning and are skipped — they remain handled by
-// the legacy engine path (runCmd) until their component migrations land.
+// config. It translates each source entry into a component config and wires up
+// the graph subsystem, manifest, and websocket components.
 func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, error) {
+	components, err := sourceComponents(cfg, org)
+	if err != nil {
+		return nil, err
+	}
+
+	manifestCfg, err := manifestComponentConfig(cfg, org)
+	if err != nil {
+		return nil, err
+	}
+	components["source-manifest"] = manifestCfg
+
+	graphComponents, err := graphSubsystemComponents()
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range graphComponents {
+		components[k] = v
+	}
+
+	wsCfg, err := websocketComponentConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	components["websocket-output"] = wsCfg
+
+	svcs, err := serviceConfigs(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &semconfig.Config{
+		Version: "1.0.0",
+		Platform: semconfig.PlatformConfig{
+			Org:         org,
+			ID:          "semsource",
+			Environment: "dev",
+		},
+		NATS: semconfig.NATSConfig{
+			JetStream: semconfig.JetStreamConfig{Enabled: true},
+		},
+		Services:   svcs,
+		Components: components,
+		Streams: semconfig.StreamConfigs{
+			"GRAPH": semconfig.StreamConfig{
+				Subjects: []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest"},
+				Storage:  "memory",
+				MaxBytes: 256 * 1024 * 1024,
+				MaxAge:   "1h",
+				Replicas: 1,
+			},
+		},
+	}, nil
+}
+
+// sourceComponents translates semsource config sources into semstreams component configs.
+func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfigs, error) {
 	components := make(semconfig.ComponentConfigs)
 
 	for i, src := range cfg.Sources {
@@ -307,8 +368,6 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 				Enabled: true,
 				Config:  rawCfg,
 			}
-			slog.Debug("registered ast-source component instance",
-				"instance", instanceName, "path", src.Path)
 
 		case "git":
 			instanceName, compCfg, err := gitSourceComponentConfig(src, org, i, cfg)
@@ -325,8 +384,6 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 				Enabled: true,
 				Config:  rawCfg,
 			}
-			slog.Debug("registered git-source component instance",
-				"instance", instanceName, "url", src.URL, "path", src.Path)
 
 		case "docs":
 			instanceName, compCfg := docSourceComponentConfig(src, org, i)
@@ -373,23 +430,24 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 			if err != nil {
 				return nil, fmt.Errorf("source[%d] (%s) marshal config: %w", i, src.Type, err)
 			}
-			factoryName := src.Type + "-source"
 			components[instanceName] = types.ComponentConfig{
-				Name:    factoryName,
+				Name:    src.Type + "-source",
 				Type:    types.ComponentTypeProcessor,
 				Enabled: true,
 				Config:  rawCfg,
 			}
 
 		default:
-			slog.Warn("source type not yet migrated to component — skipped by v2 runner",
+			slog.Warn("source type not yet migrated to component — skipped",
 				"index", i, "type", src.Type, "path", src.Path)
 		}
 	}
 
-	// --- Source manifest ---
-	// Publishes the resolved source list to the GRAPH stream at startup and
-	// serves on-demand queries via graph.query.sources.
+	return components, nil
+}
+
+// manifestComponentConfig builds the source-manifest component config.
+func manifestComponentConfig(cfg *config.Config, org string) (types.ComponentConfig, error) {
 	manifestSources := make([]sourcemanifest.ManifestSource, 0, len(cfg.Sources))
 	for _, src := range cfg.Sources {
 		manifestSources = append(manifestSources, sourcemanifest.ManifestSource{
@@ -404,7 +462,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 			PollInterval: src.PollInterval,
 		})
 	}
-	manifestCfg := map[string]any{
+	raw, err := json.Marshal(map[string]any{
 		"ports": map[string]any{
 			"outputs": []map[string]any{
 				{
@@ -419,137 +477,114 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		},
 		"namespace": org,
 		"sources":   manifestSources,
-	}
-	rawManifestCfg, err := json.Marshal(manifestCfg)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal source-manifest config: %w", err)
+		return types.ComponentConfig{}, fmt.Errorf("marshal source-manifest config: %w", err)
 	}
-	components["source-manifest"] = types.ComponentConfig{
+	return types.ComponentConfig{
 		Name:    "source-manifest",
 		Type:    types.ComponentTypeProcessor,
 		Enabled: true,
-		Config:  rawManifestCfg,
-	}
+		Config:  raw,
+	}, nil
+}
 
-	// --- Graph subsystem components ---
-	// These are built-in semstreams components (registered by componentregistry.Register).
-	// They form the read path: ingest → index → query → gateway.
-
-	// graph-ingest: consumes entity payloads from the GRAPH stream, writes to
-	// ENTITY_STATES KV bucket. Override default subject from entity.> to match
-	// our publishing subject.
-	graphIngestCfg := map[string]any{
-		"ports": map[string]any{
-			"inputs": []map[string]any{
-				{
-					"name":        "entity_stream",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.entity",
-					"stream_name": "GRAPH",
-					"config": map[string]any{
-						"deliver_policy": "all",
+// graphSubsystemComponents returns the built-in semstreams graph components:
+// ingest, index, query, and gateway.
+func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
+	configs := map[string]struct {
+		name      string
+		compType  types.ComponentType
+		configMap map[string]any
+	}{
+		"graph-ingest": {
+			name:     "graph-ingest",
+			compType: types.ComponentTypeProcessor,
+			configMap: map[string]any{
+				"ports": map[string]any{
+					"inputs": []map[string]any{
+						{
+							"name":        "entity_stream",
+							"type":        "jetstream",
+							"subject":     "graph.ingest.entity",
+							"stream_name": "GRAPH",
+							"config":      map[string]any{"deliver_policy": "all"},
+						},
+					},
+					"outputs": []map[string]any{
+						{"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"},
 					},
 				},
 			},
-			"outputs": []map[string]any{
-				{
-					"name":    "entity_states",
-					"type":    "kv-write",
-					"subject": "ENTITY_STATES",
+		},
+		"graph-index": {
+			name:     "graph-index",
+			compType: types.ComponentTypeProcessor,
+			configMap: map[string]any{
+				"ports": map[string]any{
+					"inputs": []map[string]any{
+						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+					},
+					"outputs": []map[string]any{
+						{"name": "outgoing_index", "type": "kv-write", "subject": "OUTGOING_INDEX"},
+						{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
+						{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
+						{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
+					},
 				},
 			},
 		},
-	}
-	rawGraphIngestCfg, err := json.Marshal(graphIngestCfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal graph-ingest config: %w", err)
-	}
-	components["graph-ingest"] = types.ComponentConfig{
-		Name:    "graph-ingest",
-		Type:    types.ComponentTypeProcessor,
-		Enabled: true,
-		Config:  rawGraphIngestCfg,
-	}
-
-	// graph-index: watches ENTITY_STATES KV, maintains relationship indexes.
-	graphIndexCfg := map[string]any{
-		"ports": map[string]any{
-			"inputs": []map[string]any{
-				{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+		"graph-query": {
+			name:     "graph-query",
+			compType: types.ComponentTypeProcessor,
+			configMap: map[string]any{
+				"ports": map[string]any{
+					"inputs": []map[string]any{
+						{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
+						{"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
+						{"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
+					},
+				},
 			},
-			"outputs": []map[string]any{
-				{"name": "outgoing_index", "type": "kv-write", "subject": "OUTGOING_INDEX"},
-				{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
-				{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
-				{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
+		},
+		"graph-gateway": {
+			name:     "graph-gateway",
+			compType: types.ComponentTypeGateway,
+			configMap: map[string]any{
+				"ports": map[string]any{
+					"inputs": []map[string]any{
+						{"name": "http", "type": "http", "subject": "/graphql"},
+					},
+					"outputs": []map[string]any{
+						{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
+					},
+				},
+				"bind_address":      "0.0.0.0:8082",
+				"enable_playground": true,
 			},
 		},
 	}
-	rawGraphIndexCfg, err := json.Marshal(graphIndexCfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal graph-index config: %w", err)
-	}
-	components["graph-index"] = types.ComponentConfig{
-		Name:    "graph-index",
-		Type:    types.ComponentTypeProcessor,
-		Enabled: true,
-		Config:  rawGraphIndexCfg,
-	}
 
-	// graph-query: NATS request/reply coordinator for entity, relationship,
-	// and path search queries.
-	graphQueryCfg := map[string]any{
-		"ports": map[string]any{
-			"inputs": []map[string]any{
-				{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
-				{"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
-				{"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
-			},
-		},
+	result := make(semconfig.ComponentConfigs, len(configs))
+	for key, c := range configs {
+		raw, err := json.Marshal(c.configMap)
+		if err != nil {
+			return nil, fmt.Errorf("marshal %s config: %w", key, err)
+		}
+		result[key] = types.ComponentConfig{
+			Name:    c.name,
+			Type:    c.compType,
+			Enabled: true,
+			Config:  raw,
+		}
 	}
-	rawGraphQueryCfg, err := json.Marshal(graphQueryCfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal graph-query config: %w", err)
-	}
-	components["graph-query"] = types.ComponentConfig{
-		Name:    "graph-query",
-		Type:    types.ComponentTypeProcessor,
-		Enabled: true,
-		Config:  rawGraphQueryCfg,
-	}
+	return result, nil
+}
 
-	// graph-gateway: HTTP GraphQL endpoint for semstreams-ui.
-	// Bind to 0.0.0.0 for Docker access, enable playground for dev.
-	graphGatewayCfg := map[string]any{
-		"ports": map[string]any{
-			"inputs": []map[string]any{
-				{"name": "http", "type": "http", "subject": "/graphql"},
-			},
-			"outputs": []map[string]any{
-				{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
-			},
-		},
-		"bind_address":      "0.0.0.0:8082",
-		"enable_playground": true,
-	}
-	rawGraphGatewayCfg, err := json.Marshal(graphGatewayCfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal graph-gateway config: %w", err)
-	}
-	components["graph-gateway"] = types.ComponentConfig{
-		Name:    "graph-gateway",
-		Type:    types.ComponentTypeGateway,
-		Enabled: true,
-		Config:  rawGraphGatewayCfg,
-	}
-
-	// --- WebSocket output ---
-	// Broadcasts graph entities to connected consumers (SemSpec, SemDragon).
-	// Uses a JetStream consumer on the GRAPH stream for replay-on-reconnect
-	// and ack-based backpressure. Bind address and path are configurable via
-	// SEMSOURCE_WS_BIND / SEMSOURCE_WS_PATH env vars or config file fields.
+// websocketComponentConfig builds the WebSocket output component config.
+func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error) {
 	wsAddr := fmt.Sprintf("http://%s%s", cfg.WebSocketBind, cfg.WebSocketPath)
-	wsConfig := map[string]any{
+	raw, err := json.Marshal(map[string]any{
 		"ports": map[string]any{
 			"inputs": []map[string]any{
 				{
@@ -571,63 +606,50 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 			},
 		},
 		"delivery_mode": "at-most-once",
-	}
-	rawWSCfg, err := json.Marshal(wsConfig)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal websocket config: %w", err)
+		return types.ComponentConfig{}, fmt.Errorf("marshal websocket config: %w", err)
 	}
-	components["websocket-output"] = types.ComponentConfig{
+	return types.ComponentConfig{
 		Name:    "websocket",
 		Type:    types.ComponentTypeOutput,
 		Enabled: true,
-		Config:  rawWSCfg,
-	}
+		Config:  raw,
+	}, nil
+}
 
-	// Ensure the GRAPH stream is defined explicitly so EnsureStreams creates it.
-	streams := semconfig.StreamConfigs{
-		"GRAPH": semconfig.StreamConfig{
-			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest"},
-			Storage:  "memory",
-			MaxBytes: 256 * 1024 * 1024, // 256MB cap — prevents runaway memory if consumers lag
-			MaxAge:   "1h",
-			Replicas: 1,
-		},
+// serviceConfigs builds the semstreams service configurations.
+func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
+	smCfgJSON, err := json.Marshal(map[string]any{"http_port": cfg.HTTPPort})
+	if err != nil {
+		return nil, fmt.Errorf("marshal service-manager config: %w", err)
 	}
-
-	return &semconfig.Config{
-		Version: "1.0.0",
-		Platform: semconfig.PlatformConfig{
-			Org:         org,
-			ID:          "semsource",
-			Environment: "dev",
+	return types.ServiceConfigs{
+		"service-manager": types.ServiceConfig{
+			Name:    "service-manager",
+			Enabled: true,
+			Config:  smCfgJSON,
 		},
-		NATS: semconfig.NATSConfig{
-			JetStream: semconfig.JetStreamConfig{Enabled: true},
+		"component-manager": types.ServiceConfig{
+			Name:    "component-manager",
+			Enabled: true,
+			Config:  json.RawMessage(`{}`),
 		},
-		Services: types.ServiceConfigs{
-			"component-manager": types.ServiceConfig{
-				Name:    "component-manager",
-				Enabled: true,
-				Config:  json.RawMessage(`{}`),
-			},
-			"metrics": types.ServiceConfig{
-				Name:    "metrics",
-				Enabled: true,
-				Config:  json.RawMessage(`{"port": 9091, "path": "/metrics"}`),
-			},
-			"heartbeat": types.ServiceConfig{
-				Name:    "heartbeat",
-				Enabled: true,
-				Config:  json.RawMessage(`{}`),
-			},
-			"flow-builder": types.ServiceConfig{
-				Name:    "flow-builder",
-				Enabled: true,
-				Config:  json.RawMessage(`{}`),
-			},
+		"metrics": types.ServiceConfig{
+			Name:    "metrics",
+			Enabled: true,
+			Config:  json.RawMessage(`{"port": 9091, "path": "/metrics"}`),
 		},
-		Components: components,
-		Streams:    streams,
+		"heartbeat": types.ServiceConfig{
+			Name:    "heartbeat",
+			Enabled: true,
+			Config:  json.RawMessage(`{}`),
+		},
+		"flow-builder": types.ServiceConfig{
+			Name:    "flow-builder",
+			Enabled: true,
+			Config:  json.RawMessage(`{}`),
+		},
 	}, nil
 }
 
@@ -664,7 +686,6 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 		lang = "go"
 	}
 
-	// Derive a stable, NATS-safe instance name from the source path.
 	slug := entityid.SystemSlug(path)
 	if slug == "" {
 		slug = fmt.Sprintf("source-%d", index)
@@ -691,7 +712,6 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 // gitSourceComponentConfig builds a component instance name and config map for
 // a git source entry.
 func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg *config.Config) (string, map[string]any, error) {
-	// Derive a stable slug from URL or path.
 	identifier := src.URL
 	if identifier == "" {
 		identifier = src.Path
@@ -711,15 +731,15 @@ func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg
 	}
 
 	compCfg := map[string]any{
-		"ports":          sourceOutputPorts(),
-		"org":            org,
-		"repo_path":      src.Path,
-		"repo_url":       src.URL,
-		"branch":         branch,
-		"poll_interval":  "60s",
-		"watch_enabled":  src.Watch,
-		"workspace_dir":  cfg.WorkspaceDir,
-		"git_token":      cfg.GitToken,
+		"ports":         sourceOutputPorts(),
+		"org":           org,
+		"repo_path":     src.Path,
+		"repo_url":      src.URL,
+		"branch":        branch,
+		"poll_interval": "60s",
+		"watch_enabled": src.Watch,
+		"workspace_dir": cfg.WorkspaceDir,
+		"git_token":     cfg.GitToken,
 	}
 
 	return instanceName, compCfg, nil
@@ -810,8 +830,6 @@ func mediaSourceComponentConfig(src config.SourceEntry, org string, index int, c
 		"watch_enabled": src.Watch,
 	}
 
-	// Wire filestore root when configured — enables local binary content storage
-	// in the handler in addition to metadata-only graph entity publication.
 	if cfg.MediaStoreDir != "" {
 		compCfg["file_store_root"] = cfg.MediaStoreDir
 	}

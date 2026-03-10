@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	asthandler "github.com/c360studio/semsource/handler/ast"
 	"github.com/c360studio/semsource/handler"
+	asthandler "github.com/c360studio/semsource/handler/ast"
 )
 
 // stubConfig implements handler.SourceConfig for testing.
@@ -22,15 +22,15 @@ type stubConfig struct {
 	project    string
 }
 
-func (s *stubConfig) GetType() string            { return s.sourceType }
-func (s *stubConfig) GetPath() string            { return s.path }
-func (s *stubConfig) GetPaths() []string         { return nil }
-func (s *stubConfig) GetURL() string             { return s.url }
-func (s *stubConfig) GetBranch() string          { return "" }
-func (s *stubConfig) IsWatchEnabled() bool       { return s.watch }
-func (s *stubConfig) GetKeyframeMode() string    { return "" }
+func (s *stubConfig) GetType() string             { return s.sourceType }
+func (s *stubConfig) GetPath() string             { return s.path }
+func (s *stubConfig) GetPaths() []string          { return nil }
+func (s *stubConfig) GetURL() string              { return s.url }
+func (s *stubConfig) GetBranch() string           { return "" }
+func (s *stubConfig) IsWatchEnabled() bool        { return s.watch }
+func (s *stubConfig) GetKeyframeMode() string     { return "" }
 func (s *stubConfig) GetKeyframeInterval() string { return "" }
-func (s *stubConfig) GetSceneThreshold() float64 { return 0 }
+func (s *stubConfig) GetSceneThreshold() float64  { return 0 }
 
 // ASTSourceConfig extends SourceConfig with ast-specific fields.
 func (s *stubConfig) GetLanguage() string { return s.language }

@@ -1,4 +1,4 @@
-// Package audio implements the AudioHandler for audio file sources.
+// Package audio implements the Handler for audio file sources.
 // It extracts metadata from audio files using ffprobe.
 package audio
 
@@ -24,7 +24,7 @@ import (
 // sourceTypeKey is the config source type key for audio sources.
 const sourceTypeKey = "audio"
 
-// defaultExtensions lists the file extensions AudioHandler will process.
+// defaultExtensions lists the file extensions Handler will process.
 var defaultExtensions = map[string]bool{
 	".mp3":  true,
 	".wav":  true,
@@ -35,9 +35,9 @@ var defaultExtensions = map[string]bool{
 	".wma":  true,
 }
 
-// AudioHandler handles audio file sources.
+// Handler handles audio file sources.
 // It implements handler.SourceHandler.
-type AudioHandler struct {
+type Handler struct {
 	store  storage.Store // nil = no binary storage (metadata only)
 	logger *slog.Logger
 	// org is the organisation namespace used when building EntityState values
@@ -45,31 +45,31 @@ type AudioHandler struct {
 	org string
 }
 
-// Option is a functional option for configuring an AudioHandler.
-type Option func(*AudioHandler)
+// Option is a functional option for configuring an Handler.
+type Option func(*Handler)
 
 // WithStore sets the binary storage backend. When nil (the default), the
 // handler records metadata triples only and skips binary storage.
 func WithStore(s storage.Store) Option {
-	return func(h *AudioHandler) { h.store = s }
+	return func(h *Handler) { h.store = s }
 }
 
 // WithLogger sets a custom structured logger on the handler.
 func WithLogger(l *slog.Logger) Option {
-	return func(h *AudioHandler) { h.logger = l }
+	return func(h *Handler) { h.logger = l }
 }
 
 // WithOrg sets the organisation namespace used when building typed EntityState
 // values via IngestEntityStates and Watch enrichment.
 func WithOrg(org string) Option {
-	return func(h *AudioHandler) { h.org = org }
+	return func(h *Handler) { h.org = org }
 }
 
-// New returns a ready-to-use AudioHandler configured by the provided options.
+// New returns a ready-to-use Handler configured by the provided options.
 // Calling New() with no options produces a metadata-only handler using the
 // default slog logger.
-func New(opts ...Option) *AudioHandler {
-	h := &AudioHandler{}
+func New(opts ...Option) *Handler {
+	h := &Handler{}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -80,12 +80,12 @@ func New(opts ...Option) *AudioHandler {
 }
 
 // SourceType returns the handler type identifier as used in semsource.json.
-func (h *AudioHandler) SourceType() string {
+func (h *Handler) SourceType() string {
 	return sourceTypeKey
 }
 
 // Supports returns true when cfg describes an "audio" source.
-func (h *AudioHandler) Supports(cfg handler.SourceConfig) bool {
+func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
@@ -94,7 +94,7 @@ func (h *AudioHandler) Supports(cfg handler.SourceConfig) bool {
 //
 // Path resolution: GetPaths() is used when non-empty; otherwise GetPath() is
 // used as a single-element list. An error is returned when both are empty.
-func (h *AudioHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	roots := resolvePaths(cfg)
 	if len(roots) == 0 {
 		return nil, fmt.Errorf("audio handler: no paths configured (set path or paths in source config)")
@@ -151,7 +151,7 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 
 // ingestFile streams a single audio file to compute its hash, probes metadata,
 // and returns the audio RawEntity.
-func (h *AudioHandler) ingestFile(ctx context.Context, path, root string) (handler.RawEntity, error) {
+func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.RawEntity, error) {
 	// Stream hash computation — avoid loading the entire audio file into memory.
 	f, err := os.Open(path)
 	if err != nil {

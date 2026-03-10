@@ -175,4 +175,3 @@ func DefaultConfig() Config {
 		ExcludePatterns: []string{"vendor", "node_modules", "dist", ".next", "build", "coverage"},
 	}
 }
-

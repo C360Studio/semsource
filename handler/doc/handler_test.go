@@ -18,22 +18,22 @@ import (
 
 // sourceConfig adapts test parameters to handler.SourceConfig.
 type sourceConfig struct {
-	typ     string
-	path    string
-	url     string
-	watch   bool
-	paths   []string
+	typ   string
+	path  string
+	url   string
+	watch bool
+	paths []string
 }
 
-func (s sourceConfig) GetType() string            { return s.typ }
-func (s sourceConfig) GetPath() string            { return s.path }
-func (s sourceConfig) GetPaths() []string         { return s.paths }
-func (s sourceConfig) GetURL() string             { return s.url }
-func (s sourceConfig) GetBranch() string          { return "" }
-func (s sourceConfig) IsWatchEnabled() bool       { return s.watch }
-func (s sourceConfig) GetKeyframeMode() string    { return "" }
+func (s sourceConfig) GetType() string             { return s.typ }
+func (s sourceConfig) GetPath() string             { return s.path }
+func (s sourceConfig) GetPaths() []string          { return s.paths }
+func (s sourceConfig) GetURL() string              { return s.url }
+func (s sourceConfig) GetBranch() string           { return "" }
+func (s sourceConfig) IsWatchEnabled() bool        { return s.watch }
+func (s sourceConfig) GetKeyframeMode() string     { return "" }
 func (s sourceConfig) GetKeyframeInterval() string { return "" }
-func (s sourceConfig) GetSceneThreshold() float64 { return 0 }
+func (s sourceConfig) GetSceneThreshold() float64  { return 0 }
 
 // writeMD writes a markdown file and returns its absolute path.
 func writeMD(t *testing.T, dir, name, content string) string {

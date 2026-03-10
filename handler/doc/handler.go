@@ -1,4 +1,4 @@
-// Package doc implements the DocHandler for markdown and plain-text document sources.
+// Package doc implements the doc Handler for markdown and plain-text document sources.
 package doc
 
 import (
@@ -15,30 +15,30 @@ import (
 	"github.com/c360studio/semsource/handler"
 )
 
-// docExtensions lists the file extensions DocHandler will process.
+// docExtensions lists the file extensions Handler will process.
 var docExtensions = map[string]bool{
 	".md":  true,
 	".txt": true,
 }
 
-// DocHandler handles document sources (markdown, plain text).
+// Handler handles document sources (markdown, plain text).
 // It implements handler.SourceHandler.
-type DocHandler struct {
+type Handler struct {
 	// org is the organisation namespace used when building typed EntityState
 	// values via IngestEntityStates and enrichEventEntityStates. When empty,
 	// EntityStates are not populated on watch events.
 	org string
 }
 
-// New returns a ready-to-use DocHandler.
-func New() *DocHandler {
-	return &DocHandler{}
+// New returns a ready-to-use Handler.
+func New() *Handler {
+	return &Handler{}
 }
 
-// NewWithOrg returns a DocHandler that will populate EntityStates on watch
+// NewWithOrg returns a Handler that will populate EntityStates on watch
 // events using the given org namespace.
-func NewWithOrg(org string) *DocHandler {
-	return &DocHandler{org: org}
+func NewWithOrg(org string) *Handler {
+	return &Handler{org: org}
 }
 
 // sourceTypeKey is the config source type key for doc sources.
@@ -47,12 +47,12 @@ func NewWithOrg(org string) *DocHandler {
 const sourceTypeKey = "docs"
 
 // SourceType returns the handler type identifier as used in semsource.yaml.
-func (h *DocHandler) SourceType() string {
+func (h *Handler) SourceType() string {
 	return sourceTypeKey
 }
 
 // Supports returns true when cfg describes a "docs" source.
-func (h *DocHandler) Supports(cfg handler.SourceConfig) bool {
+func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
@@ -73,7 +73,7 @@ func resolvePaths(cfg handler.SourceConfig) ([]string, error) {
 
 // Ingest walks all configured path(s) in cfg, reads each supported document
 // file, and returns a RawEntity per file. It respects ctx cancellation.
-func (h *DocHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	roots, err := resolvePaths(cfg)
 	if err != nil {
 		return nil, err

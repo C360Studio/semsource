@@ -12,9 +12,9 @@ func init() {
 
 type gitWizard struct{}
 
-func (w *gitWizard) Name() string        { return "Git history" }
-func (w *gitWizard) TypeKey() string     { return "git" }
-func (w *gitWizard) Description() string { return "commits, authors, branches" }
+func (w *gitWizard) Name() string              { return "Git history" }
+func (w *gitWizard) TypeKey() string           { return "git" }
+func (w *gitWizard) Description() string       { return "commits, authors, branches" }
 func (w *gitWizard) Available() (bool, string) { return true, "" }
 
 func (w *gitWizard) Prompts(term *Term) (*config.SourceEntry, error) {

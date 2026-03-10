@@ -22,7 +22,7 @@ var allowedProtocols = map[string]bool{
 	"ssh":   true,
 }
 
-// Config controls GitHandler behaviour.
+// Config controls Handler behaviour.
 type Config struct {
 	// PollInterval is how often Watch polls for new commits.
 	// Default: 30s.
@@ -56,22 +56,22 @@ func DefaultConfig() Config {
 	}
 }
 
-// GitHandler implements handler.SourceHandler for git sources.
+// Handler implements handler.SourceHandler for git sources.
 // It is safe for concurrent use.
-type GitHandler struct {
+type Handler struct {
 	cfg Config
 }
 
-// New creates a GitHandler with the given configuration.
-func New(cfg Config) *GitHandler {
-	return &GitHandler{cfg: cfg}
+// New creates a Handler with the given configuration.
+func New(cfg Config) *Handler {
+	return &Handler{cfg: cfg}
 }
 
 // SourceType implements handler.SourceHandler.
-func (h *GitHandler) SourceType() string { return handler.SourceTypeGit }
+func (h *Handler) SourceType() string { return handler.SourceTypeGit }
 
 // Supports implements handler.SourceHandler.
-func (h *GitHandler) Supports(cfg handler.SourceConfig) bool {
+func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == handler.SourceTypeGit
 }
 
@@ -79,7 +79,7 @@ func (h *GitHandler) Supports(cfg handler.SourceConfig) bool {
 // log, and returns RawEntity values for commits, authors, and the current branch.
 // When a URL is configured without a local path, EnsureRepo clones the repository
 // into WorkspaceDir on the first call and pulls on subsequent calls.
-func (h *GitHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (h *GitHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]ha
 // fully-typed entity states that embed vocabulary-predicate triples directly —
 // bypassing the normalizer entirely. The org parameter is the organisation
 // namespace (e.g. "acme") used in the 6-part entity ID.
-func (h *GitHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (h *GitHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceC
 // Watch starts a polling loop that emits a ChangeEvent whenever the HEAD
 // commit SHA changes. Returns (nil, nil) when watching is not enabled.
 // The returned channel is closed when ctx is cancelled.
-func (h *GitHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
+func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
 	if !cfg.IsWatchEnabled() {
 		return nil, nil
 	}
@@ -218,7 +218,7 @@ func (h *GitHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-cha
 }
 
 // pollLoop polls the repo for HEAD changes and sends ChangeEvents.
-func (h *GitHandler) pollLoop(ctx context.Context, repoPath string, ch chan<- handler.ChangeEvent) {
+func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handler.ChangeEvent) {
 	defer close(ch)
 
 	ticker := time.NewTicker(h.cfg.PollInterval)
@@ -283,7 +283,7 @@ func (c *localCfg) GetSceneThreshold() float64  { return 0 }
 // When a local path is configured, it is returned directly.
 // When only a URL is configured, EnsureRepo clones or pulls the repository
 // into WorkspaceDir and returns the resulting path.
-func (h *GitHandler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig) (string, error) {
+func (h *Handler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig) (string, error) {
 	if p := cfg.GetPath(); p != "" {
 		return p, nil
 	}
@@ -302,7 +302,7 @@ func (h *GitHandler) resolveRepoPath(ctx context.Context, cfg handler.SourceConf
 // When a URL is configured, the slug is derived from the URL so that
 // entity IDs remain stable across machines and clone locations.
 // Falls back to the local path when no URL is available.
-func (h *GitHandler) systemSlug(cfg handler.SourceConfig) string {
+func (h *Handler) systemSlug(cfg handler.SourceConfig) string {
 	if u := cfg.GetURL(); u != "" {
 		return workspace.URLToSlug(u)
 	}

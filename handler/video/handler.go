@@ -1,4 +1,4 @@
-// Package video implements the VideoHandler for video file sources.
+// Package video implements the Handler for video file sources.
 // It extracts metadata and keyframes from video files using ffprobe and ffmpeg.
 package video
 
@@ -24,7 +24,7 @@ import (
 // sourceTypeKey is the config source type key for video sources.
 const sourceTypeKey = "video"
 
-// defaultExtensions lists the file extensions VideoHandler will process.
+// defaultExtensions lists the file extensions Handler will process.
 var defaultExtensions = map[string]bool{
 	".mp4":  true,
 	".webm": true,
@@ -33,9 +33,9 @@ var defaultExtensions = map[string]bool{
 	".mkv":  true,
 }
 
-// VideoHandler handles video file sources.
+// Handler handles video file sources.
 // It implements handler.SourceHandler.
-type VideoHandler struct {
+type Handler struct {
 	store  storage.Store // nil = no binary storage (metadata only)
 	logger *slog.Logger
 	// org is the organisation namespace used when building EntityState values
@@ -43,31 +43,31 @@ type VideoHandler struct {
 	org string
 }
 
-// Option is a functional option for configuring a VideoHandler.
-type Option func(*VideoHandler)
+// Option is a functional option for configuring a Handler.
+type Option func(*Handler)
 
 // WithStore sets the binary storage backend. When nil (the default), the
 // handler records metadata triples only and skips binary storage.
 func WithStore(s storage.Store) Option {
-	return func(h *VideoHandler) { h.store = s }
+	return func(h *Handler) { h.store = s }
 }
 
 // WithLogger sets a custom structured logger on the handler.
 func WithLogger(l *slog.Logger) Option {
-	return func(h *VideoHandler) { h.logger = l }
+	return func(h *Handler) { h.logger = l }
 }
 
 // WithOrg sets the organisation namespace used when building typed EntityState
 // values via IngestEntityStates and Watch enrichment.
 func WithOrg(org string) Option {
-	return func(h *VideoHandler) { h.org = org }
+	return func(h *Handler) { h.org = org }
 }
 
-// New returns a ready-to-use VideoHandler configured by the provided options.
+// New returns a ready-to-use Handler configured by the provided options.
 // Calling New() with no options produces a metadata-only handler using the
 // default slog logger.
-func New(opts ...Option) *VideoHandler {
-	h := &VideoHandler{}
+func New(opts ...Option) *Handler {
+	h := &Handler{}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -78,12 +78,12 @@ func New(opts ...Option) *VideoHandler {
 }
 
 // SourceType returns the handler type identifier as used in semsource.json.
-func (h *VideoHandler) SourceType() string {
+func (h *Handler) SourceType() string {
 	return sourceTypeKey
 }
 
 // Supports returns true when cfg describes a "video" source.
-func (h *VideoHandler) Supports(cfg handler.SourceConfig) bool {
+func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 	return cfg.GetType() == sourceTypeKey
 }
 
@@ -93,7 +93,7 @@ func (h *VideoHandler) Supports(cfg handler.SourceConfig) bool {
 //
 // Path resolution: GetPaths() is used when non-empty; otherwise GetPath() is
 // used as a single-element list. An error is returned when both are empty.
-func (h *VideoHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	roots := resolvePaths(cfg)
 	if len(roots) == 0 {
 		return nil, fmt.Errorf("video handler: no paths configured (set path or paths in source config)")
@@ -151,7 +151,7 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 
 // ingestFile streams a single video file to compute its hash, probes metadata,
 // extracts keyframes, and returns the video RawEntity plus one RawEntity per keyframe.
-func (h *VideoHandler) ingestFile(ctx context.Context, path, root string, cfg handler.SourceConfig) (handler.RawEntity, []handler.RawEntity, error) {
+func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler.SourceConfig) (handler.RawEntity, []handler.RawEntity, error) {
 	// Stream hash computation — avoid loading the entire video file into memory.
 	f, err := os.Open(path)
 	if err != nil {
@@ -286,11 +286,11 @@ type ProbeResult struct {
 // ffprobeOutput is the JSON structure returned by ffprobe.
 type ffprobeOutput struct {
 	Streams []struct {
-		CodecName   string `json:"codec_name"`
-		Width       int    `json:"width"`
-		Height      int    `json:"height"`
-		RFrameRate  string `json:"r_frame_rate"`
-		CodecType   string `json:"codec_type"`
+		CodecName  string `json:"codec_name"`
+		Width      int    `json:"width"`
+		Height     int    `json:"height"`
+		RFrameRate string `json:"r_frame_rate"`
+		CodecType  string `json:"codec_type"`
 	} `json:"streams"`
 	Format struct {
 		Duration string `json:"duration"`
@@ -383,7 +383,7 @@ type keyframeResult struct {
 // extractKeyframes runs ffmpeg to extract keyframes from path into a temp
 // directory, then reads the resulting JPEG files. The mode selects the
 // extraction strategy: "interval" (default), "scene", or "iframes".
-func (h *VideoHandler) extractKeyframes(ctx context.Context, path, mode, interval string, threshold float64) ([]keyframeResult, error) {
+func (h *Handler) extractKeyframes(ctx context.Context, path, mode, interval string, threshold float64) ([]keyframeResult, error) {
 	// ffprobe / ffmpeg must be available; skip gracefully when they are not.
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return nil, fmt.Errorf("ffmpeg not found in PATH: %w", err)

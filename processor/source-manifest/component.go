@@ -34,7 +34,7 @@ type Component struct {
 	querySub     *natsclient.Subscription
 	responseData []byte // pre-marshaled manifest for HTTP and NATS responses
 
-	running bool
+	running   bool
 	startTime time.Time
 	mu        sync.RWMutex
 }
@@ -145,8 +145,7 @@ func (c *Component) Stop(_ time.Duration) error {
 	return nil
 }
 
-// Discoverable interface
-
+// Meta implements component.Discoverable.
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
 		Name:        "source-manifest",
@@ -156,10 +155,12 @@ func (c *Component) Meta() component.Metadata {
 	}
 }
 
+// InputPorts implements component.Discoverable.
 func (c *Component) InputPorts() []component.Port {
 	return []component.Port{}
 }
 
+// OutputPorts implements component.Discoverable.
 func (c *Component) OutputPorts() []component.Port {
 	if c.config.Ports == nil {
 		return []component.Port{}
@@ -187,10 +188,12 @@ func (c *Component) OutputPorts() []component.Port {
 	return ports
 }
 
+// ConfigSchema implements component.Discoverable.
 func (c *Component) ConfigSchema() component.ConfigSchema {
 	return manifestSchema
 }
 
+// Health implements component.Discoverable.
 func (c *Component) Health() component.HealthStatus {
 	c.mu.RLock()
 	running := c.running
@@ -210,6 +213,7 @@ func (c *Component) Health() component.HealthStatus {
 	}
 }
 
+// DataFlow implements component.Discoverable.
 func (c *Component) DataFlow() component.FlowMetrics {
 	return component.FlowMetrics{}
 }

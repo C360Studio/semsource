@@ -12,9 +12,9 @@ func init() {
 
 type cfgWizard struct{}
 
-func (w *cfgWizard) Name() string        { return "Config files" }
-func (w *cfgWizard) TypeKey() string     { return "config" }
-func (w *cfgWizard) Description() string { return "go.mod, package.json, Dockerfile" }
+func (w *cfgWizard) Name() string              { return "Config files" }
+func (w *cfgWizard) TypeKey() string           { return "config" }
+func (w *cfgWizard) Description() string       { return "go.mod, package.json, Dockerfile" }
 func (w *cfgWizard) Available() (bool, string) { return true, "" }
 
 func (w *cfgWizard) Prompts(term *Term) (*config.SourceEntry, error) {

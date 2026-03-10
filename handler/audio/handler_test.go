@@ -166,7 +166,7 @@ func TestAudioHandler_MimeForExt(t *testing.T) {
 		{".ogg", "audio/ogg"},
 		{".m4a", "audio/mp4"},
 		{".wma", "audio/x-ms-wma"},
-		{".MP3", "audio/mpeg"},   // case-insensitive
+		{".MP3", "audio/mpeg"}, // case-insensitive
 		{".unknown", "application/octet-stream"},
 		{"", "application/octet-stream"},
 	}

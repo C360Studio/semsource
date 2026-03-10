@@ -86,14 +86,14 @@ type sourceConfig struct {
 	watch bool
 }
 
-func (s sourceConfig) GetType() string  { return s.typ }
-func (s sourceConfig) GetPaths() []string { return s.paths }
-func (s sourceConfig) GetURL() string   { return s.url }
-func (s sourceConfig) GetBranch() string { return "" }
-func (s sourceConfig) IsWatchEnabled() bool       { return s.watch }
-func (s sourceConfig) GetKeyframeMode() string    { return "" }
+func (s sourceConfig) GetType() string             { return s.typ }
+func (s sourceConfig) GetPaths() []string          { return s.paths }
+func (s sourceConfig) GetURL() string              { return s.url }
+func (s sourceConfig) GetBranch() string           { return "" }
+func (s sourceConfig) IsWatchEnabled() bool        { return s.watch }
+func (s sourceConfig) GetKeyframeMode() string     { return "" }
 func (s sourceConfig) GetKeyframeInterval() string { return "" }
-func (s sourceConfig) GetSceneThreshold() float64 { return 0 }
+func (s sourceConfig) GetSceneThreshold() float64  { return 0 }
 
 // GetPath returns the primary path: the explicit path field when set, or the
 // first element of paths when only a multi-path config is provided.

@@ -467,9 +467,9 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 	for _, entity := range result.Entities {
 		state := entity.EntityState()
 		payload := &graph.EntityPayload{
-			ID:        state.ID,
+			ID:         state.ID,
 			TripleData: state.Triples,
-			UpdatedAt: state.UpdatedAt,
+			UpdatedAt:  state.UpdatedAt,
 		}
 		if err := c.publishEntity(ctx, payload); err != nil {
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)

@@ -11,9 +11,9 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// VideoEntity is a fully-typed video entity that produces triples using
+// Entity is a fully-typed video entity that produces triples using
 // canonical vocabulary predicates, bypassing the normalizer entirely.
-type VideoEntity struct {
+type Entity struct {
 	ID            string
 	FilePath      string
 	MimeType      string
@@ -33,8 +33,8 @@ type VideoEntity struct {
 	IndexedAt     time.Time
 }
 
-// Triples converts the VideoEntity to a slice of message.Triple for graph storage.
-func (e *VideoEntity) Triples() []message.Triple {
+// Triples converts the Entity to a slice of message.Triple for graph storage.
+func (e *Entity) Triples() []message.Triple {
 	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	return []message.Triple{
@@ -55,8 +55,8 @@ func (e *VideoEntity) Triples() []message.Triple {
 	}
 }
 
-// EntityState converts the VideoEntity to a handler.EntityState for graph publication.
-func (e *VideoEntity) EntityState() *handler.EntityState {
+// EntityState converts the Entity to a handler.EntityState for graph publication.
+func (e *Entity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
@@ -121,10 +121,10 @@ func (e *KeyframeEntity) EntityState() *handler.EntityState {
 }
 
 // videoEntityFromRaw converts a RawEntity with EntityType "video" produced by
-// ingestFile into a typed VideoEntity using canonical vocabulary predicates.
+// ingestFile into a typed Entity using canonical vocabulary predicates.
 // The system slug is taken from RawEntity.System (already set by ingestFile).
-func videoEntityFromRaw(org string, r handler.RawEntity, now time.Time) *VideoEntity {
-	ve := &VideoEntity{
+func videoEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity {
+	ve := &Entity{
 		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "video", r.Instance),
 		System:    r.System,
 		Org:       org,
@@ -205,7 +205,7 @@ func keyframeEntityFromRaw(org, videoID string, r handler.RawEntity, now time.Ti
 // entities, and returns fully-typed EntityState values with vocabulary-predicate
 // triples — bypassing the normalizer entirely. The org parameter is the
 // organisation namespace used in the 6-part entity ID.
-func (h *VideoHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
 	rawEntities, err := h.Ingest(ctx, cfg)
 	if err != nil {
 		return nil, err

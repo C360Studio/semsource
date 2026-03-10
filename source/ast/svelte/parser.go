@@ -202,8 +202,8 @@ func (p *Parser) ParseDirectory(ctx context.Context, dirPath string) ([]*ast.Par
 // createComponentEntity creates a component entity for a Svelte file
 func (p *Parser) createComponentEntity(name, path, lang string) *ast.CodeEntity {
 	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeComponent, name, path)
-	entity.Language = lang      // typescript or javascript (script block language)
-	entity.Framework = "svelte" // Svelte is the framework
+	entity.Language = lang                   // typescript or javascript (script block language)
+	entity.Framework = "svelte"              // Svelte is the framework
 	entity.Visibility = ast.VisibilityPublic // Svelte components are typically public
 	return entity
 }

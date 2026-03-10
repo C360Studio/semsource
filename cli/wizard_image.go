@@ -12,9 +12,9 @@ func init() {
 
 type imageWizard struct{}
 
-func (w *imageWizard) Name() string        { return "Images" }
-func (w *imageWizard) TypeKey() string     { return "image" }
-func (w *imageWizard) Description() string { return "screenshots, diagrams, visual assets" }
+func (w *imageWizard) Name() string              { return "Images" }
+func (w *imageWizard) TypeKey() string           { return "image" }
+func (w *imageWizard) Description() string       { return "screenshots, diagrams, visual assets" }
 func (w *imageWizard) Available() (bool, string) { return true, "" }
 
 func (w *imageWizard) Prompts(term *Term) (*config.SourceEntry, error) {

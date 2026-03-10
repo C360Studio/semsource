@@ -8,9 +8,9 @@ func init() {
 
 type urlWizard struct{}
 
-func (w *urlWizard) Name() string        { return "URLs" }
-func (w *urlWizard) TypeKey() string     { return "url" }
-func (w *urlWizard) Description() string { return "web pages, API docs" }
+func (w *urlWizard) Name() string              { return "URLs" }
+func (w *urlWizard) TypeKey() string           { return "url" }
+func (w *urlWizard) Description() string       { return "web pages, API docs" }
 func (w *urlWizard) Available() (bool, string) { return true, "" }
 
 func (w *urlWizard) Prompts(term *Term) (*config.SourceEntry, error) {

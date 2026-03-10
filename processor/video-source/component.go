@@ -55,7 +55,7 @@ type Component struct {
 	logger    *slog.Logger
 	platform  component.PlatformMeta
 
-	handler   *videohandler.VideoHandler
+	handler   *videohandler.Handler
 	sourceCfg *sourceCfg
 	fileStore *filestore.Store
 

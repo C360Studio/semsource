@@ -17,15 +17,15 @@ import (
 // Test doubles
 // ---------------------------------------------------------------------------
 
-// mockProvider is a configurable VisionProvider for tests.
+// mockProvider is a configurable Provider for tests.
 type mockProvider struct {
-	result *vision.VisionResult
+	result *vision.Result
 	err    error
 	calls  int
 	mu     sync.Mutex
 }
 
-func (m *mockProvider) Analyze(_ context.Context, _ []byte, _ string) (*vision.VisionResult, error) {
+func (m *mockProvider) Analyze(_ context.Context, _ []byte, _ string) (*vision.Result, error) {
 	m.mu.Lock()
 	m.calls++
 	m.mu.Unlock()
@@ -129,9 +129,9 @@ func hasProp(entity handler.RawEntity, key string) bool {
 	return findProp(entity, key) != nil
 }
 
-// defaultResult returns a non-trivial VisionResult for use in tests.
-func defaultResult() *vision.VisionResult {
-	return &vision.VisionResult{
+// defaultResult returns a non-trivial Result for use in tests.
+func defaultResult() *vision.Result {
+	return &vision.Result{
 		Labels:      []string{"cat", "indoor", "animal"},
 		Description: "A cat sitting on a couch",
 		Confidence:  0.92,
@@ -393,7 +393,7 @@ func TestProcessor_ProcessSingle_Keyframe(t *testing.T) {
 	store := newMemStore()
 	seedStore(t, store, "keyframes/video1/frame042/original", 1024)
 
-	result := &vision.VisionResult{
+	result := &vision.Result{
 		Labels:      []string{"car", "road", "outdoor"},
 		Description: "A red car on a highway",
 		Confidence:  0.88,
@@ -428,7 +428,7 @@ func TestProcessor_Process_OCRText(t *testing.T) {
 	store := newMemStore()
 	seedStore(t, store, "images/test/screenshot/original", 512)
 
-	result := &vision.VisionResult{
+	result := &vision.Result{
 		Labels:      []string{"screenshot", "ui"},
 		Description: "A software screenshot showing a login form",
 		Confidence:  0.85,
@@ -452,12 +452,12 @@ func TestProcessor_Process_OCRText(t *testing.T) {
 	}
 }
 
-func TestVisionResult_Empty(t *testing.T) {
+func TestResult_Empty(t *testing.T) {
 	store := newMemStore()
 	seedStore(t, store, "images/test/blank/original", 512)
 
 	// Provider returns a zero-value result (empty labels, empty description, etc.)
-	emptyResult := &vision.VisionResult{
+	emptyResult := &vision.Result{
 		Labels:      []string{},
 		Description: "",
 		Confidence:  0.0,

@@ -52,7 +52,7 @@ type Component struct {
 	logger    *slog.Logger
 	platform  component.PlatformMeta
 
-	handler   *imghandler.ImageHandler
+	handler   *imghandler.Handler
 	sourceCfg *sourceCfg
 	fileStore *filestore.Store
 

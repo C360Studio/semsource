@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,52 @@ type logEntry struct {
 	Sources int    `json:"sources"`
 }
 
+// manifestPayload mirrors the source-manifest response structure.
+type manifestPayload struct {
+	Namespace string           `json:"namespace"`
+	Sources   []manifestSource `json:"sources"`
+	Timestamp string           `json:"timestamp"`
+}
+
+type manifestSource struct {
+	Type         string   `json:"type"`
+	Path         string   `json:"path,omitempty"`
+	Paths        []string `json:"paths,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	URLs         []string `json:"urls,omitempty"`
+	Language     string   `json:"language,omitempty"`
+	Branch       string   `json:"branch,omitempty"`
+	Watch        bool     `json:"watch"`
+	PollInterval string   `json:"poll_interval,omitempty"`
+}
+
+// queryManifestHTTP GETs the source manifest from the ServiceManager HTTP API.
+// Retries for up to 15 seconds to allow the HTTP server and component to start.
+func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/sources", httpPort)
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		var m manifestPayload
+		if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+			t.Fatalf("decode manifest response: %v", err)
+		}
+		return m
+	}
+	t.Fatalf("GET %s did not return 200 within 15s", url)
+	return manifestPayload{}
+}
+
 // entityMessage is the envelope published to graph.ingest.entity.
 type entityMessage struct {
 	Type    string          `json:"type"`
@@ -42,7 +89,7 @@ type entityMessage struct {
 
 // entityPayload is the payload inside the entity message.
 type entityPayload struct {
-	ID     string `json:"id"`
+	ID      string `json:"id"`
 	Triples []struct {
 		Predicate string `json:"predicate"`
 		Object    any    `json:"object"`
@@ -138,11 +185,12 @@ func startNATS(t *testing.T) (natsURL string, cleanup func()) {
 
 // writeConfig writes a semsource.json targeting the repo itself with the given
 // NATS URL for entity store connectivity.
-func writeConfig(t *testing.T, dir string) string {
+func writeConfig(t *testing.T, dir string, httpPort int) string {
 	t.Helper()
 	root := repoRoot(t)
 	cfg := map[string]any{
 		"namespace": "e2etest",
+		"http_port": httpPort,
 		"sources": []map[string]any{
 			{"type": "ast", "path": root, "language": "go", "watch": false},
 			{"type": "docs", "paths": []string{filepath.Join(root, "docs")}, "watch": false},
@@ -182,7 +230,7 @@ func TestE2E_Version(t *testing.T) {
 func TestE2E_Validate(t *testing.T) {
 	binPath := buildBinary(t)
 	workDir := t.TempDir()
-	configPath := writeConfig(t, workDir)
+	configPath := writeConfig(t, workDir, 0)
 
 	cmd := exec.Command(binPath, "validate", "--config", configPath)
 	cmd.Dir = workDir
@@ -200,7 +248,8 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 
 	binPath := buildBinary(t)
 	workDir := t.TempDir()
-	configPath := writeConfig(t, workDir)
+	httpPort := freePort(t)
+	configPath := writeConfig(t, workDir, httpPort)
 
 	// Subscribe to the graph ingest subject BEFORE starting semsource so we
 	// don't miss any messages. Use JetStream consumer for reliable delivery.
@@ -355,12 +404,33 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 		t.Logf("collection timed out with %d entities", len(entities))
 	}
 
+	// Query the source manifest via HTTP while semsource is still running.
+	manifest := queryManifestHTTP(t, httpPort)
+	t.Logf("manifest: namespace=%s, sources=%d", manifest.Namespace, len(manifest.Sources))
+
 	// Stop semsource gracefully.
 	cmd.Process.Signal(os.Interrupt)
 	cmd.Wait()
 	<-logsDone
 
 	// --- Assertions ---
+
+	// 0. Source manifest is correct.
+	if manifest.Namespace != "e2etest" {
+		t.Errorf("manifest namespace = %q, want %q", manifest.Namespace, "e2etest")
+	}
+	if len(manifest.Sources) != 3 {
+		t.Errorf("manifest sources count = %d, want 3 (ast, docs, config)", len(manifest.Sources))
+	}
+	manifestTypes := map[string]bool{}
+	for _, s := range manifest.Sources {
+		manifestTypes[s.Type] = true
+	}
+	for _, want := range []string{"ast", "docs", "config"} {
+		if !manifestTypes[want] {
+			t.Errorf("manifest missing source type %q", want)
+		}
+	}
 
 	// 1. Binary started and produced log output.
 	if len(logs) == 0 {
@@ -370,13 +440,13 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	// 2. Startup log message present.
 	foundStartup := false
 	for _, l := range logs {
-		if l.Msg == "semsource v2 starting" {
+		if l.Msg == "semsource starting" {
 			foundStartup = true
 			break
 		}
 	}
 	if !foundStartup {
-		t.Error("missing 'semsource v2 starting' log entry")
+		t.Error("missing 'semsource starting' log entry")
 		for i, l := range logs {
 			if i < 10 {
 				t.Logf("  log[%d]: %s", i, l.Msg)
@@ -445,11 +515,12 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 
 // writeOSHConfig writes a semsource.json that uses a "repo" meta-source
 // pointing at the Open Sensor Hub osh-core repository.
-func writeOSHConfig(t *testing.T, dir, workspaceDir string) string {
+func writeOSHConfig(t *testing.T, dir, workspaceDir string, httpPort int) string {
 	t.Helper()
 	cfg := map[string]any{
 		"namespace":     "oshtest",
 		"workspace_dir": workspaceDir,
+		"http_port":     httpPort,
 		"sources": []map[string]any{
 			{
 				"type":     "repo",
@@ -494,7 +565,8 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	binPath := buildBinary(t)
 	workDir := t.TempDir()
 	workspaceDir := t.TempDir()
-	configPath := writeOSHConfig(t, workDir, workspaceDir)
+	httpPort := freePort(t)
+	configPath := writeOSHConfig(t, workDir, workspaceDir, httpPort)
 
 	// Subscribe to graph ingest subject BEFORE starting semsource.
 	nc, err := nats.Connect(natsURL)
@@ -665,6 +737,11 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 		t.Logf("collection timed out with %d entities", len(allEntities))
 	}
 
+	// Query the source manifest via HTTP while semsource is still running.
+	// The "repo" meta-source expands to git+ast+docs+config.
+	manifest := queryManifestHTTP(t, httpPort)
+	t.Logf("OSH manifest: namespace=%s, sources=%d", manifest.Namespace, len(manifest.Sources))
+
 	// Stop semsource gracefully.
 	cmd.Process.Signal(os.Interrupt)
 	cmd.Wait()
@@ -673,6 +750,27 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	// =====================================================================
 	// Assertions
 	// =====================================================================
+
+	// Source manifest reflects expanded repo sources.
+	if manifest.Namespace != "oshtest" {
+		t.Errorf("manifest namespace = %q, want %q", manifest.Namespace, "oshtest")
+	}
+	// "repo" expands to 4 sources: git, ast, docs, config.
+	if len(manifest.Sources) != 4 {
+		t.Errorf("manifest sources count = %d, want 4 (git+ast+docs+config from repo expansion)", len(manifest.Sources))
+		for i, s := range manifest.Sources {
+			t.Logf("  manifest source[%d]: type=%s", i, s.Type)
+		}
+	}
+	oshManifestTypes := map[string]bool{}
+	for _, s := range manifest.Sources {
+		oshManifestTypes[s.Type] = true
+	}
+	for _, want := range []string{"git", "ast", "docs", "config"} {
+		if !oshManifestTypes[want] {
+			t.Errorf("OSH manifest missing source type %q", want)
+		}
+	}
 
 	if len(allEntities) == 0 {
 		t.Fatal("no entities received on graph.ingest.entity for OSH repo")
@@ -943,7 +1041,7 @@ func assertTriplePredicate(t *testing.T, e entityPayload, predicate string, want
 func TestE2E_RunFailsGracefullyWithoutNATS(t *testing.T) {
 	binPath := buildBinary(t)
 	workDir := t.TempDir()
-	configPath := writeConfig(t, workDir)
+	configPath := writeConfig(t, workDir, 0)
 
 	// Point at a port where nothing is listening.
 	cmd := exec.Command(binPath, "run",

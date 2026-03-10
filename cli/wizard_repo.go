@@ -10,9 +10,11 @@ func init() {
 
 type repoWizard struct{}
 
-func (w *repoWizard) Name() string        { return "Repository (all-in-one)" }
-func (w *repoWizard) TypeKey() string     { return "repo" }
-func (w *repoWizard) Description() string { return "Clone a git repo and analyze code, docs, and config" }
+func (w *repoWizard) Name() string    { return "Repository (all-in-one)" }
+func (w *repoWizard) TypeKey() string { return "repo" }
+func (w *repoWizard) Description() string {
+	return "Clone a git repo and analyze code, docs, and config"
+}
 func (w *repoWizard) Available() (bool, string) { return true, "" }
 
 func (w *repoWizard) Prompts(term *Term) (*config.SourceEntry, error) {

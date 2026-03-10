@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	cfgfile "github.com/c360studio/semsource/handler/cfgfile"
 	"github.com/c360studio/semsource/handler"
+	cfgfile "github.com/c360studio/semsource/handler/cfgfile"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 

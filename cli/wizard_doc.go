@@ -12,9 +12,9 @@ func init() {
 
 type docWizard struct{}
 
-func (w *docWizard) Name() string        { return "Documentation" }
-func (w *docWizard) TypeKey() string     { return "docs" }
-func (w *docWizard) Description() string { return "markdown, text files" }
+func (w *docWizard) Name() string              { return "Documentation" }
+func (w *docWizard) TypeKey() string           { return "docs" }
+func (w *docWizard) Description() string       { return "markdown, text files" }
 func (w *docWizard) Available() (bool, string) { return true, "" }
 
 func (w *docWizard) Prompts(term *Term) (*config.SourceEntry, error) {

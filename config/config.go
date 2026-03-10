@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // EntityStoreConfig configures persistent graph storage via NATS KV.
@@ -41,6 +42,11 @@ type Config struct {
 	// When empty, media processors operate in metadata-only mode.
 	MediaStoreDir string `json:"media_store_dir,omitempty"`
 
+	// HTTPPort is the port for the ServiceManager HTTP API server.
+	// Can also be set via the SEMSOURCE_HTTP_PORT environment variable.
+	// Defaults to 8080.
+	HTTPPort int `json:"http_port,omitempty"`
+
 	// WebSocketBind is the host:port for the WebSocket output server.
 	// Can also be set via the SEMSOURCE_WS_BIND environment variable.
 	// Defaults to "0.0.0.0:7890".
@@ -75,6 +81,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.WebSocketPath == "" {
 		c.WebSocketPath = "/graph"
+	}
+	// HTTP API port: env var takes precedence, then config, then default.
+	if v := os.Getenv("SEMSOURCE_HTTP_PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			c.HTTPPort = p
+		}
+	}
+	if c.HTTPPort == 0 {
+		c.HTTPPort = 8080
 	}
 }
 

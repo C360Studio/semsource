@@ -80,7 +80,7 @@ func TestFSWatcher_Create(t *testing.T) {
 	if ev.Operation != handler.OperationCreate {
 		t.Errorf("Operation = %q, want %q", ev.Operation, handler.OperationCreate)
 	}
-	// Entities are populated by the handler layer (DocHandler/ConfigHandler),
+	// Entities are populated by the handler layer (doc.Handler/ConfigHandler),
 	// not by FSWatcher itself — FSWatcher emits the path/operation signal only.
 	if ev.Path == "" {
 		t.Error("expected Path to be set in ChangeEvent")

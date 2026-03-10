@@ -186,7 +186,7 @@ func TestVideoHandler_MimeForExt(t *testing.T) {
 		{".mov", "video/quicktime"},
 		{".avi", "video/x-msvideo"},
 		{".mkv", "video/x-matroska"},
-		{".MP4", "video/mp4"},   // case-insensitive
+		{".MP4", "video/mp4"}, // case-insensitive
 		{".unknown", "application/octet-stream"},
 		{"", "application/octet-stream"},
 	}
@@ -358,7 +358,7 @@ func TestVideoHandler_KeyframeMode_FromConfig(t *testing.T) {
 		mode string
 		want string
 	}{
-		{"", "interval"},        // default
+		{"", "interval"}, // default
 		{"interval", "interval"},
 		{"scene", "scene"},
 		{"iframes", "iframes"},
@@ -377,7 +377,7 @@ func TestVideoHandler_KeyframeInterval_FromConfig(t *testing.T) {
 		interval string
 		want     string
 	}{
-		{"", "30s"},    // default
+		{"", "30s"}, // default
 		{"10s", "10s"},
 		{"1m", "1m"},
 		{"90s", "90s"},
@@ -396,7 +396,7 @@ func TestVideoHandler_SceneThreshold_FromConfig(t *testing.T) {
 		threshold float64
 		want      float64
 	}{
-		{0, 0.3},     // default
+		{0, 0.3}, // default
 		{0.5, 0.5},
 		{0.1, 0.1},
 		{0.9, 0.9},
@@ -415,7 +415,7 @@ func TestVideoHandler_IntervalSeconds(t *testing.T) {
 		input string
 		want  int
 	}{
-		{"", 30},      // default
+		{"", 30}, // default
 		{"10s", 10},
 		{"1m", 60},
 		{"90s", 90},

@@ -1,5 +1,5 @@
 // Package fswatcher provides a shared fsnotify-based file watcher for use by
-// DocHandler and ConfigHandler. It is adapted from the DocWatcher implementation
+// doc.Handler and ConfigHandler. It is adapted from the DocWatcher implementation
 // in semspec's source-ingester package with these changes:
 //   - WatchEvent/WatchOperation replaced with handler.ChangeEvent/ChangeOperation
 //   - parser.ContentHash replaced with a local crypto/sha256 helper
@@ -351,7 +351,7 @@ func (w *FSWatcher) processOne(path string, op fsnotify.Op) {
 	w.sendEvent(handler.ChangeEvent{
 		Path:      path,
 		Operation: op2,
-		// Entities are populated by the handler layer (DocHandler/ConfigHandler)
+		// Entities are populated by the handler layer (doc.Handler/ConfigHandler)
 		// after reading and parsing the file content.
 	})
 }

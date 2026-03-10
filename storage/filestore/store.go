@@ -98,7 +98,7 @@ func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 	committed := false
 	defer func() {
 		if !committed {
-			tmp.Close()       //nolint:errcheck
+			tmp.Close()        //nolint:errcheck
 			os.Remove(tmpName) //nolint:errcheck
 		}
 	}()

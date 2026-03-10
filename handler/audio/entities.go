@@ -11,9 +11,9 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// AudioEntity is a fully-typed audio entity that produces triples using
+// Entity is a fully-typed audio entity that produces triples using
 // canonical vocabulary predicates, bypassing the normalizer entirely.
-type AudioEntity struct {
+type Entity struct {
 	ID         string
 	FilePath   string
 	MimeType   string
@@ -32,8 +32,8 @@ type AudioEntity struct {
 	IndexedAt  time.Time
 }
 
-// Triples converts the AudioEntity to a slice of message.Triple for graph storage.
-func (e *AudioEntity) Triples() []message.Triple {
+// Triples converts the Entity to a slice of message.Triple for graph storage.
+func (e *Entity) Triples() []message.Triple {
 	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	return []message.Triple{
@@ -53,8 +53,8 @@ func (e *AudioEntity) Triples() []message.Triple {
 	}
 }
 
-// EntityState converts the AudioEntity to a handler.EntityState for graph publication.
-func (e *AudioEntity) EntityState() *handler.EntityState {
+// EntityState converts the Entity to a handler.EntityState for graph publication.
+func (e *Entity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
@@ -63,10 +63,10 @@ func (e *AudioEntity) EntityState() *handler.EntityState {
 }
 
 // audioEntityFromRaw converts a RawEntity produced by ingestFile into a typed
-// AudioEntity using canonical vocabulary predicates. The system slug is taken
+// Entity using canonical vocabulary predicates. The system slug is taken
 // from RawEntity.System (already set by ingestFile via slugify(root)).
-func audioEntityFromRaw(org string, r handler.RawEntity, now time.Time) *AudioEntity {
-	ae := &AudioEntity{
+func audioEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity {
+	ae := &Entity{
 		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "audio", r.Instance),
 		System:    r.System,
 		Org:       org,
@@ -115,7 +115,7 @@ func audioEntityFromRaw(org string, r handler.RawEntity, now time.Time) *AudioEn
 // and returns fully-typed EntityState values with vocabulary-predicate triples —
 // bypassing the normalizer entirely. The org parameter is the organisation
 // namespace used in the 6-part entity ID.
-func (h *AudioHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
 	rawEntities, err := h.Ingest(ctx, cfg)
 	if err != nil {
 		return nil, err

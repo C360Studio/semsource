@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	cfgfile "github.com/c360studio/semsource/handler/cfgfile"
 	"github.com/c360studio/semsource/handler"
+	cfgfile "github.com/c360studio/semsource/handler/cfgfile"
 )
 
 // stubSourceConfig adapts test values to handler.SourceConfig.
@@ -17,15 +17,15 @@ type stubSourceConfig struct {
 	watch      bool
 }
 
-func (s *stubSourceConfig) GetType() string            { return s.sourceType }
-func (s *stubSourceConfig) GetPath() string            { return s.path }
-func (s *stubSourceConfig) GetPaths() []string         { return nil }
-func (s *stubSourceConfig) GetURL() string             { return "" }
-func (s *stubSourceConfig) GetBranch() string          { return "" }
-func (s *stubSourceConfig) IsWatchEnabled() bool       { return s.watch }
-func (s *stubSourceConfig) GetKeyframeMode() string    { return "" }
+func (s *stubSourceConfig) GetType() string             { return s.sourceType }
+func (s *stubSourceConfig) GetPath() string             { return s.path }
+func (s *stubSourceConfig) GetPaths() []string          { return nil }
+func (s *stubSourceConfig) GetURL() string              { return "" }
+func (s *stubSourceConfig) GetBranch() string           { return "" }
+func (s *stubSourceConfig) IsWatchEnabled() bool        { return s.watch }
+func (s *stubSourceConfig) GetKeyframeMode() string     { return "" }
 func (s *stubSourceConfig) GetKeyframeInterval() string { return "" }
-func (s *stubSourceConfig) GetSceneThreshold() float64 { return 0 }
+func (s *stubSourceConfig) GetSceneThreshold() float64  { return 0 }
 
 // stubMultiPathSourceConfig is like stubSourceConfig but returns multiple paths
 // from GetPaths() and returns "" from GetPath(), exercising the multi-path code path.

@@ -3,8 +3,8 @@ package ast
 import (
 	"time"
 
-	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/handler"
+	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
 // translateWatchEvent converts a WatchEvent into a handler.ChangeEvent.

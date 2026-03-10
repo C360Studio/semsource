@@ -52,7 +52,7 @@ type Component struct {
 	logger    *slog.Logger
 	platform  component.PlatformMeta
 
-	handler   *audiohandler.AudioHandler
+	handler   *audiohandler.Handler
 	sourceCfg *sourceCfg
 	fileStore *filestore.Store
 

@@ -45,12 +45,12 @@ func DetectProject(dir string) *ProjectInfo {
 
 	// Language detection from manifest files.
 	manifests := map[string]string{
-		"go.mod":       "go",
-		"package.json": "typescript",
-		"Cargo.toml":   "rust",
-		"pom.xml":      "java",
-		"build.gradle": "java",
-		"pyproject.toml": "python",
+		"go.mod":           "go",
+		"package.json":     "typescript",
+		"Cargo.toml":       "rust",
+		"pom.xml":          "java",
+		"build.gradle":     "java",
+		"pyproject.toml":   "python",
 		"requirements.txt": "python",
 	}
 	for file, lang := range manifests {

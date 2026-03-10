@@ -42,7 +42,7 @@ func DefaultConfig() Config {
 // It is safe for concurrent use — Process and ProcessSingle may be called
 // from multiple goroutines simultaneously.
 type Processor struct {
-	provider VisionProvider
+	provider Provider
 	store    storage.Store
 	cfg      Config
 	logger   *slog.Logger
@@ -63,7 +63,7 @@ func WithLogger(l *slog.Logger) Option {
 
 // New creates a VisionProcessor backed by provider and store.
 // Functional options are applied in order after the defaults are set.
-func New(provider VisionProvider, store storage.Store, opts ...Option) *Processor {
+func New(provider Provider, store storage.Store, opts ...Option) *Processor {
 	p := &Processor{
 		provider: provider,
 		store:    store,
@@ -158,7 +158,7 @@ func (p *Processor) ProcessSingle(ctx context.Context, entity handler.RawEntity)
 
 // applyResult appends vision triples and properties to entity based on result.
 // It never modifies the original entity's slice headers — a fresh copy is built.
-func (p *Processor) applyResult(entity handler.RawEntity, result *VisionResult) handler.RawEntity {
+func (p *Processor) applyResult(entity handler.RawEntity, result *Result) handler.RawEntity {
 	// Encode labels as a JSON array string.
 	labelsJSON, err := json.Marshal(result.Labels)
 	if err != nil {

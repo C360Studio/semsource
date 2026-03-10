@@ -17,8 +17,8 @@ package vision
 
 import "context"
 
-// VisionResult holds the output from a vision model analysis.
-type VisionResult struct {
+// Result holds the output from a vision model analysis.
+type Result struct {
 	// Labels are the ML-detected labels or tags for the image.
 	Labels []string
 
@@ -56,11 +56,11 @@ type BoundingBox struct {
 	Height float64 `json:"height"`
 }
 
-// VisionProvider is the interface for pluggable vision model backends.
+// Provider is the interface for pluggable vision model backends.
 // Implementations might wrap Claude Vision, OpenAI Vision, local models, etc.
-type VisionProvider interface {
+type Provider interface {
 	// Analyze sends image data to the vision model and returns the result.
 	// mimeType indicates the binary format of data (e.g. "image/png").
 	// Implementations must honour context cancellation.
-	Analyze(ctx context.Context, data []byte, mimeType string) (*VisionResult, error)
+	Analyze(ctx context.Context, data []byte, mimeType string) (*Result, error)
 }

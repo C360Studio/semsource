@@ -16,7 +16,7 @@ import (
 // changed file. Events from all watchers are fanned into the one output channel.
 //
 // Returns (nil, nil) when cfg.IsWatchEnabled() is false — callers must check.
-func (h *VideoHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
+func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan handler.ChangeEvent, error) {
 	if !cfg.IsWatchEnabled() {
 		return nil, nil
 	}
@@ -100,7 +100,7 @@ func (h *VideoHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-c
 // enrichEvent re-processes the changed file and populates ev.Entities.
 // When h.org is set it also populates ev.EntityStates for the normalizer-free
 // processor path. For delete events the file is gone, so both slices remain empty.
-func (h *VideoHandler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string, cfg handler.SourceConfig) handler.ChangeEvent {
+func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string, cfg handler.SourceConfig) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
 		return ev

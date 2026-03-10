@@ -12,9 +12,9 @@ func init() {
 
 type astWizard struct{}
 
-func (w *astWizard) Name() string        { return "Code (AST)" }
-func (w *astWizard) TypeKey() string     { return "ast" }
-func (w *astWizard) Description() string { return "functions, types, imports" }
+func (w *astWizard) Name() string              { return "Code (AST)" }
+func (w *astWizard) TypeKey() string           { return "ast" }
+func (w *astWizard) Description() string       { return "functions, types, imports" }
 func (w *astWizard) Available() (bool, string) { return true, "" }
 
 func (w *astWizard) Prompts(term *Term) (*config.SourceEntry, error) {
