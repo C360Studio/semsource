@@ -12,8 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	// Register EntityPayload in the semstreams payload registry.
+	// Register payloads in the semstreams payload registry.
 	_ "github.com/c360studio/semsource/graph"
+	_ "github.com/c360studio/semsource/processor/source-manifest"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
@@ -23,6 +24,7 @@ import (
 	docsource "github.com/c360studio/semsource/processor/doc-source"
 	gitsource "github.com/c360studio/semsource/processor/git-source"
 	imagesource "github.com/c360studio/semsource/processor/image-source"
+	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 	urlsource "github.com/c360studio/semsource/processor/url-source"
 	videosource "github.com/c360studio/semsource/processor/video-source"
 	"github.com/c360studio/semsource/storage/filestore"
@@ -148,6 +150,9 @@ func runV2Cmd(args []string) error {
 	}
 	if err := filestore.Register(componentRegistry); err != nil {
 		return fmt.Errorf("register filestore component: %w", err)
+	}
+	if err := sourcemanifest.Register(componentRegistry); err != nil {
+		return fmt.Errorf("register source-manifest component: %w", err)
 	}
 
 	factories := componentRegistry.ListFactories()
@@ -382,6 +387,50 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		}
 	}
 
+	// --- Source manifest ---
+	// Publishes the resolved source list to the GRAPH stream at startup and
+	// serves on-demand queries via graph.query.sources.
+	manifestSources := make([]sourcemanifest.ManifestSource, 0, len(cfg.Sources))
+	for _, src := range cfg.Sources {
+		manifestSources = append(manifestSources, sourcemanifest.ManifestSource{
+			Type:         src.Type,
+			Path:         src.Path,
+			Paths:        src.Paths,
+			URL:          src.URL,
+			URLs:         src.URLs,
+			Language:     src.Language,
+			Branch:       src.Branch,
+			Watch:        src.Watch,
+			PollInterval: src.PollInterval,
+		})
+	}
+	manifestCfg := map[string]any{
+		"ports": map[string]any{
+			"outputs": []map[string]any{
+				{
+					"name":        "graph.ingest",
+					"type":        "jetstream",
+					"subject":     "graph.ingest.manifest",
+					"stream_name": "GRAPH",
+					"required":    true,
+					"description": "Source manifest broadcast for downstream consumers",
+				},
+			},
+		},
+		"namespace": org,
+		"sources":   manifestSources,
+	}
+	rawManifestCfg, err := json.Marshal(manifestCfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal source-manifest config: %w", err)
+	}
+	components["source-manifest"] = types.ComponentConfig{
+		Name:    "source-manifest",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  rawManifestCfg,
+	}
+
 	// --- Graph subsystem components ---
 	// These are built-in semstreams components (registered by componentregistry.Register).
 	// They form the read path: ingest → index → query → gateway.
@@ -535,7 +584,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	// Ensure the GRAPH stream is defined explicitly so EnsureStreams creates it.
 	streams := semconfig.StreamConfigs{
 		"GRAPH": semconfig.StreamConfig{
-			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch"},
+			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest"},
 			Storage:  "memory",
 			MaxBytes: 256 * 1024 * 1024, // 256MB cap — prevents runaway memory if consumers lag
 			MaxAge:   "1h",
