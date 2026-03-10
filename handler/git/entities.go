@@ -72,9 +72,11 @@ func BuildBranchEntity(branchName, headSHA, system string) handler.RawEntity {
 // sanitizeInstance makes a string safe for use as an entity instance field.
 // Replaces characters that would be invalid in a NATS KV key segment.
 func sanitizeInstance(s string) string {
-	// Replace @, /, spaces with hyphens.
+	// Replace characters that would break the 6-part dot-delimited entity ID
+	// or are invalid in NATS KV keys.
 	r := strings.NewReplacer(
 		"@", "-at-",
+		".", "-",
 		"/", "-",
 		" ", "-",
 		"\\", "-",
