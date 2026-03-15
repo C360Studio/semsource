@@ -59,7 +59,9 @@ func runCmd(args []string) error {
 	logger := buildLogger(*logLevel)
 	slog.SetDefault(logger)
 
-	semsourceCfg, err := loadAndExpandConfig(*configPath)
+	ctx := context.Background()
+
+	semsourceCfg, expandResult, err := loadAndExpandConfig(ctx, *configPath)
 	if err != nil {
 		return err
 	}
@@ -68,9 +70,8 @@ func runCmd(args []string) error {
 		"version", version,
 		"namespace", semsourceCfg.Namespace,
 		"sources", len(semsourceCfg.Sources),
+		"branch_watchers", len(expandResult.Watchers),
 	)
-
-	ctx := context.Background()
 
 	natsAddr := resolveNATSURL(*natsURL, semsourceCfg)
 	nc, err := connectNATS(ctx, natsAddr, logger)
@@ -132,17 +133,17 @@ func runCmd(args []string) error {
 
 // loadAndExpandConfig loads the semsource config and expands "repo" meta-sources
 // into their component sources (git, ast, docs, config).
-func loadAndExpandConfig(path string) (*config.Config, error) {
+func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *config.ExpandResult, error) {
 	cfg, err := config.LoadConfig(path)
 	if err != nil {
-		return nil, fmt.Errorf("load config %q: %w", path, err)
+		return nil, nil, fmt.Errorf("load config %q: %w", path, err)
 	}
-	expanded, err := config.ExpandRepoSources(cfg.Sources, cfg.WorkspaceDir)
+	result, err := config.ExpandRepoSources(ctx, cfg.Sources, cfg.WorkspaceDir)
 	if err != nil {
-		return nil, fmt.Errorf("expand repo sources: %w", err)
+		return nil, nil, fmt.Errorf("expand repo sources: %w", err)
 	}
-	cfg.Sources = expanded
-	return cfg, nil
+	cfg.Sources = result.Sources
+	return cfg, result, nil
 }
 
 // registerComponentFactories registers all semstreams built-in and semsource
@@ -714,7 +715,8 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 	if slug == "" {
 		slug = fmt.Sprintf("source-%d", index)
 	}
-	instanceName := fmt.Sprintf("ast-source-%s", slug)
+	project := entityid.BranchScopedSlug(slug, src.BranchSlug)
+	instanceName := fmt.Sprintf("ast-source-%s", project)
 
 	compCfg := map[string]any{
 		"ports": sourceOutputPorts(),
@@ -722,7 +724,7 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 			{
 				"path":      path,
 				"org":       org,
-				"project":   slug,
+				"project":   project,
 				"languages": []string{lang},
 			},
 		},
@@ -747,7 +749,8 @@ func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg
 	if slug == "" {
 		slug = fmt.Sprintf("git-%d", index)
 	}
-	instanceName := fmt.Sprintf("git-source-%s", slug)
+	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
+	instanceName := fmt.Sprintf("git-source-%s", scopedSlug)
 
 	branch := src.Branch
 	if branch == "" {
@@ -764,6 +767,7 @@ func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg
 		"watch_enabled": src.Watch,
 		"workspace_dir": cfg.WorkspaceDir,
 		"git_token":     cfg.GitToken,
+		"branch_slug":   src.BranchSlug,
 	}
 
 	return instanceName, compCfg, nil
@@ -782,7 +786,8 @@ func docSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 			slug = fmt.Sprintf("docs-%d", index)
 		}
 	}
-	return fmt.Sprintf("doc-source-%s", slug), map[string]any{
+	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
+	return fmt.Sprintf("doc-source-%s", scopedSlug), map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,
@@ -803,7 +808,8 @@ func cfgfileSourceComponentConfig(src config.SourceEntry, org string, index int)
 			slug = fmt.Sprintf("config-%d", index)
 		}
 	}
-	return fmt.Sprintf("cfgfile-source-%s", slug), map[string]any{
+	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
+	return fmt.Sprintf("cfgfile-source-%s", scopedSlug), map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,

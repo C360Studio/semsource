@@ -240,3 +240,29 @@ func TestResolveOrg(t *testing.T) {
 		t.Errorf("ResolveOrg(empty, acme) = %q, want acme", got)
 	}
 }
+
+func TestBranchScopedSlug(t *testing.T) {
+	tests := []struct {
+		systemSlug string
+		branchSlug string
+		want       string
+	}{
+		{"github-com-acme-repo", "", "github-com-acme-repo"},
+		{"github-com-acme-repo", "main", "github-com-acme-repo~main"},
+		{"github-com-acme-repo", "scenario-auth-flow", "github-com-acme-repo~scenario-auth-flow"},
+		{"my-repo", "feature-123", "my-repo~feature-123"},
+	}
+	for _, tt := range tests {
+		got := entityid.BranchScopedSlug(tt.systemSlug, tt.branchSlug)
+		if got != tt.want {
+			t.Errorf("BranchScopedSlug(%q, %q) = %q, want %q",
+				tt.systemSlug, tt.branchSlug, got, tt.want)
+		}
+		// Tilde-separated IDs must be valid NATS KV keys.
+		if tt.want != "" {
+			if err := entityid.ValidateNATSKVKey(tt.want); err != nil {
+				t.Errorf("BranchScopedSlug result %q is not a valid NATS KV key: %v", tt.want, err)
+			}
+		}
+	}
+}

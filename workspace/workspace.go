@@ -199,6 +199,112 @@ func validateBranchName(branch string) error {
 	return nil
 }
 
+// BranchSlug converts a branch name to a filesystem-safe slug.
+// Example: "scenario/auth-flow" → "scenario-auth-flow"
+func BranchSlug(branch string) string {
+	return slugify(branch)
+}
+
+// WorktreeInfo describes a git worktree.
+type WorktreeInfo struct {
+	Path   string // absolute filesystem path
+	Branch string // branch name (empty for detached HEAD)
+}
+
+// ListBranches returns all local branch names in the repository at repoPath.
+func ListBranches(ctx context.Context, repoPath string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	cmd.Dir = repoPath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("workspace: git for-each-ref: %w\n%s", err, string(out))
+	}
+	var branches []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			branches = append(branches, line)
+		}
+	}
+	return branches, nil
+}
+
+// ListWorktrees returns all worktrees for the repository at repoPath.
+func ListWorktrees(ctx context.Context, repoPath string) ([]WorktreeInfo, error) {
+	cmd := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
+	cmd.Dir = repoPath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("workspace: git worktree list: %w\n%s", err, string(out))
+	}
+
+	var worktrees []WorktreeInfo
+	var current WorktreeInfo
+	for _, line := range strings.Split(string(out), "\n") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			current = WorktreeInfo{Path: strings.TrimPrefix(line, "worktree ")}
+		case strings.HasPrefix(line, "branch "):
+			ref := strings.TrimPrefix(line, "branch ")
+			current.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		case line == "":
+			if current.Path != "" {
+				worktrees = append(worktrees, current)
+				current = WorktreeInfo{}
+			}
+		}
+	}
+	// Flush final block if output did not end with a blank line.
+	if current.Path != "" {
+		worktrees = append(worktrees, current)
+	}
+	return worktrees, nil
+}
+
+// MatchBranches returns branches that match any of the given glob patterns.
+// Uses filepath.Match semantics for each pattern.
+func MatchBranches(branches []string, patterns []string) []string {
+	var matched []string
+	for _, branch := range branches {
+		for _, pattern := range patterns {
+			ok, err := filepath.Match(pattern, branch)
+			if err == nil && ok {
+				matched = append(matched, branch)
+				break
+			}
+		}
+	}
+	return matched
+}
+
+// EnsureWorktree ensures a git worktree exists for the given branch.
+// If a worktree for the branch already exists (created externally or by a
+// previous call), returns its path. Otherwise creates one at
+// worktreeDir/{BranchSlug(branch)}.
+// repoPath is the path to the main repository (or any existing worktree).
+func EnsureWorktree(ctx context.Context, repoPath, branch, worktreeDir string) (string, error) {
+	if err := validateBranchName(branch); err != nil {
+		return "", err
+	}
+
+	worktrees, err := ListWorktrees(ctx, repoPath)
+	if err != nil {
+		return "", err
+	}
+	for _, wt := range worktrees {
+		if wt.Branch == branch {
+			return wt.Path, nil
+		}
+	}
+
+	dest := filepath.Join(worktreeDir, BranchSlug(branch))
+	cmd := exec.CommandContext(ctx, "git", "worktree", "add", dest, branch)
+	cmd.Dir = repoPath
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("workspace: git worktree add: %w\n%s", err, string(out))
+	}
+	return dest, nil
+}
+
 // slugify converts an arbitrary string into a lowercase, hyphen-separated
 // filesystem-safe identifier. Consecutive hyphens are collapsed, and leading
 // or trailing hyphens are stripped.

@@ -46,6 +46,25 @@ type SourceEntry struct {
 	// Must be parseable as a Go time.Duration.
 	PollInterval string `json:"poll_interval,omitempty"`
 
+	// Branches is a list of branch name patterns to track in multi-branch mode.
+	// Supports glob patterns: ["*"], ["main", "scenario/*"].
+	// When empty, single-branch mode is used (tracks Branch field only).
+	// Only applicable to "repo" and "git" source types.
+	Branches []string `json:"branches,omitempty"`
+
+	// BranchPollInterval is how often to check for new branches.
+	// Must be parseable as a Go time.Duration (e.g., "15s"). Default: "15s".
+	// Only used when Branches is set.
+	BranchPollInterval string `json:"branch_poll_interval,omitempty"`
+
+	// MaxBranches is the safety cap on concurrent branch tracking.
+	// Default: 50. Only used when Branches is set.
+	MaxBranches int `json:"max_branches,omitempty"`
+
+	// BranchSlug is set internally by multi-branch expansion to scope
+	// entity IDs per branch. Not user-configurable.
+	BranchSlug string `json:"-"`
+
 	// Watch enables continuous file-system or network watching for this source.
 	Watch bool `json:"watch,omitempty"`
 
@@ -91,8 +110,11 @@ func (s SourceEntry) Validate() error {
 			return fmt.Errorf("source type %q: url is required", s.Type)
 		}
 	case "repo":
-		if s.URL == "" {
-			return fmt.Errorf("source type %q: url is required", s.Type)
+		if s.URL == "" && s.Path == "" {
+			return fmt.Errorf("source type %q: url or path is required", s.Type)
+		}
+		if len(s.Branches) > 0 && s.Branch != "" {
+			return fmt.Errorf("source type %q: cannot set both branch and branches", s.Type)
 		}
 	case "ast":
 		if s.Path == "" {

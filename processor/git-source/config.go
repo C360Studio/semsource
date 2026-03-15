@@ -50,6 +50,10 @@ type Config struct {
 	// 0 means unlimited (default).
 	MaxCommits int `json:"max_commits" schema:"type:int,description:Maximum commits to ingest per run (0 for unlimited),category:advanced,default:0"`
 
+	// BranchSlug is set by multi-branch expansion to scope entity IDs per branch.
+	// When non-empty, the system slug in entity IDs includes the branch qualifier.
+	BranchSlug string `json:"branch_slug,omitempty" schema:"type:string,description:Branch slug for multi-branch entity ID scoping,category:advanced"`
+
 	// StreamName is the JetStream stream name for publishing entities.
 	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
 }

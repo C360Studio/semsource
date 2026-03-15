@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"testing"
 )
 
@@ -8,10 +9,11 @@ func TestExpandRepoSources_ExpandsSingleRepo(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo", URL: "https://github.com/opensensorhub/osh-core", Language: "java", Watch: true, Branch: "master"},
 	}
-	expanded, err := ExpandRepoSources(sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	expanded := result.Sources
 	if len(expanded) != 4 {
 		t.Fatalf("expected 4 expanded sources, got %d", len(expanded))
 	}
@@ -49,6 +51,10 @@ func TestExpandRepoSources_ExpandsSingleRepo(t *testing.T) {
 			t.Errorf("expanded[%d].Watch = false, want true", i)
 		}
 	}
+	// No branch watchers for single-branch mode
+	if len(result.Watchers) != 0 {
+		t.Errorf("expected 0 watchers, got %d", len(result.Watchers))
+	}
 }
 
 func TestExpandRepoSources_PreservesNonRepoSources(t *testing.T) {
@@ -56,10 +62,11 @@ func TestExpandRepoSources_PreservesNonRepoSources(t *testing.T) {
 		{Type: "ast", Path: "/some/path"},
 		{Type: "git", URL: "https://example.com/repo"},
 	}
-	expanded, err := ExpandRepoSources(sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	expanded := result.Sources
 	if len(expanded) != 2 {
 		t.Fatalf("expected 2 sources, got %d", len(expanded))
 	}
@@ -74,10 +81,11 @@ func TestExpandRepoSources_MixedSources(t *testing.T) {
 		{Type: "repo", URL: "https://github.com/example/repo"},
 		{Type: "ast", Path: "."},
 	}
-	expanded, err := ExpandRepoSources(sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	expanded := result.Sources
 	// 1 (url) + 4 (repo expanded) + 1 (ast) = 6
 	if len(expanded) != 6 {
 		t.Fatalf("expected 6 sources, got %d", len(expanded))
@@ -93,13 +101,13 @@ func TestExpandRepoSources_MixedSources(t *testing.T) {
 	}
 }
 
-func TestExpandRepoSources_RequiresURL(t *testing.T) {
+func TestExpandRepoSources_RequiresURLOrPath(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo"},
 	}
-	_, err := ExpandRepoSources(sources, "/tmp/workspace")
+	_, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err == nil {
-		t.Fatal("expected error for repo without URL")
+		t.Fatal("expected error for repo without URL or path")
 	}
 }
 
@@ -107,12 +115,11 @@ func TestExpandRepoSources_LanguagePropagation(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo", URL: "https://github.com/example/repo", Language: "python"},
 	}
-	expanded, err := ExpandRepoSources(sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Find the ast entry
-	for _, s := range expanded {
+	for _, s := range result.Sources {
 		if s.Type == "ast" {
 			if s.Language != "python" {
 				t.Errorf("ast language = %q, want python", s.Language)
@@ -121,4 +128,24 @@ func TestExpandRepoSources_LanguagePropagation(t *testing.T) {
 		}
 	}
 	t.Error("no ast entry found in expanded sources")
+}
+
+func TestExpandRepoSources_LocalRepoPath(t *testing.T) {
+	sources := []SourceEntry{
+		{Type: "repo", Path: "/home/user/projects/my-app", Watch: true},
+	}
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expanded := result.Sources
+	if len(expanded) != 4 {
+		t.Fatalf("expected 4 expanded sources, got %d", len(expanded))
+	}
+	if expanded[0].Path != "/home/user/projects/my-app" {
+		t.Errorf("git path = %q, want /home/user/projects/my-app", expanded[0].Path)
+	}
+	if expanded[1].Path != "/home/user/projects/my-app" {
+		t.Errorf("ast path = %q, want /home/user/projects/my-app", expanded[1].Path)
+	}
 }

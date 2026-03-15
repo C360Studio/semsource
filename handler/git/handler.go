@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/workspace"
 )
@@ -46,6 +47,10 @@ type Config struct {
 	// Org is the organisation namespace used when building typed EntityState values
 	// via IngestEntityStates. Required for the git-source processor's normalizer-free path.
 	Org string
+
+	// BranchSlug, when non-empty, scopes entity IDs to a specific branch.
+	// Used in multi-branch mode to prevent entity ID collisions across branches.
+	BranchSlug string
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -303,10 +308,13 @@ func (h *Handler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig)
 // entity IDs remain stable across machines and clone locations.
 // Falls back to the local path when no URL is available.
 func (h *Handler) systemSlug(cfg handler.SourceConfig) string {
+	var slug string
 	if u := cfg.GetURL(); u != "" {
-		return workspace.URLToSlug(u)
+		slug = workspace.URLToSlug(u)
+	} else {
+		slug = repoSlug(cfg.GetPath())
 	}
-	return repoSlug(cfg.GetPath())
+	return entityid.BranchScopedSlug(slug, h.cfg.BranchSlug)
 }
 
 // --------------------------------------------------------------------------

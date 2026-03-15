@@ -94,6 +94,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		WorkspaceDir: config.WorkspaceDir,
 		Token:        config.GitToken,
 		Org:          config.Org,
+		BranchSlug:   config.BranchSlug,
 	})
 
 	watchEnabled := config.WatchEnabled == nil || *config.WatchEnabled

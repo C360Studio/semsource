@@ -76,6 +76,23 @@ func SystemSlug(canonicalPath string) string {
 	return slug
 }
 
+// BranchScopedSlug appends a branch qualifier to a system slug using tilde
+// separation. Returns the unmodified slug when branchSlug is empty
+// (single-branch mode, backward compatible).
+//
+// Example:
+//
+//	BranchScopedSlug("github-com-acme-repo", "scenario-auth-flow")
+//	  → "github-com-acme-repo~scenario-auth-flow"
+//	BranchScopedSlug("github-com-acme-repo", "")
+//	  → "github-com-acme-repo"
+func BranchScopedSlug(systemSlug, branchSlug string) string {
+	if branchSlug == "" {
+		return systemSlug
+	}
+	return systemSlug + "~" + branchSlug
+}
+
 // CanonicalizeURL normalizes a URL for use in deterministic entity ID construction.
 // Rules applied:
 //   - Lowercase scheme and host
