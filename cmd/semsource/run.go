@@ -29,6 +29,7 @@ import (
 	urlsource "github.com/c360studio/semsource/processor/url-source"
 	videosource "github.com/c360studio/semsource/processor/video-source"
 	"github.com/c360studio/semsource/storage/filestore"
+	"github.com/c360studio/semsource/workspace"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	semconfig "github.com/c360studio/semstreams/config"
@@ -73,23 +74,11 @@ func runCmd(args []string) error {
 		"branch_watchers", len(expandResult.Watchers),
 	)
 
-	natsAddr := resolveNATSURL(*natsURL, semsourceCfg)
-	nc, err := connectNATS(ctx, natsAddr, logger)
+	nc, ssCfg, err := setupNATS(ctx, *natsURL, semsourceCfg, logger)
 	if err != nil {
 		return err
 	}
 	defer nc.Close(context.Background())
-
-	ssCfg, err := buildSemstreamsConfig(semsourceCfg, semsourceCfg.Namespace)
-	if err != nil {
-		return fmt.Errorf("build semstreams config: %w", err)
-	}
-
-	streamsManager := semconfig.NewStreamsManager(nc, logger)
-	if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
-		return fmt.Errorf("ensure JetStream streams: %w", err)
-	}
-	logger.Info("JetStream streams ready")
 
 	configMgr, err := semconfig.NewConfigManager(ssCfg, nc, logger)
 	if err != nil {
@@ -118,6 +107,8 @@ func runCmd(args []string) error {
 		return fmt.Errorf("start services: %w", err)
 	}
 
+	startBranchWatchers(signalCtx, expandResult.Watchers, semsourceCfg, configMgr, logger)
+
 	logger.Info("semsource running — waiting for shutdown signal")
 	<-signalCtx.Done()
 	logger.Info("shutdown signal received")
@@ -129,6 +120,30 @@ func runCmd(args []string) error {
 
 	logger.Info("semsource stopped")
 	return nil
+}
+
+// setupNATS connects to NATS and ensures JetStream streams exist.
+func setupNATS(ctx context.Context, natsFlag string, cfg *config.Config, logger *slog.Logger) (*natsclient.Client, *semconfig.Config, error) {
+	natsAddr := resolveNATSURL(natsFlag, cfg)
+	nc, err := connectNATS(ctx, natsAddr, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ssCfg, err := buildSemstreamsConfig(cfg, cfg.Namespace)
+	if err != nil {
+		nc.Close(context.Background())
+		return nil, nil, fmt.Errorf("build semstreams config: %w", err)
+	}
+
+	streamsManager := semconfig.NewStreamsManager(nc, logger)
+	if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
+		nc.Close(context.Background())
+		return nil, nil, fmt.Errorf("ensure JetStream streams: %w", err)
+	}
+	logger.Info("JetStream streams ready")
+
+	return nc, ssCfg, nil
 }
 
 // loadAndExpandConfig loads the semsource config and expands "repo" meta-sources
@@ -865,4 +880,162 @@ func mediaSourceComponentConfig(src config.SourceEntry, org string, index int, c
 	}
 
 	return instanceName, compCfg
+}
+
+// startBranchWatchers starts a poll goroutine for each multi-branch repo.
+// When new branches are discovered, component configs are pushed to the
+// ConfigManager's KV store, which triggers the ServiceManager to create
+// and start the corresponding components reactively.
+func startBranchWatchers(
+	ctx context.Context,
+	watchers []config.BranchWatcherRef,
+	cfg *config.Config,
+	configMgr *semconfig.Manager,
+	logger *slog.Logger,
+) {
+	for _, ref := range watchers {
+		bw := workspace.NewBranchWatcher(workspace.BranchWatcherConfig{
+			RepoPath:     ref.RepoPath,
+			Patterns:     ref.Patterns,
+			WorktreeBase: ref.WorktreeBase,
+			MaxBranches:  ref.MaxBranches,
+			Logger:       logger,
+		})
+
+		interval := parseBranchPollInterval(ref.BranchPollInterval)
+		logger.Info("starting branch watcher",
+			"repo", ref.RepoPath,
+			"patterns", ref.Patterns,
+			"interval", interval)
+
+		go bw.Run(ctx, interval, func(added []workspace.BranchState, removed []string) {
+			for _, bs := range added {
+				logger.Info("branch discovered",
+					"branch", bs.Branch,
+					"worktree", bs.WorktreePath)
+				publishBranchComponents(ctx, bs, ref, cfg, configMgr, logger)
+			}
+			for _, branch := range removed {
+				logger.Info("branch removed", "branch", branch)
+				removeBranchComponents(ctx, branch, ref, configMgr, logger)
+			}
+		})
+	}
+}
+
+// publishBranchComponents pushes 4 component configs (git, ast, doc, config)
+// for a discovered branch to the ConfigManager KV store.
+func publishBranchComponents(
+	ctx context.Context,
+	bs workspace.BranchState,
+	ref config.BranchWatcherRef,
+	cfg *config.Config,
+	configMgr *semconfig.Manager,
+	logger *slog.Logger,
+) {
+	src := config.SourceEntry{
+		URL:        "", // local repo
+		Path:       bs.WorktreePath,
+		Branch:     bs.Branch,
+		Watch:      ref.Watch,
+		Language:   ref.Language,
+		BranchSlug: bs.Slug,
+	}
+
+	componentConfigs := buildBranchComponentConfigs(src, cfg.Namespace, cfg)
+	for name, compCfg := range componentConfigs {
+		if err := configMgr.PutComponentToKV(ctx, name, compCfg); err != nil {
+			logger.Warn("failed to publish branch component config",
+				"component", name,
+				"branch", bs.Branch,
+				"error", err)
+		}
+	}
+}
+
+// removeBranchComponents removes 4 component configs for a deleted branch
+// from the ConfigManager KV store.
+func removeBranchComponents(
+	ctx context.Context,
+	branch string,
+	ref config.BranchWatcherRef,
+	configMgr *semconfig.Manager,
+	logger *slog.Logger,
+) {
+	slug := workspace.BranchSlug(branch)
+	repoSlug := entityid.SystemSlug(ref.RepoPath)
+
+	prefixes := []string{"git-source-", "ast-source-", "doc-source-", "cfgfile-source-"}
+	for _, prefix := range prefixes {
+		name := prefix + entityid.BranchScopedSlug(repoSlug, slug)
+		if err := configMgr.DeleteComponentFromKV(ctx, name); err != nil {
+			logger.Warn("failed to remove branch component config",
+				"component", name,
+				"branch", branch,
+				"error", err)
+		}
+	}
+}
+
+// buildBranchComponentConfigs creates the 4 component configs for a single branch.
+func buildBranchComponentConfigs(src config.SourceEntry, org string, cfg *config.Config) map[string]types.ComponentConfig {
+	configs := make(map[string]types.ComponentConfig)
+
+	// Git source
+	gitName, gitCfg, err := gitSourceComponentConfig(src, org, 0, cfg)
+	if err == nil {
+		raw, _ := json.Marshal(gitCfg)
+		configs[gitName] = types.ComponentConfig{
+			Name:    "git-source",
+			Type:    types.ComponentTypeProcessor,
+			Enabled: true,
+			Config:  raw,
+		}
+	}
+
+	// AST source
+	astName, astCfg, err := astSourceComponentConfig(src, org, 0)
+	if err == nil {
+		raw, _ := json.Marshal(astCfg)
+		configs[astName] = types.ComponentConfig{
+			Name:    "ast-source",
+			Type:    types.ComponentTypeProcessor,
+			Enabled: true,
+			Config:  raw,
+		}
+	}
+
+	// Doc source
+	docName, docCfg := docSourceComponentConfig(src, org, 0)
+	raw, _ := json.Marshal(docCfg)
+	configs[docName] = types.ComponentConfig{
+		Name:    "doc-source",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  raw,
+	}
+
+	// Config file source
+	cfgName, cfgfileCfg := cfgfileSourceComponentConfig(src, org, 0)
+	raw, _ = json.Marshal(cfgfileCfg)
+	configs[cfgName] = types.ComponentConfig{
+		Name:    "cfgfile-source",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  raw,
+	}
+
+	return configs
+}
+
+// parseBranchPollInterval parses the poll interval string with a default of 15s.
+func parseBranchPollInterval(s string) time.Duration {
+	if s == "" {
+		return 15 * time.Second
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 15 * time.Second
+	}
+	return d
 }
