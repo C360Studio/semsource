@@ -6,6 +6,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
+	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -125,16 +126,16 @@ func newCommitEntity(org, fullSHA, authorFull, subject, system string, indexedAt
 func (e *CommitEntity) Triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: "source.git.commit.sha", Object: e.SHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: "source.git.commit.short_sha", Object: e.ShortSHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: "source.git.commit.author", Object: e.Author, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: "source.git.commit.subject", Object: e.Subject, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitCommitSHA, Object: e.SHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitCommitShortSHA, Object: e.ShortSHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitCommitAuthor, Object: e.Author, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitCommitSubject, Object: e.Subject, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
 	// File-touch relationship triples.
 	for _, f := range e.TouchedFiles {
 		triples = append(triples, message.Triple{
 			Subject:    e.ID,
-			Predicate:  "source.git.commit.touches",
+			Predicate:  source.GitCommitTouches,
 			Object:     f,
 			Source:     entityid.PlatformSemsource,
 			Timestamp:  now,
@@ -146,7 +147,7 @@ func (e *CommitEntity) Triples() []message.Triple {
 		authorID := entityid.Build(e.Org, entityid.PlatformSemsource, "git", e.System, "author", sanitizeInstance(e.AuthorEmail))
 		triples = append(triples, message.Triple{
 			Subject:    e.ID,
-			Predicate:  "source.git.commit.authored_by",
+			Predicate:  source.GitCommitAuthoredBy,
 			Object:     authorID,
 			Source:     entityid.PlatformSemsource,
 			Timestamp:  now,
@@ -191,8 +192,8 @@ func newAuthorEntity(org, name, email, system string, indexedAt time.Time) *Auth
 func (e *AuthorEntity) Triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
-		{Subject: e.ID, Predicate: "source.git.author.name", Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: "source.git.author.email", Object: e.Email, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitAuthorName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitAuthorEmail, Object: e.Email, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
 }
 
@@ -231,8 +232,8 @@ func newBranchEntity(org, branchName, headSHA, system string, indexedAt time.Tim
 func (e *BranchEntity) Triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
-		{Subject: e.ID, Predicate: "source.git.branch.name", Object: e.BranchName, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: "source.git.branch.head_sha", Object: e.HeadSHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitBranchName, Object: e.BranchName, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.GitBranchHeadSHA, Object: e.HeadSHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
 }
 

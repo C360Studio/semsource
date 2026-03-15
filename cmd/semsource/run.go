@@ -12,9 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	// Register payloads in the semstreams payload registry.
+	// Register payloads and vocabulary in the semstreams registries.
 	_ "github.com/c360studio/semsource/graph"
 	_ "github.com/c360studio/semsource/processor/source-manifest"
+	_ "github.com/c360studio/semsource/source/ast"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
@@ -298,7 +299,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		return nil, err
 	}
 
-	manifestCfg, err := manifestComponentConfig(cfg, org)
+	manifestCfg, err := manifestComponentConfig(cfg, org, len(components))
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +338,13 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		Components: components,
 		Streams: semconfig.StreamConfigs{
 			"GRAPH": semconfig.StreamConfig{
-				Subjects: []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest"},
+				Subjects: []string{
+					"graph.ingest.entity",
+					"graph.ingest.batch",
+					"graph.ingest.manifest",
+					"graph.ingest.status",
+					"graph.ingest.predicates",
+				},
 				Storage:  "memory",
 				MaxBytes: 256 * 1024 * 1024,
 				MaxAge:   "1h",
@@ -447,7 +454,7 @@ func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfig
 }
 
 // manifestComponentConfig builds the source-manifest component config.
-func manifestComponentConfig(cfg *config.Config, org string) (types.ComponentConfig, error) {
+func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (types.ComponentConfig, error) {
 	manifestSources := make([]sourcemanifest.ManifestSource, 0, len(cfg.Sources))
 	for _, src := range cfg.Sources {
 		manifestSources = append(manifestSources, sourcemanifest.ManifestSource{
@@ -473,10 +480,27 @@ func manifestComponentConfig(cfg *config.Config, org string) (types.ComponentCon
 					"required":    true,
 					"description": "Source manifest broadcast for downstream consumers",
 				},
+				{
+					"name":        "graph.ingest.status",
+					"type":        "jetstream",
+					"subject":     "graph.ingest.status",
+					"stream_name": "GRAPH",
+					"required":    false,
+					"description": "Ingestion status broadcast for downstream consumers",
+				},
+				{
+					"name":        "graph.ingest.predicates",
+					"type":        "jetstream",
+					"subject":     "graph.ingest.predicates",
+					"stream_name": "GRAPH",
+					"required":    false,
+					"description": "Predicate schema broadcast for downstream consumers",
+				},
 			},
 		},
-		"namespace": org,
-		"sources":   manifestSources,
+		"namespace":             org,
+		"sources":               manifestSources,
+		"expected_source_count": sourceCount,
 	})
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("marshal source-manifest config: %w", err)
@@ -590,10 +614,10 @@ func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error)
 				{
 					"name":        "graph_entities",
 					"type":        "jetstream",
-					"subject":     "graph.ingest.entity",
+					"subject":     "graph.ingest.>",
 					"stream_name": "GRAPH",
 					"required":    true,
-					"description": "Entity payloads from source components",
+					"description": "Entity, status, and predicate payloads from source components",
 				},
 			},
 			"outputs": []map[string]any{

@@ -101,7 +101,7 @@ func (e *KeyframeEntity) Triples() []message.Triple {
 	if e.VideoID != "" {
 		triples = append(triples, message.Triple{
 			Subject:    e.ID,
-			Predicate:  "source.media.keyframe_of",
+			Predicate:  source.MediaKeyframeOf,
 			Object:     e.VideoID,
 			Source:     src,
 			Timestamp:  now,

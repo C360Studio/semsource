@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
 
 	"github.com/c360studio/semsource/graph"
@@ -36,11 +37,12 @@ type pathWatcher struct {
 
 // Component implements the ast-source processor.
 type Component struct {
-	name      string
-	config    Config
-	publisher *entitypub.Publisher
-	logger    *slog.Logger
-	platform  component.PlatformMeta
+	name       string
+	config     Config
+	publisher  *entitypub.Publisher
+	natsClient *natsclient.Client
+	logger     *slog.Logger
+	platform   component.PlatformMeta
 
 	// Per-path watchers
 	watchers []*pathWatcher
@@ -86,6 +88,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		name:       "ast-source",
 		config:     config,
 		publisher:  pub,
+		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
 		platform:   deps.Platform,
 		fileHashes: make(map[string]string),
@@ -215,8 +218,12 @@ func (c *Component) Start(ctx context.Context) error {
 		"entities", c.entitiesIndexed.Load(),
 		"parse_failures", c.parseFailures.Load())
 
+	c.publishStatusReport(ctx, "watching")
+
 	// Collect cancel funcs locally, then assign under lock to avoid races with Stop.
 	var cancels []context.CancelFunc
+
+	cancels = append(cancels, c.startStatusReporter(ctx))
 
 	if c.config.WatchEnabled {
 		for _, pw := range c.watchers {
@@ -523,6 +530,51 @@ func (c *Component) getFileHash(path string) (string, bool) {
 	defer c.fileHashesMu.RUnlock()
 	hash, ok := c.fileHashes[path]
 	return hash, ok
+}
+
+// publishStatusReport sends a status report to the manifest component via NATS core.
+func (c *Component) publishStatusReport(ctx context.Context, phase string) {
+	report := struct {
+		SourceType  string    `json:"source_type"`
+		Phase       string    `json:"phase"`
+		EntityCount int64     `json:"entity_count"`
+		ErrorCount  int64     `json:"error_count"`
+		Timestamp   time.Time `json:"timestamp"`
+	}{
+		SourceType:  "ast",
+		Phase:       phase,
+		EntityCount: c.entitiesIndexed.Load(),
+		ErrorCount:  c.errors.Load(),
+		Timestamp:   time.Now(),
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		c.logger.Warn("failed to marshal status report", "error", err)
+		return
+	}
+	if err := c.natsClient.Publish(ctx, "semsource.internal.status", data); err != nil {
+		c.logger.Debug("failed to publish status report", "error", err)
+	}
+}
+
+// startStatusReporter starts a goroutine that periodically re-publishes the
+// component's status so the source-manifest component always has fresh data.
+// Returns a cancel func that stops the goroutine.
+func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
+	rCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-rCtx.Done():
+				return
+			case <-ticker.C:
+				c.publishStatusReport(rCtx, "watching")
+			}
+		}
+	}()
+	return cancel
 }
 
 // Stop gracefully stops the component within the given timeout.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360studio/semsource/handler"
 	videohandler "github.com/c360studio/semsource/handler/video"
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // ---------------------------------------------------------------------------
@@ -779,7 +780,7 @@ func TestVideoHandler_IngestEntityStates_WithFFmpeg(t *testing.T) {
 	for _, state := range states[1:] {
 		var hasKeyframeOf bool
 		for _, tr := range state.Triples {
-			if tr.Predicate == "source.media.keyframe_of" {
+			if tr.Predicate == source.MediaKeyframeOf {
 				hasKeyframeOf = true
 				if tr.Object != video.ID {
 					t.Errorf("keyframe_of Object = %q, want video ID %q", tr.Object, video.ID)

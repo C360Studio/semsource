@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -46,11 +47,12 @@ func (s *sourceCfg) GetSceneThreshold() float64  { return 0 }
 // which handles local path resolution, remote cloning, commit log walking,
 // and change detection via polling.
 type Component struct {
-	name      string
-	config    Config
-	publisher *entitypub.Publisher
-	logger    *slog.Logger
-	platform  component.PlatformMeta
+	name       string
+	config     Config
+	publisher  *entitypub.Publisher
+	natsClient *natsclient.Client
+	logger     *slog.Logger
+	platform   component.PlatformMeta
 
 	handler   *githandler.Handler
 	sourceCfg *sourceCfg
@@ -108,13 +110,14 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
-		name:      "git-source",
-		config:    config,
-		publisher: pub,
-		logger:    deps.GetLogger(),
-		platform:  deps.Platform,
-		handler:   h,
-		sourceCfg: sc,
+		name:       "git-source",
+		config:     config,
+		publisher:  pub,
+		natsClient: deps.NATSClient,
+		logger:     deps.GetLogger(),
+		platform:   deps.Platform,
+		handler:    h,
+		sourceCfg:  sc,
 	}
 
 	return c, nil
@@ -154,12 +157,15 @@ func (c *Component) Start(ctx context.Context) error {
 		"repo", repoDesc,
 		"entities_published", c.entitiesPublished.Load())
 
+	c.publishStatusReport(ctx, "watching")
+
 	cancel := c.startPolling(ctx)
 
 	c.mu.Lock()
 	if cancel != nil {
 		c.cancelFuncs = append(c.cancelFuncs, cancel)
 	}
+	c.cancelFuncs = append(c.cancelFuncs, c.startStatusReporter(ctx))
 	c.running = true
 	c.startTime = time.Now()
 	c.mu.Unlock()
@@ -291,6 +297,51 @@ func (c *Component) getLastActivity() time.Time {
 	c.lastActivityMu.RLock()
 	defer c.lastActivityMu.RUnlock()
 	return c.lastActivity
+}
+
+// publishStatusReport sends a status report to the manifest component via NATS core.
+func (c *Component) publishStatusReport(ctx context.Context, phase string) {
+	report := struct {
+		SourceType  string    `json:"source_type"`
+		Phase       string    `json:"phase"`
+		EntityCount int64     `json:"entity_count"`
+		ErrorCount  int64     `json:"error_count"`
+		Timestamp   time.Time `json:"timestamp"`
+	}{
+		SourceType:  "git",
+		Phase:       phase,
+		EntityCount: c.entitiesPublished.Load(),
+		ErrorCount:  c.ingestErrors.Load(),
+		Timestamp:   time.Now(),
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		c.logger.Warn("failed to marshal status report", "error", err)
+		return
+	}
+	if err := c.natsClient.Publish(ctx, "semsource.internal.status", data); err != nil {
+		c.logger.Debug("failed to publish status report", "error", err)
+	}
+}
+
+// startStatusReporter starts a goroutine that periodically re-publishes the
+// component's status so the source-manifest component always has fresh data.
+// Returns a cancel func that stops the goroutine.
+func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
+	rCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-rCtx.Done():
+				return
+			case <-ticker.C:
+				c.publishStatusReport(rCtx, "watching")
+			}
+		}
+	}()
+	return cancel
 }
 
 // Stop gracefully stops the component within the given timeout.

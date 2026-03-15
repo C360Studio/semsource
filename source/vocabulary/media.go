@@ -79,6 +79,10 @@ const (
 	// MediaFrameIndex is the zero-based frame index within the video.
 	// Phase 2: keyframe extraction only.
 	MediaFrameIndex = "source.media.frame_index"
+
+	// MediaKeyframeOf links a keyframe entity to its parent video entity.
+	// Phase 2: keyframe extraction only.
+	MediaKeyframeOf = "source.media.keyframe_of"
 )
 
 // Audio-specific predicates.
@@ -217,6 +221,11 @@ func registerMediaPredicates() {
 		vocabulary.WithDescription("Zero-based frame index within the video (Phase 2: keyframe extraction only)"),
 		vocabulary.WithDataType("int"),
 		vocabulary.WithIRI(Namespace+"mediaFrameIndex"))
+
+	vocabulary.Register(MediaKeyframeOf,
+		vocabulary.WithDescription("Links a keyframe entity to its parent video entity"),
+		vocabulary.WithDataType("entity_id"),
+		vocabulary.WithIRI(Namespace+"keyframeOf"))
 
 	// --- Audio predicates ---
 

@@ -179,8 +179,8 @@ func TestComponent_OutputPorts(t *testing.T) {
 	}
 
 	ports := comp.(*Component).OutputPorts()
-	if len(ports) != 1 {
-		t.Fatalf("output ports count = %d, want 1", len(ports))
+	if len(ports) != 3 {
+		t.Fatalf("output ports count = %d, want 3", len(ports))
 	}
 	if ports[0].Name != "graph.ingest" {
 		t.Errorf("port name = %q, want %q", ports[0].Name, "graph.ingest")
@@ -274,8 +274,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Ports == nil {
 		t.Fatal("default config ports is nil")
 	}
-	if len(cfg.Ports.Outputs) != 1 {
-		t.Fatalf("outputs count = %d, want 1", len(cfg.Ports.Outputs))
+	if len(cfg.Ports.Outputs) != 3 {
+		t.Fatalf("outputs count = %d, want 3", len(cfg.Ports.Outputs))
 	}
 	if cfg.Ports.Outputs[0].Subject != "graph.ingest.manifest" {
 		t.Errorf("output subject = %q, want %q", cfg.Ports.Outputs[0].Subject, "graph.ingest.manifest")

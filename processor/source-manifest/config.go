@@ -18,6 +18,17 @@ type Config struct {
 
 	// Sources is the resolved list of configured source entries.
 	Sources []ManifestSource `json:"sources" schema:"type:array,description:Configured source entries,category:basic,required:true"`
+
+	// ExpectedSourceCount is the number of source components to wait for
+	// before declaring seed-complete. Set by run.go during config construction.
+	ExpectedSourceCount int `json:"expected_source_count" schema:"type:int,description:Number of source components to expect,category:status"`
+
+	// SeedTimeout is how long to wait for all sources to report before
+	// marking status as degraded. Defaults to "120s".
+	SeedTimeout string `json:"seed_timeout,omitempty" schema:"type:string,description:Timeout waiting for all sources to report,category:status"`
+
+	// HeartbeatInterval is how often to re-publish status. Defaults to "30s".
+	HeartbeatInterval string `json:"heartbeat_interval,omitempty" schema:"type:string,description:Status heartbeat interval,category:status"`
 }
 
 // ManifestSource is the external-facing representation of a configured source.
@@ -54,11 +65,29 @@ func DefaultConfig() Config {
 			Required:    true,
 			Description: "Source manifest broadcast for downstream consumers",
 		},
+		{
+			Name:        "graph.ingest.status",
+			Type:        "jetstream",
+			Subject:     "graph.ingest.status",
+			StreamName:  "GRAPH",
+			Required:    false,
+			Description: "Ingestion status broadcast for downstream consumers",
+		},
+		{
+			Name:        "graph.ingest.predicates",
+			Type:        "jetstream",
+			Subject:     "graph.ingest.predicates",
+			StreamName:  "GRAPH",
+			Required:    false,
+			Description: "Predicate schema broadcast for downstream consumers",
+		},
 	}
 
 	return Config{
 		Ports: &component.PortConfig{
 			Outputs: outputDefs,
 		},
+		SeedTimeout:       "120s",
+		HeartbeatInterval: "30s",
 	}
 }
