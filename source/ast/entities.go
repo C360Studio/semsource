@@ -102,13 +102,20 @@ func NewCodeEntity(org, language, project string, entityType CodeEntityType, nam
 	}
 }
 
+// SanitizePathSegment converts a path to a NATS-safe entity ID segment by
+// replacing slashes and dots with hyphens and stripping leading hyphens.
+// Exported for reuse in hierarchy construction.
+func SanitizePathSegment(path string) string {
+	s := strings.ReplaceAll(path, "/", "-")
+	s = strings.ReplaceAll(s, ".", "-")
+	s = strings.TrimPrefix(s, "-")
+	return s
+}
+
 // BuildInstanceID creates a unique instance identifier from path and name.
 // Exported for use by language-specific parser packages.
 func BuildInstanceID(path, name string, entityType CodeEntityType) string {
-	// Sanitize for use in entity ID (replace invalid characters)
-	sanitized := strings.ReplaceAll(path, "/", "-")
-	sanitized = strings.ReplaceAll(sanitized, ".", "-")
-	sanitized = strings.TrimPrefix(sanitized, "-")
+	sanitized := SanitizePathSegment(path)
 
 	if name != "" && entityType != TypeFile && entityType != TypePackage {
 		// For functions, types, etc: include name

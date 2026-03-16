@@ -199,6 +199,9 @@ func (c *Component) Start(ctx context.Context) error {
 			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
 		}
 
+		// Publish repo and folder hierarchy entities before file/symbol entities.
+		c.publishHierarchy(ctx, results, pw.config.Org, pw.config.Project)
+
 		for _, result := range results {
 			if err := c.publishParseResult(ctx, result); err != nil {
 				c.logger.Warn("Failed to publish parse result",
@@ -291,7 +294,7 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 				if !ok {
 					return
 				}
-				c.handleWatchEvent(watchCtx, event)
+				c.handleWatchEvent(watchCtx, pw, event)
 			}
 		}
 	}()
@@ -313,12 +316,16 @@ func (p *multiParser) ParseFile(ctx context.Context, filePath string) (*semsourc
 }
 
 // handleWatchEvent processes a file watcher event.
-func (c *Component) handleWatchEvent(ctx context.Context, event semsourceast.WatchEvent) {
+func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event semsourceast.WatchEvent) {
 	c.updateLastActivity()
 
 	switch event.Operation {
 	case semsourceast.OpCreate, semsourceast.OpModify:
 		if event.Result != nil {
+			// Publish folder chain for new/modified files so containment
+			// edges exist even for directories created between full reindexes.
+			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.config.Project)
+
 			if err := c.publishParseResult(ctx, event.Result); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", event.Path,
@@ -383,6 +390,9 @@ func (c *Component) performFullIndex(ctx context.Context) {
 			c.incrementErrors()
 			continue
 		}
+
+		// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
+		c.publishHierarchy(ctx, results, pw.config.Org, pw.config.Project)
 
 		for _, result := range results {
 			totalFiles++
@@ -485,6 +495,43 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 		c.updateLastActivity()
 	}
 	return nil
+}
+
+// publishHierarchy builds and publishes repo and folder entities for a batch of parse results.
+func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceast.ParseResult, org, project string) {
+	entities := semsourceast.BuildHierarchy(results, org, project)
+	for _, entity := range entities {
+		state := entity.EntityState()
+		payload := &graph.EntityPayload{
+			ID:         state.ID,
+			TripleData: state.Triples,
+			UpdatedAt:  state.UpdatedAt,
+		}
+		if err := c.publishEntity(ctx, payload); err != nil {
+			c.logger.Warn("Failed to publish hierarchy entity",
+				"id", entity.ID, "error", err)
+		}
+		c.entitiesIndexed.Add(1)
+	}
+}
+
+// publishFolderChain publishes folder entities for a single file's ancestor directories.
+// Used during watch events to ensure containment edges exist for newly created directories.
+func (c *Component) publishFolderChain(ctx context.Context, filePath, org, project string) {
+	entities := semsourceast.BuildFolderChain(filePath, org, project)
+	for _, entity := range entities {
+		state := entity.EntityState()
+		payload := &graph.EntityPayload{
+			ID:         state.ID,
+			TripleData: state.Triples,
+			UpdatedAt:  state.UpdatedAt,
+		}
+		if err := c.publishEntity(ctx, payload); err != nil {
+			c.logger.Warn("Failed to publish folder entity",
+				"id", entity.ID, "error", err)
+		}
+		c.entitiesIndexed.Add(1)
+	}
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.

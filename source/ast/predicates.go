@@ -61,6 +61,8 @@ type CodeEntityType string
 // TypeFile and related constants enumerate the kinds of code entity
 // that can be extracted during AST parsing.
 const (
+	TypeRepo      CodeEntityType = "repo"
+	TypeFolder    CodeEntityType = "folder"
 	TypeFile      CodeEntityType = "file"
 	TypePackage   CodeEntityType = "package"
 	TypeFunction  CodeEntityType = "function"
