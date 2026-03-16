@@ -13,7 +13,7 @@ RUN CGO_ENABLED=1 go build -ldflags="-s -w -linkmode external -extldflags '-stat
 # --- Runtime ---
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates git tzdata
 
 COPY --from=builder /bin/semsource /usr/local/bin/semsource
 
