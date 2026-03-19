@@ -140,6 +140,8 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
+	c.publishStatusReport(ctx, "ingesting")
+
 	repoDesc := c.config.RepoPath
 	if repoDesc == "" {
 		repoDesc = c.config.RepoURL
@@ -303,17 +305,19 @@ func (c *Component) getLastActivity() time.Time {
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	report := struct {
-		SourceType  string    `json:"source_type"`
-		Phase       string    `json:"phase"`
-		EntityCount int64     `json:"entity_count"`
-		ErrorCount  int64     `json:"error_count"`
-		Timestamp   time.Time `json:"timestamp"`
+		InstanceName string    `json:"instance_name"`
+		SourceType   string    `json:"source_type"`
+		Phase        string    `json:"phase"`
+		EntityCount  int64     `json:"entity_count"`
+		ErrorCount   int64     `json:"error_count"`
+		Timestamp    time.Time `json:"timestamp"`
 	}{
-		SourceType:  "git",
-		Phase:       phase,
-		EntityCount: c.entitiesPublished.Load(),
-		ErrorCount:  c.ingestErrors.Load(),
-		Timestamp:   time.Now(),
+		InstanceName: c.config.InstanceName,
+		SourceType:   "git",
+		Phase:        phase,
+		EntityCount:  c.entitiesPublished.Load(),
+		ErrorCount:   c.ingestErrors.Load(),
+		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)
 	if err != nil {

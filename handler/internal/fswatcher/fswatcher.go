@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -56,6 +57,15 @@ func (c *WatchConfig) GetDebounceDelay() time.Duration {
 		return 500 * time.Millisecond
 	}
 	return d
+}
+
+// WithCoalesceMs returns a copy of the WatchConfig with DebounceDelay overridden
+// by the given millisecond value. If ms <= 0, the original config is returned unchanged.
+func (c WatchConfig) WithCoalesceMs(ms int) WatchConfig {
+	if ms > 0 {
+		c.DebounceDelay = fmt.Sprintf("%dms", ms)
+	}
+	return c
 }
 
 // ContentHash returns the hex-encoded SHA-256 of content.

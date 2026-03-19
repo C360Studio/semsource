@@ -281,3 +281,215 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("output subject = %q, want %q", cfg.Ports.Outputs[0].Subject, "graph.ingest.manifest")
 	}
 }
+
+func TestStatusAggregator_KeysByInstanceName(t *testing.T) {
+	agg := newStatusAggregator(3)
+
+	agg.update(&SourceStatusReport{
+		InstanceName: "ast-source-repo-a",
+		SourceType:   "ast",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  100,
+	})
+	agg.update(&SourceStatusReport{
+		InstanceName: "ast-source-repo-b",
+		SourceType:   "ast",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  200,
+	})
+	agg.update(&SourceStatusReport{
+		InstanceName: "git-source-repo-a",
+		SourceType:   "git",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  50,
+	})
+
+	// All 3 instances reported — should be ready.
+	if !agg.allReported() {
+		t.Error("allReported() = false, want true after 3 unique instances reported")
+	}
+
+	status := agg.buildStatus("acme")
+	if status.Phase != PhaseReady {
+		t.Errorf("phase = %q, want %q", status.Phase, PhaseReady)
+	}
+	if status.TotalEntities != 350 {
+		t.Errorf("total_entities = %d, want 350", status.TotalEntities)
+	}
+	if len(status.Sources) != 3 {
+		t.Errorf("sources count = %d, want 3", len(status.Sources))
+	}
+
+	// Verify instance names are preserved in output.
+	instanceNames := map[string]bool{}
+	for _, s := range status.Sources {
+		instanceNames[s.InstanceName] = true
+	}
+	for _, want := range []string{"ast-source-repo-a", "ast-source-repo-b", "git-source-repo-a"} {
+		if !instanceNames[want] {
+			t.Errorf("missing instance %q in status sources", want)
+		}
+	}
+}
+
+func TestStatusAggregator_SameTypeDoesNotCollide(t *testing.T) {
+	agg := newStatusAggregator(2)
+
+	agg.update(&SourceStatusReport{
+		InstanceName: "ast-source-alpha",
+		SourceType:   "ast",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  500,
+	})
+
+	if agg.allReported() {
+		t.Error("allReported() = true after 1 of 2 instances reported")
+	}
+
+	agg.update(&SourceStatusReport{
+		InstanceName: "ast-source-beta",
+		SourceType:   "ast",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  300,
+	})
+
+	if !agg.allReported() {
+		t.Error("allReported() = false, want true after 2 unique instances reported")
+	}
+
+	status := agg.buildStatus("test")
+	if status.TotalEntities != 800 {
+		t.Errorf("total_entities = %d, want 800 (both instances counted)", status.TotalEntities)
+	}
+}
+
+func TestStatusAggregator_PhaseTransitions(t *testing.T) {
+	agg := newStatusAggregator(2)
+
+	// Initially seeding.
+	status := agg.buildStatus("ns")
+	if status.Phase != PhaseSeeding {
+		t.Errorf("initial phase = %q, want %q", status.Phase, PhaseSeeding)
+	}
+
+	// First instance reports ingesting.
+	agg.update(&SourceStatusReport{
+		InstanceName: "git-source-main",
+		SourceType:   "git",
+		Phase:        SourcePhaseIngesting,
+		EntityCount:  0,
+	})
+	status = agg.buildStatus("ns")
+	if status.Phase != PhaseSeeding {
+		t.Errorf("after 1 of 2: phase = %q, want %q", status.Phase, PhaseSeeding)
+	}
+
+	// First instance transitions to watching.
+	agg.update(&SourceStatusReport{
+		InstanceName: "git-source-main",
+		SourceType:   "git",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  50,
+	})
+	status = agg.buildStatus("ns")
+	if status.Phase != PhaseSeeding {
+		t.Errorf("still 1 of 2: phase = %q, want %q", status.Phase, PhaseSeeding)
+	}
+
+	// Second instance reports watching.
+	agg.update(&SourceStatusReport{
+		InstanceName: "ast-source-main",
+		SourceType:   "ast",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  200,
+	})
+	status = agg.buildStatus("ns")
+	if status.Phase != PhaseReady {
+		t.Errorf("after all reported: phase = %q, want %q", status.Phase, PhaseReady)
+	}
+}
+
+func TestStatusAggregator_MarkDegraded(t *testing.T) {
+	agg := newStatusAggregator(3)
+
+	agg.update(&SourceStatusReport{
+		InstanceName: "git-source-a",
+		SourceType:   "git",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  10,
+	})
+
+	// Only 1 of 3 reported — normally still seeding.
+	status := agg.buildStatus("ns")
+	if status.Phase != PhaseSeeding {
+		t.Errorf("before degraded: phase = %q, want %q", status.Phase, PhaseSeeding)
+	}
+
+	// Force degraded (simulating seed timeout).
+	degraded := agg.markDegraded("ns")
+	if degraded.Phase != PhaseDegraded {
+		t.Errorf("degraded phase = %q, want %q", degraded.Phase, PhaseDegraded)
+	}
+	if len(degraded.Sources) != 1 {
+		t.Errorf("degraded sources = %d, want 1", len(degraded.Sources))
+	}
+}
+
+func TestStatusPayload_RoundTrip(t *testing.T) {
+	payload := &StatusPayload{
+		Namespace: "acme",
+		Phase:     PhaseReady,
+		Sources: []SourceStatus{
+			{
+				InstanceName: "ast-source-myrepo",
+				SourceType:   "ast",
+				Phase:        SourcePhaseWatching,
+				EntityCount:  500,
+				ErrorCount:   2,
+			},
+		},
+		TotalEntities: 500,
+		Timestamp:     time.Now().Truncate(time.Second),
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded StatusPayload
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if decoded.Phase != PhaseReady {
+		t.Errorf("phase = %q, want %q", decoded.Phase, PhaseReady)
+	}
+	if len(decoded.Sources) != 1 {
+		t.Fatalf("sources = %d, want 1", len(decoded.Sources))
+	}
+	src := decoded.Sources[0]
+	if src.InstanceName != "ast-source-myrepo" {
+		t.Errorf("instance_name = %q, want %q", src.InstanceName, "ast-source-myrepo")
+	}
+	if src.SourceType != "ast" {
+		t.Errorf("source_type = %q, want %q", src.SourceType, "ast")
+	}
+	if src.EntityCount != 500 {
+		t.Errorf("entity_count = %d, want 500", src.EntityCount)
+	}
+}
+
+func TestStatusPayload_Schema(t *testing.T) {
+	p := &StatusPayload{}
+	schema := p.Schema()
+	if schema.Domain != "semsource" {
+		t.Errorf("domain = %q, want %q", schema.Domain, "semsource")
+	}
+	if schema.Category != "status" {
+		t.Errorf("category = %q, want %q", schema.Category, "status")
+	}
+	if schema.Version != "v1" {
+		t.Errorf("version = %q, want %q", schema.Version, "v1")
+	}
+}

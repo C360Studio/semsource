@@ -32,6 +32,9 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 		FileExtensions: []string{".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"},
 		ExcludeDirs:    []string{".git", "node_modules", "vendor"},
 	}
+	if cp, ok := cfg.(handler.CoalesceProvider); ok {
+		wcfg = wcfg.WithCoalesceMs(cp.GetCoalesceMs())
+	}
 
 	// Start one FSWatcher per root and collect them together with their root.
 	type watcherEntry struct {

@@ -561,6 +561,7 @@ func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
 			name:     "graph-index",
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
+				"coalesce_ms": 200,
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
@@ -570,6 +571,23 @@ func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
 						{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
 						{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
 						{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
+					},
+				},
+			},
+		},
+		"graph-embedding": {
+			name:     "graph-embedding",
+			compType: types.ComponentTypeProcessor,
+			configMap: map[string]any{
+				"coalesce_ms":   200,
+				"embedder_type": "bm25",
+				"batch_size":    50,
+				"ports": map[string]any{
+					"inputs": []map[string]any{
+						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+					},
+					"outputs": []map[string]any{
+						{"name": "embeddings", "type": "kv-write", "subject": "EMBEDDINGS_CACHE"},
 					},
 				},
 			},
@@ -745,6 +763,7 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 		},
 		"watch_enabled":  src.Watch,
 		"index_interval": "60s",
+		"instance_name":  instanceName,
 	}
 
 	return instanceName, compCfg, nil
@@ -783,6 +802,7 @@ func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg
 		"workspace_dir": cfg.WorkspaceDir,
 		"git_token":     cfg.GitToken,
 		"branch_slug":   src.BranchSlug,
+		"instance_name": instanceName,
 	}
 
 	return instanceName, compCfg, nil
@@ -802,11 +822,13 @@ func docSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 		}
 	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	return fmt.Sprintf("doc-source-%s", scopedSlug), map[string]any{
+	instanceName := fmt.Sprintf("doc-source-%s", scopedSlug)
+	return instanceName, map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
+		"instance_name": instanceName,
 	}
 }
 
@@ -824,11 +846,13 @@ func cfgfileSourceComponentConfig(src config.SourceEntry, org string, index int)
 		}
 	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	return fmt.Sprintf("cfgfile-source-%s", scopedSlug), map[string]any{
+	instanceName := fmt.Sprintf("cfgfile-source-%s", scopedSlug)
+	return instanceName, map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
+		"instance_name": instanceName,
 	}
 }
 
@@ -845,11 +869,13 @@ func urlSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 			slug = fmt.Sprintf("url-%d", index)
 		}
 	}
-	return fmt.Sprintf("url-source-%s", slug), map[string]any{
+	instanceName := fmt.Sprintf("url-source-%s", slug)
+	return instanceName, map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"urls":          urls,
 		"poll_interval": "300s",
+		"instance_name": instanceName,
 	}
 }
 
@@ -873,6 +899,7 @@ func mediaSourceComponentConfig(src config.SourceEntry, org string, index int, c
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
+		"instance_name": instanceName,
 	}
 
 	if cfg.MediaStoreDir != "" {

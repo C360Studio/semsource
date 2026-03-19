@@ -189,6 +189,9 @@ func (h *ConfigHandler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-
 	// Watch recognised config file extensions; Dockerfile is extensionless but
 	// the fanOut filter catches it by base name regardless.
 	watchCfg.FileExtensions = []string{".mod", ".json", ".xml", ".gradle"}
+	if cp, ok := cfg.(handler.CoalesceProvider); ok {
+		watchCfg = watchCfg.WithCoalesceMs(cp.GetCoalesceMs())
+	}
 
 	out := make(chan handler.ChangeEvent, 64*len(paths))
 

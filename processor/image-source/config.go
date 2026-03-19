@@ -23,6 +23,7 @@ type Config struct {
 	// WatchEnabled controls whether fsnotify watching is active after the
 	// initial ingest. When false the component exits after the initial walk.
 	WatchEnabled bool `json:"watch_enabled" schema:"type:bool,description:Enable fsnotify watching for live file changes,category:basic,default:true"`
+	CoalesceMs   int  `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for file watcher events in ms. 0 uses built-in default (200ms),category:advanced"`
 
 	// StreamName is the JetStream stream name for publishing entities.
 	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
@@ -30,6 +31,10 @@ type Config struct {
 	// FileStoreRoot is the root directory for local filesystem binary storage.
 	// When empty, the handler operates in metadata-only mode (no binary storage).
 	FileStoreRoot string `json:"file_store_root" schema:"type:string,description:Root directory for local filesystem binary storage (empty = metadata-only),category:advanced"`
+
+	// InstanceName is the unique component instance name for status tracking.
+	// Set automatically by run.go to match the component map key.
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
 }
 
 // Validate checks the configuration for errors.

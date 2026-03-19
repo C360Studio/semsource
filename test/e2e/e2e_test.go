@@ -53,6 +53,23 @@ type manifestSource struct {
 	PollInterval string   `json:"poll_interval,omitempty"`
 }
 
+// statusPayload mirrors the source-manifest status response structure.
+type statusPayload struct {
+	Namespace     string         `json:"namespace"`
+	Phase         string         `json:"phase"`
+	Sources       []sourceStatus `json:"sources"`
+	TotalEntities int64          `json:"total_entities"`
+	Timestamp     string         `json:"timestamp"`
+}
+
+type sourceStatus struct {
+	InstanceName string `json:"instance_name"`
+	SourceType   string `json:"source_type"`
+	Phase        string `json:"phase"`
+	EntityCount  int64  `json:"entity_count"`
+	ErrorCount   int64  `json:"error_count"`
+}
+
 // queryManifestHTTP GETs the source manifest from the ServiceManager HTTP API.
 // Retries for up to 15 seconds to allow the HTTP server and component to start.
 func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
@@ -78,6 +95,56 @@ func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
 	}
 	t.Fatalf("GET %s did not return 200 within 15s", url)
 	return manifestPayload{}
+}
+
+// queryStatusHTTP GETs the ingestion status from the ServiceManager HTTP API.
+// Retries for up to 15 seconds to allow startup.
+func queryStatusHTTP(t *testing.T, httpPort int) statusPayload {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		var s statusPayload
+		if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+			t.Fatalf("decode status response: %v", err)
+		}
+		return s
+	}
+	t.Fatalf("GET %s did not return 200 within 15s", url)
+	return statusPayload{}
+}
+
+// waitForReady polls the status endpoint until Phase is "ready" or "degraded",
+// or the deadline expires. Returns the final status.
+func waitForReady(t *testing.T, httpPort int, timeout time.Duration) statusPayload {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
+	deadline := time.Now().Add(timeout)
+	var last statusPayload
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		json.NewDecoder(resp.Body).Decode(&last)
+		resp.Body.Close()
+		if last.Phase == "ready" || last.Phase == "degraded" {
+			return last
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return last
 }
 
 // entityMessage is the envelope published to graph.ingest.entity.
@@ -408,6 +475,10 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	manifest := queryManifestHTTP(t, httpPort)
 	t.Logf("manifest: namespace=%s, sources=%d", manifest.Namespace, len(manifest.Sources))
 
+	// Query ingestion status — should reach "ready" since all sources are no-watch.
+	status := waitForReady(t, httpPort, 30*time.Second)
+	t.Logf("status: phase=%s, total_entities=%d, sources=%d", status.Phase, status.TotalEntities, len(status.Sources))
+
 	// Stop semsource gracefully.
 	cmd.Process.Signal(os.Interrupt)
 	cmd.Wait()
@@ -430,6 +501,31 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 		if !manifestTypes[want] {
 			t.Errorf("manifest missing source type %q", want)
 		}
+	}
+
+	// --- Status assertions ---
+	if status.Phase != "ready" {
+		t.Errorf("status phase = %q, want 'ready'", status.Phase)
+	}
+	if status.Namespace != "e2etest" {
+		t.Errorf("status namespace = %q, want %q", status.Namespace, "e2etest")
+	}
+	// 3 source components: ast, docs, config → 3 instance-level status entries.
+	if len(status.Sources) != 3 {
+		t.Errorf("status sources count = %d, want 3", len(status.Sources))
+	}
+	// Every source must have a non-empty instance_name.
+	for _, src := range status.Sources {
+		if src.InstanceName == "" {
+			t.Errorf("status source %q has empty instance_name", src.SourceType)
+		}
+		if src.Phase != "watching" && src.Phase != "idle" {
+			t.Errorf("status source %q: phase = %q, want 'watching' or 'idle'", src.InstanceName, src.Phase)
+		}
+	}
+	// Total entities should match what we received (approximately — status may lag slightly).
+	if status.TotalEntities == 0 {
+		t.Error("status total_entities = 0, expected entities to be counted")
 	}
 
 	// 1. Binary started and produced log output.
@@ -750,6 +846,12 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	manifest := queryManifestHTTP(t, httpPort)
 	t.Logf("OSH manifest: namespace=%s, sources=%d", manifest.Namespace, len(manifest.Sources))
 
+	// Query ingestion status — "repo" expands to 4 instances.
+	// Use a generous timeout since git clone + Java parsing can be slow.
+	oshStatus := waitForReady(t, httpPort, 120*time.Second)
+	t.Logf("OSH status: phase=%s, total_entities=%d, sources=%d",
+		oshStatus.Phase, oshStatus.TotalEntities, len(oshStatus.Sources))
+
 	// Stop semsource gracefully.
 	cmd.Process.Signal(os.Interrupt)
 	cmd.Wait()
@@ -778,6 +880,37 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 		if !oshManifestTypes[want] {
 			t.Errorf("OSH manifest missing source type %q", want)
 		}
+	}
+
+	// --- Status assertions ---
+	if oshStatus.Phase != "ready" && oshStatus.Phase != "degraded" {
+		t.Errorf("OSH status phase = %q, want 'ready' or 'degraded'", oshStatus.Phase)
+	}
+	if oshStatus.Namespace != "oshtest" {
+		t.Errorf("OSH status namespace = %q, want %q", oshStatus.Namespace, "oshtest")
+	}
+	// 4 component instances from repo expansion: git, ast, docs, config.
+	if len(oshStatus.Sources) < 4 {
+		t.Errorf("OSH status sources = %d, want >= 4 (git+ast+docs+config instances)", len(oshStatus.Sources))
+	}
+	// Every status source must have instance_name and source_type.
+	oshStatusTypes := map[string]bool{}
+	for _, src := range oshStatus.Sources {
+		if src.InstanceName == "" {
+			t.Errorf("OSH status source has empty instance_name (type=%s)", src.SourceType)
+		}
+		oshStatusTypes[src.SourceType] = true
+		t.Logf("  status source: instance=%s type=%s phase=%s entities=%d errors=%d",
+			src.InstanceName, src.SourceType, src.Phase, src.EntityCount, src.ErrorCount)
+	}
+	// All 4 source types should appear in status.
+	for _, want := range []string{"git", "ast", "docs", "config"} {
+		if !oshStatusTypes[want] {
+			t.Errorf("OSH status missing source type %q", want)
+		}
+	}
+	if oshStatus.TotalEntities == 0 {
+		t.Error("OSH status total_entities = 0")
 	}
 
 	if len(allEntities) == 0 {

@@ -95,8 +95,13 @@ type Config struct {
 	Languages       []string `json:"languages"        schema:"type:array,description:Languages to index (deprecated: use watch_paths),category:basic,default:[go]"`
 	ExcludePatterns []string `json:"exclude_patterns" schema:"type:array,description:Directory patterns to exclude (deprecated: use watch_paths),category:advanced"`
 
+	// InstanceName is the unique component instance name for status tracking.
+	// Set automatically by run.go to match the component map key.
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+
 	// Global settings
 	WatchEnabled  bool   `json:"watch_enabled"  schema:"type:bool,description:Enable file watcher for real-time updates,category:basic,default:true"`
+	CoalesceMs    int    `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for file watcher events in ms. 0 uses built-in default (100ms),category:advanced"`
 	IndexInterval string `json:"index_interval" schema:"type:string,description:Full reindex interval (e.g. 60s). Empty string disables periodic reindex.,category:advanced,default:60s"`
 	StreamName    string `json:"stream_name"    schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
 }

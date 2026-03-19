@@ -33,6 +33,9 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 		FileExtensions: []string{".md", ".txt"},
 		ExcludeDirs:    []string{".git", "node_modules", "vendor"},
 	}
+	if cp, ok := cfg.(handler.CoalesceProvider); ok {
+		wcfg = wcfg.WithCoalesceMs(cp.GetCoalesceMs())
+	}
 
 	// Start one watcher per root, collecting them so we can stop them all on
 	// shutdown and fan their events into a single output channel.

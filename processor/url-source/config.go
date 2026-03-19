@@ -27,6 +27,10 @@ type Config struct {
 
 	// StreamName is the JetStream stream name for publishing entities.
 	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
+
+	// InstanceName is the unique component instance name for status tracking.
+	// Set automatically by run.go to match the component map key.
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
 }
 
 // Validate checks the configuration for errors.

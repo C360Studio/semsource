@@ -32,6 +32,9 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 		FileExtensions: []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"},
 		ExcludeDirs:    []string{".git", "node_modules", "vendor"},
 	}
+	if cp, ok := cfg.(handler.CoalesceProvider); ok {
+		wcfg = wcfg.WithCoalesceMs(cp.GetCoalesceMs())
+	}
 
 	out := make(chan handler.ChangeEvent, 64)
 

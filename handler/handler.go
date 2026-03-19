@@ -47,6 +47,13 @@ type SourceConfig interface {
 	GetSceneThreshold() float64
 }
 
+// CoalesceProvider is an optional interface that SourceConfig implementations
+// may satisfy to provide a custom coalescing/debounce window for file watchers.
+// When not implemented, handlers use their built-in defaults.
+type CoalesceProvider interface {
+	GetCoalesceMs() int
+}
+
 // SourceHandler is the core interface implemented by every source handler.
 // Each handler is responsible for one category of source material.
 //

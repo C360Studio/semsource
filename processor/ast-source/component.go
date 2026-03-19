@@ -168,6 +168,8 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
+	c.publishStatusReport(ctx, "ingesting")
+
 	// Initialize watchers with retry — paths may not exist yet if a git
 	// clone is still in progress (repo expansion pattern).
 	err := retry.Do(ctx, retry.Persistent(), func() error {
@@ -263,11 +265,16 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 		excludes = append(excludes, exc)
 	}
 
+	debounceDelay := 100 * time.Millisecond
+	if c.config.CoalesceMs > 0 {
+		debounceDelay = time.Duration(c.config.CoalesceMs) * time.Millisecond
+	}
+
 	watcherConfig := semsourceast.WatcherConfig{
 		RepoRoot:       pw.root,
 		Org:            pw.config.Org,
 		Project:        pw.config.Project,
-		DebounceDelay:  100 * time.Millisecond,
+		DebounceDelay:  debounceDelay,
 		Logger:         c.logger,
 		FileExtensions: pw.config.GetFileExtensions(),
 		ExcludeDirs:    excludes,
@@ -582,17 +589,19 @@ func (c *Component) getFileHash(path string) (string, bool) {
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	report := struct {
-		SourceType  string    `json:"source_type"`
-		Phase       string    `json:"phase"`
-		EntityCount int64     `json:"entity_count"`
-		ErrorCount  int64     `json:"error_count"`
-		Timestamp   time.Time `json:"timestamp"`
+		InstanceName string    `json:"instance_name"`
+		SourceType   string    `json:"source_type"`
+		Phase        string    `json:"phase"`
+		EntityCount  int64     `json:"entity_count"`
+		ErrorCount   int64     `json:"error_count"`
+		Timestamp    time.Time `json:"timestamp"`
 	}{
-		SourceType:  "ast",
-		Phase:       phase,
-		EntityCount: c.entitiesIndexed.Load(),
-		ErrorCount:  c.errors.Load(),
-		Timestamp:   time.Now(),
+		InstanceName: c.config.InstanceName,
+		SourceType:   "ast",
+		Phase:        phase,
+		EntityCount:  c.entitiesIndexed.Load(),
+		ErrorCount:   c.errors.Load(),
+		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)
 	if err != nil {
