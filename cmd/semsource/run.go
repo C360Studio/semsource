@@ -91,7 +91,7 @@ func runCmd(args []string) error {
 	defer configMgr.Stop(5 * time.Second)
 
 	registry := component.NewRegistry()
-	if err := registerComponentFactories(registry); err != nil {
+	if err := registerComponentFactories(registry, semsourceCfg.IsHeadless()); err != nil {
 		return err
 	}
 
@@ -168,11 +168,17 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 	return cfg, result, nil
 }
 
-// registerComponentFactories registers all semstreams built-in and semsource
-// component factories in the given registry.
-func registerComponentFactories(registry *component.Registry) error {
-	if err := componentregistry.Register(registry); err != nil {
-		return fmt.Errorf("register semstreams components: %w", err)
+// registerComponentFactories registers component factories based on mode.
+// In standalone mode, all semstreams built-in factories (graph, agentic, etc.)
+// are registered alongside semsource factories. In headless mode, only
+// semsource's own factories plus the graph-layer factories needed for
+// standalone are registered — no agentic, protocol, or other factories that
+// could collide with the host app's components on the shared KV bucket.
+func registerComponentFactories(registry *component.Registry, headless bool) error {
+	if !headless {
+		if err := componentregistry.Register(registry); err != nil {
+			return fmt.Errorf("register semstreams components: %w", err)
+		}
 	}
 	if err := registerSemsourceFactories(registry); err != nil {
 		return err
