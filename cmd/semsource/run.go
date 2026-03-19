@@ -137,12 +137,18 @@ func setupNATS(ctx context.Context, natsFlag string, cfg *config.Config, logger 
 		return nil, nil, fmt.Errorf("build semstreams config: %w", err)
 	}
 
-	streamsManager := semconfig.NewStreamsManager(nc, logger)
-	if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
-		nc.Close(context.Background())
-		return nil, nil, fmt.Errorf("ensure JetStream streams: %w", err)
+	// In headless mode the host app owns JetStream infrastructure —
+	// skip stream creation/updates to avoid conflicts.
+	if !cfg.IsHeadless() {
+		streamsManager := semconfig.NewStreamsManager(nc, logger)
+		if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
+			nc.Close(context.Background())
+			return nil, nil, fmt.Errorf("ensure JetStream streams: %w", err)
+		}
+		logger.Info("JetStream streams ready")
+	} else {
+		logger.Info("headless mode — skipping stream provisioning (host app owns infrastructure)")
 	}
-	logger.Info("JetStream streams ready")
 
 	return nc, ssCfg, nil
 }
@@ -358,25 +364,9 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		Components: components,
 	}
 
-	if cfg.IsHeadless() {
-		// In headless mode, declare the GRAPH stream with only the subjects
-		// sources need. EnsureStreams will create it if missing or skip if
-		// the host app already created it with matching subjects.
-		ssCfg.Streams = semconfig.StreamConfigs{
-			"GRAPH": semconfig.StreamConfig{
-				Subjects: []string{
-					"graph.ingest.entity",
-					"graph.ingest.manifest",
-					"graph.ingest.status",
-					"graph.ingest.predicates",
-				},
-				Storage:  "memory",
-				MaxBytes: 64 * 1024 * 1024,
-				MaxAge:   "1h",
-				Replicas: 1,
-			},
-		}
-	} else {
+	// In headless mode, no stream config — the host app owns infrastructure.
+	// In standalone mode, declare the full GRAPH stream with user overrides.
+	if !cfg.IsHeadless() {
 		ssCfg.Streams = graphStreamConfig(cfg)
 	}
 
