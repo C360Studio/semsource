@@ -152,16 +152,17 @@ Extends: `bfo:GenericallyDependentContinuant`, `cco:InformationContentEntity`, `
        |
   [MediaHandler]
        |
-       +---> binary data ---> ObjectStore (via BinaryStorable)
-       |                          returns StorageReference
-       +---> metadata -----> RawEntity
-                                |
-                           [Normalizer]
-                                |
-                           [GraphEvent] ---> WebSocket (JSON, refs only)
+       +---> metadata -----> EntityPayload (via entitypub.Publisher)
+       |                          |
+       |                     graph.ingest.entity (JetStream)
+       |                          |
+       +---> binary data ---> FileStore (local) or ObjectStore (future)
 ```
 
-The graph event is always JSON. It carries `StorageReference` keys, not raw bytes. Consumers fetch binary from ObjectStore on demand.
+The graph event carries `StorageReference` keys, not raw bytes. Consumers fetch binary from the store on demand.
+
+> **Note:** ObjectStore is not yet wired. Current media handlers (image, video, audio) store metadata only.
+> Binary storage uses local FileStore when `media_store_dir` is configured.
 
 ### ObjectStore Integration
 
@@ -368,21 +369,32 @@ This keeps SemSource focused on ingestion. Vision labeling is a consumer-side co
 
 ## Implementation Plan
 
-### Phase 1 Milestones (Image Support)
+### Phase 1 Milestones (Image Support) -- COMPLETE
 
-1. **Vocabulary**: Add `source.media.*` predicates and class IRIs
-2. **Config**: Add `image` source type to `SourceEntry`, add `object_store` config section
-3. **Handler**: Implement `ImageHandler` with Ingest/Watch/RETRACT
-4. **ObjectStore wiring**: Connect engine to ObjectStore, pass to handler
-5. **CLI wizard**: Add image source wizard with path detection
-6. **Tests**: Unit tests for handler, vocabulary registration, ID construction
+1. **Vocabulary**: `source.media.*` predicates and class IRIs added. ✓
+2. **Config**: `image` source type added to `SourceEntry`. ✓
+3. **Handler**: `ImageHandler` implemented with Ingest/Watch/RETRACT. ✓
+4. **Processor component**: `image-source` processor component registered (`processor/image-source/`). ✓
+5. **CLI wizard**: Image source wizard available. ✓
+6. **Tests**: Unit tests for handler, vocabulary, and ID construction. ✓
 
-### Phase 2 Milestones (Video + Keyframes)
+> **Note:** ObjectStore wiring is deferred. The `image-source` component stores metadata only.
+> Binary storage requires `media_store_dir` config for local FileStore; NATS ObjectStore integration
+> is a future milestone.
 
-1. **Handler**: Implement `VideoHandler` with ffmpeg keyframe extraction
-2. **Config**: Add `video` source type with keyframe mode settings
-3. **CLI wizard**: Add video source wizard with ffmpeg availability check
-4. **Tests**: Unit tests, integration tests with sample video files
+### Phase 2 Milestones (Video + Audio — Metadata Only) -- COMPLETE (metadata-only)
+
+1. **Handlers**: `VideoHandler` and `AudioHandler` implemented (metadata only, no ObjectStore). ✓
+2. **Processor components**: `video-source` and `audio-source` registered. ✓
+3. **Config**: `video` and `audio` source types available. ✓
+4. **Keyframe extraction** (ffmpeg): Not yet implemented — deferred to a future phase.
+
+### Phase 3 Milestones (Binary Storage + Keyframes) -- FUTURE
+
+1. **ObjectStore wiring**: Connect media handlers to NATS ObjectStore.
+2. **Keyframe extraction**: `VideoHandler` ffmpeg keyframe extraction.
+3. **CLI wizard**: Video source wizard with ffmpeg availability check.
+4. **Tests**: Integration tests with sample video files.
 
 ### Future
 

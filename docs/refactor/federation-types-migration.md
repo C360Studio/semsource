@@ -1,5 +1,9 @@
 # Refactor: Adopt `semstreams/federation` Types — Complete
 
+> **Note (2026-03):** This document records the migration completed in early March 2026.
+> The engine, emitter, and normalizer packages referenced here have since been replaced by
+> semstreams processor components. See `processor/*/` for the current architecture.
+
 ## What Changed
 
 Replaced all semsource-local graph types with shared `semstreams/federation` types. The codebase now uses `federation.Entity`, `federation.Event`, `federation.Edge`, `federation.Provenance`, and `federation.Store` directly — no aliases, no local copies.

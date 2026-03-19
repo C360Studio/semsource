@@ -97,7 +97,7 @@ IDs must be purely intrinsic (no timestamps, instance IDs, or insertion-order). 
 
 ### Federation
 
-`FederationProcessor` sits in each consumer flow between WebSocket input and graph ingestion. Applies merge policy: `public.*` merges unconditionally, `{org}.*` is sovereign. Transport-agnostic.
+`FederationProcessor` in `semstreams/processor/federation` handles merge policy for multi-instance deployments: `public.*` merges unconditionally, `{org}.*` is sovereign. Consumers query SemSource's graph directly via NATS `graph.query.*` endpoints — no federation setup needed on the consumer side.
 
 ## semstreams Component Patterns
 
@@ -121,8 +121,10 @@ New message types must follow the payload registry pattern: define type → impl
 - `at-least-once` delivery using WebSocket ack/nack protocol
 - MVP targets same-LAN deployment only (no TLS/reverse proxy)
 - AST parsers, doc parsers, weburl, and vocabulary packages are self-contained in `source/` (copied from semspec, no cross-repo dependency)
-- `FederationProcessor` lives in each consumer flow (from `semstreams/processor/federation`), not in semsource — semsource just emits events
-- Graph types use `semstreams/federation` directly (`federation.Entity`, `federation.Event`, `federation.Store`). The `graph/` package contains only `GraphEventPayload` (domain-specific payload registration for `"semsource"`)
+- Consumers query SemSource via NATS `graph.query.*` endpoints — no WebSocket ingestion or federation bridge needed
+- `FederationProcessor` is a SemSource-internal concern for multi-instance deployments, not a consumer concern
+- Graph types use `semstreams/federation` directly (`federation.Entity`, `federation.Event`, `federation.Store`). The `graph/` package contains only `EntityPayload` (domain-specific payload registration for `"semsource"`)
+- Status gating: consumers wait for `graph.query.status` → `phase: "ready"` before querying
 
 ## Development Milestones
 
@@ -132,7 +134,7 @@ Current roadmap (see spec Section 10 for full details):
 2. **M2 — Core Handlers** ✅: GitHandler, ASTHandler, DocHandler, ConfigHandler, URLHandler
 3. **M3 — Graph Normalization & Events** ✅: Deterministic entity IDs, namespace routing, SEED/DELTA/RETRACT/HEARTBEAT emission
 4. **M4 — FederationProcessor** ✅: Lives in `semstreams/processor/federation`. Semsource verified alignment and deleted local copy.
-5. **M5 — Parallel Consumer Validation**: SemSpec + SemDragon consuming simultaneously (integration guide at `docs/integration/m5-consumer-integration.md`)
+5. **M5 — Consumer Query Integration** ✅: Status gating API (`graph.query.status`), per-instance tracking, NATS query endpoints, GraphQL gateway. Integration guide at `docs/integration/m5-consumer-integration.md`
 6. **M6 — Federation Validation**: Multiple SemSource instances producing identical `public.*` IDs
 
 ## Custom Agents & Skills

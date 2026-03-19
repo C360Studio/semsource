@@ -4,7 +4,8 @@
 
 ## Context
 
-SemSource emits graph entities from 9 source processors into the GRAPH JetStream stream (`graph.ingest.entity`). Two components consume this stream in parallel:
+SemSource emits graph entities from 8 source processors (ast, git, doc, cfgfile, url, image, video, audio)
+into the GRAPH JetStream stream (`graph.ingest.entity`). Two components consume this stream in parallel:
 
 - **graph-ingest** writes entities to the `ENTITY_STATES` KV bucket, where `graph-index` builds structural indexes (OUTGOING, INCOMING, ALIAS, PREDICATE).
 - **websocket-output** broadcasts entities directly to downstream consumers (SemSpec, SemDragon) via WebSocket.
@@ -54,7 +55,7 @@ ENTITY_STATES holds raw entity triples regardless of tier. The WebSocket export 
 ## Data Flow Reference
 
 ```
-Source Processors (9)
+Source Processors (8)
     |
     | entitypub.Publisher
     v
@@ -62,14 +63,19 @@ graph.ingest.entity (GRAPH JetStream)
     |
     +---> graph-ingest ---> ENTITY_STATES KV ---> graph-index ---> KV indices
     |                                                  |
-    |                                        [future: enrichment processors]
+    |                                        [enrichment: graph-embedding (BM25, default)]
     |
     +---> websocket-output ---> ws://0.0.0.0:7890/graph ---> downstream
 ```
 
+### Enrichment Architecture
+
+`graph-embedding` (BM25) is wired by default in `graphSubsystemComponents()` with
+`coalesce_ms: 200`. Embeddings are written to `EMBEDDINGS_CACHE`, not to `ENTITY_STATES`.
+The WebSocket export is unaffected — it always reflects the raw entity stream.
+
 ## Related Files
 
-- `cmd/semsource/run.go:500-519` — graph-ingest component wiring
-- `cmd/semsource/run.go:584-619` — websocket-output component wiring
+- `cmd/semsource/run.go` — graph subsystem and websocket component wiring
 - `internal/entitypub/publisher.go` — buffered entity publisher
 - `graph/event_payload.go` — EntityPayload definition

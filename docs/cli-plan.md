@@ -14,12 +14,13 @@ SemSource CLI provides an interactive setup wizard and subcommand structure to h
 - Example config at `configs/semsource-example.json`
 - `yaml.v3` retained in go.mod only for `source/parser/markdown.go` frontmatter
 
-### Phase 1: CLI Subcommands & Wizard -- COMPLETE (pending reviewer fixes)
+### Phase 1: CLI Subcommands & Wizard -- COMPLETE
 
 **Subcommands implemented:**
 - `semsource init` -- Interactive setup wizard, creates `semsource.json`
 - `semsource run` -- Start the ingestion engine
 - `semsource add` -- Add a source (interactive or flag-based)
+- `semsource remove` -- Remove a source (interactive or `--index N`)
 - `semsource sources` -- List configured sources in a table
 - `semsource validate` -- Check config without starting
 - `semsource version` -- Print version
@@ -38,20 +39,23 @@ SemSource CLI provides an interactive setup wizard and subcommand structure to h
 | URL | `url` | Available |
 | Video | `video` | Coming soon (placeholder) |
 
-### Phase 2: Post-Review Fixes -- TODO
+### Phase 2: Post-Review Fixes -- COMPLETE
 
-Must-fix issues from go-reviewer:
+Must-fix issues from go-reviewer (all resolved):
 
-1. **EOF infinite loop in `Term.Select`** (`cli/term.go:90-101`) -- `readLine()` returns "" on EOF, causing Select to loop forever. Fix: detect EOF and return 0 or error.
-2. **Git wizard allows empty URL** (`cli/wizard_git.go:19`) -- Prompt with empty default accepts empty input, producing invalid config. Fix: loop until non-empty.
-3. **Doc/Config wizards allow zero paths** -- `MultiLine` can return empty slice, producing invalid config. Fix: require at least one path.
-4. **URL wizard allows zero URLs** -- Same issue as doc/config. Fix: require at least one URL.
+1. **EOF infinite loop in `Term.Select`** (`cli/term.go`) -- Fixed: EOF detection returns error instead
+   of looping.
+2. **Git wizard allows empty URL** (`cli/wizard_git.go`) -- Fixed: prompt loops until non-empty input.
+3. **Doc/Config wizards allow zero paths** -- Fixed: `MultiLine` requires at least one path.
+4. **URL wizard allows zero URLs** -- Fixed: requires at least one URL.
 
-Should-fix issues:
+Should-fix issues (all resolved):
 
-1. Remove dead `autoRun()` in `cmd/semsource/run.go:76-81`
-2. Remove unused `_ string` parameter in `parseGlobalFlag` (`cmd/semsource/main.go:149`)
-3. Consider whether bare `semsource` should auto-run (currently starts engine if `semsource.json` exists)
+1. Dead `autoRun()` removed -- `run_v2.go` was renamed to `run.go`; `runV2Cmd` renamed to `runCmd`.
+   The dead code path no longer exists.
+2. Unused `_ string` parameter in `parseGlobalFlag` removed (`cmd/semsource/main.go`).
+3. Bare `semsource` auto-runs when `semsource.json` exists -- this is the intended behavior and is
+   confirmed working.
 
 ### Phase 3: Enhancements -- FUTURE
 

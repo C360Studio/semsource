@@ -115,11 +115,8 @@ C360_PORT=3000                    # External port for Caddy
 UI_CONTEXT=../semstreams-ui       # Path to semstreams-ui repo
 ```
 
-Include NATS (required for image/video/audio object storage):
-
-```bash
-docker compose --profile nats up
-```
+NATS is required — SemSource runs on the semstreams ServiceManager, which requires NATS JetStream. The default
+`docker compose up` includes NATS. The `--profile nats` flag is no longer needed.
 
 ### Port Map
 
@@ -128,10 +125,11 @@ Ports are chosen to avoid clashes when running alongside other SemStreams servic
 | Port | Service | Notes |
 |------|---------|-------|
 | 3000 | Caddy entry point | UI + graph WebSocket |
-| 4222 | NATS | Internal, opt-in via `--profile nats` |
+| 4222 | NATS | JetStream, included by default |
 | 7890 | SemSource WebSocket | Internal, proxied via `/graph` |
 | 5173 | SemStreams UI (Vite) | Internal, proxied via `/*` |
-| 8080 | Reserved | Future: semspec/semdragon backend |
+| 8080 | ServiceManager HTTP API | Status, sources, predicates, metrics |
+| 9090 | Prometheus metrics | Scrape endpoint (semstreams alpha.61+) |
 
 ## Config File
 
@@ -140,28 +138,73 @@ SemSource uses a JSON config file (`semsource.json`). The wizard creates it for 
 ```json
 {
   "namespace": "myorg",
-  "flow": {
-    "outputs": [{
-      "name": "graph_stream",
-      "type": "network",
-      "subject": "http://0.0.0.0:7890/graph"
-    }],
-    "delivery_mode": "at-least-once",
-    "ack_timeout": "5s"
-  },
   "sources": [
     { "type": "ast", "path": "./", "language": "go", "watch": true },
     { "type": "docs", "paths": ["docs/", "README.md"], "watch": true },
-    { "type": "config", "paths": ["go.mod", "Dockerfile"], "watch": true }
+    { "type": "config", "paths": ["./"], "watch": true }
   ]
 }
 ```
+
+Optional top-level fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `http_port` | `8080` | ServiceManager HTTP API port |
+| `websocket_bind` | `"0.0.0.0:7890"` | WebSocket server bind address |
+| `websocket_path` | `"/graph"` | WebSocket path |
+| `workspace_dir` | — | Root directory for relative source paths |
+| `git_token` | — | Token for authenticated remote repo cloning |
+| `media_store_dir` | — | Local directory for media binary storage |
 
 Validate without starting the engine:
 
 ```bash
 semsource validate
 ```
+
+## Graph Query & Status API
+
+SemSource exposes graph query and status endpoints via NATS request/reply and HTTP.
+
+### NATS Subjects
+
+| Subject | Type | Description |
+|---------|------|-------------|
+| `graph.query.entity` | Request/Reply | Query a single entity by ID |
+| `graph.query.relationships` | Request/Reply | Query entity relationships |
+| `graph.query.pathSearch` | Request/Reply | Traverse paths between entities |
+| `graph.query.status` | Request/Reply | Current ingestion status |
+| `graph.query.sources` | Request/Reply | Configured source manifest |
+| `graph.query.predicates` | Request/Reply | Predicate schema by source type |
+
+### HTTP Endpoints (ServiceManager, default :8080)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /source-manifest/sources` | Configured sources |
+| `GET /source-manifest/status` | Ingestion status with per-instance phases |
+| `GET /source-manifest/predicates` | Predicate schema grouped by source type |
+| `GET /graphql` | GraphQL gateway (port 8082) |
+
+### Status Phases
+
+The status endpoint reports aggregate and per-source lifecycle:
+
+| Aggregate Phase | Meaning |
+|----------------|---------|
+| `seeding` | Initial ingest in progress |
+| `ready` | All sources completed initial ingest |
+| `degraded` | Seed timeout fired before all sources reported |
+
+| Source Phase | Meaning |
+|-------------|---------|
+| `ingesting` | Performing initial ingest |
+| `watching` | Watching for changes |
+| `idle` | No watch configured |
+| `errored` | Error encountered |
+
+Downstream consumers should gate on `phase: "ready"` before querying the graph.
 
 ## Building from Source
 

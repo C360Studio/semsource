@@ -1,220 +1,186 @@
 # M5 Consumer Integration Guide
 
-Instructions for connecting SemSpec and SemDragon to SemSource's graph event stream.
+Instructions for connecting SemSpec and SemDragon to SemSource's graph.
 
 ## Overview
 
-SemSource emits `GraphEvent` payloads (SEED/DELTA/RETRACT/HEARTBEAT) via `output/websocket` on `:7890/graph`. Each consumer needs to:
+Consumers query SemSource's graph directly via NATS request/reply endpoints. No WebSocket client setup,
+no FederationProcessor registration, and no bridge processor are required on the consumer side. SemSource
+manages its own full graph pipeline internally.
 
-1. Add `input/websocket` in ModeClient connecting to semsource
-2. Route received messages through the `FederationProcessor` from `semstreams/processor/federation` (merge policy filter)
-3. Feed the filtered entities into their existing `graph-ingest` pipeline -> `ENTITY_STATES` KV
+### Internal pipeline (SemSource)
 
-The federation processor and its shared types (`federation.Entity`, `federation.Event`, etc.) live in `semstreams/federation` and `semstreams/processor/federation`. **SemSource does not ship its own federation processor** — it is a consumer-side concern.
+```
+Source Processors → graph.ingest.entity → graph-ingest → ENTITY_STATES KV
+                                                               |
+                                                          graph-index → KV indices
+                                                               |
+                                                          graph-query ← graph.query.*
+                                                               |
+                                                          graph-gateway ← /graphql
+```
 
-## Wire Format
+### Consumer integration
 
-SemSource emits events as JSON. The wire format is structurally identical to `federation.Event`:
+```
+[SemDragon/SemSpec] → graph.query.status        (gate on "ready")
+                    → graph.query.entity         (fetch entities by ID)
+                    → graph.query.relationships  (traverse the graph)
+                    → graph.query.pathSearch     (path queries)
+                    → /graphql                   (rich queries, port 8082)
+```
+
+## Gating on Readiness
+
+Before querying the graph, consumers must wait for SemSource to complete its initial seed pass.
+
+### Option A: Subscribe to the GRAPH JetStream stream
+
+Subscribe to `graph.ingest.status` on the `GRAPH` stream and watch for a message with
+`"phase": "ready"`.
+
+### Option B: Poll via NATS request/reply
+
+Send a NATS request to `graph.query.status` and retry until the response contains
+`"phase": "ready"`.
+
+### Option C: Poll via HTTP
+
+```
+GET http://localhost:8080/source-manifest/status
+```
+
+Retry until `phase` is `"ready"`.
+
+## Status Payload Schema
+
+The status response is a JSON object:
 
 ```json
 {
-  "type": "SEED|DELTA|RETRACT|HEARTBEAT",
-  "source_id": "semsource",
-  "namespace": "acme",
-  "timestamp": "2026-03-07T...",
-  "entities": [...],
-  "retractions": [...],
-  "provenance": { "source_type": "engine", "source_id": "semsource", ... }
-}
-```
-
-Consumers unmarshal directly into `federation.Event`. Entity fields (`id`, `triples`, `edges`, `provenance`, `additional_provenance`) map 1:1 to `federation.Entity`.
-
-## SemSpec Integration
-
-### What exists today
-
-- `source-ingester`, `repo-ingester`, `web-ingester`, `ast-indexer` all publish to `graph.ingest.entity` (JetStream subject on `GRAPH` stream)
-- `graph-ingest` component subscribes to `graph.ingest.entity` -> writes to `ENTITY_STATES` KV
-- No WebSocket input currently configured
-
-### What to add
-
-#### 1. Register the FederationProcessor
-
-In whatever file semspec registers components (look for existing `Register()` calls), add:
-
-```go
-import "github.com/c360studio/semstreams/processor/federation"
-federation.Register(registry)
-```
-
-Also register the federation event payload for semspec's domain:
-
-```go
-import fedtypes "github.com/c360studio/semstreams/federation"
-fedtypes.RegisterPayload("semspec")
-```
-
-#### 2. Add two components to the flow config JSON
-
-Add to `configs/e2e.json` (and other deployment configs):
-
-**WebSocket input (ModeClient):**
-
-```json
-"semsource-input": {
-  "name": "semsource-input",
-  "type": "input",
-  "enabled": true,
-  "config": {
-    "mode": "client",
-    "client": {
-      "url": "ws://localhost:7890/graph",
-      "reconnect": {
-        "enabled": true,
-        "max_retries": 0,
-        "initial_interval": "1s",
-        "max_interval": "60s",
-        "multiplier": 2.0
-      }
+  "namespace": "myorg",
+  "phase": "ready",
+  "sources": [
+    {
+      "instance_name": "ast-source-0",
+      "source_type": "ast",
+      "phase": "watching",
+      "entity_count": 1842,
+      "error_count": 0
     },
-    "ports": {
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "ws_data",
-          "type": "jetstream",
-          "subject": "semsource.graph.events",
-          "stream_name": "GRAPH_EVENTS"
-        }
-      ]
+    {
+      "instance_name": "doc-source-0",
+      "source_type": "docs",
+      "phase": "watching",
+      "entity_count": 37,
+      "error_count": 0
     }
-  }
+  ],
+  "total_entities": 1879,
+  "timestamp": "2026-03-19T10:22:04Z"
 }
 ```
 
-**FederationProcessor:**
+### Aggregate phases
 
-```json
-"federation-processor": {
-  "name": "federation-processor",
-  "type": "processor",
-  "enabled": true,
-  "config": {
-    "local_namespace": "acme",
-    "merge_policy": "standard"
-  }
-}
-```
+| Phase | Meaning |
+|-------|---------|
+| `seeding` | Initial ingest in progress |
+| `ready` | All sources completed initial ingest |
+| `degraded` | Seed timeout fired before all sources reported |
 
-The federation processor consumes from `semsource.graph.events` (GRAPH_EVENTS stream) and publishes merged events to `semsource.graph.merged` (GRAPH_MERGED stream).
+### Per-source phases
 
-#### 3. Bridge federation output to graph-ingest
+| Phase | Meaning |
+|-------|---------|
+| `ingesting` | Performing initial ingest |
+| `watching` | Watching for changes |
+| `idle` | No watch configured |
+| `errored` | Error encountered |
 
-The federation processor outputs merged `federation.Event` payloads to `semsource.graph.merged`. These need to be converted to individual entity publishes on `graph.ingest.entity` so the existing `graph-ingest` component picks them up.
+## NATS Query Endpoints
 
-Use `federation.ToEntityState()` to convert each `federation.Entity` to a `graph.EntityState` for storage:
+All endpoints use NATS request/reply. Send a JSON request body; receive a JSON response.
 
-```go
-import fedtypes "github.com/c360studio/semstreams/federation"
+| Subject | Description |
+|---------|-------------|
+| `graph.query.entity` | Fetch a single entity by 6-part ID |
+| `graph.query.relationships` | Fetch edges for an entity |
+| `graph.query.pathSearch` | Traverse paths between two entities |
+| `graph.query.status` | Current ingestion status (same as HTTP) |
+| `graph.query.sources` | Configured source manifest |
+| `graph.query.predicates` | Predicate schema grouped by source type |
 
-for _, entity := range event.Entities {
-    state := fedtypes.ToEntityState(entity, fedtypes.NewFederationMessageType())
-    // publish state to graph.ingest.entity
-}
-```
+These subjects are served by the `graph-query` component running inside SemSource.
 
-Two options for the bridge:
+## HTTP Endpoints (ServiceManager, default :8080)
 
-**Option A (recommended): Small bridge processor.** A lightweight processor that subscribes to `semsource.graph.merged`, unwraps the `federation.Event`, and for each entity uses `ToEntityState()` to publish to `graph.ingest.entity`. For RETRACT events, publish delete messages. This keeps `graph-ingest` unchanged.
+Use HTTP as a fallback when NATS is not directly accessible:
 
-**Option B: Add a second input to graph-ingest.** Modify `graph-ingest` to also subscribe to `semsource.graph.merged` and handle `federation.Event` payloads directly. More invasive but eliminates the bridge.
+| Endpoint | Description |
+|----------|-------------|
+| `GET /source-manifest/status` | Ingestion status |
+| `GET /source-manifest/sources` | Configured source manifest |
+| `GET /source-manifest/predicates` | Predicate schema |
 
-#### 4. SemSpec's own processors continue working independently
+## GraphQL Gateway
 
-The `source-ingester`, `ast-indexer`, `repo-ingester`, and `web-ingester` still publish directly to `graph.ingest.entity`. SemSource provides _additional_ external graph entities via the WebSocket -> federation -> bridge -> graph-ingest path. Both feed into the same `ENTITY_STATES` KV. The 6-part entity IDs ensure no collisions.
-
-### SemSpec data flow after integration
-
-```
-[semsource :7890/graph]
-    | WebSocket
-[input/websocket ModeClient]
-    | semsource.graph.events
-[federation-processor] (merge policy filter)
-    | semsource.graph.merged
-[bridge processor] (federation.ToEntityState -> individual entities)
-    | graph.ingest.entity
-[graph-ingest] -> ENTITY_STATES KV
-```
-
-## SemDragon Integration
-
-### What exists today
-
-- `seeding` processor bootstraps agents/guilds into board KV
-- `graph-ingest` component writes to `ENTITY_STATES` KV
-- No WebSocket input currently configured
-- SemDragon relies entirely on external sources (semsource) for source graph entities
-
-### What to add
-
-#### 1. Register the FederationProcessor
-
-Same as semspec:
-
-```go
-import "github.com/c360studio/semstreams/processor/federation"
-federation.Register(registry)
-
-import fedtypes "github.com/c360studio/semstreams/federation"
-fedtypes.RegisterPayload("semdragon")
-```
-
-#### 2. Add WebSocket input + FederationProcessor to flow config
-
-Add to `config/semdragons-e2e-openai.json` (and other deployment configs). Same two component configs as semspec above, but with the `local_namespace` matching semdragon's org namespace.
-
-#### 3. Bridge federation output to graph-ingest
-
-Same pattern as semspec. The bridge processor uses `federation.ToEntityState()` to unwrap `federation.Event` entities into individual `graph.EntityState` publishes on `graph.ingest.entity`.
-
-#### 4. Board pre-seeding from external graph
-
-The `seeding` processor currently bootstraps agents/guilds. After integration, the ENTITY_STATES KV will also contain source-graph entities from semsource (code symbols, git commits, docs, config files, URLs). The seeding processor doesn't need to change -- it operates on its own domain entities. But any downstream processors that query the graph (quest tools, context builders, etc.) will now see semsource entities in ENTITY_STATES and can use them.
-
-### SemDragon data flow after integration
+A GraphQL interface is available at port 8082 via the `graph-gateway` component:
 
 ```
-[semsource :7890/graph]
-    | WebSocket
-[input/websocket ModeClient]
-    | semsource.graph.events
-[federation-processor] (merge policy filter)
-    | semsource.graph.merged
-[bridge processor] (federation.ToEntityState)
-    | graph.ingest.entity
-[graph-ingest] -> ENTITY_STATES KV
-    |
-[seeding, quest tools, etc.] -- can now query source entities
+GET/POST http://localhost:8082/graphql
 ```
 
-## Shared Deliverables (Both Teams)
+This is the recommended interface for complex or exploratory queries involving multiple
+entity types, relationship traversal, and filtering.
 
-### Bridge processor
+## Federation (Multi-Instance SemSource)
 
-Both teams need the same small processor. Consider putting it in `semstreams` as a shared component (`processor/graph-event-bridge/`) since both consumers need it, or each team can implement their own. The logic is ~50 lines using `federation.ToEntityState()`:
+Federation is a SemSource-to-SemSource concern. Consumers do not need to handle it.
 
-- Subscribe to `semsource.graph.merged`
-- For SEED/DELTA: iterate `event.Entities`, call `federation.ToEntityState(entity, federation.NewFederationMessageType())`, publish to `graph.ingest.entity`
-- For RETRACT: iterate `event.Retractions`, publish delete messages to `graph.ingest.entity`
-- For HEARTBEAT: no-op (or forward as a liveness signal)
+When multiple SemSource instances run against the same or overlapping codebases:
 
-### JetStream streams
+- `public.*` entities (deterministic IDs for open-source packages, standard predicates) merge
+  automatically across instances.
+- `{org}.*` entities are sovereign to their owning namespace and do not merge.
 
-Both consumers need `GRAPH_EVENTS` and `GRAPH_MERGED` streams created. Add to NATS stream provisioning (usually in the flow config or startup scripts).
+Consumers query a single SemSource instance and receive the already-federated view. No
+consumer-side merge logic is needed.
 
-### Integration test
+## What Consumers Do NOT Need
 
-Start semsource with a test YAML config, start the consumer with the new flow config, verify entities appear in `ENTITY_STATES` KV after semsource emits a SEED event.
+| Item | Reason |
+|------|--------|
+| WebSocket client (`input/websocket`) | SemSource handles its own WebSocket output internally |
+| `FederationProcessor` registration | Federation is SemSource-internal |
+| Bridge processor | No `GRAPH_EVENTS` or `GRAPH_MERGED` streams to bridge |
+| `GRAPH_EVENTS` stream | Not exposed to consumers |
+| `GRAPH_MERGED` stream | Not exposed to consumers |
+| `federation.ToEntityState()` calls | Consumers receive query responses, not raw event streams |
+
+## SemSpec Integration Checklist
+
+1. Choose a readiness gating strategy (NATS subscribe, NATS poll, or HTTP poll).
+2. On `phase: "ready"`, begin querying via `graph.query.*` NATS subjects or HTTP.
+3. Use `graph.query.entity` to resolve entities by 6-part ID.
+4. Use `graph.query.relationships` to traverse edges between entities.
+5. Use `/graphql` (port 8082) for complex multi-hop queries.
+
+SemSpec's own processors (`source-ingester`, `ast-indexer`, `repo-ingester`, `web-ingester`)
+continue publishing to their own `graph.ingest.entity` subject independently. SemSource graph
+entities supplement the SemSpec graph — entity IDs do not collide because namespace prefixes differ.
+
+## SemDragon Integration Checklist
+
+1. Gate on `phase: "ready"` using any of the three options above.
+2. Query source-graph entities (`code`, `git`, `docs`, `config`) via `graph.query.*`.
+3. Make these entities available to quest tools and context builders that query ENTITY_STATES.
+4. The `seeding` processor bootstraps agents/guilds independently — no changes needed there.
+
+## Integration Test Outline
+
+1. Start SemSource with a test config pointing at a small repo.
+2. Subscribe to `graph.query.status` and wait for `phase: "ready"`.
+3. Send a `graph.query.entity` request for a known entity ID; assert a valid response.
+4. Send a `graph.query.relationships` request; assert edges are present.
+5. Confirm `GET /source-manifest/status` returns matching phase and entity count.

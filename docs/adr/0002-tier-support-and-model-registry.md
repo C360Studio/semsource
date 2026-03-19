@@ -1,6 +1,6 @@
 # ADR-0002: Tier Support and Model Registry Passthrough
 
-> **Status:** Proposed | **Date:** 2026-03-12
+> **Status:** Accepted (Statistical Tier Implemented) | **Date:** 2026-03-12
 
 ## Context
 
@@ -18,15 +18,23 @@ SemSource may want to offer optional tier escalation so users can get embeddings
 
 ## Decision
 
-**Defer tier support implementation. Document the design for future use.**
+**Implement statistical tier. Defer semantic tier until semembed/seminstruct infrastructure is needed.**
 
-SemSource remains structural-only for now. When tier support is needed, the implementation is:
+Statistical tier is now wired by default:
 
-1. Add `tier` and `model_registry` fields to `config.Config`
-2. Extend `graphSubsystemComponents()` in `run.go` to conditionally wire `graph-embedding` and `graph-clustering`
-3. Pass `model_registry` through to the semstreams config builder
+- `graph-embedding` (BM25) is registered in `graphSubsystemComponents()` with `coalesce_ms: 200`.
+- `graph-index` also uses `coalesce_ms: 200`.
+- No external services are required — BM25 embeddings and LPA clustering are pure Go.
 
-This is a config-level change only. No source processors change.
+When semantic tier is needed, the implementation path is:
+
+1. Add `tier` and `model_registry` fields to `config.Config`.
+2. Extend `graphSubsystemComponents()` in `run.go` to conditionally wire the HTTP-backed
+   `graph-embedding` and LLM-backed `graph-clustering`.
+3. Pass `model_registry` through to the semstreams config builder.
+
+Model registry passthrough is available in the semstreams config builder but not yet
+exposed in the semsource config surface.
 
 ## Consequences
 
@@ -57,7 +65,7 @@ Statistical tier requires no external services (BM25 embeddings and LPA clusteri
 ## Related
 
 - ADR-0001: WebSocket Output Exports Raw Entities Before ENTITY_STATES
-- `cmd/semsource/run.go:492-582` — graphSubsystemComponents() to extend
-- `config/config.go` — Config struct to extend
+- `cmd/semsource/run.go` — `graphSubsystemComponents()` wiring
+- `config/config.go` — Config struct
 - semstreams `configs/statistical.json`, `configs/semantic.json` — reference tier configs
 - semstreams `docs/operations/migration-alpha29.md` — model registry migration guide
