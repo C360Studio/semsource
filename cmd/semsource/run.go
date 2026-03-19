@@ -69,6 +69,7 @@ func runCmd(args []string) error {
 
 	logger.Info("semsource starting",
 		"version", version,
+		"mode", semsourceCfg.Mode,
 		"namespace", semsourceCfg.Namespace,
 		"sources", len(semsourceCfg.Sources),
 		"branch_watchers", len(expandResult.Watchers),
@@ -307,8 +308,8 @@ func wrapNATSConnError(err error, url string) error {
 }
 
 // buildSemstreamsConfig constructs a semstreams config.Config from the semsource
-// config. It translates each source entry into a component config and wires up
-// the graph subsystem, manifest, and websocket components.
+// config. In standalone mode it wires the full graph subsystem and WebSocket
+// output. In headless mode only source components and the manifest are included.
 func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, error) {
 	components, err := sourceComponents(cfg, org)
 	if err != nil {
@@ -321,26 +322,29 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}
 	components["source-manifest"] = manifestCfg
 
-	graphComponents, err := graphSubsystemComponents()
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range graphComponents {
-		components[k] = v
-	}
+	// Graph subsystem and WebSocket are standalone-only.
+	if !cfg.IsHeadless() {
+		graphComponents, err := graphSubsystemComponents(cfg)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range graphComponents {
+			components[k] = v
+		}
 
-	wsCfg, err := websocketComponentConfig(cfg)
-	if err != nil {
-		return nil, err
+		wsCfg, err := websocketComponentConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		components["websocket-output"] = wsCfg
 	}
-	components["websocket-output"] = wsCfg
 
 	svcs, err := serviceConfigs(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return &semconfig.Config{
+	ssCfg := &semconfig.Config{
 		Version: "1.0.0",
 		Platform: semconfig.PlatformConfig{
 			Org:         org,
@@ -352,22 +356,31 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		},
 		Services:   svcs,
 		Components: components,
-		Streams: semconfig.StreamConfigs{
+	}
+
+	if cfg.IsHeadless() {
+		// In headless mode, declare the GRAPH stream with only the subjects
+		// sources need. EnsureStreams will create it if missing or skip if
+		// the host app already created it with matching subjects.
+		ssCfg.Streams = semconfig.StreamConfigs{
 			"GRAPH": semconfig.StreamConfig{
 				Subjects: []string{
 					"graph.ingest.entity",
-					"graph.ingest.batch",
 					"graph.ingest.manifest",
 					"graph.ingest.status",
 					"graph.ingest.predicates",
 				},
 				Storage:  "memory",
-				MaxBytes: 256 * 1024 * 1024,
+				MaxBytes: 64 * 1024 * 1024,
 				MaxAge:   "1h",
 				Replicas: 1,
 			},
-		},
-	}, nil
+		}
+	} else {
+		ssCfg.Streams = graphStreamConfig(cfg)
+	}
+
+	return ssCfg, nil
 }
 
 // sourceComponents translates semsource config sources into semstreams component configs.
@@ -531,7 +544,32 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 
 // graphSubsystemComponents returns the built-in semstreams graph components:
 // ingest, index, query, and gateway.
-func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
+func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, error) {
+	// Resolve graph config with defaults.
+	gatewayBind := "0.0.0.0:8082"
+	enablePlayground := true
+	embedderType := "bm25"
+	batchSize := 50
+	coalesceMs := 200
+
+	if g := cfg.Graph; g != nil {
+		if g.GatewayBind != "" {
+			gatewayBind = g.GatewayBind
+		}
+		if g.EnablePlayground != nil {
+			enablePlayground = *g.EnablePlayground
+		}
+		if g.EmbedderType != "" {
+			embedderType = g.EmbedderType
+		}
+		if g.EmbeddingBatchSize > 0 {
+			batchSize = g.EmbeddingBatchSize
+		}
+		if g.CoalesceMs > 0 {
+			coalesceMs = g.CoalesceMs
+		}
+	}
+
 	configs := map[string]struct {
 		name      string
 		compType  types.ComponentType
@@ -561,7 +599,7 @@ func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
 			name:     "graph-index",
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
-				"coalesce_ms": 200,
+				"coalesce_ms": coalesceMs,
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
@@ -579,9 +617,9 @@ func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
 			name:     "graph-embedding",
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
-				"coalesce_ms":   200,
-				"embedder_type": "bm25",
-				"batch_size":    50,
+				"coalesce_ms":   coalesceMs,
+				"embedder_type": embedderType,
+				"batch_size":    batchSize,
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
@@ -617,8 +655,8 @@ func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
 						{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
 					},
 				},
-				"bind_address":      "0.0.0.0:8082",
-				"enable_playground": true,
+				"bind_address":      gatewayBind,
+				"enable_playground": enablePlayground,
 			},
 		},
 	}
@@ -637,6 +675,40 @@ func graphSubsystemComponents() (semconfig.ComponentConfigs, error) {
 		}
 	}
 	return result, nil
+}
+
+// graphStreamConfig builds the GRAPH stream config with user overrides applied.
+func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
+	sc := semconfig.StreamConfig{
+		Subjects: []string{
+			"graph.ingest.entity",
+			"graph.ingest.batch",
+			"graph.ingest.manifest",
+			"graph.ingest.status",
+			"graph.ingest.predicates",
+		},
+		Storage:  "memory",
+		MaxBytes: 256 * 1024 * 1024,
+		MaxAge:   "1h",
+		Replicas: 1,
+	}
+
+	if override, ok := cfg.Streams["GRAPH"]; ok {
+		if override.Storage != "" {
+			sc.Storage = override.Storage
+		}
+		if override.MaxBytes != nil {
+			sc.MaxBytes = *override.MaxBytes
+		}
+		if override.MaxAge != "" {
+			sc.MaxAge = override.MaxAge
+		}
+		if override.Replicas != nil {
+			sc.Replicas = *override.Replicas
+		}
+	}
+
+	return semconfig.StreamConfigs{"GRAPH": sc}
 }
 
 // websocketComponentConfig builds the WebSocket output component config.
@@ -682,6 +754,22 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal service-manager config: %w", err)
 	}
+
+	metricsPort := 9091
+	metricsPath := "/metrics"
+	if m := cfg.Metrics; m != nil {
+		if m.Port > 0 {
+			metricsPort = m.Port
+		}
+		if m.Path != "" {
+			metricsPath = m.Path
+		}
+	}
+	metricsCfgJSON, err := json.Marshal(map[string]any{"port": metricsPort, "path": metricsPath})
+	if err != nil {
+		return nil, fmt.Errorf("marshal metrics config: %w", err)
+	}
+
 	return types.ServiceConfigs{
 		"service-manager": types.ServiceConfig{
 			Name:    "service-manager",
@@ -696,7 +784,7 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 		"metrics": types.ServiceConfig{
 			Name:    "metrics",
 			Enabled: true,
-			Config:  json.RawMessage(`{"port": 9091, "path": "/metrics"}`),
+			Config:  metricsCfgJSON,
 		},
 		"heartbeat": types.ServiceConfig{
 			Name:    "heartbeat",

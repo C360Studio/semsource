@@ -1202,3 +1202,201 @@ func TestE2E_RunFailsGracefullyWithoutNATS(t *testing.T) {
 	}
 	t.Logf("graceful failure output: %s", strings.TrimSpace(output))
 }
+
+func TestE2E_HeadlessMode(t *testing.T) {
+	// Start NATS via Docker.
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	httpPort := freePort(t)
+	wsPort := freePort(t)
+
+	// Write headless config — no graph subsystem, no WebSocket.
+	root := repoRoot(t)
+	cfg := map[string]any{
+		"namespace":      "headless-test",
+		"mode":           "headless",
+		"http_port":      httpPort,
+		"websocket_bind": fmt.Sprintf("0.0.0.0:%d", wsPort),
+		"sources": []map[string]any{
+			{"type": "ast", "path": root, "language": "go", "watch": false},
+			{"type": "docs", "paths": []string{filepath.Join(root, "docs")}, "watch": false},
+			{"type": "config", "paths": []string{root}, "watch": false},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	configPath := filepath.Join(workDir, "semsource.json")
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	// Subscribe to graph ingest subject BEFORE starting semsource.
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect to NATS: %v", err)
+	}
+	defer nc.Close()
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+
+	ctx := context.Background()
+	stream, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     "GRAPH",
+		Subjects: []string{"graph.ingest.>"},
+		Storage:  jetstream.MemoryStorage,
+	})
+	if err != nil {
+		t.Fatalf("create GRAPH stream: %v", err)
+	}
+
+	cons, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
+		DeliverPolicy: jetstream.DeliverAllPolicy,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+	})
+	if err != nil {
+		t.Fatalf("create consumer: %v", err)
+	}
+
+	// Start semsource in headless mode.
+	runCtx, runCancel := context.WithTimeout(ctx, 60*time.Second)
+	defer runCancel()
+
+	cmd := exec.CommandContext(runCtx, binPath, "run",
+		"--config", configPath,
+		"--log-level", "debug",
+		"--nats-url", natsURL,
+	)
+	cmd.Dir = workDir
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start semsource: %v", err)
+	}
+
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			t.Logf("[stderr] %s", scanner.Text())
+		}
+	}()
+
+	logsDone := make(chan struct{})
+	go func() {
+		defer close(logsDone)
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			t.Logf("[stdout] %s", scanner.Text())
+		}
+	}()
+
+	// Collect entity messages from NATS.
+	var entities []entityPayload
+	collectCtx, collectCancel := context.WithTimeout(ctx, 45*time.Second)
+	defer collectCancel()
+
+	fetchDone := make(chan struct{})
+	go func() {
+		defer close(fetchDone)
+		for {
+			if collectCtx.Err() != nil {
+				return
+			}
+			msgs, err := cons.Fetch(10, jetstream.FetchMaxWait(2*time.Second))
+			if err != nil {
+				continue
+			}
+			for msg := range msgs.Messages() {
+				var raw map[string]json.RawMessage
+				if err := json.Unmarshal(msg.Data(), &raw); err != nil {
+					msg.Ack()
+					continue
+				}
+				payloadJSON, ok := raw["payload"]
+				if !ok {
+					payloadJSON, ok = raw["data"]
+				}
+				if !ok {
+					msg.Ack()
+					continue
+				}
+				var payload entityPayload
+				if err := json.Unmarshal(payloadJSON, &payload); err != nil {
+					msg.Ack()
+					continue
+				}
+				if payload.ID == "" {
+					msg.Ack()
+					continue
+				}
+				entities = append(entities, payload)
+				msg.Ack()
+				if len(entities) >= 20 {
+					return
+				}
+			}
+		}
+	}()
+
+	select {
+	case <-fetchDone:
+		t.Logf("collected %d entities", len(entities))
+	case <-collectCtx.Done():
+		t.Logf("collection timed out with %d entities", len(entities))
+	}
+
+	// Query status — should reach "ready" in headless mode.
+	status := waitForReady(t, httpPort, 30*time.Second)
+	t.Logf("headless status: phase=%s, total_entities=%d, sources=%d",
+		status.Phase, status.TotalEntities, len(status.Sources))
+
+	// Stop semsource.
+	cmd.Process.Signal(os.Interrupt)
+	cmd.Wait()
+	<-logsDone
+
+	// --- Assertions ---
+
+	// Entities were published to NATS even without graph subsystem.
+	if len(entities) == 0 {
+		t.Fatal("no entities received — headless mode should still publish to graph.ingest.entity")
+	}
+
+	// Status gating works in headless mode.
+	if status.Phase != "ready" {
+		t.Errorf("status phase = %q, want 'ready'", status.Phase)
+	}
+	if status.Namespace != "headless-test" {
+		t.Errorf("status namespace = %q, want %q", status.Namespace, "headless-test")
+	}
+	if len(status.Sources) != 3 {
+		t.Errorf("status sources = %d, want 3", len(status.Sources))
+	}
+	if status.TotalEntities == 0 {
+		t.Error("status total_entities = 0")
+	}
+
+	// WebSocket should NOT be listening (headless mode skips it).
+	wsURL := fmt.Sprintf("http://127.0.0.1:%d/graph", wsPort)
+	resp, err := http.Get(wsURL)
+	if err == nil {
+		resp.Body.Close()
+		t.Errorf("WebSocket port %d should not be listening in headless mode, but got response", wsPort)
+	}
+	// Connection refused is expected.
+}

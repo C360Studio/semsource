@@ -501,3 +501,182 @@ func TestLoadConfigFromReader_VideoInvalidKeyframeMode(t *testing.T) {
 		t.Fatal("expected validation error for video source with invalid keyframe_mode, got nil")
 	}
 }
+
+func TestLoadConfigFromReader_ModeDefault(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Mode != config.ModeStandalone {
+		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeStandalone)
+	}
+	if cfg.IsHeadless() {
+		t.Error("IsHeadless() = true, want false for default mode")
+	}
+}
+
+func TestLoadConfigFromReader_ModeHeadless(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "mode": "headless",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Mode != config.ModeHeadless {
+		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeHeadless)
+	}
+	if !cfg.IsHeadless() {
+		t.Error("IsHeadless() = false, want true")
+	}
+}
+
+func TestLoadConfigFromReader_ModeStandalone(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "mode": "standalone",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Mode != config.ModeStandalone {
+		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeStandalone)
+	}
+}
+
+func TestLoadConfigFromReader_ModeInvalid(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "mode": "turbo",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for invalid mode")
+	}
+	if !strings.Contains(err.Error(), "mode") {
+		t.Errorf("error should mention mode, got: %v", err)
+	}
+}
+
+func TestLoadConfigFromReader_ModeEnvOverride(t *testing.T) {
+	t.Setenv("SEMSOURCE_MODE", "headless")
+	input := `{
+  "namespace": "acme",
+  "mode": "standalone",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Mode != config.ModeHeadless {
+		t.Errorf("mode: got %q, want %q (env should override config)", cfg.Mode, config.ModeHeadless)
+	}
+}
+
+func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "graph": {
+    "gateway_bind": "127.0.0.1:9000",
+    "enable_playground": false,
+    "embedder_type": "http",
+    "embedding_batch_size": 100,
+    "coalesce_ms": 500
+  }
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Graph == nil {
+		t.Fatal("graph config is nil")
+	}
+	if cfg.Graph.GatewayBind != "127.0.0.1:9000" {
+		t.Errorf("gateway_bind: got %q, want %q", cfg.Graph.GatewayBind, "127.0.0.1:9000")
+	}
+	if cfg.Graph.EnablePlayground == nil || *cfg.Graph.EnablePlayground {
+		t.Error("enable_playground: want false")
+	}
+	if cfg.Graph.EmbedderType != "http" {
+		t.Errorf("embedder_type: got %q, want %q", cfg.Graph.EmbedderType, "http")
+	}
+	if cfg.Graph.EmbeddingBatchSize != 100 {
+		t.Errorf("embedding_batch_size: got %d, want 100", cfg.Graph.EmbeddingBatchSize)
+	}
+	if cfg.Graph.CoalesceMs != 500 {
+		t.Errorf("coalesce_ms: got %d, want 500", cfg.Graph.CoalesceMs)
+	}
+}
+
+func TestLoadConfigFromReader_MetricsConfig(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "metrics": {
+    "port": 9999,
+    "path": "/prom"
+  }
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Metrics == nil {
+		t.Fatal("metrics config is nil")
+	}
+	if cfg.Metrics.Port != 9999 {
+		t.Errorf("port: got %d, want 9999", cfg.Metrics.Port)
+	}
+	if cfg.Metrics.Path != "/prom" {
+		t.Errorf("path: got %q, want %q", cfg.Metrics.Path, "/prom")
+	}
+}
+
+func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {
+    "GRAPH": {
+      "storage": "file",
+      "max_age": "24h",
+      "max_bytes": 1073741824,
+      "replicas": 3
+    }
+  }
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Streams == nil {
+		t.Fatal("streams config is nil")
+	}
+	graph, ok := cfg.Streams["GRAPH"]
+	if !ok {
+		t.Fatal("GRAPH stream override missing")
+	}
+	if graph.Storage != "file" {
+		t.Errorf("storage: got %q, want %q", graph.Storage, "file")
+	}
+	if graph.MaxAge != "24h" {
+		t.Errorf("max_age: got %q, want %q", graph.MaxAge, "24h")
+	}
+	if graph.MaxBytes == nil || *graph.MaxBytes != 1073741824 {
+		t.Errorf("max_bytes: got %v, want 1073741824", graph.MaxBytes)
+	}
+	if graph.Replicas == nil || *graph.Replicas != 3 {
+		t.Errorf("replicas: got %v, want 3", graph.Replicas)
+	}
+}
