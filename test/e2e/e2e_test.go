@@ -63,11 +63,34 @@ type statusPayload struct {
 }
 
 type sourceStatus struct {
-	InstanceName string `json:"instance_name"`
-	SourceType   string `json:"source_type"`
-	Phase        string `json:"phase"`
-	EntityCount  int64  `json:"entity_count"`
-	ErrorCount   int64  `json:"error_count"`
+	InstanceName string           `json:"instance_name"`
+	SourceType   string           `json:"source_type"`
+	Phase        string           `json:"phase"`
+	EntityCount  int64            `json:"entity_count"`
+	ErrorCount   int64            `json:"error_count"`
+	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+}
+
+// summaryPayload mirrors the source-manifest summary response structure.
+type summaryPayload struct {
+	Namespace      string          `json:"namespace"`
+	Phase          string          `json:"phase"`
+	EntityIDFormat string          `json:"entity_id_format"`
+	TotalEntities  int64           `json:"total_entities"`
+	Domains        []domainSummary `json:"domains"`
+	Timestamp      string          `json:"timestamp"`
+}
+
+type domainSummary struct {
+	Domain      string      `json:"domain"`
+	EntityCount int64       `json:"entity_count"`
+	Types       []typeCount `json:"types"`
+	Sources     []string    `json:"sources"`
+}
+
+type typeCount struct {
+	Type  string `json:"type"`
+	Count int64  `json:"count"`
 }
 
 // queryManifestHTTP GETs the source manifest from the ServiceManager HTTP API.
@@ -145,6 +168,32 @@ func waitForReady(t *testing.T, httpPort int, timeout time.Duration) statusPaylo
 		time.Sleep(2 * time.Second)
 	}
 	return last
+}
+
+// querySummaryHTTP GETs the graph summary from the ServiceManager HTTP API.
+func querySummaryHTTP(t *testing.T, httpPort int) summaryPayload {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/summary", httpPort)
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		var s summaryPayload
+		if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+			t.Fatalf("decode summary response: %v", err)
+		}
+		return s
+	}
+	t.Fatalf("GET %s did not return 200 within 15s", url)
+	return summaryPayload{}
 }
 
 // entityMessage is the envelope published to graph.ingest.entity.
@@ -479,6 +528,16 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	status := waitForReady(t, httpPort, 30*time.Second)
 	t.Logf("status: phase=%s, total_entities=%d, sources=%d", status.Phase, status.TotalEntities, len(status.Sources))
 
+	// Query graph summary — agent bootstrap endpoint.
+	summary := querySummaryHTTP(t, httpPort)
+	t.Logf("summary: domains=%d, total_entities=%d", len(summary.Domains), summary.TotalEntities)
+	for _, d := range summary.Domains {
+		t.Logf("  domain %q: %d entities, %d types", d.Domain, d.EntityCount, len(d.Types))
+		for _, tc := range d.Types {
+			t.Logf("    %s: %d", tc.Type, tc.Count)
+		}
+	}
+
 	// Stop semsource gracefully.
 	cmd.Process.Signal(os.Interrupt)
 	cmd.Wait()
@@ -526,6 +585,36 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	// Total entities should match what we received (approximately — status may lag slightly).
 	if status.TotalEntities == 0 {
 		t.Error("status total_entities = 0, expected entities to be counted")
+	}
+
+	// --- Summary assertions ---
+	if summary.Namespace != "e2etest" {
+		t.Errorf("summary namespace = %q, want %q", summary.Namespace, "e2etest")
+	}
+	if summary.Phase != "ready" {
+		t.Errorf("summary phase = %q, want 'ready'", summary.Phase)
+	}
+	if summary.EntityIDFormat == "" {
+		t.Error("summary entity_id_format is empty")
+	}
+	if len(summary.Domains) == 0 {
+		t.Error("summary has no domains — type counting not working")
+	}
+	if summary.TotalEntities == 0 {
+		t.Error("summary total_entities = 0")
+	}
+	// Should have at least golang domain (we're indexing Go code).
+	foundGolang := false
+	for _, d := range summary.Domains {
+		if d.Domain == "golang" {
+			foundGolang = true
+			if len(d.Types) == 0 {
+				t.Error("golang domain has no type breakdown")
+			}
+		}
+	}
+	if !foundGolang {
+		t.Error("summary missing 'golang' domain")
 	}
 
 	// 1. Binary started and produced log output.

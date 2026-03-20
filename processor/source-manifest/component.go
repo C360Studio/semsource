@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +23,9 @@ const (
 
 	// querySubject is the NATS subject for request/reply source queries.
 	querySubject = "graph.query.sources"
+
+	// summaryQuerySubject is the NATS subject for on-demand summary queries.
+	summaryQuerySubject = "graph.query.summary"
 )
 
 // Component implements the source-manifest processor.
@@ -49,6 +54,9 @@ type Component struct {
 	// Predicate schema
 	predicatesQuerySub *natsclient.Subscription
 	predicatesData     []byte // pre-marshaled predicate schema for HTTP and NATS
+
+	// Summary query
+	summaryQuerySub *natsclient.Subscription
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
@@ -199,6 +207,17 @@ func (c *Component) startStatusAggregation(ctx context.Context) error {
 	c.statusQuerySub = querySub
 	c.logger.Info("listening for status queries", "subject", statusQuerySubject)
 
+	// Subscribe for on-demand summary queries.
+	summarySub, err := c.client.SubscribeForRequests(ctx, summaryQuerySubject, func(_ context.Context, _ []byte) ([]byte, error) {
+		summary := c.buildSummary()
+		return json.Marshal(summary)
+	})
+	if err != nil {
+		return fmt.Errorf("subscribe %s: %w", summaryQuerySubject, err)
+	}
+	c.summaryQuerySub = summarySub
+	c.logger.Info("listening for summary queries", "subject", summaryQuerySubject)
+
 	// Start heartbeat and seed timeout goroutines.
 	heartbeatCancel := c.startHeartbeat(ctx)
 	c.cancelFuncs = append(c.cancelFuncs, heartbeatCancel)
@@ -323,6 +342,82 @@ func (c *Component) updateStatusData(status *StatusPayload) {
 	c.statusMu.Unlock()
 }
 
+// buildSummary constructs a SummaryPayload from current aggregator state
+// and the predicate schema. Called on-demand for query responses.
+func (c *Component) buildSummary() *SummaryPayload {
+	c.statusMu.RLock()
+	status := c.aggregator.buildStatus(c.config.Namespace)
+	c.statusMu.RUnlock()
+
+	// Aggregate type counts by domain across all source instances.
+	domainMap := make(map[string]*DomainSummary)
+	for _, src := range status.Sources {
+		for key, count := range src.TypeCounts {
+			parts := strings.SplitN(key, ".", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			domain, eType := parts[0], parts[1]
+			ds, ok := domainMap[domain]
+			if !ok {
+				ds = &DomainSummary{Domain: domain}
+				domainMap[domain] = ds
+			}
+			ds.EntityCount += count
+			// Accumulate type counts.
+			found := false
+			for i := range ds.Types {
+				if ds.Types[i].Type == eType {
+					ds.Types[i].Count += count
+					found = true
+					break
+				}
+			}
+			if !found {
+				ds.Types = append(ds.Types, TypeCount{Type: eType, Count: count})
+			}
+			// Track contributing sources.
+			hasSource := false
+			for _, s := range ds.Sources {
+				if s == src.InstanceName {
+					hasSource = true
+					break
+				}
+			}
+			if !hasSource {
+				ds.Sources = append(ds.Sources, src.InstanceName)
+			}
+		}
+	}
+
+	// Convert map to sorted slice (sort by entity count descending).
+	domains := make([]DomainSummary, 0, len(domainMap))
+	for _, ds := range domainMap {
+		// Sort types by count descending.
+		sort.Slice(ds.Types, func(i, j int) bool {
+			return ds.Types[i].Count > ds.Types[j].Count
+		})
+		domains = append(domains, *ds)
+	}
+	sort.Slice(domains, func(i, j int) bool {
+		return domains[i].EntityCount > domains[j].EntityCount
+	})
+
+	// Get predicate schema.
+	sourceTypes := c.configuredSourceTypes()
+	predicates := buildPredicateSchema(sourceTypes)
+
+	return &SummaryPayload{
+		Namespace:      c.config.Namespace,
+		Phase:          status.Phase,
+		EntityIDFormat: "{org}.semsource.{domain}.{system}.{type}.{instance}",
+		TotalEntities:  status.TotalEntities,
+		Domains:        domains,
+		Predicates:     predicates.Sources,
+		Timestamp:      time.Now(),
+	}
+}
+
 // publishPayload marshals and publishes a payload to JetStream.
 func (c *Component) publishPayload(ctx context.Context, msgType message.Type, payload message.Payload, subject string) error {
 	msg := message.NewBaseMessage(msgType, payload, "semsource")
@@ -360,7 +455,7 @@ func (c *Component) Stop(_ time.Duration) error {
 	}
 	c.cancelFuncs = nil
 
-	for _, sub := range []*natsclient.Subscription{c.querySub, c.statusSub, c.statusQuerySub, c.predicatesQuerySub} {
+	for _, sub := range []*natsclient.Subscription{c.querySub, c.statusSub, c.statusQuerySub, c.predicatesQuerySub, c.summaryQuerySub} {
 		if sub != nil {
 			if err := sub.Unsubscribe(); err != nil {
 				c.logger.Warn("failed to unsubscribe", "error", err)
@@ -371,6 +466,7 @@ func (c *Component) Stop(_ time.Duration) error {
 	c.statusSub = nil
 	c.statusQuerySub = nil
 	c.predicatesQuerySub = nil
+	c.summaryQuerySub = nil
 
 	c.running = false
 	c.logger.Info("source-manifest stopped")
@@ -468,6 +564,10 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	predicatesPath := prefix + "predicates"
 	mux.HandleFunc(predicatesPath, c.handlePredicates)
 	c.logger.Info("registered HTTP handler", "path", predicatesPath)
+
+	summaryPath := prefix + "summary"
+	mux.HandleFunc(summaryPath, c.handleSummary)
+	c.logger.Info("registered HTTP handler", "path", summaryPath)
 }
 
 // handleSources serves the pre-marshaled manifest payload.
@@ -502,6 +602,22 @@ func (c *Component) handlePredicates(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(c.predicatesData)
+}
+
+// handleSummary serves a combined status and predicate schema response.
+func (c *Component) handleSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	summary := c.buildSummary()
+	data, err := json.Marshal(summary)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 // parseDurationOrDefault parses a duration string with a fallback default.

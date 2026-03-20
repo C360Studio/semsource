@@ -54,12 +54,13 @@ const (
 // SourceStatusReport is the internal message published by source components
 // to semsource.internal.status after initial ingest and periodically.
 type SourceStatusReport struct {
-	InstanceName string    `json:"instance_name"`
-	SourceType   string    `json:"source_type"`
-	Phase        string    `json:"phase"`
-	EntityCount  int64     `json:"entity_count"`
-	ErrorCount   int64     `json:"error_count"`
-	Timestamp    time.Time `json:"timestamp"`
+	InstanceName string           `json:"instance_name"`
+	SourceType   string           `json:"source_type"`
+	Phase        string           `json:"phase"`
+	EntityCount  int64            `json:"entity_count"`
+	ErrorCount   int64            `json:"error_count"`
+	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+	Timestamp    time.Time        `json:"timestamp"`
 }
 
 // statusAggregator tracks per-source status reports and determines the
@@ -93,6 +94,7 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			Phase:        r.Phase,
 			EntityCount:  r.EntityCount,
 			ErrorCount:   r.ErrorCount,
+			TypeCounts:   r.TypeCounts,
 		})
 		totalEntities += r.EntityCount
 	}

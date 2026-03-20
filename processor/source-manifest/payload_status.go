@@ -36,11 +36,12 @@ type StatusPayload struct {
 
 // SourceStatus reports the status of a single source instance.
 type SourceStatus struct {
-	InstanceName string `json:"instance_name"`
-	SourceType   string `json:"source_type"`
-	Phase        string `json:"phase"` // "ingesting", "watching", "idle", "errored"
-	EntityCount  int64  `json:"entity_count"`
-	ErrorCount   int64  `json:"error_count"`
+	InstanceName string           `json:"instance_name"`
+	SourceType   string           `json:"source_type"`
+	Phase        string           `json:"phase"` // "ingesting", "watching", "idle", "errored"
+	EntityCount  int64            `json:"entity_count"`
+	ErrorCount   int64            `json:"error_count"`
+	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 }
 
 // Schema implements message.Payload.

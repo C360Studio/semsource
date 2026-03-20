@@ -17,6 +17,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -58,6 +59,9 @@ type Component struct {
 	errors          atomic.Int64
 	lastActivityMu  sync.RWMutex
 	lastActivity    time.Time
+
+	// Entity type counters: domain.type → *atomic.Int64
+	typeCounts sync.Map
 
 	// Cancel functions for background goroutines
 	cancelFuncs []context.CancelFunc
@@ -499,6 +503,7 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)
 		}
 		c.entitiesIndexed.Add(1)
+		c.trackEntityType(state.ID)
 		c.updateLastActivity()
 	}
 	return nil
@@ -519,6 +524,7 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 				"id", entity.ID, "error", err)
 		}
 		c.entitiesIndexed.Add(1)
+		c.trackEntityType(state.ID)
 	}
 }
 
@@ -538,6 +544,7 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 				"id", entity.ID, "error", err)
 		}
 		c.entitiesIndexed.Add(1)
+		c.trackEntityType(state.ID)
 	}
 }
 
@@ -578,6 +585,27 @@ func (c *Component) setFileHash(path, hash string) {
 	c.fileHashesMu.Unlock()
 }
 
+// trackEntityType increments the per-type counter for the given entity ID.
+func (c *Component) trackEntityType(id string) {
+	domain, eType := entityid.Parts(id)
+	if domain == "" {
+		return
+	}
+	key := domain + "." + eType
+	val, _ := c.typeCounts.LoadOrStore(key, &atomic.Int64{})
+	val.(*atomic.Int64).Add(1)
+}
+
+// snapshotTypeCounts returns a point-in-time copy of all per-type counts.
+func (c *Component) snapshotTypeCounts() map[string]int64 {
+	counts := make(map[string]int64)
+	c.typeCounts.Range(func(k, v any) bool {
+		counts[k.(string)] = v.(*atomic.Int64).Load()
+		return true
+	})
+	return counts
+}
+
 // getFileHash returns the recorded content hash for a file path.
 func (c *Component) getFileHash(path string) (string, bool) {
 	c.fileHashesMu.RLock()
@@ -589,18 +617,20 @@ func (c *Component) getFileHash(path string) (string, bool) {
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	report := struct {
-		InstanceName string    `json:"instance_name"`
-		SourceType   string    `json:"source_type"`
-		Phase        string    `json:"phase"`
-		EntityCount  int64     `json:"entity_count"`
-		ErrorCount   int64     `json:"error_count"`
-		Timestamp    time.Time `json:"timestamp"`
+		InstanceName string           `json:"instance_name"`
+		SourceType   string           `json:"source_type"`
+		Phase        string           `json:"phase"`
+		EntityCount  int64            `json:"entity_count"`
+		ErrorCount   int64            `json:"error_count"`
+		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+		Timestamp    time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "ast",
 		Phase:        phase,
 		EntityCount:  c.entitiesIndexed.Load(),
 		ErrorCount:   c.errors.Load(),
+		TypeCounts:   c.snapshotTypeCounts(),
 		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)

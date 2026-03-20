@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	videohandler "github.com/c360studio/semsource/handler/video"
@@ -73,6 +74,9 @@ type Component struct {
 	ingestErrors      atomic.Int64
 	lastActivityMu    sync.RWMutex
 	lastActivity      time.Time
+
+	// Entity type counters: domain.type → *atomic.Int64
+	typeCounts sync.Map
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
@@ -203,6 +207,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			continue
 		}
 		c.entitiesPublished.Add(1)
+		c.trackEntityType(state.ID)
 		c.updateLastActivity()
 	}
 
@@ -268,6 +273,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			continue
 		}
 		c.entitiesPublished.Add(1)
+		c.trackEntityType(state.ID)
 		c.updateLastActivity()
 	}
 }
@@ -302,21 +308,44 @@ func (c *Component) getLastActivity() time.Time {
 	return c.lastActivity
 }
 
+// trackEntityType increments the per-type counter for the given entity ID.
+func (c *Component) trackEntityType(id string) {
+	domain, eType := entityid.Parts(id)
+	if domain == "" {
+		return
+	}
+	key := domain + "." + eType
+	val, _ := c.typeCounts.LoadOrStore(key, &atomic.Int64{})
+	val.(*atomic.Int64).Add(1)
+}
+
+// snapshotTypeCounts returns a point-in-time copy of all per-type counts.
+func (c *Component) snapshotTypeCounts() map[string]int64 {
+	counts := make(map[string]int64)
+	c.typeCounts.Range(func(k, v any) bool {
+		counts[k.(string)] = v.(*atomic.Int64).Load()
+		return true
+	})
+	return counts
+}
+
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	report := struct {
-		InstanceName string    `json:"instance_name"`
-		SourceType   string    `json:"source_type"`
-		Phase        string    `json:"phase"`
-		EntityCount  int64     `json:"entity_count"`
-		ErrorCount   int64     `json:"error_count"`
-		Timestamp    time.Time `json:"timestamp"`
+		InstanceName string           `json:"instance_name"`
+		SourceType   string           `json:"source_type"`
+		Phase        string           `json:"phase"`
+		EntityCount  int64            `json:"entity_count"`
+		ErrorCount   int64            `json:"error_count"`
+		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+		Timestamp    time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "video",
 		Phase:        phase,
 		EntityCount:  c.entitiesPublished.Load(),
 		ErrorCount:   c.ingestErrors.Load(),
+		TypeCounts:   c.snapshotTypeCounts(),
 		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)

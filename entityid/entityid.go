@@ -183,3 +183,13 @@ func ResolveOrg(orgOverride, defaultOrg string) string {
 	}
 	return defaultOrg
 }
+
+// Parts extracts the domain and entity type segments from a 6-part entity ID.
+// Returns empty strings if the ID has fewer than 6 dot-separated parts.
+func Parts(id string) (domain, entityType string) {
+	parts := strings.SplitN(id, ".", 6)
+	if len(parts) < 6 {
+		return "", ""
+	}
+	return parts[2], parts[4]
+}
