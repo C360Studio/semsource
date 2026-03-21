@@ -522,6 +522,7 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish hierarchy entity",
 				"id", entity.ID, "error", err)
+			continue
 		}
 		c.entitiesIndexed.Add(1)
 		c.trackEntityType(state.ID)
@@ -542,6 +543,7 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish folder entity",
 				"id", entity.ID, "error", err)
+			continue
 		}
 		c.entitiesIndexed.Add(1)
 		c.trackEntityType(state.ID)

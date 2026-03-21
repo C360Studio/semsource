@@ -181,15 +181,17 @@ func querySummaryHTTP(t *testing.T, httpPort int) summaryPayload {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		var s summaryPayload
 		if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+			resp.Body.Close()
 			t.Fatalf("decode summary response: %v", err)
 		}
+		resp.Body.Close()
 		return s
 	}
 	t.Fatalf("GET %s did not return 200 within 15s", url)

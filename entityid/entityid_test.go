@@ -7,6 +7,34 @@ import (
 	"github.com/c360studio/semsource/entityid"
 )
 
+func TestParts(t *testing.T) {
+	tests := []struct {
+		id         string
+		wantDomain string
+		wantType   string
+	}{
+		{"acme.semsource.golang.myrepo.function.main-go-Foo", "golang", "function"},
+		{"acme.semsource.git.myrepo.commit.abc123", "git", "commit"},
+		{"acme.semsource.web.docs.doc.sha256", "web", "doc"},
+		{"acme.semsource.config.myrepo.dependency.lodash", "config", "dependency"},
+		{"acme.semsource.code.myrepo.folder.src-pkg", "code", "folder"},
+		// Instance segment with dots — SplitN(6) captures everything after 5th dot.
+		{"acme.semsource.java.repo.class.com.example.Foo", "java", "class"},
+		// Too few parts.
+		{"acme.semsource.golang", "", ""},
+		{"", "", ""},
+		// Exactly 6 parts.
+		{"a.b.c.d.e.f", "c", "e"},
+	}
+	for _, tt := range tests {
+		domain, eType := entityid.Parts(tt.id)
+		if domain != tt.wantDomain || eType != tt.wantType {
+			t.Errorf("Parts(%q) = (%q, %q), want (%q, %q)",
+				tt.id, domain, eType, tt.wantDomain, tt.wantType)
+		}
+	}
+}
+
 func TestBuild(t *testing.T) {
 	tests := []struct {
 		name       string
