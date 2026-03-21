@@ -7,13 +7,13 @@ import "time"
 // into a single response. Served at GET /source-manifest/summary and
 // via NATS request/reply on graph.query.summary.
 type SummaryPayload struct {
-	Namespace      string                 `json:"namespace"`
-	Phase          string                 `json:"phase"`
-	EntityIDFormat string                 `json:"entity_id_format"`
-	TotalEntities  int64                  `json:"total_entities"`
-	Domains        []DomainSummary        `json:"domains"`
+	Namespace      string                  `json:"namespace"`
+	Phase          string                  `json:"phase"`
+	EntityIDFormat string                  `json:"entity_id_format"`
+	TotalEntities  int64                   `json:"total_entities"`
+	Domains        []DomainSummary         `json:"domains"`
 	Predicates     []SourcePredicateSchema `json:"predicates"`
-	Timestamp      time.Time              `json:"timestamp"`
+	Timestamp      time.Time               `json:"timestamp"`
 }
 
 // DomainSummary reports entity counts by type within a single domain.
