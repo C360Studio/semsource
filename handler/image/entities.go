@@ -14,19 +14,20 @@ import (
 // Entity is a fully-typed image entity that produces triples using
 // canonical vocabulary predicates, bypassing the normalizer entirely.
 type Entity struct {
-	ID         string
-	FilePath   string
-	MimeType   string
-	FileHash   string
-	FileSize   int64
-	Format     string
-	Width      int
-	Height     int
-	StorageRef string
-	ThumbRef   string
-	System     string
-	Org        string
-	IndexedAt  time.Time
+	ID          string
+	FilePath    string
+	MimeType    string
+	FileHash    string
+	FileSize    int64
+	Format      string
+	Width       int
+	Height      int
+	StorageRef  string
+	ThumbRef    string
+	System      string
+	Org         string
+	IndexedAt   time.Time
+	StoreBucket string // ObjectStore bucket name for typed StorageReference
 }
 
 // Triples converts the Entity to a slice of message.Triple for graph storage.
@@ -59,24 +60,36 @@ func (e *Entity) Triples() []message.Triple {
 }
 
 // EntityState converts the Entity to a handler.EntityState for graph publication.
+// When StorageRef is set, the typed StorageReference is populated so downstream
+// consumers (e.g. embedding worker) can access stored content via message.Storable.
 func (e *Entity) EntityState() *handler.EntityState {
-	return &handler.EntityState{
+	state := &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
 		UpdatedAt: e.IndexedAt,
 	}
+	if e.StorageRef != "" && e.StoreBucket != "" {
+		state.StorageRef = &message.StorageReference{
+			StorageInstance: e.StoreBucket,
+			Key:             e.StorageRef,
+			ContentType:     e.MimeType,
+			Size:            e.FileSize,
+		}
+	}
+	return state
 }
 
 // imageEntityFromRaw converts a RawEntity produced by ingestFile into a typed
 // Entity using canonical vocabulary predicates. The system slug is derived
 // from the root path that produced the entity (stored in RawEntity.System).
-func imageEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity {
+func imageEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
 	ie := &Entity{
 		// RawEntity.System already holds slugify(root) set by ingestFile.
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "image", r.Instance),
-		System:    r.System,
-		Org:       org,
-		IndexedAt: now,
+		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "image", r.Instance),
+		System:      r.System,
+		Org:         org,
+		IndexedAt:   now,
+		StoreBucket: storeBucket,
 	}
 	if v, ok := r.Properties["file_path"].(string); ok {
 		ie.FilePath = v
@@ -121,7 +134,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	now := time.Now().UTC()
 	states := make([]*handler.EntityState, 0, len(rawEntities))
 	for _, r := range rawEntities {
-		ie := imageEntityFromRaw(org, r, now)
+		ie := imageEntityFromRaw(org, h.storeBucket, r, now)
 		states = append(states, ie.EntityState())
 	}
 	return states, nil

@@ -39,8 +39,9 @@ var defaultExtensions = map[string]bool{
 // Handler handles audio file sources.
 // It implements handler.SourceHandler.
 type Handler struct {
-	store  storage.Store // nil = no binary storage (metadata only)
-	logger *slog.Logger
+	store       storage.Store // nil = no binary storage (metadata only)
+	storeBucket string        // ObjectStore bucket name for StorageReference
+	logger      *slog.Logger
 	// org is the organisation namespace used when building EntityState values
 	// via IngestEntityStates and enrichEvent. Empty disables the typed path.
 	org string
@@ -51,8 +52,13 @@ type Option func(*Handler)
 
 // WithStore sets the binary storage backend. When nil (the default), the
 // handler records metadata triples only and skips binary storage.
-func WithStore(s storage.Store) Option {
-	return func(h *Handler) { h.store = s }
+func WithStore(s storage.Store, bucket ...string) Option {
+	return func(h *Handler) {
+		h.store = s
+		if len(bucket) > 0 {
+			h.storeBucket = bucket[0]
+		}
+	}
 }
 
 // WithLogger sets a custom structured logger on the handler.

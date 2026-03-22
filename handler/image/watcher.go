@@ -120,7 +120,7 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root 
 	if err == nil {
 		ev.Entities = []handler.RawEntity{entity}
 		if h.org != "" {
-			ie := imageEntityFromRaw(h.org, entity, time.Now().UTC())
+			ie := imageEntityFromRaw(h.org, h.storeBucket, entity, time.Now().UTC())
 			ev.EntityStates = []*handler.EntityState{ie.EntityState()}
 		}
 	}

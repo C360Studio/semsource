@@ -105,6 +105,11 @@ type EntityState struct {
 
 	// UpdatedAt is when the entity was last observed / indexed.
 	UpdatedAt time.Time
+
+	// StorageRef points to where the full content is stored in ObjectStore.
+	// When set, large content (e.g. document body) lives in the store rather
+	// than inline in a triple. Nil means all content is in Triples.
+	StorageRef *message.StorageReference
 }
 
 // ChangeEvent is emitted by a handler's Watch channel when a source change is detected.

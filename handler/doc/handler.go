@@ -14,6 +14,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semstreams/storage"
 )
 
 // docExtensions lists the file extensions Handler will process.
@@ -24,6 +25,10 @@ var docExtensions = map[string]bool{
 	".txt":  true,
 }
 
+// defaultContentThreshold is the byte size above which document content is
+// stored in ObjectStore rather than inline in a triple.
+const defaultContentThreshold = 4096
+
 // Handler handles document sources (markdown, plain text).
 // It implements handler.SourceHandler.
 type Handler struct {
@@ -31,17 +36,53 @@ type Handler struct {
 	// values via IngestEntityStates and enrichEventEntityStates. When empty,
 	// EntityStates are not populated on watch events.
 	org string
+
+	// store is the ObjectStore backend for large document content. When nil,
+	// all content is stored inline in triples regardless of size.
+	store storage.Store
+
+	// storeBucket is the ObjectStore bucket name, used to build StorageReference.
+	storeBucket string
+
+	// contentThreshold is the byte size above which content is stored in
+	// ObjectStore. Documents at or below this size keep content inline.
+	contentThreshold int
+}
+
+// Option is a functional option for configuring a Handler.
+type Option func(*Handler)
+
+// WithStore sets the ObjectStore backend for large document content.
+// When set, documents exceeding the content threshold store their body
+// as raw bytes in the store (same pattern as image/video handlers).
+func WithStore(s storage.Store, bucket string) Option {
+	return func(h *Handler) {
+		h.store = s
+		h.storeBucket = bucket
+	}
+}
+
+// WithContentThreshold sets the byte size above which document content is
+// stored in ObjectStore. Defaults to 4096.
+func WithContentThreshold(n int) Option {
+	return func(h *Handler) { h.contentThreshold = n }
 }
 
 // New returns a ready-to-use Handler.
-func New() *Handler {
-	return &Handler{}
+func New(opts ...Option) *Handler {
+	h := &Handler{contentThreshold: defaultContentThreshold}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 // NewWithOrg returns a Handler that will populate EntityStates on watch
 // events using the given org namespace.
-func NewWithOrg(org string) *Handler {
-	return &Handler{org: org}
+func NewWithOrg(org string, opts ...Option) *Handler {
+	h := New(opts...)
+	h.org = org
+	return h
 }
 
 // sourceTypeKey is the config source type key for doc sources.

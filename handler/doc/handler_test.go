@@ -2,9 +2,11 @@ package doc_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/c360studio/semsource/handler"
@@ -537,5 +539,251 @@ func TestDocHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
 	_, err := h.IngestEntityStates(ctx, cfg, "acme")
 	if err == nil {
 		t.Error("expected error on cancelled context")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ObjectStore content threshold
+// ---------------------------------------------------------------------------
+
+// memStore is an in-memory storage.Store for testing.
+type memStore struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func newMemStore() *memStore { return &memStore{data: make(map[string][]byte)} }
+
+func (s *memStore) Put(_ context.Context, key string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[key] = append([]byte(nil), data...)
+	return nil
+}
+
+func (s *memStore) Get(_ context.Context, key string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.data[key]
+	if !ok {
+		return nil, fmt.Errorf("key not found: %s", key)
+	}
+	return d, nil
+}
+
+func (s *memStore) List(_ context.Context, prefix string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var keys []string
+	for k := range s.data {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
+}
+
+func (s *memStore) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, key)
+	return nil
+}
+
+func (s *memStore) keys() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keys := make([]string, 0, len(s.data))
+	for k := range s.data {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func TestDocHandler_IngestEntityStates_LargeDocGoesToStore(t *testing.T) {
+	dir := t.TempDir()
+	// Create a doc larger than the 100-byte threshold we'll set.
+	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
+	writeMD(t, dir, "large.md", largeContent)
+
+	store := newMemStore()
+	h := dochandler.NewWithOrg("acme",
+		dochandler.WithStore(store, "MESSAGES"),
+		dochandler.WithContentThreshold(100),
+	)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("state count: got %d, want 1", len(states))
+	}
+
+	state := states[0]
+
+	// StorageRef should be set.
+	if state.StorageRef == nil {
+		t.Fatal("StorageRef should be set for large doc")
+	}
+	if state.StorageRef.StorageInstance != "MESSAGES" {
+		t.Errorf("StorageInstance: got %q, want MESSAGES", state.StorageRef.StorageInstance)
+	}
+
+	// DocContent triple should be absent.
+	for _, triple := range state.Triples {
+		if triple.Predicate == source.DocContent {
+			t.Error("DocContent triple should be absent when content is in ObjectStore")
+		}
+	}
+
+	// Metadata triples should still be present.
+	hasHash := false
+	for _, triple := range state.Triples {
+		if triple.Predicate == source.DocFileHash {
+			hasHash = true
+		}
+	}
+	if !hasHash {
+		t.Error("DocFileHash triple should still be present")
+	}
+
+	// Store should contain the raw content.
+	storedKeys := store.keys()
+	if len(storedKeys) != 1 {
+		t.Fatalf("store key count: got %d, want 1", len(storedKeys))
+	}
+	stored, _ := store.Get(context.Background(), storedKeys[0])
+	if string(stored) != largeContent {
+		t.Error("stored content does not match original")
+	}
+}
+
+func TestDocHandler_IngestEntityStates_SmallDocStaysInline(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "small.md", "# Small\nTiny doc.")
+
+	store := newMemStore()
+	h := dochandler.NewWithOrg("acme",
+		dochandler.WithStore(store, "MESSAGES"),
+		dochandler.WithContentThreshold(4096),
+	)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("state count: got %d, want 1", len(states))
+	}
+
+	state := states[0]
+
+	// StorageRef should be nil.
+	if state.StorageRef != nil {
+		t.Error("StorageRef should be nil for small doc")
+	}
+
+	// DocContent triple should be present.
+	hasContent := false
+	for _, triple := range state.Triples {
+		if triple.Predicate == source.DocContent {
+			hasContent = true
+		}
+	}
+	if !hasContent {
+		t.Error("DocContent triple should be present for small doc")
+	}
+
+	// Store should be empty.
+	if len(store.keys()) != 0 {
+		t.Error("store should be empty for small doc")
+	}
+}
+
+func TestDocHandler_IngestEntityStates_StoreFailureFallsBackToInline(t *testing.T) {
+	dir := t.TempDir()
+	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
+	writeMD(t, dir, "large.md", largeContent)
+
+	store := &failStore{}
+	h := dochandler.NewWithOrg("acme",
+		dochandler.WithStore(store, "MESSAGES"),
+		dochandler.WithContentThreshold(100),
+	)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("state count: got %d, want 1", len(states))
+	}
+
+	state := states[0]
+
+	// StorageRef should be nil because store.Put failed.
+	if state.StorageRef != nil {
+		t.Error("StorageRef should be nil when store fails")
+	}
+
+	// DocContent triple should be present (fallback to inline).
+	hasContent := false
+	for _, triple := range state.Triples {
+		if triple.Predicate == source.DocContent {
+			hasContent = true
+		}
+	}
+	if !hasContent {
+		t.Error("DocContent triple should be present when store fails")
+	}
+}
+
+// failStore always returns an error from Put.
+type failStore struct{}
+
+func (s *failStore) Put(context.Context, string, []byte) error {
+	return fmt.Errorf("simulated store failure")
+}
+func (s *failStore) Get(context.Context, string) ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (s *failStore) List(context.Context, string) ([]string, error) { return nil, nil }
+func (s *failStore) Delete(context.Context, string) error           { return nil }
+
+func TestDocHandler_IngestEntityStates_NoStoreAllInline(t *testing.T) {
+	dir := t.TempDir()
+	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
+	writeMD(t, dir, "large.md", largeContent)
+
+	// No store configured — all content stays inline regardless of size.
+	h := dochandler.NewWithOrg("acme")
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("state count: got %d, want 1", len(states))
+	}
+
+	state := states[0]
+
+	if state.StorageRef != nil {
+		t.Error("StorageRef should be nil when no store is configured")
+	}
+
+	hasContent := false
+	for _, triple := range state.Triples {
+		if triple.Predicate == source.DocContent {
+			hasContent = true
+		}
+	}
+	if !hasContent {
+		t.Error("DocContent triple should be present when no store is configured")
 	}
 }

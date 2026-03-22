@@ -30,13 +30,14 @@ func init() {
 // EntityType is the message type for semsource entity payloads.
 var EntityType = message.Type{Domain: "semsource", Category: "entity", Version: "v1"}
 
-// EntityPayload implements message.Payload and graph.Graphable.
+// EntityPayload implements message.Payload, graph.Graphable, and message.Storable.
 // This is the single payload type all semsource components use to publish
 // entities to graph-ingest via JetStream.
 type EntityPayload struct {
-	ID         string           `json:"id"`
-	TripleData []message.Triple `json:"triples"`
-	UpdatedAt  time.Time        `json:"updated_at"`
+	ID         string                    `json:"id"`
+	TripleData []message.Triple          `json:"triples"`
+	UpdatedAt  time.Time                 `json:"updated_at"`
+	Storage    *message.StorageReference `json:"storage_ref,omitempty"`
 }
 
 // EntityID implements graph.Graphable.
@@ -44,6 +45,9 @@ func (p *EntityPayload) EntityID() string { return p.ID }
 
 // Triples implements graph.Graphable.
 func (p *EntityPayload) Triples() []message.Triple { return p.TripleData }
+
+// StorageRef implements message.Storable. Returns nil when content is inline.
+func (p *EntityPayload) StorageRef() *message.StorageReference { return p.Storage }
 
 // Schema implements message.Payload.
 func (p *EntityPayload) Schema() message.Type { return EntityType }

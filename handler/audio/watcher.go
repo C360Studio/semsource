@@ -120,7 +120,7 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root 
 	if err == nil {
 		ev.Entities = []handler.RawEntity{audioEntity}
 		if h.org != "" {
-			ae := audioEntityFromRaw(h.org, audioEntity, time.Now().UTC())
+			ae := audioEntityFromRaw(h.org, h.storeBucket, audioEntity, time.Now().UTC())
 			ev.EntityStates = []*handler.EntityState{ae.EntityState()}
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/storage/objectstore"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -92,7 +93,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
 
-	h := dochandler.NewWithOrg(config.Org)
+	var handlerOpts []dochandler.Option
+	if config.ContentThreshold > 0 {
+		handlerOpts = append(handlerOpts, dochandler.WithContentThreshold(config.ContentThreshold))
+	}
+
+	h := dochandler.NewWithOrg(config.Org, handlerOpts...)
 
 	sc := &sourceCfg{
 		paths:        config.Paths,
@@ -134,6 +140,25 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	c.publisher.Start(ctx)
+
+	// Wire ObjectStore for large document content if configured.
+	if c.config.ContentThreshold > 0 && c.config.ContentBucket != "" {
+		store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+			BucketName: c.config.ContentBucket,
+		})
+		if err != nil {
+			c.logger.Debug("content store not available, all doc content will be inline",
+				"bucket", c.config.ContentBucket, "error", err)
+		} else {
+			c.handler = dochandler.NewWithOrg(c.config.Org,
+				dochandler.WithStore(store, c.config.ContentBucket),
+				dochandler.WithContentThreshold(c.config.ContentThreshold),
+			)
+			c.logger.Info("content store wired for large document storage",
+				"bucket", c.config.ContentBucket,
+				"threshold", c.config.ContentThreshold)
+		}
+	}
 
 	c.publishStatusReport(ctx, "ingesting")
 
@@ -192,6 +217,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			ID:         state.ID,
 			TripleData: state.Triples,
 			UpdatedAt:  state.UpdatedAt,
+			Storage:    state.StorageRef,
 		}
 
 		if err := c.publishEntity(ctx, payload); err != nil {
@@ -267,6 +293,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 				ID:         state.ID,
 				TripleData: state.Triples,
 				UpdatedAt:  state.UpdatedAt,
+				Storage:    state.StorageRef,
 			}
 			if err := c.publishEntity(ctx, payload); err != nil {
 				c.logger.Warn("Failed to publish doc entity on change",

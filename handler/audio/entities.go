@@ -14,22 +14,23 @@ import (
 // Entity is a fully-typed audio entity that produces triples using
 // canonical vocabulary predicates, bypassing the normalizer entirely.
 type Entity struct {
-	ID         string
-	FilePath   string
-	MimeType   string
-	FileHash   string
-	FileSize   int64
-	Format     string
-	Duration   float64
-	Codec      string
-	Bitrate    int
-	SampleRate int
-	Channels   int
-	BitDepth   int
-	StorageRef string
-	System     string
-	Org        string
-	IndexedAt  time.Time
+	ID          string
+	FilePath    string
+	MimeType    string
+	FileHash    string
+	FileSize    int64
+	Format      string
+	Duration    float64
+	Codec       string
+	Bitrate     int
+	SampleRate  int
+	Channels    int
+	BitDepth    int
+	StorageRef  string
+	System      string
+	Org         string
+	IndexedAt   time.Time
+	StoreBucket string // ObjectStore bucket name for typed StorageReference
 }
 
 // Triples converts the Entity to a slice of message.Triple for graph storage.
@@ -55,22 +56,32 @@ func (e *Entity) Triples() []message.Triple {
 
 // EntityState converts the Entity to a handler.EntityState for graph publication.
 func (e *Entity) EntityState() *handler.EntityState {
-	return &handler.EntityState{
+	state := &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
 		UpdatedAt: e.IndexedAt,
 	}
+	if e.StorageRef != "" && e.StoreBucket != "" {
+		state.StorageRef = &message.StorageReference{
+			StorageInstance: e.StoreBucket,
+			Key:             e.StorageRef,
+			ContentType:     e.MimeType,
+			Size:            e.FileSize,
+		}
+	}
+	return state
 }
 
 // audioEntityFromRaw converts a RawEntity produced by ingestFile into a typed
 // Entity using canonical vocabulary predicates. The system slug is taken
 // from RawEntity.System (already set by ingestFile via slugify(root)).
-func audioEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity {
+func audioEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
 	ae := &Entity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "audio", r.Instance),
-		System:    r.System,
-		Org:       org,
-		IndexedAt: now,
+		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "audio", r.Instance),
+		System:      r.System,
+		Org:         org,
+		IndexedAt:   now,
+		StoreBucket: storeBucket,
 	}
 	if v, ok := r.Properties["file_path"].(string); ok {
 		ae.FilePath = v
@@ -124,7 +135,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	now := time.Now().UTC()
 	states := make([]*handler.EntityState, 0, len(rawEntities))
 	for _, r := range rawEntities {
-		ae := audioEntityFromRaw(org, r, now)
+		ae := audioEntityFromRaw(org, h.storeBucket, r, now)
 		states = append(states, ae.EntityState())
 	}
 	return states, nil

@@ -31,6 +31,7 @@ type Entity struct {
 	System        string
 	Org           string
 	IndexedAt     time.Time
+	StoreBucket   string // ObjectStore bucket name for typed StorageReference
 }
 
 // Triples converts the Entity to a slice of message.Triple for graph storage.
@@ -57,11 +58,20 @@ func (e *Entity) Triples() []message.Triple {
 
 // EntityState converts the Entity to a handler.EntityState for graph publication.
 func (e *Entity) EntityState() *handler.EntityState {
-	return &handler.EntityState{
+	state := &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
 		UpdatedAt: e.IndexedAt,
 	}
+	if e.StorageRef != "" && e.StoreBucket != "" {
+		state.StorageRef = &message.StorageReference{
+			StorageInstance: e.StoreBucket,
+			Key:             e.StorageRef,
+			ContentType:     e.MimeType,
+			Size:            e.FileSize,
+		}
+	}
+	return state
 }
 
 // KeyframeEntity is a fully-typed keyframe entity that produces triples using
@@ -74,10 +84,11 @@ type KeyframeEntity struct {
 	Height     int
 	StorageRef string
 	// VideoID is the parent video entity ID — stored as a relationship triple.
-	VideoID   string
-	System    string
-	Org       string
-	IndexedAt time.Time
+	VideoID     string
+	System      string
+	Org         string
+	IndexedAt   time.Time
+	StoreBucket string // ObjectStore bucket name for typed StorageReference
 }
 
 // Triples converts the KeyframeEntity to a slice of message.Triple for graph storage.
@@ -113,22 +124,31 @@ func (e *KeyframeEntity) Triples() []message.Triple {
 
 // EntityState converts the KeyframeEntity to a handler.EntityState for graph publication.
 func (e *KeyframeEntity) EntityState() *handler.EntityState {
-	return &handler.EntityState{
+	state := &handler.EntityState{
 		ID:        e.ID,
 		Triples:   e.Triples(),
 		UpdatedAt: e.IndexedAt,
 	}
+	if e.StorageRef != "" && e.StoreBucket != "" {
+		state.StorageRef = &message.StorageReference{
+			StorageInstance: e.StoreBucket,
+			Key:             e.StorageRef,
+			ContentType:     "image/jpeg", // keyframes are always JPEG
+		}
+	}
+	return state
 }
 
 // videoEntityFromRaw converts a RawEntity with EntityType "video" produced by
 // ingestFile into a typed Entity using canonical vocabulary predicates.
 // The system slug is taken from RawEntity.System (already set by ingestFile).
-func videoEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity {
+func videoEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
 	ve := &Entity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "video", r.Instance),
-		System:    r.System,
-		Org:       org,
-		IndexedAt: now,
+		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "video", r.Instance),
+		System:      r.System,
+		Org:         org,
+		IndexedAt:   now,
+		StoreBucket: storeBucket,
 	}
 	if v, ok := r.Properties["file_path"].(string); ok {
 		ve.FilePath = v
@@ -175,13 +195,14 @@ func videoEntityFromRaw(org string, r handler.RawEntity, now time.Time) *Entity 
 // keyframeEntityFromRaw converts a RawEntity with EntityType "keyframe" produced
 // by ingestFile into a typed KeyframeEntity. videoID is the fully-qualified
 // entity ID of the parent video, used to emit the keyframe_of relationship triple.
-func keyframeEntityFromRaw(org, videoID string, r handler.RawEntity, now time.Time) *KeyframeEntity {
+func keyframeEntityFromRaw(org, videoID, storeBucket string, r handler.RawEntity, now time.Time) *KeyframeEntity {
 	ke := &KeyframeEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "keyframe", r.Instance),
-		VideoID:   videoID,
-		System:    r.System,
-		Org:       org,
-		IndexedAt: now,
+		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "keyframe", r.Instance),
+		VideoID:     videoID,
+		System:      r.System,
+		Org:         org,
+		IndexedAt:   now,
+		StoreBucket: storeBucket,
 	}
 	if v, ok := r.Properties["timestamp"].(string); ok {
 		ke.Timestamp = v
@@ -220,7 +241,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 
 	for _, r := range rawEntities {
 		if r.EntityType == "video" {
-			ve := videoEntityFromRaw(org, r, now)
+			ve := videoEntityFromRaw(org, h.storeBucket, r, now)
 			videoIDByInstance[r.Instance] = ve.ID
 			states = append(states, ve.EntityState())
 		}
@@ -238,7 +259,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 			videoInstance = r.Instance[:6]
 		}
 		videoID := videoIDByInstance[videoInstance]
-		ke := keyframeEntityFromRaw(org, videoID, r, now)
+		ke := keyframeEntityFromRaw(org, videoID, h.storeBucket, r, now)
 		states = append(states, ke.EntityState())
 	}
 

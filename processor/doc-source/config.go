@@ -28,6 +28,13 @@ type Config struct {
 	// StreamName is the JetStream stream name for publishing entities.
 	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
 
+	// ContentThreshold is the byte size above which document content is stored
+	// in ObjectStore rather than inline in a triple. 0 means always inline.
+	ContentThreshold int `json:"content_threshold,omitempty" schema:"type:int,description:Byte threshold above which doc content is stored in ObjectStore (0=always inline),category:advanced,default:4096"`
+
+	// ContentBucket is the NATS ObjectStore bucket for document content.
+	ContentBucket string `json:"content_bucket,omitempty" schema:"type:string,description:ObjectStore bucket name for document content,category:advanced,default:MESSAGES"`
+
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
 	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
@@ -66,7 +73,9 @@ func DefaultConfig() Config {
 		Ports: &component.PortConfig{
 			Outputs: outputDefs,
 		},
-		WatchEnabled: true,
-		StreamName:   "GRAPH",
+		WatchEnabled:     true,
+		StreamName:       "GRAPH",
+		ContentThreshold: 4096,
+		ContentBucket:    "MESSAGES",
 	}
 }

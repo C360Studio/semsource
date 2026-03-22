@@ -81,7 +81,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 					if !ok {
 						return
 					}
-					enriched := enrichEvent(ev, root, org)
+					enriched := h.enrichEvent(ctx, ev, root, org)
 					select {
 					case out <- enriched:
 					case <-ctx.Done():
@@ -103,26 +103,33 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 // enrichEvent re-reads the changed file and populates ev.Entities and, when
 // org is set, ev.EntityStates. For delete events the file is gone, so both
 // slices remain empty.
-func enrichEvent(ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
+//
+// When org is set, only the EntityState path runs (single file read). The
+// RawEntity path is only used as a fallback when org is empty.
+func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
 		return ev
 	}
 
-	// Check file is readable before calling ingestFile (which reads it again).
+	// Check file still exists — may have been removed between fsnotify event
+	// and processing.
 	if _, err := os.Stat(ev.Path); os.IsNotExist(err) {
 		ev.Operation = handler.OperationDelete
 		ev.Timestamp = time.Now()
 		return ev
 	}
 
-	entity, err := ingestFile(ev.Path, root)
-	if err == nil {
-		ev.Entities = []handler.RawEntity{entity}
+	if org != "" {
+		// Typed EntityState path — single file read, includes store logic.
+		ev = h.enrichEventEntityStates(ctx, ev, root, org)
+	} else {
+		// Legacy RawEntity fallback — no org means no EntityStates.
+		entity, err := ingestFile(ev.Path, root)
+		if err == nil {
+			ev.Entities = []handler.RawEntity{entity}
+		}
 	}
-
-	// Populate EntityStates for the normalizer-free processor path.
-	ev = enrichEventEntityStates(ev, root, org)
 
 	ev.Timestamp = time.Now()
 	return ev

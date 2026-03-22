@@ -121,10 +121,10 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root 
 		ev.Entities = append([]handler.RawEntity{videoEntity}, keyframeEntities...)
 		if h.org != "" {
 			now := time.Now().UTC()
-			ve := videoEntityFromRaw(h.org, videoEntity, now)
+			ve := videoEntityFromRaw(h.org, h.storeBucket, videoEntity, now)
 			states := []*handler.EntityState{ve.EntityState()}
 			for _, kf := range keyframeEntities {
-				ke := keyframeEntityFromRaw(h.org, ve.ID, kf, now)
+				ke := keyframeEntityFromRaw(h.org, ve.ID, h.storeBucket, kf, now)
 				states = append(states, ke.EntityState())
 			}
 			ev.EntityStates = states
