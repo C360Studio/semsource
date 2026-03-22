@@ -30,7 +30,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 	wcfg := fswatcher.WatchConfig{
 		Enabled:        true,
 		DebounceDelay:  "200ms",
-		FileExtensions: []string{".md", ".mdx", ".txt"},
+		FileExtensions: []string{".adoc", ".md", ".mdx", ".txt"},
 		ExcludeDirs:    []string{".git", "node_modules", "vendor"},
 	}
 	if cp, ok := cfg.(handler.CoalesceProvider); ok {

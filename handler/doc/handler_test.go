@@ -275,6 +275,7 @@ func TestDocHandler_Ingest_FiltersByExtension(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "valid.md", "# Doc\nContent.")
 	writeMD(t, dir, "guide.mdx", "# MDX Guide\nSome MDX content.")
+	writeMD(t, dir, "spec.adoc", "= AsciiDoc Spec\nSome AsciiDoc content.")
 	// Non-doc file — should be ignored by DocHandler.
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -287,8 +288,8 @@ func TestDocHandler_Ingest_FiltersByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ingest() error: %v", err)
 	}
-	if len(entities) != 2 {
-		t.Errorf("entity count: got %d, want 2 (.md + .mdx)", len(entities))
+	if len(entities) != 3 {
+		t.Errorf("entity count: got %d, want 3 (.adoc + .md + .mdx)", len(entities))
 	}
 }
 
