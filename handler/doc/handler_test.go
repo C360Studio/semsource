@@ -274,6 +274,7 @@ func TestDocHandler_Ingest_ContentHashChangesOnModify(t *testing.T) {
 func TestDocHandler_Ingest_FiltersByExtension(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "valid.md", "# Doc\nContent.")
+	writeMD(t, dir, "guide.mdx", "# MDX Guide\nSome MDX content.")
 	// Non-doc file — should be ignored by DocHandler.
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -286,8 +287,8 @@ func TestDocHandler_Ingest_FiltersByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ingest() error: %v", err)
 	}
-	if len(entities) != 1 {
-		t.Errorf("entity count: got %d, want 1 (only .md)", len(entities))
+	if len(entities) != 2 {
+		t.Errorf("entity count: got %d, want 2 (.md + .mdx)", len(entities))
 	}
 }
 

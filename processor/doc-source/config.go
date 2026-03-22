@@ -15,7 +15,7 @@ type Config struct {
 
 	// Paths is the list of filesystem directories to walk for document files.
 	// At least one path is required.
-	Paths []string `json:"paths" schema:"type:array,description:Filesystem directories to scan for documents (.md .txt),category:basic,required:true"`
+	Paths []string `json:"paths" schema:"type:array,description:Filesystem directories to scan for documents (.md .mdx .txt),category:basic,required:true"`
 
 	// Org is the organization namespace used in entity ID construction.
 	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`

@@ -19,6 +19,7 @@ import (
 // docExtensions lists the file extensions Handler will process.
 var docExtensions = map[string]bool{
 	".md":  true,
+	".mdx": true,
 	".txt": true,
 }
 
@@ -175,7 +176,7 @@ func contentHash(b []byte) string {
 // mimeForExt returns the MIME type for known document extensions.
 func mimeForExt(ext string) string {
 	switch strings.ToLower(ext) {
-	case ".md":
+	case ".md", ".mdx":
 		return "text/markdown"
 	case ".txt":
 		return "text/plain"
