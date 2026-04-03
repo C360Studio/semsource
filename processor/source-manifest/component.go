@@ -570,10 +570,26 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	c.logger.Info("registered HTTP handler", "path", summaryPath)
 }
 
+// requireRunning checks whether Start() has completed. If not, it writes a
+// 503 Service Unavailable response and returns false.
+func (c *Component) requireRunning(w http.ResponseWriter) bool {
+	c.mu.RLock()
+	started := c.running
+	c.mu.RUnlock()
+	if !started {
+		http.Error(w, "component not started", http.StatusServiceUnavailable)
+		return false
+	}
+	return true
+}
+
 // handleSources serves the pre-marshaled manifest payload.
 func (c *Component) handleSources(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !c.requireRunning(w) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -584,6 +600,9 @@ func (c *Component) handleSources(w http.ResponseWriter, r *http.Request) {
 func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !c.requireRunning(w) {
 		return
 	}
 	c.statusMu.RLock()
@@ -600,6 +619,9 @@ func (c *Component) handlePredicates(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !c.requireRunning(w) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(c.predicatesData)
 }
@@ -608,6 +630,9 @@ func (c *Component) handlePredicates(w http.ResponseWriter, r *http.Request) {
 func (c *Component) handleSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !c.requireRunning(w) {
 		return
 	}
 	summary := c.buildSummary()

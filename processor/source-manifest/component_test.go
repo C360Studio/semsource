@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,7 +190,8 @@ func TestComponent_OutputPorts(t *testing.T) {
 
 func TestHandleSources_GET(t *testing.T) {
 	c := &Component{
-		config: Config{Namespace: "acme"},
+		config:  Config{Namespace: "acme"},
+		running: true,
 		responseData: mustMarshal(t, &ManifestPayload{
 			Namespace: "acme",
 			Sources: []ManifestSource{
@@ -237,9 +239,40 @@ func TestHandleSources_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlers_NotStarted(t *testing.T) {
+	c := &Component{}
+
+	endpoints := []struct {
+		name    string
+		path    string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{"sources", "/source-manifest/sources", c.handleSources},
+		{"status", "/source-manifest/status", c.handleStatus},
+		{"predicates", "/source-manifest/predicates", c.handlePredicates},
+		{"summary", "/source-manifest/summary", c.handleSummary},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, ep.path, nil)
+			rec := httptest.NewRecorder()
+			ep.handler(rec, req)
+
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+			}
+			if body := rec.Body.String(); !strings.Contains(body, "component not started") {
+				t.Errorf("body = %q, want it to contain %q", body, "component not started")
+			}
+		})
+	}
+}
+
 func TestRegisterHTTPHandlers(t *testing.T) {
 	c := &Component{
 		config:       Config{Namespace: "acme"},
+		running:      true,
 		responseData: []byte(`{"namespace":"acme","sources":[]}`),
 		logger:       newTestLogger(),
 	}
