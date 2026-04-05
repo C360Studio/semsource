@@ -68,6 +68,7 @@ type SourceStatusReport struct {
 type statusAggregator struct {
 	reports       map[string]*SourceStatusReport // instance_name → latest report
 	expectedCount int
+	degraded      bool // set by markDegraded, sticky until allReported
 }
 
 func newStatusAggregator(expectedCount int) *statusAggregator {
@@ -102,6 +103,8 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 	phase := PhaseSeeding
 	if a.allReported() {
 		phase = PhaseReady
+	} else if a.degraded {
+		phase = PhaseDegraded
 	}
 
 	return &StatusPayload{
@@ -123,9 +126,8 @@ func (a *statusAggregator) allReported() bool {
 
 // markDegraded forces the aggregate to degraded phase (used on seed timeout).
 func (a *statusAggregator) markDegraded(namespace string) *StatusPayload {
-	status := a.buildStatus(namespace)
-	status.Phase = PhaseDegraded
-	return status
+	a.degraded = true
+	return a.buildStatus(namespace)
 }
 
 // sourcePredicates maps source types to predicate prefixes.

@@ -12,12 +12,14 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/retry"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/workspace"
 )
 
 // gitSourceSchema defines the configuration schema for the git-source component.
@@ -156,7 +158,18 @@ func (c *Component) Start(ctx context.Context) error {
 		"org", c.config.Org,
 		"branch", c.config.Branch)
 
-	if err := c.ingestOnce(ctx); err != nil {
+	// Retry initial ingest — the repo filesystem may not be ready yet if
+	// a Docker volume mount is still settling or a clone is in progress.
+	if err := retry.Do(ctx, retry.Persistent(), func() error {
+		if c.config.RepoPath != "" {
+			if err := workspace.IsRepoReady(c.config.RepoPath); err != nil {
+				c.logger.Debug("waiting for repo to become available",
+					"repo", c.config.RepoPath, "error", err)
+				return err
+			}
+		}
+		return c.ingestOnce(ctx)
+	}); err != nil {
 		return fmt.Errorf("initial git ingest failed: %w", err)
 	}
 
