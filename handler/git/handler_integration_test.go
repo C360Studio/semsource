@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +136,49 @@ func TestGitHandler_Ingest_ProducesBranchEntity(t *testing.T) {
 	}
 	if branches == 0 {
 		t.Error("expected at least one branch entity")
+	}
+}
+
+// TestGitHandler_Ingest_BranchNameWithSpecialChars reproduces the failure mode
+// reported by semspec: a branch name containing '/' and '.' (e.g. the
+// requirement-executor's `semspec/requirement-<id>` convention) must produce
+// a valid graph-ingest segment — not a passthrough that breaks 6-part parsing.
+func TestGitHandler_Ingest_BranchNameWithSpecialChars(t *testing.T) {
+	repoDir := initTempRepo(t)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out)
+		}
+	}
+	// Exact pattern from the bug report.
+	branchName := "semspec/requirement-requirement.ec55314ae0f5.1"
+	run("git", "checkout", "-b", branchName)
+
+	h := githandler.New(githandler.DefaultConfig())
+	entities, err := h.Ingest(context.Background(), &srcCfg{typ: "git", path: repoDir})
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+
+	segRE := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+	found := false
+	for _, e := range entities {
+		if e.EntityType != "branch" {
+			continue
+		}
+		if name, _ := e.Properties["name"].(string); name == branchName {
+			found = true
+			if !segRE.MatchString(e.Instance) {
+				t.Errorf("branch Instance %q is not a valid entity-ID segment", e.Instance)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("did not find branch entity for %q", branchName)
 	}
 }
 

@@ -1,7 +1,6 @@
 package git
 
 import (
-	"strings"
 	"time"
 
 	"github.com/c360studio/semsource/entityid"
@@ -36,7 +35,7 @@ func BuildCommitEntity(fullSHA, authorFull, subject, system string) handler.RawE
 // Exported for white-box testing.
 func BuildAuthorEntity(name, email, system string) handler.RawEntity {
 	// Use email as the instance identifier — stable and unique per person.
-	instance := sanitizeInstance(email)
+	instance := entityid.SanitizeInstance(email)
 
 	return handler.RawEntity{
 		SourceType: handler.SourceTypeGit,
@@ -62,27 +61,12 @@ func BuildBranchEntity(branchName, headSHA, system string) handler.RawEntity {
 		Domain:     handler.DomainGit,
 		System:     system,
 		EntityType: "branch",
-		Instance:   branchName,
+		Instance:   entityid.SanitizeInstance(branchName),
 		Properties: map[string]any{
 			"name":     branchName,
 			"head_sha": sha,
 		},
 	}
-}
-
-// sanitizeInstance makes a string safe for use as an entity instance field.
-// Replaces characters that would be invalid in a NATS KV key segment.
-func sanitizeInstance(s string) string {
-	// Replace characters that would break the 6-part dot-delimited entity ID
-	// or are invalid in NATS KV keys.
-	r := strings.NewReplacer(
-		"@", "-at-",
-		".", "-",
-		"/", "-",
-		" ", "-",
-		"\\", "-",
-	)
-	return r.Replace(s)
 }
 
 // --------------------------------------------------------------------------
@@ -144,7 +128,7 @@ func (e *CommitEntity) Triples() []message.Triple {
 	}
 	// Authored-by relationship triple: Object is the author entity ID.
 	if e.AuthorEmail != "" {
-		authorID := entityid.Build(e.Org, entityid.PlatformSemsource, "git", e.System, "author", sanitizeInstance(e.AuthorEmail))
+		authorID := entityid.Build(e.Org, entityid.PlatformSemsource, "git", e.System, "author", entityid.SanitizeInstance(e.AuthorEmail))
 		triples = append(triples, message.Triple{
 			Subject:    e.ID,
 			Predicate:  source.GitCommitAuthoredBy,
@@ -179,7 +163,7 @@ type AuthorEntity struct {
 // newAuthorEntity constructs an AuthorEntity with a deterministic ID.
 func newAuthorEntity(org, name, email, system string, indexedAt time.Time) *AuthorEntity {
 	return &AuthorEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "git", system, "author", sanitizeInstance(email)),
+		ID:        entityid.Build(org, entityid.PlatformSemsource, "git", system, "author", entityid.SanitizeInstance(email)),
 		Name:      name,
 		Email:     email,
 		System:    system,
@@ -219,7 +203,7 @@ type BranchEntity struct {
 // newBranchEntity constructs a BranchEntity with a deterministic ID.
 func newBranchEntity(org, branchName, headSHA, system string, indexedAt time.Time) *BranchEntity {
 	return &BranchEntity{
-		ID:         entityid.Build(org, entityid.PlatformSemsource, "git", system, "branch", branchName),
+		ID:         entityid.Build(org, entityid.PlatformSemsource, "git", system, "branch", entityid.SanitizeInstance(branchName)),
 		BranchName: branchName,
 		HeadSHA:    shortSHA(headSHA),
 		System:     system,

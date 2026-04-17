@@ -2,13 +2,21 @@ package git_test
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
 	"github.com/c360studio/semstreams/message"
 )
+
+// entityIDSegmentRegex matches one segment of a graph-ingest-valid entity ID.
+// Mirrors the per-segment rule from semstreams/processor/graph-ingest
+// component.go's entityIDRegex. SanitizeInstance must produce output that
+// satisfies this.
+var entityIDSegmentRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 // --------------------------------------------------------------------------
 // Test helpers
@@ -137,37 +145,72 @@ func TestBuildCommitEntity(t *testing.T) {
 }
 
 func TestBuildAuthorEntity(t *testing.T) {
-	e := githandler.BuildAuthorEntity("Alice", "alice@example.com", "github.com-acme-repo")
-
-	if e.EntityType != "author" {
-		t.Errorf("EntityType = %q, want author", e.EntityType)
+	tests := []struct {
+		name  string
+		email string
+	}{
+		{"plain email", "alice@example.com"},
+		{"github noreply with plus",
+			"43158+cglusky@users.noreply.github.com"},
 	}
-	if e.Domain != "git" {
-		t.Errorf("Domain = %q, want git", e.Domain)
-	}
-	if e.Instance == "" {
-		t.Error("Instance must not be empty")
-	}
-	// Instance should be derived from the email for determinism.
-	if !strings.Contains(e.Instance, "alice") && e.Instance != "alice@example.com" {
-		// Accept any stable non-empty instance derived from author identity.
-		if len(e.Instance) < 4 {
-			t.Errorf("Instance %q too short to be a useful author identifier", e.Instance)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := githandler.BuildAuthorEntity("Alice", tt.email, "gh-com-acme-repo")
+			if e.EntityType != "author" {
+				t.Errorf("EntityType = %q, want author", e.EntityType)
+			}
+			if e.Domain != "git" {
+				t.Errorf("Domain = %q, want git", e.Domain)
+			}
+			if !entityIDSegmentRegex.MatchString(e.Instance) {
+				t.Errorf("Instance %q is not a valid entity-ID segment", e.Instance)
+			}
+			// Instance must not leak characters forbidden by graph-ingest.
+			for _, forbidden := range []string{"+", "@", "."} {
+				if strings.Contains(e.Instance, forbidden) {
+					t.Errorf("Instance %q contains forbidden character %q", e.Instance, forbidden)
+				}
+			}
+			// Reference: ensure the constructed ID is what we expect.
+			_ = entityid.Build("acme", entityid.PlatformSemsource, e.Domain,
+				e.System, e.EntityType, e.Instance)
+		})
 	}
 }
 
 func TestBuildBranchEntity(t *testing.T) {
-	e := githandler.BuildBranchEntity("main", "abc1234def5678", "github.com-acme-repo")
-
-	if e.EntityType != "branch" {
-		t.Errorf("EntityType = %q, want branch", e.EntityType)
+	tests := []struct {
+		name       string
+		branchName string
+	}{
+		{"simple", "main"},
+		{"slash separator", "feature/auth"},
+		{"reported failing branch",
+			"semspec/requirement-requirement.ec55314ae0f5.1"},
+		{"version-like", "release/v1.0.0"},
 	}
-	if e.Domain != "git" {
-		t.Errorf("Domain = %q, want git", e.Domain)
-	}
-	if e.Instance != "main" {
-		t.Errorf("Instance = %q, want main", e.Instance)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := githandler.BuildBranchEntity(tt.branchName, "abc1234def5678",
+				"gh-com-acme-repo")
+			if e.EntityType != "branch" {
+				t.Errorf("EntityType = %q, want branch", e.EntityType)
+			}
+			if e.Domain != "git" {
+				t.Errorf("Domain = %q, want git", e.Domain)
+			}
+			// Raw branch name must still be preserved in properties so downstream
+			// consumers see the true name even if the ID segment is sanitized.
+			if got, _ := e.Properties["name"].(string); got != tt.branchName {
+				t.Errorf("Properties[name] = %q, want %q", got, tt.branchName)
+			}
+			// Sanitized instance must pass the graph-ingest per-segment regex.
+			if !entityIDSegmentRegex.MatchString(e.Instance) {
+				t.Errorf("branch Instance %q is not a valid entity-ID segment", e.Instance)
+			}
+			_ = entityid.Build("acme", entityid.PlatformSemsource, e.Domain,
+				e.System, e.EntityType, e.Instance)
+		})
 	}
 }
 
@@ -210,10 +253,9 @@ func TestCommitEntity_Triples(t *testing.T) {
 		t.Fatal("no commit entity state found in results")
 	}
 
-	// ID must be a non-empty 6-part dot-delimited string starting with org.
-	parts := strings.Split(commitState.ID, ".")
+	parts := strings.SplitN(commitState.ID, ".", 6)
 	if len(parts) < 6 {
-		t.Errorf("commit entity ID %q has fewer than 6 parts", commitState.ID)
+		t.Fatalf("commit entity ID %q has fewer than 6 parts", commitState.ID)
 	}
 	if parts[0] != "acme" {
 		t.Errorf("commit entity ID org = %q, want acme", parts[0])
@@ -223,6 +265,11 @@ func TestCommitEntity_Triples(t *testing.T) {
 	}
 	if parts[4] != "commit" {
 		t.Errorf("commit entity ID type = %q, want commit", parts[4])
+	}
+	// The instance segment is what SanitizeInstance controls — must pass
+	// graph-ingest's per-segment regex.
+	if !entityIDSegmentRegex.MatchString(parts[5]) {
+		t.Errorf("commit instance segment %q is not valid", parts[5])
 	}
 
 	// Required predicates must be present.
@@ -259,12 +306,15 @@ func TestAuthorEntity_Triples(t *testing.T) {
 		t.Fatal("no author entity state found in results")
 	}
 
-	parts := strings.Split(authorState.ID, ".")
+	parts := strings.SplitN(authorState.ID, ".", 6)
 	if len(parts) < 6 {
-		t.Errorf("author entity ID %q has fewer than 6 parts", authorState.ID)
+		t.Fatalf("author entity ID %q has fewer than 6 parts", authorState.ID)
 	}
 	if parts[4] != "author" {
 		t.Errorf("author entity ID type = %q, want author", parts[4])
+	}
+	if !entityIDSegmentRegex.MatchString(parts[5]) {
+		t.Errorf("author instance segment %q is not valid", parts[5])
 	}
 
 	for _, pred := range []string{"source.git.author.name", "source.git.author.email"} {
@@ -295,12 +345,15 @@ func TestBranchEntity_Triples(t *testing.T) {
 		t.Fatal("no branch entity state found in results")
 	}
 
-	parts := strings.Split(branchState.ID, ".")
+	parts := strings.SplitN(branchState.ID, ".", 6)
 	if len(parts) < 6 {
-		t.Errorf("branch entity ID %q has fewer than 6 parts", branchState.ID)
+		t.Fatalf("branch entity ID %q has fewer than 6 parts", branchState.ID)
 	}
 	if parts[4] != "branch" {
 		t.Errorf("branch entity ID type = %q, want branch", parts[4])
+	}
+	if !entityIDSegmentRegex.MatchString(parts[5]) {
+		t.Errorf("branch instance segment %q is not valid", parts[5])
 	}
 
 	for _, pred := range []string{"source.git.branch.name", "source.git.branch.head_sha"} {

@@ -140,6 +140,66 @@ func IsPublicNamespace(org string) bool {
 	return org == "public"
 }
 
+// maxInstanceLen caps the sanitized instance segment. Combined with the other
+// five segments and their dot separators, keeps total entity IDs well under
+// graph-ingest's 255-char limit.
+const maxInstanceLen = 60
+
+// SanitizeInstance converts an arbitrary string into a segment that satisfies
+// the graph-ingest entity-ID regex ^[a-zA-Z0-9][a-zA-Z0-9_-]*$.
+//
+// Runes outside [a-zA-Z0-9_-] are replaced with '-', consecutive dashes are
+// collapsed, and any non-alphanumeric characters are trimmed from both ends
+// so the result starts (and ends) with an alphanumeric. Inputs that sanitize
+// to empty fall back to a short SHA-256 hash of the original so IDs remain
+// deterministic. Overlong results are truncated with an 8-char content-hash
+// suffix to preserve uniqueness across near-identical long inputs.
+//
+// Case is preserved so human-readable names like "featureAuth" stay legible.
+func SanitizeInstance(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if isAllowedInstanceRune(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	out := b.String()
+	for strings.Contains(out, "--") {
+		out = strings.ReplaceAll(out, "--", "-")
+	}
+	out = strings.TrimFunc(out, func(r rune) bool { return !isASCIIAlnum(r) })
+
+	if out == "" {
+		return shortHash(s)
+	}
+	if len(out) > maxInstanceLen {
+		suffix := shortHash(s)
+		prefix := strings.TrimRightFunc(out[:maxInstanceLen-len(suffix)-1],
+			func(r rune) bool { return !isASCIIAlnum(r) })
+		if prefix == "" {
+			return suffix
+		}
+		return prefix + "-" + suffix
+	}
+	return out
+}
+
+func isAllowedInstanceRune(r rune) bool {
+	return isASCIIAlnum(r) || r == '-' || r == '_'
+}
+
+func isASCIIAlnum(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+}
+
+func shortHash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:4])
+}
+
 // natsKVForbidden lists characters disallowed in NATS KV keys.
 const natsKVForbidden = " */>\\"
 

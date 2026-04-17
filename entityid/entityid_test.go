@@ -1,11 +1,17 @@
 package entityid_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/entityid"
 )
+
+// entityIDSegmentRegex mirrors the per-segment rule enforced by
+// semstreams/processor/graph-ingest/component.go's entityIDRegex.
+// Keep this identical — it is the contract SanitizeInstance must satisfy.
+var entityIDSegmentRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func TestParts(t *testing.T) {
 	tests := []struct {
@@ -217,6 +223,82 @@ func TestValidateNATSKVKey(t *testing.T) {
 				t.Errorf("ValidateNATSKVKey(%q) error = %v, wantErr %v", tt.key, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSanitizeInstance(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"simple branch", "main", "main"},
+		{"branch with slash", "feature/auth", "feature-auth"},
+		{"branch with dots", "v1.0.0", "v1-0-0"},
+		{"reported failing branch",
+			"semspec/requirement-requirement.ec55314ae0f5.1",
+			"semspec-requirement-requirement-ec55314ae0f5-1"},
+		{"github noreply email",
+			"43158+cglusky@users.noreply.github.com",
+			"43158-cglusky-users-noreply-github-com"},
+		{"plain email", "alice@example.com", "alice-example-com"},
+		{"preserves case", "FeatureAuth", "FeatureAuth"},
+		{"keeps hyphens and underscores", "my-branch_name", "my-branch_name"},
+		{"collapses runs of separators", "foo///...bar", "foo-bar"},
+		{"trims leading underscore", "_leading", "leading"},
+		{"trims trailing underscore", "trailing_", "trailing"},
+		{"space", "with space", "with-space"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := entityid.SanitizeInstance(tt.input)
+			if got != tt.want {
+				t.Errorf("SanitizeInstance(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+			if !entityIDSegmentRegex.MatchString(got) {
+				t.Errorf("SanitizeInstance(%q) = %q, does not match entity-ID segment regex",
+					tt.input, got)
+			}
+		})
+	}
+}
+
+func TestSanitizeInstance_FallbackHash(t *testing.T) {
+	// Degenerate inputs that sanitize to nothing must still yield a valid
+	// alphanumeric segment (the deterministic content hash).
+	inputs := []string{"", "---", "...", "/.//", "___"}
+	for _, input := range inputs {
+		got := entityid.SanitizeInstance(input)
+		if !entityIDSegmentRegex.MatchString(got) {
+			t.Errorf("SanitizeInstance(%q) = %q, not a valid segment", input, got)
+		}
+	}
+}
+
+func TestSanitizeInstance_DeterministicForSameInput(t *testing.T) {
+	input := "feature/auth.v2"
+	a := entityid.SanitizeInstance(input)
+	b := entityid.SanitizeInstance(input)
+	if a != b {
+		t.Errorf("SanitizeInstance not deterministic: %q vs %q", a, b)
+	}
+}
+
+func TestSanitizeInstance_LengthCapPreservesUniqueness(t *testing.T) {
+	// Two near-identical long inputs that share a long prefix must sanitize
+	// to distinct segments (the hash suffix guarantees this).
+	longA := strings.Repeat("a", 100) + "-suffix-A"
+	longB := strings.Repeat("a", 100) + "-suffix-B"
+	a := entityid.SanitizeInstance(longA)
+	b := entityid.SanitizeInstance(longB)
+	if a == b {
+		t.Errorf("long inputs collided: both sanitize to %q", a)
+	}
+	if !entityIDSegmentRegex.MatchString(a) || !entityIDSegmentRegex.MatchString(b) {
+		t.Errorf("long-input sanitization failed regex: %q / %q", a, b)
+	}
+	if len(a) > 60 || len(b) > 60 {
+		t.Errorf("length cap exceeded: %d / %d", len(a), len(b))
 	}
 }
 
