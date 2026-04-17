@@ -109,10 +109,10 @@ func TestSystemSlug(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"github.com/acme/gcs", "github.com-acme-gcs"},
-		{"github.com/gin-gonic/gin", "github.com-gin-gonic-gin"},
+		{"github.com/acme/gcs", "github-com-acme-gcs"},
+		{"github.com/gin-gonic/gin", "github-com-gin-gonic-gin"},
 		{"stdlib/net/http", "stdlib-net-http"},
-		{"pkg.go.dev", "pkg.go.dev"},
+		{"pkg.go.dev", "pkg-go-dev"},
 		{"my-repo", "my-repo"},
 		// Absolute paths use only the base name to avoid encoding
 		// deep directory hierarchies into entity IDs.
@@ -151,6 +151,25 @@ func TestSystemSlug_NoSlashes(t *testing.T) {
 		got := entityid.SystemSlug(input)
 		if strings.Contains(got, "/") {
 			t.Errorf("SystemSlug(%q) contains slash: %q", input, got)
+		}
+	}
+}
+
+// TestSystemSlug_IsValidGraphIngestSegment guards against regressions that
+// would reintroduce '.' or other characters that break the 6-part entity ID.
+func TestSystemSlug_IsValidGraphIngestSegment(t *testing.T) {
+	inputs := []string{
+		"github.com/acme/gcs",
+		"https://github.com/opensensorhub/osh-core",
+		"pkg.go.dev",
+		"pkg.go.dev/net/http",
+		"docs.acme.io",
+		"https://docs.anthropic.com/en/api",
+	}
+	for _, input := range inputs {
+		got := entityid.SystemSlug(input)
+		if !entityIDSegmentRegex.MatchString(got) {
+			t.Errorf("SystemSlug(%q) = %q, not a valid entity-ID segment", input, got)
 		}
 	}
 }
@@ -358,9 +377,9 @@ func TestBranchScopedSlug(t *testing.T) {
 		want       string
 	}{
 		{"github-com-acme-repo", "", "github-com-acme-repo"},
-		{"github-com-acme-repo", "main", "github-com-acme-repo~main"},
-		{"github-com-acme-repo", "scenario-auth-flow", "github-com-acme-repo~scenario-auth-flow"},
-		{"my-repo", "feature-123", "my-repo~feature-123"},
+		{"github-com-acme-repo", "main", "github-com-acme-repo-main"},
+		{"github-com-acme-repo", "scenario-auth-flow", "github-com-acme-repo-scenario-auth-flow"},
+		{"my-repo", "feature-123", "my-repo-feature-123"},
 	}
 	for _, tt := range tests {
 		got := entityid.BranchScopedSlug(tt.systemSlug, tt.branchSlug)
@@ -368,10 +387,14 @@ func TestBranchScopedSlug(t *testing.T) {
 			t.Errorf("BranchScopedSlug(%q, %q) = %q, want %q",
 				tt.systemSlug, tt.branchSlug, got, tt.want)
 		}
-		// Tilde-separated IDs must be valid NATS KV keys.
+		// Result must pass both NATS KV validation and the graph-ingest
+		// per-segment regex — it serves as a single entity ID segment.
 		if tt.want != "" {
 			if err := entityid.ValidateNATSKVKey(tt.want); err != nil {
 				t.Errorf("BranchScopedSlug result %q is not a valid NATS KV key: %v", tt.want, err)
+			}
+			if !entityIDSegmentRegex.MatchString(tt.want) {
+				t.Errorf("BranchScopedSlug result %q is not a valid entity-ID segment", tt.want)
 			}
 		}
 	}

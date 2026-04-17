@@ -32,18 +32,19 @@ func Build(org, platform, domain, system, entityType, instance string) string {
 // leaves room for the other five.
 const maxSystemSlugLen = 80
 
-// SystemSlug converts a canonical path, URL, or module string into a NATS-safe
-// system segment. URLs have their scheme stripped; all forward slashes and
-// colons are replaced with hyphens. Absolute filesystem paths are reduced to
+// SystemSlug converts a canonical path, URL, or module string into a
+// graph-ingest-safe system segment. URLs have their scheme stripped; forward
+// slashes, colons, and dots are replaced with hyphens so the result is a
+// single [a-zA-Z0-9_-] segment. Absolute filesystem paths are reduced to
 // their base name so that deep temp-directory hierarchies don't bloat entity
 // IDs. A safety cap truncates slugs that still exceed maxSystemSlugLen.
 //
 // Examples:
 //
-//	"github.com/acme/gcs"                          → "github.com-acme-gcs"
-//	"https://github.com/opensensorhub/osh-core"    → "github.com-opensensorhub-osh-core"
+//	"github.com/acme/gcs"                          → "github-com-acme-gcs"
+//	"https://github.com/opensensorhub/osh-core"    → "github-com-opensensorhub-osh-core"
 //	"stdlib/net/http"                               → "stdlib-net-http"
-//	"pkg.go.dev"                                    → "pkg.go.dev"  (no slashes, unchanged)
+//	"pkg.go.dev"                                    → "pkg-go-dev"
 //	"/tmp/workspace/github-com-acme-gcs"           → "github-com-acme-gcs"
 func SystemSlug(canonicalPath string) string {
 	// Strip URL scheme if present so "https://host/path" becomes "host/path".
@@ -61,8 +62,16 @@ func SystemSlug(canonicalPath string) string {
 		canonicalPath = filepath.Base(canonicalPath)
 	}
 
+	// Replace segment-breaking characters with hyphens. Dots must be
+	// translated too — graph-ingest treats '.' as the segment separator
+	// for the 6-part entity ID, so a host like "pkg.go.dev" would
+	// inflate the part count.
 	slug := strings.ReplaceAll(canonicalPath, "/", "-")
 	slug = strings.ReplaceAll(slug, ":", "-")
+	slug = strings.ReplaceAll(slug, ".", "-")
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
 	slug = strings.Trim(slug, "-")
 
 	// Safety cap: truncate and append a short content hash when the slug
@@ -76,21 +85,22 @@ func SystemSlug(canonicalPath string) string {
 	return slug
 }
 
-// BranchScopedSlug appends a branch qualifier to a system slug using tilde
-// separation. Returns the unmodified slug when branchSlug is empty
-// (single-branch mode, backward compatible).
+// BranchScopedSlug appends a branch qualifier to a system slug with a hyphen
+// separator so the combined string remains a single graph-ingest segment
+// (matching [a-zA-Z0-9_-]). Returns the unmodified slug when branchSlug is
+// empty (single-branch mode, backward compatible).
 //
 // Example:
 //
 //	BranchScopedSlug("github-com-acme-repo", "scenario-auth-flow")
-//	  → "github-com-acme-repo~scenario-auth-flow"
+//	  → "github-com-acme-repo-scenario-auth-flow"
 //	BranchScopedSlug("github-com-acme-repo", "")
 //	  → "github-com-acme-repo"
 func BranchScopedSlug(systemSlug, branchSlug string) string {
 	if branchSlug == "" {
 		return systemSlug
 	}
-	return systemSlug + "~" + branchSlug
+	return systemSlug + "-" + branchSlug
 }
 
 // CanonicalizeURL normalizes a URL for use in deterministic entity ID construction.
