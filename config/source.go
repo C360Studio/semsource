@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"math"
+	"time"
 )
 
 // validSourceTypes lists all supported source handler types.
@@ -42,9 +43,17 @@ type SourceEntry struct {
 	// URLs is a list of HTTP/S URLs for url sources.
 	URLs []string `json:"urls,omitempty"`
 
-	// PollInterval is how often to re-fetch url sources (e.g., "300s").
-	// Must be parseable as a Go time.Duration.
+	// PollInterval controls how often poll-based sources check their origin
+	// for changes. Must be parseable as a Go time.Duration.
+	// Applies to: git (default "60s"), url (default "300s").
+	// Ignored by fsnotify-based sources (docs, config, ast).
 	PollInterval string `json:"poll_interval,omitempty"`
+
+	// IndexInterval controls how often ast sources perform a full reindex
+	// sweep on top of fsnotify. Must be parseable as a Go time.Duration.
+	// Default "60s". Empty string or "0s" disables periodic reindex.
+	// Only applicable to "ast" source type.
+	IndexInterval string `json:"index_interval,omitempty"`
 
 	// Branches is a list of branch name patterns to track in multi-branch mode.
 	// Supports glob patterns: ["*"], ["main", "scenario/*"].
@@ -98,10 +107,35 @@ type SourceEntry struct {
 	SceneThreshold float64 `json:"scene_threshold,omitempty"`
 }
 
+// validatePositiveDuration checks that an optional duration-string field is
+// either empty (use default) or a positive Go duration. Zero-valued durations
+// would disable the associated ticker entirely, which is almost never what a
+// user intends when they set the field.
+func validatePositiveDuration(field, value string) error {
+	if value == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf("source: invalid %s %q: %w", field, value, err)
+	}
+	if d <= 0 {
+		return fmt.Errorf("source: %s must be positive, got %q", field, value)
+	}
+	return nil
+}
+
 // Validate checks that the SourceEntry has the required fields for its type.
 func (s SourceEntry) Validate() error {
 	if !validSourceTypes[s.Type] {
 		return fmt.Errorf("source: unknown type %q (valid: git, repo, ast, docs, config, url, image, video, audio)", s.Type)
+	}
+
+	if err := validatePositiveDuration("poll_interval", s.PollInterval); err != nil {
+		return err
+	}
+	if err := validatePositiveDuration("index_interval", s.IndexInterval); err != nil {
+		return err
 	}
 
 	switch s.Type {

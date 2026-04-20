@@ -35,15 +35,16 @@ type Config struct {
 // It contains only the fields useful for downstream consumers to understand
 // what data SemSource is ingesting.
 type ManifestSource struct {
-	Type         string   `json:"type"`
-	Path         string   `json:"path,omitempty"`
-	Paths        []string `json:"paths,omitempty"`
-	URL          string   `json:"url,omitempty"`
-	URLs         []string `json:"urls,omitempty"`
-	Language     string   `json:"language,omitempty"`
-	Branch       string   `json:"branch,omitempty"`
-	Watch        bool     `json:"watch"`
-	PollInterval string   `json:"poll_interval,omitempty"`
+	Type          string   `json:"type"`
+	Path          string   `json:"path,omitempty"`
+	Paths         []string `json:"paths,omitempty"`
+	URL           string   `json:"url,omitempty"`
+	URLs          []string `json:"urls,omitempty"`
+	Language      string   `json:"language,omitempty"`
+	Branch        string   `json:"branch,omitempty"`
+	Watch         bool     `json:"watch"`
+	PollInterval  string   `json:"poll_interval,omitempty"`
+	IndexInterval string   `json:"index_interval,omitempty"`
 }
 
 // Validate checks the configuration for errors.

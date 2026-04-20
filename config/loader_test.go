@@ -293,6 +293,61 @@ func TestLoadConfigFromReader_URLMissingURLs(t *testing.T) {
 	}
 }
 
+func TestLoadConfigFromReader_InvalidPollInterval(t *testing.T) {
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "git", "url": "https://example.com/r.git", "poll_interval": "fifteen-seconds"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for malformed poll_interval, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_NonPositivePollInterval(t *testing.T) {
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "git", "url": "https://example.com/r.git", "poll_interval": "0s"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for zero poll_interval, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_InvalidIndexInterval(t *testing.T) {
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "ast", "path": "./src", "index_interval": "not-a-duration"}
+  ]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for malformed index_interval, got nil")
+	}
+}
+
+func TestLoadConfigFromReader_IndexIntervalParsed(t *testing.T) {
+	input := `{
+  "namespace": "myorg",
+  "sources": [
+    {"type": "ast", "path": "./src", "language": "go", "index_interval": "30s"}
+  ]
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cfg.Sources[0].IndexInterval; got != "30s" {
+		t.Errorf("IndexInterval: got %q, want %q", got, "30s")
+	}
+}
+
 func TestLoadConfigFromReader_InvalidJSON(t *testing.T) {
 	_, err := config.LoadConfigFromReader(strings.NewReader("{invalid json"))
 	if err == nil {

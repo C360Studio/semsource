@@ -81,6 +81,14 @@ func runCmd(args []string) error {
 	}
 	defer nc.Close(context.Background())
 
+	// Register factories before starting the config manager so we can drop
+	// components coming from the shared KV bucket whose factory semsource
+	// doesn't own — see pruneForeignComponents.
+	registry := component.NewRegistry()
+	if err := registerComponentFactories(registry, semsourceCfg.IsHeadless()); err != nil {
+		return err
+	}
+
 	configMgr, err := semconfig.NewConfigManager(ssCfg, nc, logger)
 	if err != nil {
 		return fmt.Errorf("create config manager: %w", err)
@@ -90,9 +98,8 @@ func runCmd(args []string) error {
 	}
 	defer configMgr.Stop(5 * time.Second)
 
-	registry := component.NewRegistry()
-	if err := registerComponentFactories(registry, semsourceCfg.IsHeadless()); err != nil {
-		return err
+	if semsourceCfg.IsHeadless() {
+		pruneForeignComponents(configMgr, registry, logger)
 	}
 
 	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, configMgr, logger)
@@ -166,6 +173,61 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 	}
 	cfg.Sources = result.Sources
 	return cfg, result, nil
+}
+
+// pruneForeignComponents removes components from the config manager's KV-synced
+// state whose factory name isn't in the local registry. In headless mode
+// semsource shares the "semstreams_config" KV bucket with the host app
+// (SemSpec, SemDragon, etc.), so the synced Components map includes the host's
+// component definitions. Without pruning, semstreams' ComponentManager tries
+// to instantiate every one of them at startup and logs a loud
+// "factory lookup failed" ERROR for each foreign component — noisy and alarming
+// even though the instantiation is harmless (semsource only runs the 5 it owns).
+//
+// The registry holds only the factories semsource registered; anything not in
+// it is by definition foreign. We keep foreign entries out of the in-memory
+// SafeConfig but leave them untouched in the KV bucket so the owning app still
+// sees its own config.
+func pruneForeignComponents(configMgr *semconfig.Manager, registry *component.Registry, logger *slog.Logger) {
+	safeCfg := configMgr.GetConfig()
+	if safeCfg == nil {
+		return
+	}
+	cfg := safeCfg.Get()
+	if cfg == nil || len(cfg.Components) == 0 {
+		return
+	}
+
+	factories := registry.ListFactories()
+	known := make(map[string]bool, len(factories))
+	for name := range factories {
+		known[name] = true
+	}
+
+	var foreign []string
+	for instance, comp := range cfg.Components {
+		if !known[comp.Name] {
+			foreign = append(foreign, instance)
+		}
+	}
+	if len(foreign) == 0 {
+		return
+	}
+
+	for _, instance := range foreign {
+		delete(cfg.Components, instance)
+	}
+	if err := safeCfg.Update(cfg); err != nil {
+		logger.Warn("headless: failed to prune foreign components from synced config",
+			"error", err,
+			"foreign_count", len(foreign))
+		return
+	}
+	logger.Info("headless: pruned foreign components from synced config",
+		"pruned", len(foreign),
+		"owned", len(cfg.Components))
+	logger.Debug("headless: foreign components pruned",
+		"instances", foreign)
 }
 
 // registerComponentFactories registers component factories based on mode.
@@ -483,15 +545,16 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	manifestSources := make([]sourcemanifest.ManifestSource, 0, len(cfg.Sources))
 	for _, src := range cfg.Sources {
 		manifestSources = append(manifestSources, sourcemanifest.ManifestSource{
-			Type:         src.Type,
-			Path:         src.Path,
-			Paths:        src.Paths,
-			URL:          src.URL,
-			URLs:         src.URLs,
-			Language:     src.Language,
-			Branch:       src.Branch,
-			Watch:        src.Watch,
-			PollInterval: src.PollInterval,
+			Type:          src.Type,
+			Path:          src.Path,
+			Paths:         src.Paths,
+			URL:           src.URL,
+			URLs:          src.URLs,
+			Language:      src.Language,
+			Branch:        src.Branch,
+			Watch:         src.Watch,
+			PollInterval:  src.PollInterval,
+			IndexInterval: src.IndexInterval,
 		})
 	}
 	raw, err := json.Marshal(map[string]any{
@@ -835,6 +898,11 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 	project := entityid.BranchScopedSlug(slug, src.BranchSlug)
 	instanceName := fmt.Sprintf("ast-source-%s", project)
 
+	indexInterval := src.IndexInterval
+	if indexInterval == "" {
+		indexInterval = "60s"
+	}
+
 	compCfg := map[string]any{
 		"ports": sourceOutputPorts(),
 		"watch_paths": []map[string]any{
@@ -846,7 +914,7 @@ func astSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 			},
 		},
 		"watch_enabled":  src.Watch,
-		"index_interval": "60s",
+		"index_interval": indexInterval,
 		"instance_name":  instanceName,
 	}
 
@@ -875,13 +943,18 @@ func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg
 		branch = "main"
 	}
 
+	pollInterval := src.PollInterval
+	if pollInterval == "" {
+		pollInterval = "60s"
+	}
+
 	compCfg := map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"repo_path":     src.Path,
 		"repo_url":      src.URL,
 		"branch":        branch,
-		"poll_interval": "60s",
+		"poll_interval": pollInterval,
 		"watch_enabled": src.Watch,
 		"workspace_dir": cfg.WorkspaceDir,
 		"git_token":     cfg.GitToken,
@@ -954,11 +1027,15 @@ func urlSourceComponentConfig(src config.SourceEntry, org string, index int) (st
 		}
 	}
 	instanceName := fmt.Sprintf("url-source-%s", slug)
+	pollInterval := src.PollInterval
+	if pollInterval == "" {
+		pollInterval = "300s"
+	}
 	return instanceName, map[string]any{
 		"ports":         sourceOutputPorts(),
 		"org":           org,
 		"urls":          urls,
-		"poll_interval": "300s",
+		"poll_interval": pollInterval,
 		"instance_name": instanceName,
 	}
 }

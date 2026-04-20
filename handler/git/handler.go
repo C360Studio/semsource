@@ -6,9 +6,11 @@ package git
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/c360studio/semsource/entityid"
@@ -51,6 +53,12 @@ type Config struct {
 	// BranchSlug, when non-empty, scopes entity IDs to a specific branch.
 	// Used in multi-branch mode to prevent entity ID collisions across branches.
 	BranchSlug string
+
+	// Logger, when non-nil, receives structured logs from Watch/pollLoop
+	// operations. Without a logger, polling errors are invisible — the handler
+	// silently skips failed ticks. Pass the component's logger here so poll
+	// failures surface in the operational log.
+	Logger *slog.Logger
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -65,11 +73,32 @@ func DefaultConfig() Config {
 // It is safe for concurrent use.
 type Handler struct {
 	cfg Config
+
+	// watchErrors counts errors observed by the polling loop that would
+	// otherwise be swallowed (headCommitSHA failures, Ingest failures during
+	// a poll tick). Readable via WatchErrorCount so the owning component can
+	// surface the value in its status report.
+	watchErrors atomic.Int64
 }
 
 // New creates a Handler with the given configuration.
 func New(cfg Config) *Handler {
 	return &Handler{cfg: cfg}
+}
+
+// WatchErrorCount returns the cumulative number of errors encountered by the
+// polling watch loop. Returns 0 before Watch() has been called or if watching
+// is disabled.
+func (h *Handler) WatchErrorCount() int64 {
+	return h.watchErrors.Load()
+}
+
+// logger returns the configured logger or slog.Default() when none is set.
+func (h *Handler) logger() *slog.Logger {
+	if h.cfg.Logger != nil {
+		return h.cfg.Logger
+	}
+	return slog.Default()
 }
 
 // SourceType implements handler.SourceHandler.
@@ -229,8 +258,15 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 	ticker := time.NewTicker(h.cfg.PollInterval)
 	defer ticker.Stop()
 
+	logger := h.logger()
+
 	// Record initial HEAD so we only fire on changes.
-	lastSHA, _ := headCommitSHA(ctx, repoPath)
+	lastSHA, initErr := headCommitSHA(ctx, repoPath)
+	if initErr != nil {
+		h.watchErrors.Add(1)
+		logger.Warn("git watch: failed to read initial HEAD",
+			"repo", repoPath, "error", initErr)
+	}
 
 	for {
 		select {
@@ -238,7 +274,13 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 			return
 		case <-ticker.C:
 			currentSHA, err := headCommitSHA(ctx, repoPath)
-			if err != nil || currentSHA == lastSHA {
+			if err != nil {
+				h.watchErrors.Add(1)
+				logger.Warn("git watch: failed to read HEAD on tick",
+					"repo", repoPath, "error", err)
+				continue
+			}
+			if currentSHA == lastSHA {
 				continue
 			}
 			lastSHA = currentSHA
@@ -249,6 +291,9 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 			lc := &localCfg{path: repoPath}
 			entities, err := h.Ingest(ctx, lc)
 			if err != nil {
+				h.watchErrors.Add(1)
+				logger.Warn("git watch: re-ingest after HEAD change failed",
+					"repo", repoPath, "new_sha", currentSHA, "error", err)
 				continue
 			}
 			var entityStates []*handler.EntityState

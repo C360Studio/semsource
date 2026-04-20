@@ -101,6 +101,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		Token:        config.GitToken,
 		Org:          config.Org,
 		BranchSlug:   config.BranchSlug,
+		Logger:       deps.GetLogger(),
 	})
 
 	watchEnabled := config.WatchEnabled == nil || *config.WatchEnabled
@@ -160,17 +161,31 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Retry initial ingest — the repo filesystem may not be ready yet if
 	// a Docker volume mount is still settling or a clone is in progress.
+	// retry.Do swallows interim errors, so we log each failed attempt at WARN
+	// so operators can see why seeding is taking time instead of staring at a
+	// silent status counter ticking up.
+	var attempt atomic.Int32
 	if err := retry.Do(ctx, retry.Persistent(), func() error {
+		n := attempt.Add(1)
 		if c.config.RepoPath != "" {
 			if err := workspace.IsRepoReady(c.config.RepoPath); err != nil {
-				c.logger.Debug("waiting for repo to become available",
-					"repo", c.config.RepoPath, "error", err)
+				c.logger.Warn("git-source: repo not ready — retrying",
+					"repo", c.config.RepoPath,
+					"attempt", n,
+					"error", err)
 				return err
 			}
 		}
-		return c.ingestOnce(ctx)
+		if err := c.ingestOnce(ctx); err != nil {
+			c.logger.Warn("git-source: initial ingest attempt failed — retrying",
+				"repo", repoDesc,
+				"attempt", n,
+				"error", err)
+			return err
+		}
+		return nil
 	}); err != nil {
-		return fmt.Errorf("initial git ingest failed: %w", err)
+		return fmt.Errorf("initial git ingest failed after %d attempts: %w", attempt.Load(), err)
 	}
 
 	c.logger.Info("Git-source initial ingest complete",
@@ -357,7 +372,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		SourceType:   "git",
 		Phase:        phase,
 		EntityCount:  c.entitiesPublished.Load(),
-		ErrorCount:   c.ingestErrors.Load(),
+		ErrorCount:   c.ingestErrors.Load() + c.handler.WatchErrorCount(),
 		TypeCounts:   c.snapshotTypeCounts(),
 		Timestamp:    time.Now(),
 	}

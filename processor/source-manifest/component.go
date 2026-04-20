@@ -240,18 +240,35 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 
 	c.statusMu.Lock()
 	wasComplete := c.seedComplete
+	wasDegraded := c.aggregator.degraded
 	c.aggregator.update(&report)
 	nowComplete := c.aggregator.allReported()
 	if nowComplete {
 		c.seedComplete = true
+		// Clear the sticky degraded flag — a late source finally reporting
+		// means we recovered. The aggregator already returns PhaseReady in
+		// this case, but leaving degraded=true on the record would confuse
+		// any future buildStatus call that happened when reports drop below
+		// expectedCount again.
+		c.aggregator.degraded = false
 	}
 	status := c.aggregator.buildStatus(c.config.Namespace)
 	c.statusMu.Unlock()
 
 	c.updateStatusData(status)
 
-	// Publish seed-complete signal the first time all sources report.
-	if nowComplete && !wasComplete {
+	// Publish the phase transition to consumers. Recovery (degraded → ready)
+	// must be checked first because wasComplete is also false in that case
+	// (we intentionally don't set seedComplete on the degraded timeout).
+	switch {
+	case nowComplete && wasDegraded:
+		c.logger.Info("late source reported — recovered from degraded",
+			"total_entities", status.TotalEntities,
+			"sources", len(status.Sources))
+		if err := c.publishPayload(ctx, StatusType, status, statusSubject); err != nil {
+			c.logger.Warn("failed to publish recovery status", "error", err)
+		}
+	case nowComplete && !wasComplete:
 		c.logger.Info("all sources reported — seed complete",
 			"total_entities", status.TotalEntities,
 			"sources", len(status.Sources))
@@ -312,12 +329,15 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 				c.statusMu.Unlock()
 				return
 			}
+			// Do NOT set seedComplete here — the timer is one-shot so there's
+			// nothing to guard against re-firing, and marking seed complete
+			// prevents the recovery publish in handleStatusReport from firing
+			// when a late source finally reports.
 			status := c.aggregator.markDegraded(c.config.Namespace)
-			c.seedComplete = true // don't fire again
 			c.statusMu.Unlock()
 
 			c.updateStatusData(status)
-			c.logger.Warn("seed timeout — marking status degraded",
+			c.logger.Warn("seed timeout — marking status degraded (may recover)",
 				"expected", c.config.ExpectedSourceCount,
 				"received", len(status.Sources))
 
