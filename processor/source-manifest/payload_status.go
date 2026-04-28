@@ -4,22 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 )
-
-func init() {
-	err := component.RegisterPayload(&component.PayloadRegistration{
-		Domain:      "semsource",
-		Category:    "status",
-		Version:     "v1",
-		Description: "Ingestion status with per-source phase, entity counts, and aggregate lifecycle",
-		Factory:     func() any { return &StatusPayload{} },
-	})
-	if err != nil {
-		panic("failed to register StatusPayload: " + err.Error())
-	}
-}
 
 // StatusType is the message type for ingestion status payloads.
 var StatusType = message.Type{Domain: "semsource", Category: "status", Version: "v1"}

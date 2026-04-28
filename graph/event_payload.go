@@ -10,21 +10,20 @@ import (
 	"errors"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/payloadregistry"
 )
 
-func init() {
-	err := component.RegisterPayload(&component.PayloadRegistration{
+// RegisterPayloads registers EntityPayload with the supplied registry.
+// Called from cmd/semsource/run.go during bootstrap.
+func RegisterPayloads(reg *payloadregistry.Registry) error {
+	return reg.Register(&payloadregistry.Registration{
 		Domain:      "semsource",
 		Category:    "entity",
 		Version:     "v1",
 		Description: "SemSource entity payload for graph ingestion",
 		Factory:     func() any { return &EntityPayload{} },
 	})
-	if err != nil {
-		panic("failed to register EntityPayload: " + err.Error())
-	}
 }
 
 // EntityType is the message type for semsource entity payloads.

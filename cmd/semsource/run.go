@@ -12,13 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	// Register payloads and vocabulary in the semstreams registries.
-	_ "github.com/c360studio/semsource/graph"
-	_ "github.com/c360studio/semsource/processor/source-manifest"
+	// Register language parsers and vocabulary in the semstreams registries.
 	_ "github.com/c360studio/semsource/source/ast"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/graph"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	audiosource "github.com/c360studio/semsource/processor/audio-source"
 	cfgfilesource "github.com/c360studio/semsource/processor/cfgfile-source"
@@ -35,6 +34,8 @@ import (
 	semconfig "github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/payloadbuiltins"
+	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 )
@@ -89,6 +90,11 @@ func runCmd(args []string) error {
 		return err
 	}
 
+	payloadReg, err := buildPayloadRegistry()
+	if err != nil {
+		return err
+	}
+
 	configMgr, err := semconfig.NewConfigManager(ssCfg, nc, logger)
 	if err != nil {
 		return fmt.Errorf("create config manager: %w", err)
@@ -102,7 +108,7 @@ func runCmd(args []string) error {
 		pruneForeignComponents(configMgr, registry, logger)
 	}
 
-	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, configMgr, logger)
+	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, logger)
 	if err != nil {
 		configMgr.Stop(5 * time.Second)
 		return err
@@ -249,6 +255,24 @@ func registerComponentFactories(registry *component.Registry, headless bool) err
 	return nil
 }
 
+// buildPayloadRegistry constructs the payload registry, registers semstreams
+// first-party builtins, and layers semsource's own payload types on top.
+// The result is plumbed through service.Dependencies.PayloadRegistry so every
+// component receives the same registry via component.Dependencies.
+func buildPayloadRegistry() (*payloadregistry.Registry, error) {
+	reg := payloadregistry.New()
+	if err := payloadbuiltins.Register(reg); err != nil {
+		return nil, fmt.Errorf("register builtin payloads: %w", err)
+	}
+	if err := graph.RegisterPayloads(reg); err != nil {
+		return nil, fmt.Errorf("register graph payloads: %w", err)
+	}
+	if err := sourcemanifest.RegisterPayloads(reg); err != nil {
+		return nil, fmt.Errorf("register source-manifest payloads: %w", err)
+	}
+	return reg, nil
+}
+
 // registerSemsourceFactories registers all semsource-specific component factories.
 func registerSemsourceFactories(registry *component.Registry) error {
 	for name, fn := range map[string]func() error{
@@ -276,6 +300,7 @@ func createServiceManager(
 	ssCfg *semconfig.Config,
 	nc *natsclient.Client,
 	registry *component.Registry,
+	payloadReg *payloadregistry.Registry,
 	configMgr *semconfig.Manager,
 	logger *slog.Logger,
 ) (*service.Manager, error) {
@@ -298,6 +323,7 @@ func createServiceManager(
 		Platform:          platform,
 		Manager:           configMgr,
 		ComponentRegistry: registry,
+		PayloadRegistry:   payloadReg,
 	}
 
 	if err := manager.ConfigureFromServices(ssCfg.Services, deps); err != nil {

@@ -4,22 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 )
-
-func init() {
-	err := component.RegisterPayload(&component.PayloadRegistration{
-		Domain:      "semsource",
-		Category:    "manifest",
-		Version:     "v1",
-		Description: "Source manifest listing all configured ingestion sources",
-		Factory:     func() any { return &ManifestPayload{} },
-	})
-	if err != nil {
-		panic("failed to register ManifestPayload: " + err.Error())
-	}
-}
 
 // ManifestType is the message type for source manifest payloads.
 var ManifestType = message.Type{Domain: "semsource", Category: "manifest", Version: "v1"}

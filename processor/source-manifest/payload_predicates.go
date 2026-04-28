@@ -4,22 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 )
-
-func init() {
-	err := component.RegisterPayload(&component.PayloadRegistration{
-		Domain:      "semsource",
-		Category:    "predicates",
-		Version:     "v1",
-		Description: "Predicate schema advertising predicates emitted per source type with semantic roles",
-		Factory:     func() any { return &PredicateSchemaPayload{} },
-	})
-	if err != nil {
-		panic("failed to register PredicateSchemaPayload: " + err.Error())
-	}
-}
 
 // PredicatesType is the message type for predicate schema payloads.
 var PredicatesType = message.Type{Domain: "semsource", Category: "predicates", Version: "v1"}
