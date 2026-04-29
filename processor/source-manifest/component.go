@@ -58,6 +58,9 @@ type Component struct {
 	// Summary query
 	summaryQuerySub *natsclient.Subscription
 
+	// Ingest API (graph.ingest.add/remove)
+	ingestSubs []*natsclient.Subscription
+
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
 
@@ -475,7 +478,9 @@ func (c *Component) Stop(_ time.Duration) error {
 	}
 	c.cancelFuncs = nil
 
-	for _, sub := range []*natsclient.Subscription{c.querySub, c.statusSub, c.statusQuerySub, c.predicatesQuerySub, c.summaryQuerySub} {
+	subs := []*natsclient.Subscription{c.querySub, c.statusSub, c.statusQuerySub, c.predicatesQuerySub, c.summaryQuerySub}
+	subs = append(subs, c.ingestSubs...)
+	for _, sub := range subs {
 		if sub != nil {
 			if err := sub.Unsubscribe(); err != nil {
 				c.logger.Warn("failed to unsubscribe", "error", err)
@@ -487,6 +492,7 @@ func (c *Component) Stop(_ time.Duration) error {
 	c.statusQuerySub = nil
 	c.predicatesQuerySub = nil
 	c.summaryQuerySub = nil
+	c.ingestSubs = nil
 
 	c.running = false
 	c.logger.Info("source-manifest stopped")

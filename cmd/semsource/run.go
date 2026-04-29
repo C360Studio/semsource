@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/sourcespawn"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	audiosource "github.com/c360studio/semsource/processor/audio-source"
 	cfgfilesource "github.com/c360studio/semsource/processor/cfgfile-source"
@@ -119,6 +120,10 @@ func runCmd(args []string) error {
 
 	if err := manager.StartAll(signalCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
+	}
+
+	if err := registerIngestHandlers(signalCtx, manager, configMgr, semsourceCfg, logger); err != nil {
+		logger.Warn("failed to register ingest handlers", "error", err)
 	}
 
 	startBranchWatchers(signalCtx, expandResult.Watchers, semsourceCfg, configMgr, logger)
@@ -470,96 +475,25 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 // sourceComponents translates semsource config sources into semstreams component configs.
 func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfigs, error) {
 	components := make(semconfig.ComponentConfigs)
+	opts := sourcespawn.Options{
+		Org:           org,
+		WorkspaceDir:  cfg.WorkspaceDir,
+		GitToken:      cfg.GitToken,
+		MediaStoreDir: cfg.MediaStoreDir,
+	}
 
 	for i, src := range cfg.Sources {
-		switch src.Type {
-		case "ast":
-			instanceName, compCfg, err := astSourceComponentConfig(src, org, i)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (ast): %w", i, err)
+		built, err := sourcespawn.Build(src, opts, i)
+		if err != nil {
+			if sourcespawn.CodeOf(err) == sourcespawn.CodeUnsupportedType {
+				slog.Warn("source type not yet migrated to component — skipped",
+					"index", i, "type", src.Type, "path", src.Path)
+				continue
 			}
-			rawCfg, err := json.Marshal(compCfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (ast) marshal config: %w", i, err)
-			}
-			components[instanceName] = types.ComponentConfig{
-				Name:    "ast-source",
-				Type:    types.ComponentTypeProcessor,
-				Enabled: true,
-				Config:  rawCfg,
-			}
-
-		case "git":
-			instanceName, compCfg, err := gitSourceComponentConfig(src, org, i, cfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (git): %w", i, err)
-			}
-			rawCfg, err := json.Marshal(compCfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (git) marshal config: %w", i, err)
-			}
-			components[instanceName] = types.ComponentConfig{
-				Name:    "git-source",
-				Type:    types.ComponentTypeProcessor,
-				Enabled: true,
-				Config:  rawCfg,
-			}
-
-		case "docs":
-			instanceName, compCfg := docSourceComponentConfig(src, org, i)
-			rawCfg, err := json.Marshal(compCfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (docs) marshal config: %w", i, err)
-			}
-			components[instanceName] = types.ComponentConfig{
-				Name:    "doc-source",
-				Type:    types.ComponentTypeProcessor,
-				Enabled: true,
-				Config:  rawCfg,
-			}
-
-		case "config":
-			instanceName, compCfg := cfgfileSourceComponentConfig(src, org, i)
-			rawCfg, err := json.Marshal(compCfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (config) marshal config: %w", i, err)
-			}
-			components[instanceName] = types.ComponentConfig{
-				Name:    "cfgfile-source",
-				Type:    types.ComponentTypeProcessor,
-				Enabled: true,
-				Config:  rawCfg,
-			}
-
-		case "url":
-			instanceName, compCfg := urlSourceComponentConfig(src, org, i)
-			rawCfg, err := json.Marshal(compCfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (url) marshal config: %w", i, err)
-			}
-			components[instanceName] = types.ComponentConfig{
-				Name:    "url-source",
-				Type:    types.ComponentTypeProcessor,
-				Enabled: true,
-				Config:  rawCfg,
-			}
-
-		case "image", "video", "audio":
-			instanceName, compCfg := mediaSourceComponentConfig(src, org, i, cfg)
-			rawCfg, err := json.Marshal(compCfg)
-			if err != nil {
-				return nil, fmt.Errorf("source[%d] (%s) marshal config: %w", i, src.Type, err)
-			}
-			components[instanceName] = types.ComponentConfig{
-				Name:    src.Type + "-source",
-				Type:    types.ComponentTypeProcessor,
-				Enabled: true,
-				Config:  rawCfg,
-			}
-
-		default:
-			slog.Warn("source type not yet migrated to component — skipped",
-				"index", i, "type", src.Type, "path", src.Path)
+			return nil, fmt.Errorf("source[%d] (%s): %w", i, src.Type, err)
+		}
+		for name, compCfg := range built {
+			components[name] = compCfg
 		}
 	}
 
@@ -884,216 +818,47 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 	}, nil
 }
 
-// sourceOutputPorts returns the standard output port config shared by all source
-// components. The flow engine reads ports from the config JSON to discover
-// connections — without explicit ports in the config, the flow graph shows 0
-// connections even though components use DefaultConfig at runtime.
-func sourceOutputPorts() map[string]any {
-	return map[string]any{
-		"outputs": []map[string]any{
-			{
-				"name":        "graph.ingest",
-				"type":        "jetstream",
-				"subject":     "graph.ingest.entity",
-				"stream_name": "GRAPH",
-				"required":    true,
-				"description": "Entity state updates for graph ingestion",
-			},
+// registerIngestHandlers locates the running source-manifest component and
+// wires graph.ingest.add.{namespace} and graph.ingest.remove.{namespace}
+// onto it. The component owns the subscription lifecycle — Stop tears
+// these down alongside its existing query subs.
+func registerIngestHandlers(
+	ctx context.Context,
+	manager *service.Manager,
+	configMgr *semconfig.Manager,
+	cfg *config.Config,
+	logger *slog.Logger,
+) error {
+	cmService, ok := manager.GetService("component-manager")
+	if !ok {
+		return fmt.Errorf("component-manager service not running")
+	}
+	cm, ok := cmService.(*service.ComponentManager)
+	if !ok {
+		return fmt.Errorf("component-manager has unexpected type %T", cmService)
+	}
+
+	managed := cm.GetManagedComponents()
+	mc, ok := managed["source-manifest"]
+	if !ok {
+		logger.Debug("source-manifest not running; skipping ingest handler registration")
+		return nil
+	}
+	smComponent, ok := mc.Component.(*sourcemanifest.Component)
+	if !ok {
+		return fmt.Errorf("source-manifest has unexpected type %T", mc.Component)
+	}
+
+	return smComponent.RegisterIngestHandlers(ctx, sourcemanifest.IngestHandlerConfig{
+		Namespace: cfg.Namespace,
+		Store:     configMgr,
+		Spawn: sourcespawn.Options{
+			Org:           cfg.Namespace,
+			WorkspaceDir:  cfg.WorkspaceDir,
+			GitToken:      cfg.GitToken,
+			MediaStoreDir: cfg.MediaStoreDir,
 		},
-	}
-}
-
-// astSourceComponentConfig builds a component instance name and config map for
-// an AST source entry. The instance name is derived from the path so multiple
-// AST sources produce distinct component instances.
-func astSourceComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any, error) {
-	path := src.Path
-	if path == "" {
-		path = "."
-	}
-
-	lang := src.Language
-	if lang == "" {
-		lang = "go"
-	}
-
-	slug := entityid.SystemSlug(path)
-	if slug == "" {
-		slug = fmt.Sprintf("source-%d", index)
-	}
-	project := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("ast-source-%s", project)
-
-	indexInterval := src.IndexInterval
-	if indexInterval == "" {
-		indexInterval = "60s"
-	}
-
-	compCfg := map[string]any{
-		"ports": sourceOutputPorts(),
-		"watch_paths": []map[string]any{
-			{
-				"path":      path,
-				"org":       org,
-				"project":   project,
-				"languages": []string{lang},
-			},
-		},
-		"watch_enabled":  src.Watch,
-		"index_interval": indexInterval,
-		"instance_name":  instanceName,
-	}
-
-	return instanceName, compCfg, nil
-}
-
-// gitSourceComponentConfig builds a component instance name and config map for
-// a git source entry.
-func gitSourceComponentConfig(src config.SourceEntry, org string, index int, cfg *config.Config) (string, map[string]any, error) {
-	identifier := src.URL
-	if identifier == "" {
-		identifier = src.Path
-	}
-	if identifier == "" {
-		identifier = fmt.Sprintf("git-%d", index)
-	}
-	slug := entityid.SystemSlug(identifier)
-	if slug == "" {
-		slug = fmt.Sprintf("git-%d", index)
-	}
-	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("git-source-%s", scopedSlug)
-
-	branch := src.Branch
-	if branch == "" {
-		branch = "main"
-	}
-
-	pollInterval := src.PollInterval
-	if pollInterval == "" {
-		pollInterval = "60s"
-	}
-
-	compCfg := map[string]any{
-		"ports":         sourceOutputPorts(),
-		"org":           org,
-		"repo_path":     src.Path,
-		"repo_url":      src.URL,
-		"branch":        branch,
-		"poll_interval": pollInterval,
-		"watch_enabled": src.Watch,
-		"workspace_dir": cfg.WorkspaceDir,
-		"git_token":     cfg.GitToken,
-		"branch_slug":   src.BranchSlug,
-		"instance_name": instanceName,
-	}
-
-	return instanceName, compCfg, nil
-}
-
-// docSourceComponentConfig builds config for a docs source entry.
-func docSourceComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any) {
-	paths := src.Paths
-	if len(paths) == 0 && src.Path != "" {
-		paths = []string{src.Path}
-	}
-	slug := fmt.Sprintf("docs-%d", index)
-	if len(paths) > 0 {
-		slug = entityid.SystemSlug(paths[0])
-		if slug == "" {
-			slug = fmt.Sprintf("docs-%d", index)
-		}
-	}
-	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("doc-source-%s", scopedSlug)
-	return instanceName, map[string]any{
-		"ports":         sourceOutputPorts(),
-		"org":           org,
-		"paths":         paths,
-		"watch_enabled": src.Watch,
-		"instance_name": instanceName,
-	}
-}
-
-// cfgfileSourceComponentConfig builds config for a config file source entry.
-func cfgfileSourceComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any) {
-	paths := src.Paths
-	if len(paths) == 0 && src.Path != "" {
-		paths = []string{src.Path}
-	}
-	slug := fmt.Sprintf("config-%d", index)
-	if len(paths) > 0 {
-		slug = entityid.SystemSlug(paths[0])
-		if slug == "" {
-			slug = fmt.Sprintf("config-%d", index)
-		}
-	}
-	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("cfgfile-source-%s", scopedSlug)
-	return instanceName, map[string]any{
-		"ports":         sourceOutputPorts(),
-		"org":           org,
-		"paths":         paths,
-		"watch_enabled": src.Watch,
-		"instance_name": instanceName,
-	}
-}
-
-// urlSourceComponentConfig builds config for a URL source entry.
-func urlSourceComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any) {
-	urls := src.URLs
-	if len(urls) == 0 && src.URL != "" {
-		urls = []string{src.URL}
-	}
-	slug := fmt.Sprintf("url-%d", index)
-	if len(urls) > 0 {
-		slug = entityid.SystemSlug(urls[0])
-		if slug == "" {
-			slug = fmt.Sprintf("url-%d", index)
-		}
-	}
-	instanceName := fmt.Sprintf("url-source-%s", slug)
-	pollInterval := src.PollInterval
-	if pollInterval == "" {
-		pollInterval = "300s"
-	}
-	return instanceName, map[string]any{
-		"ports":         sourceOutputPorts(),
-		"org":           org,
-		"urls":          urls,
-		"poll_interval": pollInterval,
-		"instance_name": instanceName,
-	}
-}
-
-// mediaSourceComponentConfig builds config for image, video, or audio source entries.
-func mediaSourceComponentConfig(src config.SourceEntry, org string, index int, cfg *config.Config) (string, map[string]any) {
-	paths := src.Paths
-	if len(paths) == 0 && src.Path != "" {
-		paths = []string{src.Path}
-	}
-	slug := fmt.Sprintf("%s-%d", src.Type, index)
-	if len(paths) > 0 {
-		s := entityid.SystemSlug(paths[0])
-		if s != "" {
-			slug = s
-		}
-	}
-	instanceName := fmt.Sprintf("%s-source-%s", src.Type, slug)
-
-	compCfg := map[string]any{
-		"ports":         sourceOutputPorts(),
-		"org":           org,
-		"paths":         paths,
-		"watch_enabled": src.Watch,
-		"instance_name": instanceName,
-	}
-
-	if cfg.MediaStoreDir != "" {
-		compCfg["file_store_root"] = cfg.MediaStoreDir
-	}
-
-	return instanceName, compCfg
+	})
 }
 
 // startBranchWatchers starts a poll goroutine for each multi-branch repo.
@@ -1147,16 +912,29 @@ func publishBranchComponents(
 	configMgr *semconfig.Manager,
 	logger *slog.Logger,
 ) {
-	src := config.SourceEntry{
-		URL:        "", // local repo
+	opts := sourcespawn.Options{
+		Org:           cfg.Namespace,
+		WorkspaceDir:  cfg.WorkspaceDir,
+		GitToken:      cfg.GitToken,
+		MediaStoreDir: cfg.MediaStoreDir,
+	}
+	// A discovered branch expands to a "repo" entry pinned to the worktree;
+	// sourcespawn handles the per-branch git/ast/docs/config split.
+	repoEntry := config.SourceEntry{
+		Type:       "repo",
 		Path:       bs.WorktreePath,
 		Branch:     bs.Branch,
+		BranchSlug: bs.Slug,
 		Watch:      ref.Watch,
 		Language:   ref.Language,
-		BranchSlug: bs.Slug,
 	}
-
-	componentConfigs := buildBranchComponentConfigs(src, cfg.Namespace, cfg)
+	componentConfigs, err := sourcespawn.Build(repoEntry, opts, 0)
+	if err != nil {
+		logger.Warn("failed to build branch component configs",
+			"branch", bs.Branch,
+			"error", err)
+		return
+	}
 	for name, compCfg := range componentConfigs {
 		if err := configMgr.PutComponentToKV(ctx, name, compCfg); err != nil {
 			logger.Warn("failed to publish branch component config",
@@ -1189,57 +967,6 @@ func removeBranchComponents(
 				"error", err)
 		}
 	}
-}
-
-// buildBranchComponentConfigs creates the 4 component configs for a single branch.
-func buildBranchComponentConfigs(src config.SourceEntry, org string, cfg *config.Config) map[string]types.ComponentConfig {
-	configs := make(map[string]types.ComponentConfig)
-
-	// Git source
-	gitName, gitCfg, err := gitSourceComponentConfig(src, org, 0, cfg)
-	if err == nil {
-		raw, _ := json.Marshal(gitCfg)
-		configs[gitName] = types.ComponentConfig{
-			Name:    "git-source",
-			Type:    types.ComponentTypeProcessor,
-			Enabled: true,
-			Config:  raw,
-		}
-	}
-
-	// AST source
-	astName, astCfg, err := astSourceComponentConfig(src, org, 0)
-	if err == nil {
-		raw, _ := json.Marshal(astCfg)
-		configs[astName] = types.ComponentConfig{
-			Name:    "ast-source",
-			Type:    types.ComponentTypeProcessor,
-			Enabled: true,
-			Config:  raw,
-		}
-	}
-
-	// Doc source
-	docName, docCfg := docSourceComponentConfig(src, org, 0)
-	raw, _ := json.Marshal(docCfg)
-	configs[docName] = types.ComponentConfig{
-		Name:    "doc-source",
-		Type:    types.ComponentTypeProcessor,
-		Enabled: true,
-		Config:  raw,
-	}
-
-	// Config file source
-	cfgName, cfgfileCfg := cfgfileSourceComponentConfig(src, org, 0)
-	raw, _ = json.Marshal(cfgfileCfg)
-	configs[cfgName] = types.ComponentConfig{
-		Name:    "cfgfile-source",
-		Type:    types.ComponentTypeProcessor,
-		Enabled: true,
-		Config:  raw,
-	}
-
-	return configs
 }
 
 // parseBranchPollInterval parses the poll interval string with a default of 15s.

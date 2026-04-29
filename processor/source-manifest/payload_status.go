@@ -28,6 +28,34 @@ type SourceStatus struct {
 	EntityCount  int64            `json:"entity_count"`
 	ErrorCount   int64            `json:"error_count"`
 	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+	LastError    *SourceError     `json:"last_error,omitempty"`
+}
+
+// SourceErrorCode is a typed code for asynchronous source-runtime failures.
+// Codes flow to remote callers (subscribers of graph.ingest.status) so they
+// can branch on retryability without scraping log strings.
+type SourceErrorCode string
+
+const (
+	// SourceUnreachable indicates the source's origin could not be reached
+	// (git clone 404, URL DNS fail, path missing).
+	SourceUnreachable SourceErrorCode = "SOURCE_UNREACHABLE"
+
+	// SourceAuthFailed indicates an authentication or authorization failure
+	// reaching the source (private repo without creds, 401/403 from URL).
+	SourceAuthFailed SourceErrorCode = "SOURCE_AUTH_FAILED"
+
+	// WatchFailed indicates the watch subsystem (fsnotify, polling) failed
+	// after the initial seed completed.
+	WatchFailed SourceErrorCode = "WATCH_FAILED"
+)
+
+// SourceError describes the most recent asynchronous failure for a source
+// instance. Cleared (nil) when the source recovers and is reporting healthy.
+type SourceError struct {
+	Code      SourceErrorCode `json:"code"`
+	Message   string          `json:"message"`
+	Timestamp time.Time       `json:"timestamp"`
 }
 
 // Schema implements message.Payload.

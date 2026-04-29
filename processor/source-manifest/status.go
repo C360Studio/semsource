@@ -60,6 +60,7 @@ type SourceStatusReport struct {
 	EntityCount  int64            `json:"entity_count"`
 	ErrorCount   int64            `json:"error_count"`
 	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+	LastError    *SourceError     `json:"last_error,omitempty"`
 	Timestamp    time.Time        `json:"timestamp"`
 }
 
@@ -96,6 +97,7 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			EntityCount:  r.EntityCount,
 			ErrorCount:   r.ErrorCount,
 			TypeCounts:   r.TypeCounts,
+			LastError:    r.LastError,
 		})
 		totalEntities += r.EntityCount
 	}

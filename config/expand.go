@@ -73,6 +73,9 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 }
 
 // expandSingleBranch expands a repo source with a single branch (existing behavior).
+// src.BranchSlug propagates onto each child entry so per-branch instance names
+// stay scoped (e.g. branch-watcher discoveries don't collide with the default
+// branch's KV keys).
 func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 	localPath := src.Path
 	if localPath == "" && src.URL != "" {
@@ -84,18 +87,20 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 
 	// 1. Git source — clones the repo (auto-clone resolves URL → local path)
 	entries = append(entries, SourceEntry{
-		Type:   "git",
-		URL:    src.URL,
-		Path:   src.Path,
-		Branch: src.Branch,
-		Watch:  src.Watch,
+		Type:       "git",
+		URL:        src.URL,
+		Path:       src.Path,
+		Branch:     src.Branch,
+		Watch:      src.Watch,
+		BranchSlug: src.BranchSlug,
 	})
 
 	// 2. AST source — code structure analysis
 	astEntry := SourceEntry{
-		Type:  "ast",
-		Path:  localPath,
-		Watch: src.Watch,
+		Type:       "ast",
+		Path:       localPath,
+		Watch:      src.Watch,
+		BranchSlug: src.BranchSlug,
 	}
 	if src.Language != "" {
 		astEntry.Language = src.Language
@@ -104,16 +109,18 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 
 	// 3. Docs source — markdown/text docs
 	entries = append(entries, SourceEntry{
-		Type:  "docs",
-		Paths: []string{localPath},
-		Watch: src.Watch,
+		Type:       "docs",
+		Paths:      []string{localPath},
+		Watch:      src.Watch,
+		BranchSlug: src.BranchSlug,
 	})
 
 	// 4. Config source — go.mod, package.json, pom.xml, Dockerfile, etc.
 	entries = append(entries, SourceEntry{
-		Type:  "config",
-		Paths: []string{localPath},
-		Watch: src.Watch,
+		Type:       "config",
+		Paths:      []string{localPath},
+		Watch:      src.Watch,
+		BranchSlug: src.BranchSlug,
 	})
 
 	return entries
