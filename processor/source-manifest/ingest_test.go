@@ -45,11 +45,11 @@ func TestMapSpawnError_AllCodes(t *testing.T) {
 	}
 }
 
-func TestMapSpawnError_UnknownError_FallsBack(t *testing.T) {
+func TestMapSpawnError_UnknownError_FallsBackToInternal(t *testing.T) {
 	t.Parallel()
 	got := mapSpawnError(errors.New("bare error"))
-	if got.Code != CodeValidationFailed {
-		t.Errorf("fallback Code = %q, want %q", got.Code, CodeValidationFailed)
+	if got.Code != CodeInternalError {
+		t.Errorf("fallback Code = %q, want %q", got.Code, CodeInternalError)
 	}
 }
 
@@ -150,6 +150,59 @@ func TestSourceStatus_NoLastError_OmittedFromJSON(t *testing.T) {
 	}
 	if string(raw) == "" || containsLastError(raw) {
 		t.Errorf("raw should omit last_error, got %s", raw)
+	}
+}
+
+// TestAppendManifestSources_Idempotent guards H1: programmatic Adds mutate
+// c.manifestSources under lock; a duplicate add for the same logical source
+// must not produce two entries.
+func TestAppendManifestSources_Idempotent(t *testing.T) {
+	t.Parallel()
+	c := &Component{name: "source-manifest", logger: slog.Default()}
+	src := config.SourceEntry{Type: "url", URLs: []string{"https://example.com"}}
+
+	c.appendManifestSources(src)
+	c.appendManifestSources(src)
+
+	c.manifestMu.RLock()
+	defer c.manifestMu.RUnlock()
+	if len(c.manifestSources) != 1 {
+		t.Errorf("manifestSources len = %d, want 1 (idempotent dup-add)", len(c.manifestSources))
+	}
+	if c.manifestSources[0].Type != "url" || len(c.manifestSources[0].URLs) != 1 || c.manifestSources[0].URLs[0] != "https://example.com" {
+		t.Errorf("manifestSources entry = %+v; not the URL source we appended", c.manifestSources[0])
+	}
+}
+
+// TestRemoveManifestSourceByInstance_FindsViaBuild guards the H1 remove path:
+// given an instance name the caller got back from Add, the manifest entry
+// that produced it must be located via sourcespawn.Build and dropped.
+func TestRemoveManifestSourceByInstance_FindsViaBuild(t *testing.T) {
+	t.Parallel()
+	c := &Component{name: "source-manifest", logger: slog.Default()}
+	src := config.SourceEntry{Type: "url", URLs: []string{"https://example.com"}}
+	c.appendManifestSources(src)
+
+	// Compute the instance name the same way the runtime would.
+	built, err := sourcespawn.Build(src, sourcespawn.Options{Org: "acme"})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var instanceName string
+	for k := range built {
+		instanceName = k
+	}
+	if instanceName == "" {
+		t.Fatal("Build returned no instance name")
+	}
+
+	if !c.removeManifestSourceByInstance(instanceName, sourcespawn.Options{Org: "acme"}) {
+		t.Fatal("removeManifestSourceByInstance returned false; want true")
+	}
+	c.manifestMu.RLock()
+	defer c.manifestMu.RUnlock()
+	if len(c.manifestSources) != 0 {
+		t.Errorf("manifestSources len = %d after remove; want 0", len(c.manifestSources))
 	}
 }
 

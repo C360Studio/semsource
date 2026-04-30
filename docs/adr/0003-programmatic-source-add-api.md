@@ -148,6 +148,7 @@ Synchronous failures (returned in the reply's `error` field):
 | `INSTANCE_EXISTS` | Idempotent | If submitted config matches existing, treat as success; otherwise prompt user before replace |
 | `KV_WRITE_FAILED` | Yes | Backoff + retry |
 | `UNSUPPORTED_TYPE` | No | Type not implemented in this build (e.g., image/video deferred) |
+| `INTERNAL_ERROR` | Yes | Unexpected SemSource-side failure not attributable to caller input. Backoff + retry; if persistent, surface to operator. |
 
 Asynchronous failures (emitted on `graph.ingest.status` via a new
 `last_error` field on `SourceStatus`):
@@ -211,11 +212,12 @@ exist today). Add when first caller hits them.
 - **Provenance persistence.** v1 logs `actor` only; no field is written
   to component KV configs or stamped onto entity events. Wire contract
   is stable so this can land transparently later.
-- **Manifest refresh on Add/Remove.** `graph.query.sources` returns the
-  manifest snapshotted at startup; programmatic adds do not currently
-  re-publish or update it. Callers should use `graph.query.status` (or
-  subscribe to `graph.ingest.status`) to confirm a newly-added source
-  is live. Refresh-on-write is a tracked follow-on.
+- ~~**Manifest refresh on Add/Remove.**~~ Implemented: a successful Add
+  appends the source to the in-memory manifest, re-marshals
+  `responseData`, and republishes on `graph.ingest.manifest`. A
+  successful Remove inverts the operation. `graph.query.sources` and
+  the HTTP `/source-manifest/sources` handler always reflect the
+  current set under a read-write mutex.
 
 ### Trust model and risk
 

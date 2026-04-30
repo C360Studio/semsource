@@ -483,7 +483,7 @@ func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfig
 	}
 
 	for i, src := range cfg.Sources {
-		built, err := sourcespawn.Build(src, opts, i)
+		built, err := sourcespawn.Build(src, opts)
 		if err != nil {
 			if sourcespawn.CodeOf(err) == sourcespawn.CodeUnsupportedType {
 				slog.Warn("source type not yet migrated to component — skipped",
@@ -928,7 +928,7 @@ func publishBranchComponents(
 		Watch:      ref.Watch,
 		Language:   ref.Language,
 	}
-	componentConfigs, err := sourcespawn.Build(repoEntry, opts, 0)
+	componentConfigs, err := sourcespawn.Build(repoEntry, opts)
 	if err != nil {
 		logger.Warn("failed to build branch component configs",
 			"branch", bs.Branch,

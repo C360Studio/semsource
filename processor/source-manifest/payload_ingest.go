@@ -48,6 +48,13 @@ const (
 	// exist. Idempotent removes (delete-of-missing) succeed without this code;
 	// it is reserved for explicit-conflict modes.
 	CodeNotFound IngestErrorCode = "NOT_FOUND"
+
+	// CodeInternalError indicates an unexpected failure inside SemSource that
+	// is not directly attributable to caller input or KV state (e.g. a wrapped
+	// error from a future dependency that bypasses sourcespawn.Error). Treat
+	// as retryable with backoff — distinct from VALIDATION_FAILED, which must
+	// not be retried without changing the request.
+	CodeInternalError IngestErrorCode = "INTERNAL_ERROR"
 )
 
 // IngestError is the typed error envelope embedded in reply payloads.

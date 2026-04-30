@@ -159,7 +159,7 @@ func AddWithChecker(
 		}
 	}
 
-	specs, err := buildSpecsAt(src, opts, 0)
+	specs, err := buildSpecs(src, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -207,18 +207,19 @@ func AddWithChecker(
 
 // Build is the marshal-only path: it validates src and produces the
 // instance-name → ComponentConfig map without touching any KV store. Used
-// by the startup loader, which collects all sources into a single config
-// document before handing it to the ConfigManager.
+// by the startup loader (which collects all sources into a single config
+// document before handing it to the ConfigManager) and the branch-watcher.
 //
-// Index is only used as a fallback for slug generation when path/url is
-// empty; the loader passes the source's position in cfg.Sources, the Add
-// path passes 0.
-func Build(src config.SourceEntry, opts Options, index int) (map[string]types.ComponentConfig, error) {
+// Instance names are deterministic functions of the SourceEntry's
+// identifying fields — no index parameter, no insertion-order dependency.
+// Equivalent inputs always produce identical KV keys, which is what makes
+// Add idempotent.
+func Build(src config.SourceEntry, opts Options) (map[string]types.ComponentConfig, error) {
 	if err := src.Validate(); err != nil {
 		return nil, &Error{Code: CodeValidationFailed, Message: err.Error()}
 	}
 
-	specs, err := buildSpecsAt(src, opts, index)
+	specs, err := buildSpecs(src, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -267,42 +268,43 @@ type componentSpec struct {
 	compCfg      map[string]any
 }
 
-// buildSpecsAt dispatches src to the right per-type builder(s). index is
-// the fallback slug index used when path/url fields are empty.
-func buildSpecsAt(src config.SourceEntry, opts Options, index int) ([]componentSpec, error) {
+// buildSpecs dispatches src to the right per-type builder(s). Instance names
+// are deterministic functions of the SourceEntry's identifying fields — no
+// insertion-order or index dependency.
+func buildSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
 	switch src.Type {
 	case "ast":
-		name, cfg, err := astComponentConfig(src, opts.Org, index)
+		name, cfg, err := astComponentConfig(src, opts.Org)
 		if err != nil {
 			return nil, &Error{Code: CodeValidationFailed, Message: err.Error()}
 		}
 		return []componentSpec{{name, "ast-source", "ast", cfg}}, nil
 
 	case "git":
-		name, cfg, err := gitComponentConfig(src, opts.Org, index, opts)
+		name, cfg, err := gitComponentConfig(src, opts.Org, opts)
 		if err != nil {
 			return nil, &Error{Code: CodeValidationFailed, Message: err.Error()}
 		}
 		return []componentSpec{{name, "git-source", "git", cfg}}, nil
 
 	case "docs":
-		name, cfg := docComponentConfig(src, opts.Org, index)
+		name, cfg := docComponentConfig(src, opts.Org)
 		return []componentSpec{{name, "doc-source", "docs", cfg}}, nil
 
 	case "config":
-		name, cfg := cfgfileComponentConfig(src, opts.Org, index)
+		name, cfg := cfgfileComponentConfig(src, opts.Org)
 		return []componentSpec{{name, "cfgfile-source", "config", cfg}}, nil
 
 	case "url":
-		name, cfg := urlComponentConfig(src, opts.Org, index)
+		name, cfg := urlComponentConfig(src, opts.Org)
 		return []componentSpec{{name, "url-source", "url", cfg}}, nil
 
 	case "image", "video", "audio":
-		name, cfg := mediaComponentConfig(src, opts.Org, index, opts)
+		name, cfg := mediaComponentConfig(src, opts.Org, opts)
 		return []componentSpec{{name, src.Type + "-source", src.Type, cfg}}, nil
 
 	case "repo":
-		return repoSpecs(src, opts, index)
+		return repoSpecs(src, opts)
 
 	default:
 		return nil, &Error{
@@ -314,7 +316,7 @@ func buildSpecsAt(src config.SourceEntry, opts Options, index int) ([]componentS
 
 // repoSpecs expands a single-branch repo into git+ast+docs+config specs.
 // Multi-branch (Branches set) is rejected earlier with CodeUnsupportedType.
-func repoSpecs(src config.SourceEntry, opts Options, index int) ([]componentSpec, error) {
+func repoSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
 	expanded, err := config.ExpandRepoSources(
 		// ExpandRepoSources takes a context for branch discovery; with
 		// Branches empty it never reads the network and ctx is unused.
@@ -331,8 +333,8 @@ func repoSpecs(src config.SourceEntry, opts Options, index int) ([]componentSpec
 	}
 
 	var specs []componentSpec
-	for i, entry := range expanded.Sources {
-		sub, err := buildSpecsAt(entry, opts, index+i)
+	for _, entry := range expanded.Sources {
+		sub, err := buildSpecs(entry, opts)
 		if err != nil {
 			return nil, err
 		}

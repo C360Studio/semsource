@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semstreams/natsclient"
 )
@@ -128,13 +129,12 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 	}
 
 	results, err := sourcespawn.AddWithChecker(ctx, req.Source, cfg.Store, cfg.Checker, cfg.Spawn)
-	if err != nil {
-		return marshalAddReply(&AddReply{
-			Error:     mapSpawnError(err),
-			Timestamp: time.Now(),
-		})
-	}
 
+	// AddWithChecker may return partial results alongside an error when a
+	// repo-expansion mid-loop write fails. Always surface what landed so
+	// the caller can distinguish "all 4 failed" from "git+ast committed,
+	// docs failed" and retry safely (deterministic instance names make
+	// re-add idempotent).
 	components := make([]AddedComponent, 0, len(results))
 	for _, r := range results {
 		components = append(components, AddedComponent{
@@ -145,18 +145,125 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 		})
 	}
 
-	c.logger.Info("source added via ingest API",
-		"namespace", cfg.Namespace,
-		"source_type", req.Source.Type,
-		"components", len(components),
-		"actor", req.Provenance.Actor)
-
-	return marshalAddReply(&AddReply{
+	reply := &AddReply{
 		Components:    components,
 		StatusSubject: statusSubject,
 		ReadyWhen:     ingestReadyWhen,
 		Timestamp:     time.Now(),
-	})
+	}
+	if err != nil {
+		reply.Error = mapSpawnError(err)
+	}
+
+	c.logger.Info("source add request handled",
+		"namespace", cfg.Namespace,
+		"source_type", req.Source.Type,
+		"components", len(components),
+		"error", err,
+		"actor", req.Provenance.Actor)
+
+	// Refresh the manifest only when at least one component landed. Partial
+	// success is enough — the refreshed manifest will reflect what's actually
+	// in KV, not what the caller intended.
+	if len(components) > 0 {
+		c.appendManifestSources(req.Source)
+		if err := c.publishManifest(ctx); err != nil {
+			c.logger.Warn("failed to republish manifest after add", "error", err)
+		}
+	}
+
+	return marshalAddReply(reply)
+}
+
+// appendManifestSources adds entries reflecting src to c.manifestSources. A
+// "repo" entry is recorded as itself (not its expanded children) so the
+// manifest preserves the caller's intent. Idempotent on the manifest level:
+// duplicate adds (same Type+identifier) are skipped.
+func (c *Component) appendManifestSources(src config.SourceEntry) {
+	entry := sourceEntryToManifestSource(src)
+	c.manifestMu.Lock()
+	defer c.manifestMu.Unlock()
+	for _, existing := range c.manifestSources {
+		if manifestSourcesEqual(existing, entry) {
+			return
+		}
+	}
+	c.manifestSources = append(c.manifestSources, entry)
+}
+
+// removeManifestSourceByInstance drops the first manifest entry whose
+// expanded instance name matches target. Used by the Remove path so the
+// manifest stays in sync with the KV. The mapping is not always perfect for
+// "repo" expansions (one manifest entry → many instances); a remove by
+// instance name only clears the manifest when the *last* expanded instance
+// for that source is gone — left as a follow-on, since v1 manifest semantics
+// are "what was registered," not "what is alive."
+func (c *Component) removeManifestSourceByInstance(instanceName string, opts sourcespawn.Options) bool {
+	c.manifestMu.Lock()
+	defer c.manifestMu.Unlock()
+	for i, existing := range c.manifestSources {
+		built, err := sourcespawn.Build(manifestSourceToSourceEntry(existing), opts)
+		if err != nil {
+			continue
+		}
+		if _, ok := built[instanceName]; ok {
+			c.manifestSources = append(c.manifestSources[:i], c.manifestSources[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+func sourceEntryToManifestSource(src config.SourceEntry) ManifestSource {
+	return ManifestSource{
+		Type:          src.Type,
+		Path:          src.Path,
+		Paths:         src.Paths,
+		URL:           src.URL,
+		URLs:          src.URLs,
+		Language:      src.Language,
+		Branch:        src.Branch,
+		Watch:         src.Watch,
+		PollInterval:  src.PollInterval,
+		IndexInterval: src.IndexInterval,
+	}
+}
+
+func manifestSourceToSourceEntry(m ManifestSource) config.SourceEntry {
+	return config.SourceEntry{
+		Type:          m.Type,
+		Path:          m.Path,
+		Paths:         m.Paths,
+		URL:           m.URL,
+		URLs:          m.URLs,
+		Language:      m.Language,
+		Branch:        m.Branch,
+		Watch:         m.Watch,
+		PollInterval:  m.PollInterval,
+		IndexInterval: m.IndexInterval,
+	}
+}
+
+func manifestSourcesEqual(a, b ManifestSource) bool {
+	if a.Type != b.Type || a.Path != b.Path || a.URL != b.URL || a.Branch != b.Branch {
+		return false
+	}
+	if !stringSliceEqual(a.Paths, b.Paths) || !stringSliceEqual(a.URLs, b.URLs) {
+		return false
+	}
+	return true
+}
+
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // handleRemoveRequest deletes a component config from the KV store.
@@ -185,6 +292,12 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 		"instance_name", req.InstanceName,
 		"actor", req.Provenance.Actor)
 
+	if c.removeManifestSourceByInstance(req.InstanceName, cfg.Spawn) {
+		if err := c.publishManifest(ctx); err != nil {
+			c.logger.Warn("failed to republish manifest after remove", "error", err)
+		}
+	}
+
 	return marshalRemoveReply(&RemoveReply{
 		InstanceName: req.InstanceName,
 		Removed:      true,
@@ -193,11 +306,15 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 }
 
 // mapSpawnError maps a sourcespawn.Error code onto the wire IngestErrorCode.
-// Returns a generic VALIDATION_FAILED envelope for unknown errors.
+// Non-typed errors (json decode failures, anything that bypasses
+// sourcespawn.Error wrapping) become INTERNAL_ERROR — retryable, distinct
+// from VALIDATION_FAILED. The decode-failure path is technically a caller
+// error, but we cannot distinguish it from genuine internal failures here;
+// callers should see INTERNAL_ERROR and inspect Message to decide.
 func mapSpawnError(err error) *IngestError {
 	var serr *sourcespawn.Error
 	if !errors.As(err, &serr) {
-		return &IngestError{Code: CodeValidationFailed, Message: err.Error()}
+		return &IngestError{Code: CodeInternalError, Message: err.Error()}
 	}
 	code := CodeValidationFailed
 	switch serr.Code {

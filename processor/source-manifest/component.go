@@ -42,6 +42,11 @@ type Component struct {
 	// Manifest query
 	querySub     *natsclient.Subscription
 	responseData []byte // pre-marshaled manifest for HTTP and NATS responses
+	// manifestMu guards responseData and the underlying sources slice
+	// (config.Sources is stable post-Start, but the canonical "what's
+	// configured" list is mutated by ingest Add/Remove).
+	manifestMu      sync.RWMutex
+	manifestSources []ManifestSource
 
 	// Status aggregation
 	aggregator     *statusAggregator
@@ -120,26 +125,17 @@ func (c *Component) Start(ctx context.Context) error {
 
 // startManifest publishes the manifest and sets up query handlers.
 func (c *Component) startManifest(ctx context.Context) error {
-	payload := &ManifestPayload{
-		Namespace: c.config.Namespace,
-		Sources:   c.config.Sources,
-		Timestamp: time.Now(),
-	}
+	c.manifestMu.Lock()
+	c.manifestSources = append([]ManifestSource(nil), c.config.Sources...)
+	c.manifestMu.Unlock()
 
-	if err := c.publishPayload(ctx, ManifestType, payload, manifestSubject); err != nil {
-		return fmt.Errorf("publish manifest: %w", err)
-	}
-	c.logger.Info("source manifest published",
-		"namespace", c.config.Namespace,
-		"sources", len(c.config.Sources))
-
-	var err error
-	c.responseData, err = json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal manifest response: %w", err)
+	if err := c.publishManifest(ctx); err != nil {
+		return err
 	}
 
 	sub, err := c.client.SubscribeForRequests(ctx, querySubject, func(_ context.Context, _ []byte) ([]byte, error) {
+		c.manifestMu.RLock()
+		defer c.manifestMu.RUnlock()
 		return c.responseData, nil
 	})
 	if err != nil {
@@ -147,6 +143,35 @@ func (c *Component) startManifest(ctx context.Context) error {
 	}
 	c.querySub = sub
 	c.logger.Info("listening for source queries", "subject", querySubject)
+	return nil
+}
+
+// publishManifest re-marshals the current manifest sources and publishes a
+// fresh ManifestPayload to manifestSubject. Caller must NOT hold manifestMu.
+func (c *Component) publishManifest(ctx context.Context) error {
+	c.manifestMu.RLock()
+	payload := &ManifestPayload{
+		Namespace: c.config.Namespace,
+		Sources:   append([]ManifestSource(nil), c.manifestSources...),
+		Timestamp: time.Now(),
+	}
+	c.manifestMu.RUnlock()
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal manifest response: %w", err)
+	}
+
+	c.manifestMu.Lock()
+	c.responseData = raw
+	c.manifestMu.Unlock()
+
+	if err := c.publishPayload(ctx, ManifestType, payload, manifestSubject); err != nil {
+		return fmt.Errorf("publish manifest: %w", err)
+	}
+	c.logger.Info("source manifest published",
+		"namespace", c.config.Namespace,
+		"sources", len(payload.Sources))
 	return nil
 }
 
@@ -619,7 +644,10 @@ func (c *Component) handleSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(c.responseData)
+	c.manifestMu.RLock()
+	raw := c.responseData
+	c.manifestMu.RUnlock()
+	w.Write(raw)
 }
 
 // handleStatus serves the current aggregated status.

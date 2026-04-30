@@ -228,6 +228,74 @@ func TestAdd_KVFailure_ReportsKVCode(t *testing.T) {
 	}
 }
 
+// flakyStore fails after N successful puts. Used to exercise repo-expansion
+// partial-success: writes 1..N-1 land, write N fails, write N+1 never runs.
+type flakyStore struct {
+	puts    map[string]types.ComponentConfig
+	deletes []string
+	failAt  int // 1-based; 0 disables
+	count   int
+}
+
+func newFlakyStore(failAt int) *flakyStore {
+	return &flakyStore{puts: make(map[string]types.ComponentConfig), failAt: failAt}
+}
+
+func (f *flakyStore) PutComponentToKV(_ context.Context, name string, cfg types.ComponentConfig) error {
+	f.count++
+	if f.failAt > 0 && f.count == f.failAt {
+		return errors.New("kv unavailable on write " + itoa(f.count))
+	}
+	f.puts[name] = cfg
+	return nil
+}
+
+func (f *flakyStore) DeleteComponentFromKV(_ context.Context, name string) error {
+	f.deletes = append(f.deletes, name)
+	return nil
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [4]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
+}
+
+// TestAdd_PartialSuccess_ReturnsResultsAndError verifies the contract that
+// callers depend on for retry safety: when a repo write fails mid-loop, the
+// caller sees both the partial results (committed instances) and the error.
+func TestAdd_PartialSuccess_ReturnsResultsAndError(t *testing.T) {
+	t.Parallel()
+	// Repo expands to 4 components; fail on the 3rd write.
+	store := newFlakyStore(3)
+	src := config.SourceEntry{
+		Type:   "repo",
+		URL:    "https://github.com/acme/foo",
+		Branch: "main",
+	}
+	results, err := Add(context.Background(), src, store, Options{Org: "acme", WorkspaceDir: "/tmp/ws"})
+	if err == nil {
+		t.Fatal("Add returned nil error; want KV failure")
+	}
+	if CodeOf(err) != CodeKVWriteFailed {
+		t.Errorf("CodeOf = %q, want %q", CodeOf(err), CodeKVWriteFailed)
+	}
+	if len(results) != 2 {
+		t.Errorf("len(results) = %d, want 2 (committed before failure)", len(results))
+	}
+	if len(store.puts) != 2 {
+		t.Errorf("len(store.puts) = %d, want 2", len(store.puts))
+	}
+}
+
 func TestAddWithChecker_DetectsExisting(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
@@ -280,7 +348,7 @@ func TestBuild_EquivalentToAdd_NoKVWrite(t *testing.T) {
 
 	// Build is the marshal-only path; verify it produces the same instance
 	// names as Add but never touches the store.
-	built, err := Build(src, Options{Org: "acme"}, 0)
+	built, err := Build(src, Options{Org: "acme"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -294,6 +362,41 @@ func TestBuild_EquivalentToAdd_NoKVWrite(t *testing.T) {
 	}
 	if _, ok := built[results[0].InstanceName]; !ok {
 		t.Errorf("Build did not produce instance %q (got %v)", results[0].InstanceName, mapKeys(built))
+	}
+}
+
+// TestAdd_EmptySlugFallback_IsContentStable guards H3: when the natural
+// identifier yields an empty SystemSlug (e.g., a path of "."), the fallback
+// must be a deterministic function of source content, not of position. Two
+// equivalent SourceEntries — added from any context — must land on the same
+// KV key.
+func TestAdd_EmptySlugFallback_IsContentStable(t *testing.T) {
+	t.Parallel()
+	// "./" yields an empty SystemSlug; the fallback path is exercised.
+	src := config.SourceEntry{Type: "docs", Paths: []string{"./"}}
+
+	storeA := newFakeStore()
+	resA, err := Add(context.Background(), src, storeA, Options{Org: "acme"})
+	if err != nil {
+		t.Fatalf("Add A: %v", err)
+	}
+	storeB := newFakeStore()
+	resB, err := Add(context.Background(), src, storeB, Options{Org: "acme"})
+	if err != nil {
+		t.Fatalf("Add B: %v", err)
+	}
+	if resA[0].InstanceName != resB[0].InstanceName {
+		t.Errorf("Add of equivalent sources produced different instance names: %q vs %q",
+			resA[0].InstanceName, resB[0].InstanceName)
+	}
+
+	// Build (loader path) must match Add (programmatic path) for the same input.
+	built, err := Build(src, Options{Org: "acme"})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if _, ok := built[resA[0].InstanceName]; !ok {
+		t.Errorf("Build produced %v; expected %q", mapKeys(built), resA[0].InstanceName)
 	}
 }
 

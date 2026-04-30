@@ -8,11 +8,42 @@
 package sourcespawn
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 )
+
+// contentHashSlug produces a deterministic 6-hex-character slug from the
+// identifying fields of src. Used as a fallback when entityid.SystemSlug
+// returns empty for the type's natural identifier (e.g., a path of "." or
+// "/" yields no useful slug).
+//
+// The hash covers all identifying fields, so two SourceEntries that produce
+// the same hash describe the same logical source — that's what makes Add
+// idempotent (and why Build no longer needs an index parameter to break
+// fallback ties; collisions now imply equivalence by construction).
+func contentHashSlug(src config.SourceEntry) string {
+	var b strings.Builder
+	b.WriteString(src.Type)
+	b.WriteByte('|')
+	b.WriteString(src.URL)
+	b.WriteByte('|')
+	b.WriteString(src.Path)
+	b.WriteByte('|')
+	b.WriteString(strings.Join(src.Paths, ","))
+	b.WriteByte('|')
+	b.WriteString(strings.Join(src.URLs, ","))
+	b.WriteByte('|')
+	b.WriteString(src.Branch)
+	b.WriteByte('|')
+	b.WriteString(src.BranchSlug)
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:3]) // 6 hex chars; collision-safe for typical configs
+}
 
 // outputPorts returns the standard output port config shared by all source
 // components. The flow engine reads ports from the config JSON to discover
@@ -36,7 +67,7 @@ func outputPorts() map[string]any {
 // astComponentConfig builds a component instance name and config map for an
 // AST source entry. The instance name is derived from the path so multiple
 // AST sources produce distinct component instances.
-func astComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any, error) {
+func astComponentConfig(src config.SourceEntry, org string) (string, map[string]any, error) {
 	path := src.Path
 	if path == "" {
 		path = "."
@@ -49,7 +80,7 @@ func astComponentConfig(src config.SourceEntry, org string, index int) (string, 
 
 	slug := entityid.SystemSlug(path)
 	if slug == "" {
-		slug = fmt.Sprintf("source-%d", index)
+		slug = "src-" + contentHashSlug(src)
 	}
 	project := entityid.BranchScopedSlug(slug, src.BranchSlug)
 	instanceName := fmt.Sprintf("ast-source-%s", project)
@@ -79,17 +110,14 @@ func astComponentConfig(src config.SourceEntry, org string, index int) (string, 
 
 // gitComponentConfig builds a component instance name and config map for a
 // git source entry.
-func gitComponentConfig(src config.SourceEntry, org string, index int, opts Options) (string, map[string]any, error) {
+func gitComponentConfig(src config.SourceEntry, org string, opts Options) (string, map[string]any, error) {
 	identifier := src.URL
 	if identifier == "" {
 		identifier = src.Path
 	}
-	if identifier == "" {
-		identifier = fmt.Sprintf("git-%d", index)
-	}
 	slug := entityid.SystemSlug(identifier)
 	if slug == "" {
-		slug = fmt.Sprintf("git-%d", index)
+		slug = "git-" + contentHashSlug(src)
 	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
 	instanceName := fmt.Sprintf("git-source-%s", scopedSlug)
@@ -122,17 +150,14 @@ func gitComponentConfig(src config.SourceEntry, org string, index int, opts Opti
 }
 
 // docComponentConfig builds config for a docs source entry.
-func docComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any) {
+func docComponentConfig(src config.SourceEntry, org string) (string, map[string]any) {
 	paths := src.Paths
 	if len(paths) == 0 && src.Path != "" {
 		paths = []string{src.Path}
 	}
-	slug := fmt.Sprintf("docs-%d", index)
+	slug := "docs-" + contentHashSlug(src)
 	if len(paths) > 0 {
-		s := entityid.SystemSlug(paths[0])
-		if s == "" {
-			slug = fmt.Sprintf("docs-%d", index)
-		} else {
+		if s := entityid.SystemSlug(paths[0]); s != "" {
 			slug = s
 		}
 	}
@@ -148,17 +173,14 @@ func docComponentConfig(src config.SourceEntry, org string, index int) (string, 
 }
 
 // cfgfileComponentConfig builds config for a config-file source entry.
-func cfgfileComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any) {
+func cfgfileComponentConfig(src config.SourceEntry, org string) (string, map[string]any) {
 	paths := src.Paths
 	if len(paths) == 0 && src.Path != "" {
 		paths = []string{src.Path}
 	}
-	slug := fmt.Sprintf("config-%d", index)
+	slug := "config-" + contentHashSlug(src)
 	if len(paths) > 0 {
-		s := entityid.SystemSlug(paths[0])
-		if s == "" {
-			slug = fmt.Sprintf("config-%d", index)
-		} else {
+		if s := entityid.SystemSlug(paths[0]); s != "" {
 			slug = s
 		}
 	}
@@ -174,17 +196,14 @@ func cfgfileComponentConfig(src config.SourceEntry, org string, index int) (stri
 }
 
 // urlComponentConfig builds config for a URL source entry.
-func urlComponentConfig(src config.SourceEntry, org string, index int) (string, map[string]any) {
+func urlComponentConfig(src config.SourceEntry, org string) (string, map[string]any) {
 	urls := src.URLs
 	if len(urls) == 0 && src.URL != "" {
 		urls = []string{src.URL}
 	}
-	slug := fmt.Sprintf("url-%d", index)
+	slug := "url-" + contentHashSlug(src)
 	if len(urls) > 0 {
-		s := entityid.SystemSlug(urls[0])
-		if s == "" {
-			slug = fmt.Sprintf("url-%d", index)
-		} else {
+		if s := entityid.SystemSlug(urls[0]); s != "" {
 			slug = s
 		}
 	}
@@ -203,15 +222,14 @@ func urlComponentConfig(src config.SourceEntry, org string, index int) (string, 
 }
 
 // mediaComponentConfig builds config for image, video, or audio source entries.
-func mediaComponentConfig(src config.SourceEntry, org string, index int, opts Options) (string, map[string]any) {
+func mediaComponentConfig(src config.SourceEntry, org string, opts Options) (string, map[string]any) {
 	paths := src.Paths
 	if len(paths) == 0 && src.Path != "" {
 		paths = []string{src.Path}
 	}
-	slug := fmt.Sprintf("%s-%d", src.Type, index)
+	slug := src.Type + "-" + contentHashSlug(src)
 	if len(paths) > 0 {
-		s := entityid.SystemSlug(paths[0])
-		if s != "" {
+		if s := entityid.SystemSlug(paths[0]); s != "" {
 			slug = s
 		}
 	}
