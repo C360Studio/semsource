@@ -41,6 +41,33 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
+// runFlags holds the parsed `semsource run` command-line flags.
+type runFlags struct {
+	configPath          string
+	logLevel            string
+	natsURL             string
+	natsDisconnectGrace time.Duration
+}
+
+// parseRunFlags parses the `semsource run` flag set.
+func parseRunFlags(args []string) (*runFlags, error) {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
+	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
+	natsURL := fs.String("nats-url", "", "NATS server URL (overrides NATS_URL env and config)")
+	natsDisconnectGrace := fs.Duration("nats-disconnect-grace", resolveNATSDisconnectGrace(),
+		"shut down if NATS is disconnected continuously beyond this duration; 0 disables the watchdog")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	return &runFlags{
+		configPath:          *configPath,
+		logLevel:            *logLevel,
+		natsURL:             *natsURL,
+		natsDisconnectGrace: *natsDisconnectGrace,
+	}, nil
+}
+
 // runCmd is the semstreams-native entry point for semsource.
 //
 // Wire-up sequence:
@@ -51,20 +78,17 @@ import (
 //  5. Create ServiceManager, configure, start
 //  6. Block on SIGINT/SIGTERM, then shut down cleanly
 func runCmd(args []string) error {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
-	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
-	natsURL := fs.String("nats-url", "", "NATS server URL (overrides NATS_URL env and config)")
-	if err := fs.Parse(args); err != nil {
+	flags, err := parseRunFlags(args)
+	if err != nil {
 		return err
 	}
 
-	logger := buildLogger(*logLevel)
+	logger := buildLogger(flags.logLevel)
 	slog.SetDefault(logger)
 
 	ctx := context.Background()
 
-	semsourceCfg, expandResult, err := loadAndExpandConfig(ctx, *configPath)
+	semsourceCfg, expandResult, err := loadAndExpandConfig(ctx, flags.configPath)
 	if err != nil {
 		return err
 	}
@@ -77,7 +101,22 @@ func runCmd(args []string) error {
 		"branch_watchers", len(expandResult.Watchers),
 	)
 
-	nc, ssCfg, err := setupNATS(ctx, *natsURL, semsourceCfg, logger)
+	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer signalCancel()
+
+	// Hand the natsclient an "exit if the broker stays gone" policy: when
+	// the connection has been continuously down for the configured grace,
+	// trigger graceful shutdown so the supervisor can restart us with a
+	// fresh state instead of letting downstream components hot-loop.
+	onConnectionLost := func(err error) {
+		logger.Error("NATS broker unreachable beyond grace period — initiating shutdown",
+			"grace", flags.natsDisconnectGrace,
+			"error", err,
+		)
+		signalCancel()
+	}
+	nc, ssCfg, err := setupNATS(ctx, flags.natsURL, semsourceCfg, logger,
+		flags.natsDisconnectGrace, onConnectionLost)
 	if err != nil {
 		return err
 	}
@@ -115,9 +154,6 @@ func runCmd(args []string) error {
 		return err
 	}
 
-	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-	defer signalCancel()
-
 	if err := manager.StartAll(signalCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
@@ -141,10 +177,20 @@ func runCmd(args []string) error {
 	return nil
 }
 
-// setupNATS connects to NATS and ensures JetStream streams exist.
-func setupNATS(ctx context.Context, natsFlag string, cfg *config.Config, logger *slog.Logger) (*natsclient.Client, *semconfig.Config, error) {
+// setupNATS connects to NATS and ensures JetStream streams exist. The
+// connection-loss watchdog (grace + callback) is wired into the natsclient
+// so the caller is signalled once the broker has been continuously absent
+// for the configured grace.
+func setupNATS(
+	ctx context.Context,
+	natsFlag string,
+	cfg *config.Config,
+	logger *slog.Logger,
+	connectionLossGrace time.Duration,
+	onConnectionLost func(error),
+) (*natsclient.Client, *semconfig.Config, error) {
 	natsAddr := resolveNATSURL(natsFlag, cfg)
-	nc, err := connectNATS(ctx, natsAddr, logger)
+	nc, err := connectNATS(ctx, natsAddr, logger, connectionLossGrace, onConnectionLost)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -352,6 +398,24 @@ func createServiceManager(
 	return manager, nil
 }
 
+// defaultNATSDisconnectGrace is the default window we tolerate a NATS broker
+// outage before initiating a graceful shutdown. Long enough to ride through
+// a typical broker restart or short network blip; short enough that the
+// process supervisor can take over before logs and CPU spend get out of hand.
+const defaultNATSDisconnectGrace = 2 * time.Minute
+
+// resolveNATSDisconnectGrace returns the watchdog grace, falling back to the
+// SEMSOURCE_NATS_DISCONNECT_GRACE env var, then defaultNATSDisconnectGrace.
+// A zero or negative value disables the watchdog.
+func resolveNATSDisconnectGrace() time.Duration {
+	if v := os.Getenv("SEMSOURCE_NATS_DISCONNECT_GRACE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return defaultNATSDisconnectGrace
+}
+
 // resolveNATSURL picks the NATS URL in priority order:
 //  1. Explicit --nats-url flag
 //  2. NATS_URL environment variable
@@ -371,15 +435,32 @@ func resolveNATSURL(flagValue string, cfg *config.Config) string {
 }
 
 // connectNATS creates a natsclient.Client and establishes the connection.
-func connectNATS(ctx context.Context, url string, logger *slog.Logger) (*natsclient.Client, error) {
+// When connectionLossGrace is positive and onConnectionLost is non-nil, the
+// natsclient fires the callback once the broker has been continuously
+// unreachable for at least the grace duration.
+func connectNATS(
+	ctx context.Context,
+	url string,
+	logger *slog.Logger,
+	connectionLossGrace time.Duration,
+	onConnectionLost func(error),
+) (*natsclient.Client, error) {
 	logger.Info("connecting to NATS", "url", url)
 
-	nc, err := natsclient.NewClient(url,
+	opts := []natsclient.ClientOption{
 		natsclient.WithName("semsource"),
 		natsclient.WithMaxReconnects(-1),
-		natsclient.WithReconnectWait(2*time.Second),
-		natsclient.WithHealthInterval(30*time.Second),
-	)
+		natsclient.WithReconnectWait(2 * time.Second),
+		natsclient.WithHealthInterval(30 * time.Second),
+	}
+	if connectionLossGrace > 0 && onConnectionLost != nil {
+		opts = append(opts,
+			natsclient.WithConnectionLossTimeout(connectionLossGrace),
+			natsclient.WithConnectionLostCallback(onConnectionLost),
+		)
+	}
+
+	nc, err := natsclient.NewClient(url, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create NATS client: %w", err)
 	}

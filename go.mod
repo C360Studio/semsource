@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
-	github.com/c360studio/semstreams v1.0.0-beta.20
+	github.com/c360studio/semstreams v1.0.0-beta.29
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/nats-io/nats.go v1.48.0
@@ -68,6 +68,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/sashabaranov/go-openai v1.41.2 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
