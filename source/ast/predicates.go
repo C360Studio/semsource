@@ -40,7 +40,8 @@ const (
 	CodeComplexity = "code.metric.complexity" // cyclomatic complexity (future)
 
 	// Documentation
-	CodeDocComment = "code.doc.comment" // documentation comment
+	CodeDocComment = "code.doc.comment"   // documentation comment
+	CodeSignature  = "code.doc.signature" // rendered signature, e.g. "submit(item: Job): Promise<string>"
 
 	// Capability predicates (for agentic vocabulary integration)
 	CodeCapabilityName        = "agentic.capability.name"        // capability identifier

@@ -417,10 +417,12 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	entity.EndLine = endLine
 	entity.Visibility = ast.VisibilityPrivate // Functions in script are component-private
 
-	// Check for async
+	var metadata string
 	if p.hasModifier(node, "async") {
-		entity.DocComment = "Async function"
+		metadata = "Async function"
 	}
+	entity.DocComment = ast.CombineDocComment(ast.PrecedingJSDoc(node, source), metadata)
+	entity.Signature = ast.RenderTSFunctionSignature(node, source)
 
 	return entity
 }
@@ -442,6 +444,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = ast.VisibilityPrivate
+	entity.DocComment = ast.PrecedingJSDoc(node, source)
 
 	return entity
 }
@@ -463,6 +466,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = ast.VisibilityPrivate
+	entity.DocComment = ast.PrecedingJSDoc(node, source)
 
 	return entity
 }
@@ -487,7 +491,7 @@ func (p *Parser) extractVariableDeclaration(node *sitter.Node, source []byte, fi
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 		if child.Type() == "variable_declarator" {
-			entity := p.extractVariableDeclarator(child, source, filePath, lang, parentID, kind)
+			entity := p.extractVariableDeclarator(child, source, filePath, lang, parentID, kind, node)
 			if entity != nil {
 				entities = append(entities, entity)
 			}
@@ -497,8 +501,11 @@ func (p *Parser) extractVariableDeclaration(node *sitter.Node, source []byte, fi
 	return entities
 }
 
-// extractVariableDeclarator extracts a single variable declarator
-func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, filePath, lang, parentID, kind string) *ast.CodeEntity {
+// extractVariableDeclarator extracts a single variable declarator. The
+// declarationNode is the enclosing lexical_declaration / variable_declaration
+// because JSDoc comments precede that wrapper rather than the inner
+// declarator.
+func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) *ast.CodeEntity {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return nil
@@ -507,21 +514,21 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 	name := nodeText(nameNode, source)
 	valueNode := node.ChildByFieldName("value")
 
-	isArrowFunc := false
-	if valueNode != nil && valueNode.Type() == "arrow_function" {
-		isArrowFunc = true
-	}
+	isArrowFunc := valueNode != nil && valueNode.Type() == "arrow_function"
 
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
 	var entity *ast.CodeEntity
-	if isArrowFunc {
+	var metadata string
+	switch {
+	case isArrowFunc:
 		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFunction, name, filePath)
-		entity.DocComment = "Arrow function"
-	} else if kind == "const" {
+		metadata = "Arrow function"
+		entity.Signature = ast.RenderTSArrowSignature(name, valueNode, source)
+	case kind == "const":
 		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeConst, name, filePath)
-	} else {
+	default:
 		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeVar, name, filePath)
 	}
 
@@ -530,6 +537,7 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = ast.VisibilityPrivate
+	entity.DocComment = ast.CombineDocComment(ast.PrecedingJSDoc(declarationNode, source), metadata)
 
 	return entity
 }

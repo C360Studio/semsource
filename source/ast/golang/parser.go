@@ -6,6 +6,7 @@ import (
 	"fmt"
 	goast "go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -243,6 +244,7 @@ func (p *Parser) extractFunction(fset *token.FileSet, fn *goast.FuncDecl, filePa
 	entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
 	entity.StartLine = fset.Position(fn.Pos()).Line
 	entity.EndLine = fset.Position(fn.End()).Line
+	entity.Signature = renderGoSignature(fset, fn)
 
 	if fn.Doc != nil {
 		entity.DocComment = fn.Doc.Text()
@@ -540,6 +542,26 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// Build instance ID from file path and type name
 	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
 	return entityid.Build(p.org, entityid.PlatformSemsource, "golang", p.project, "type", instance)
+}
+
+// renderGoSignature formats a Go function or method declaration without its
+// body, producing a canonical signature string like
+// "func (s *Server) Run(ctx context.Context) error". Uses go/printer so
+// receiver, generics, variadics, and multi-return are rendered correctly.
+func renderGoSignature(fset *token.FileSet, fn *goast.FuncDecl) string {
+	if fn == nil || fn.Name == nil || fn.Type == nil {
+		return ""
+	}
+	shell := &goast.FuncDecl{
+		Recv: fn.Recv,
+		Name: fn.Name,
+		Type: fn.Type,
+	}
+	var buf strings.Builder
+	if err := printer.Fprint(&buf, fset, shell); err != nil {
+		return ""
+	}
+	return strings.Join(strings.Fields(buf.String()), " ")
 }
 
 // isBuiltinType returns true if the type is a Go built-in type

@@ -349,15 +349,12 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 		}
 	}
 
-	// Extract decorators if present
-	decorators := p.extractDecorators(node, source)
-	if len(decorators) > 0 {
-		if entity.DocComment == "" {
-			entity.DocComment = "Decorators: " + strings.Join(decorators, ", ")
-		} else {
-			entity.DocComment += "\nDecorators: " + strings.Join(decorators, ", ")
-		}
+	// Extract decorators if present (rendered as supplemental metadata).
+	var metadata string
+	if decorators := p.extractDecorators(node, source); len(decorators) > 0 {
+		metadata = "Decorators: " + strings.Join(decorators, ", ")
 	}
+	entity.DocComment = p.docCommentFor(node, source, metadata)
 
 	return entity
 }
@@ -407,12 +404,12 @@ func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang,
 	entity.EndLine = endLine
 	entity.Visibility = p.determineMethodVisibility(node, source)
 
-	// Check for async
+	var metadata string
 	if p.hasModifier(node, "async") {
-		if entity.DocComment == "" {
-			entity.DocComment = "Async method"
-		}
+		metadata = "Async method"
 	}
+	entity.DocComment = p.docCommentFor(node, source, metadata)
+	entity.Signature = ast.RenderTSFunctionSignature(node, source)
 
 	// Extract parameters and return type
 	p.extractFunctionSignature(node, source, entity)
@@ -436,6 +433,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = p.determineVisibility(node, source)
+	entity.DocComment = p.docCommentFor(node, source, "")
 
 	// Extract extends by walking all children
 	for i := 0; i < int(node.ChildCount()); i++ {
@@ -472,6 +470,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = p.determineVisibility(node, source)
+	entity.DocComment = p.docCommentFor(node, source, "")
 
 	return entity
 }
@@ -492,6 +491,7 @@ func (p *Parser) extractEnum(node *sitter.Node, source []byte, filePath, lang, p
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = p.determineVisibility(node, source)
+	entity.DocComment = p.docCommentFor(node, source, "")
 
 	return entity
 }
@@ -513,12 +513,12 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	entity.EndLine = endLine
 	entity.Visibility = p.determineVisibility(node, source)
 
-	// Check for async
+	var metadata string
 	if p.hasModifier(node, "async") {
-		if entity.DocComment == "" {
-			entity.DocComment = "Async function"
-		}
+		metadata = "Async function"
 	}
+	entity.DocComment = p.docCommentFor(node, source, metadata)
+	entity.Signature = ast.RenderTSFunctionSignature(node, source)
 
 	// Extract parameters and return type
 	p.extractFunctionSignature(node, source, entity)
@@ -582,6 +582,7 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 	endLine := int(node.EndPoint().Row) + 1
 
 	var entity *ast.CodeEntity
+	var metadata string
 	if isArrowFunc {
 		// Create function entity for arrow functions
 		entity = ast.NewCodeEntity(p.org, lang, p.project, ast.TypeFunction, name, filePath)
@@ -591,9 +592,7 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 			for i := 0; i < int(valueNode.ChildCount()); i++ {
 				child := valueNode.Child(i)
 				if child.Type() == "async" {
-					if entity.DocComment == "" {
-						entity.DocComment = "Async arrow function"
-					}
+					metadata = "Async arrow function"
 					break
 				}
 			}
@@ -602,6 +601,7 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 		// Extract function signature from arrow function
 		if valueNode != nil {
 			p.extractFunctionSignature(valueNode, source, entity)
+			entity.Signature = ast.RenderTSArrowSignature(name, valueNode, source)
 		}
 	} else if kind == "const" {
 		entity = ast.NewCodeEntity(p.org, lang, p.project, ast.TypeConst, name, filePath)
@@ -613,6 +613,7 @@ func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, fil
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
 	entity.Visibility = p.determineVisibility(declarationNode, source)
+	entity.DocComment = p.docCommentFor(declarationNode, source, metadata)
 
 	return entity
 }
@@ -703,7 +704,23 @@ func (p *Parser) extractFunctionSignature(node *sitter.Node, source []byte, enti
 	}
 }
 
-// extractDecorators extracts decorators from a node
+// docCommentFor merges the JSDoc preceding node (if any) with supplemental
+// metadata (decorator list, async marker). Either side may be empty.
+func (p *Parser) docCommentFor(node *sitter.Node, content []byte, metadata string) string {
+	return ast.CombineDocComment(ast.PrecedingJSDoc(node, content), metadata)
+}
+
+// extractDecorators extracts decorators attached to a class/method node.
+// Decorators may appear in two structural shapes:
+//
+//   - Inline (`@Foo class Bar`): decorator is a child of the declaration
+//     node itself.
+//   - Exported (`@Foo export class Bar`): tree-sitter wraps both the
+//     decorator and the declaration as siblings inside an export_statement,
+//     so decorators must be collected from the export_statement parent.
+//
+// Both shapes are handled so the resulting metadata is identical regardless
+// of export status.
 func (p *Parser) extractDecorators(node *sitter.Node, source []byte) []string {
 	var decorators []string
 
@@ -711,6 +728,15 @@ func (p *Parser) extractDecorators(node *sitter.Node, source []byte) []string {
 		child := node.Child(i)
 		if child.Type() == "decorator" {
 			decorators = append(decorators, nodeText(child, source))
+		}
+	}
+
+	if parent := node.Parent(); parent != nil && parent.Type() == "export_statement" {
+		for i := 0; i < int(parent.ChildCount()); i++ {
+			child := parent.Child(i)
+			if child.Type() == "decorator" {
+				decorators = append(decorators, nodeText(child, source))
+			}
 		}
 	}
 

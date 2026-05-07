@@ -352,6 +352,7 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.determineVisibility(name)
+	entity.Signature = renderPythonSignature(node, content)
 
 	// Extract parameters
 	if params := node.ChildByFieldName("parameters"); params != nil {
@@ -615,6 +616,42 @@ func isBuiltinType(name string) bool {
 		return true
 	}
 	return false
+}
+
+// renderPythonSignature builds a `name(params) -> return` style signature
+// string for a Python function/method by slicing source from the name node
+// through parameters and (when present) the return-type annotation. Body is
+// excluded. Whitespace is collapsed.
+func renderPythonSignature(node *sitter.Node, content []byte) string {
+	nameNode := node.ChildByFieldName("name")
+	if nameNode == nil {
+		return ""
+	}
+	end := uint32(0)
+	if params := node.ChildByFieldName("parameters"); params != nil {
+		end = params.EndByte()
+	}
+	if returnType := node.ChildByFieldName("return_type"); returnType != nil && returnType.EndByte() > end {
+		end = returnType.EndByte()
+	}
+	if end <= nameNode.StartByte() {
+		return ""
+	}
+	body := string(content[nameNode.StartByte():end])
+	// Tree-sitter Python omits the `->` arrow from the return_type field span,
+	// so re-insert it when a return type is present and not already preceded
+	// by an arrow.
+	if returnType := node.ChildByFieldName("return_type"); returnType != nil {
+		if params := node.ChildByFieldName("parameters"); params != nil {
+			gap := strings.TrimSpace(string(content[params.EndByte():returnType.StartByte()]))
+			if !strings.Contains(gap, "->") {
+				prefix := string(content[nameNode.StartByte():params.EndByte()])
+				ret := string(content[returnType.StartByte():returnType.EndByte()])
+				body = prefix + " -> " + ret
+			}
+		}
+	}
+	return strings.Join(strings.Fields(body), " ")
 }
 
 // isAllCaps returns true if the string is all uppercase (constant naming convention).

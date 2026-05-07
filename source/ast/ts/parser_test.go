@@ -809,6 +809,102 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+func TestParseFile_JSDoc(t *testing.T) {
+	dir := t.TempDir()
+	tsPath := filepath.Join(dir, "service.ts")
+
+	src := "/**\n" +
+		" * Routes work items to the correct handler.\n" +
+		" *\n" +
+		" * Implements at-least-once delivery; consumers must be idempotent.\n" +
+		" */\n" +
+		"@Injectable()\n" +
+		"export class Dispatcher {\n" +
+		"    /**\n" +
+		"     * Submits a work item for processing.\n" +
+		"     *\n" +
+		"     * @param item the work item\n" +
+		"     * @returns assigned correlation id\n" +
+		"     */\n" +
+		"    async submit(item: Job): Promise<string> {\n" +
+		"        return \"\";\n" +
+		"    }\n" +
+		"}\n" +
+		"\n" +
+		"/**\n" +
+		" * Computes total weight across all jobs.\n" +
+		" */\n" +
+		"export function totalWeight(jobs: Job[]): number {\n" +
+		"    return 0;\n" +
+		"}\n" +
+		"\n" +
+		"/**\n" +
+		" * Maximum retries before giving up.\n" +
+		" */\n" +
+		"export const MAX_RETRIES = 5;\n" +
+		"\n" +
+		"/**\n" +
+		" * Job submitted by a producer.\n" +
+		" */\n" +
+		"export interface Job {\n" +
+		"    id: string;\n" +
+		"}\n"
+
+	if err := os.WriteFile(tsPath, []byte(src), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	p := NewParser("acme", "test", dir)
+	result, err := p.ParseFile(context.Background(), tsPath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	byName := make(map[string]*ast.CodeEntity)
+	for _, e := range result.Entities {
+		byName[e.Name] = e
+	}
+
+	cases := []struct {
+		name        string
+		mustContain []string
+	}{
+		{"Dispatcher", []string{"Routes work items", "at-least-once delivery", "Decorators: @Injectable"}},
+		{"submit", []string{"Submits a work item", "@param item", "Async method"}},
+		{"totalWeight", []string{"Computes total weight"}},
+		{"MAX_RETRIES", []string{"Maximum retries"}},
+		{"Job", []string{"Job submitted by a producer"}},
+	}
+
+	for _, tc := range cases {
+		entity, ok := byName[tc.name]
+		if !ok {
+			t.Errorf("entity %q not found", tc.name)
+			continue
+		}
+		for _, snippet := range tc.mustContain {
+			if !strings.Contains(entity.DocComment, snippet) {
+				t.Errorf("%s.DocComment = %q, want to contain %q",
+					tc.name, entity.DocComment, snippet)
+			}
+		}
+	}
+
+	signatureCases := map[string]string{
+		"submit":      "submit(item: Job): Promise<string>",
+		"totalWeight": "totalWeight(jobs: Job[]): number",
+	}
+	for name, want := range signatureCases {
+		entity, ok := byName[name]
+		if !ok {
+			continue
+		}
+		if entity.Signature != want {
+			t.Errorf("%s.Signature = %q, want %q", name, entity.Signature, want)
+		}
+	}
+}
+
 // containsImport checks if import path is in the slice
 func containsImport(imports []string, path string) bool {
 	for _, imp := range imports {

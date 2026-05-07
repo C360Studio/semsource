@@ -80,6 +80,10 @@ def add(a: int, b: int) -> int:
 		t.Errorf("Returns count = %d, want 1", len(addFunc.Returns))
 	}
 
+	if want := "add(a: int, b: int) -> int"; addFunc.Signature != want {
+		t.Errorf("Signature = %q, want %q", addFunc.Signature, want)
+	}
+
 	// Check entity ID format
 	if !strings.HasPrefix(addFunc.ID, "acme.semsource.python.test.function.") {
 		t.Errorf("ID = %q, want prefix 'acme.semsource.python.test.function.'", addFunc.ID)

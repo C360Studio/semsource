@@ -453,3 +453,60 @@ func TestParser_Integration_RealComponent(t *testing.T) {
 	assert.Contains(t, funcs, "handlePromote")
 	assert.Contains(t, funcs, "handleExecute")
 }
+
+func TestParser_JSDoc(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	src := `<script lang="ts">
+	/**
+	 * Submits the current draft for review.
+	 *
+	 * @param item the draft payload
+	 */
+	async function submit(item: Draft): Promise<string> {
+		return "";
+	}
+
+	/**
+	 * Maximum draft size before splitting.
+	 */
+	const MAX_SIZE = 1024;
+
+	/**
+	 * Computes total weight across drafts.
+	 */
+	const computeWeight = (drafts: Draft[]): number => 0;
+</script>
+
+<div>placeholder</div>
+`
+	path := filepath.Join(tmpDir, "Drafts.svelte")
+	if err := os.WriteFile(path, []byte(src), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	p := NewParser("acme", "test", tmpDir)
+	result, err := p.ParseFile(context.Background(), path)
+	require.NoError(t, err)
+
+	byName := make(map[string]*ast.CodeEntity)
+	for _, e := range result.Entities {
+		byName[e.Name] = e
+	}
+
+	submit := byName["submit"]
+	require.NotNil(t, submit, "submit function not found")
+	assert.Contains(t, submit.DocComment, "Submits the current draft")
+	assert.Contains(t, submit.DocComment, "@param item")
+	assert.Contains(t, submit.DocComment, "Async function")
+	assert.Equal(t, "submit(item: Draft): Promise<string>", submit.Signature)
+
+	maxSize := byName["MAX_SIZE"]
+	require.NotNil(t, maxSize, "MAX_SIZE const not found")
+	assert.Contains(t, maxSize.DocComment, "Maximum draft size")
+
+	computeWeight := byName["computeWeight"]
+	require.NotNil(t, computeWeight, "computeWeight arrow not found")
+	assert.Contains(t, computeWeight.DocComment, "Computes total weight")
+	assert.Equal(t, "computeWeight(drafts: Draft[]): number", computeWeight.Signature)
+}

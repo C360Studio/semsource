@@ -50,6 +50,13 @@ type CodeEntity struct {
 	// Documentation comment
 	DocComment string
 
+	// Signature is a rendered, language-flavored signature string
+	// (e.g. "submit(item: Job): Promise<string>") suitable for embedding
+	// alongside the doc comment in semantic search. Aligns with SCIP's
+	// SymbolInformation.signature_documentation concept without changing
+	// entity identity.
+	Signature string
+
 	// Capability metadata (extracted from doc comments)
 	Capability *CapabilityInfo
 
@@ -189,6 +196,9 @@ func (e *CodeEntity) identityTriples() []message.Triple {
 	}
 	if e.DocComment != "" {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeDocComment, Object: e.DocComment})
+	}
+	if e.Signature != "" {
+		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeSignature, Object: e.Signature})
 	}
 	return triples
 }

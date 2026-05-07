@@ -865,6 +865,93 @@ func TestParseDirectory_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestParseFile_Javadoc(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	code := `package com.example;
+
+/**
+ * Tracks an ordered queue of jobs.
+ *
+ * Jobs are dequeued in submission order and processed
+ * exactly once.
+ */
+@Service
+public class JobQueue {
+
+    /**
+     * Maximum jobs the queue will hold before back-pressuring.
+     */
+    public static final int CAPACITY = 1024;
+
+    /**
+     * Submits a new job for processing.
+     *
+     * @param job the job to enqueue
+     * @return the assigned sequence number
+     */
+    @Override
+    public long submit(Job job) {
+        return 0;
+    }
+}
+`
+	filePath := filepath.Join(tmpDir, "JobQueue.java")
+	if err := os.WriteFile(filePath, []byte(code), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	p := NewParser("acme", "test", tmpDir)
+	result, err := p.ParseFile(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	byName := make(map[string]*ast.CodeEntity)
+	for _, e := range result.Entities {
+		byName[e.Name] = e
+	}
+
+	queue, ok := byName["JobQueue"]
+	if !ok {
+		t.Fatal("JobQueue class not found")
+	}
+	if !strings.Contains(queue.DocComment, "ordered queue of jobs") {
+		t.Errorf("class DocComment missing Javadoc body, got %q", queue.DocComment)
+	}
+	if !strings.Contains(queue.DocComment, "@Service") {
+		t.Errorf("class DocComment lost @Service annotation, got %q", queue.DocComment)
+	}
+
+	submit, ok := byName["submit"]
+	if !ok {
+		t.Fatal("submit method not found")
+	}
+	if !strings.Contains(submit.DocComment, "Submits a new job") {
+		t.Errorf("method DocComment missing Javadoc body, got %q", submit.DocComment)
+	}
+	if !strings.Contains(submit.DocComment, "@param job") {
+		t.Errorf("method DocComment missing @param tag, got %q", submit.DocComment)
+	}
+	if !strings.Contains(submit.DocComment, "@Override") {
+		t.Errorf("method DocComment lost @Override annotation, got %q", submit.DocComment)
+	}
+	if want := "long submit(Job job)"; submit.Signature != want {
+		t.Errorf("method Signature = %q, want %q", submit.Signature, want)
+	}
+
+	capacity, ok := byName["CAPACITY"]
+	if !ok {
+		t.Fatal("CAPACITY field not found")
+	}
+	if !strings.Contains(capacity.DocComment, "Maximum jobs") {
+		t.Errorf("field DocComment missing Javadoc body, got %q", capacity.DocComment)
+	}
+	if !strings.Contains(capacity.DocComment, "static") {
+		t.Errorf("field DocComment lost static modifier, got %q", capacity.DocComment)
+	}
+}
+
 // Helper function
 func containsID(ids []string, target string) bool {
 	for _, id := range ids {

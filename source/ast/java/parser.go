@@ -270,11 +270,8 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
 
-	// Extract annotations (store in DocComment metadata)
-	annotations := p.extractAnnotations(node, content)
-	if len(annotations) > 0 {
-		entity.DocComment = strings.Join(annotations, "\n")
-	}
+	entity.DocComment = p.docCommentWithMetadata(node, content,
+		strings.Join(p.extractAnnotations(node, content), "\n"))
 
 	// Extract superclass (extends)
 	if superclass := node.ChildByFieldName("superclass"); superclass != nil {
@@ -321,11 +318,8 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
 
-	// Extract annotations
-	annotations := p.extractAnnotations(node, content)
-	if len(annotations) > 0 {
-		entity.DocComment = strings.Join(annotations, "\n")
-	}
+	entity.DocComment = p.docCommentWithMetadata(node, content,
+		strings.Join(p.extractAnnotations(node, content), "\n"))
 
 	// Extract extended interfaces
 	if extends := node.ChildByFieldName("extends"); extends != nil {
@@ -373,11 +367,8 @@ func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string)
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
 
-	// Extract annotations
-	annotations := p.extractAnnotations(node, content)
-	if len(annotations) > 0 {
-		entity.DocComment = strings.Join(annotations, "\n")
-	}
+	entity.DocComment = p.docCommentWithMetadata(node, content,
+		strings.Join(p.extractAnnotations(node, content), "\n"))
 
 	// Extract implemented interfaces
 	if interfaces := node.ChildByFieldName("interfaces"); interfaces != nil {
@@ -407,11 +398,8 @@ func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath strin
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
 
-	// Extract annotations
-	annotations := p.extractAnnotations(node, content)
-	if len(annotations) > 0 {
-		entity.DocComment = strings.Join(annotations, "\n")
-	}
+	entity.DocComment = p.docCommentWithMetadata(node, content,
+		strings.Join(p.extractAnnotations(node, content), "\n"))
 
 	// Extract implemented interfaces
 	if interfaces := node.ChildByFieldName("interfaces"); interfaces != nil {
@@ -445,19 +433,11 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 		entity.Receiver = receiverID
 	}
 
-	// Extract annotations and modifiers
-	annotations := p.extractAnnotations(node, content)
-	modifiers := p.extractModifiers(node, content)
-	docParts := make([]string, 0)
-	if len(annotations) > 0 {
-		docParts = append(docParts, strings.Join(annotations, "\n"))
-	}
-	if len(modifiers) > 0 {
-		docParts = append(docParts, strings.Join(modifiers, " "))
-	}
-	if len(docParts) > 0 {
-		entity.DocComment = strings.Join(docParts, "\n")
-	}
+	entity.DocComment = p.docCommentWithMetadata(node, content,
+		joinAnnotationsAndModifiers(
+			p.extractAnnotations(node, content),
+			p.extractModifiers(node, content)))
+	entity.Signature = renderMethodSignature(node, content)
 
 	// Extract parameters
 	if params := node.ChildByFieldName("parameters"); params != nil {
@@ -489,6 +469,8 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 	// Extract visibility and modifiers
 	visibility := p.extractVisibility(node, content)
 	modifiers := p.extractModifiers(node, content)
+	metadata := strings.Join(modifiers, " ")
+	javadoc := ast.PrecedingDocComment(node, content, "block_comment")
 
 	// A field declaration can have multiple declarators
 	for i := 0; i < int(node.NamedChildCount()); i++ {
@@ -509,9 +491,7 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 				entity.References = append(entity.References, p.typeNameToEntityID(typeName, filePath))
 			}
 
-			if len(modifiers) > 0 {
-				entity.DocComment = strings.Join(modifiers, " ")
-			}
+			entity.DocComment = ast.CombineDocComment(javadoc, metadata)
 
 			entities = append(entities, entity)
 		}
@@ -600,19 +580,11 @@ func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath 
 	entity.Visibility = p.extractVisibility(node, content)
 	entity.Receiver = receiverID
 
-	// Extract annotations and modifiers
-	annotations := p.extractAnnotations(node, content)
-	modifiers := p.extractModifiers(node, content)
-	docParts := make([]string, 0)
-	if len(annotations) > 0 {
-		docParts = append(docParts, strings.Join(annotations, "\n"))
-	}
-	if len(modifiers) > 0 {
-		docParts = append(docParts, strings.Join(modifiers, " "))
-	}
-	if len(docParts) > 0 {
-		entity.DocComment = strings.Join(docParts, "\n")
-	}
+	entity.DocComment = p.docCommentWithMetadata(node, content,
+		joinAnnotationsAndModifiers(
+			p.extractAnnotations(node, content),
+			p.extractModifiers(node, content)))
+	entity.Signature = renderMethodSignature(node, content)
 
 	// Extract parameters
 	if params := node.ChildByFieldName("parameters"); params != nil {
@@ -680,6 +652,59 @@ func (p *Parser) extractModifiers(node *sitter.Node, content []byte) []string {
 	}
 
 	return modifiers
+}
+
+// joinAnnotationsAndModifiers renders an annotations/modifiers metadata block
+// in the legacy "annotations\nmodifiers" shape, omitting either side when
+// empty. Annotations are newline-separated, modifiers space-separated.
+func joinAnnotationsAndModifiers(annotations, modifiers []string) string {
+	parts := make([]string, 0, 2)
+	if len(annotations) > 0 {
+		parts = append(parts, strings.Join(annotations, "\n"))
+	}
+	if len(modifiers) > 0 {
+		parts = append(parts, strings.Join(modifiers, " "))
+	}
+	return strings.Join(parts, "\n")
+}
+
+// renderMethodSignature builds a concise signature string for a Java method
+// or constructor by slicing source from the method name through the parameter
+// list (and `throws` clause when present). Returns "" when the layout is
+// unexpected. Annotations and modifiers are intentionally excluded so the
+// signature stays focused on shape.
+func renderMethodSignature(node *sitter.Node, content []byte) string {
+	nameNode := node.ChildByFieldName("name")
+	if nameNode == nil {
+		return ""
+	}
+	end := uint32(0)
+	if params := node.ChildByFieldName("parameters"); params != nil {
+		end = params.EndByte()
+	}
+	if throws := node.ChildByFieldName("throws"); throws != nil && throws.EndByte() > end {
+		end = throws.EndByte()
+	}
+	if end <= nameNode.StartByte() {
+		return ""
+	}
+
+	prefix := ""
+	if returnType := node.ChildByFieldName("type"); returnType != nil {
+		prefix = strings.TrimSpace(string(content[returnType.StartByte():returnType.EndByte()])) + " "
+	}
+	body := strings.TrimSpace(string(content[nameNode.StartByte():end]))
+	return strings.Join(strings.Fields(prefix+body), " ")
+}
+
+// docCommentWithMetadata combines a preceding Javadoc block (if any) with the
+// supplied annotations/modifiers metadata string. Either or both sides may be
+// empty. Doc body leads, metadata follows after a blank line so semantic
+// search benefits from natural-language content while existing assertions on
+// annotations and modifiers continue to hold.
+func (p *Parser) docCommentWithMetadata(node *sitter.Node, content []byte, metadata string) string {
+	doc := ast.PrecedingDocComment(node, content, "block_comment")
+	return ast.CombineDocComment(doc, metadata)
 }
 
 // extractAnnotations extracts annotation strings.

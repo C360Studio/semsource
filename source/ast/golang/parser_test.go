@@ -209,6 +209,9 @@ func (u *User) Greet() string {
 	if !strings.Contains(greetMethod.Receiver, "User") {
 		t.Errorf("Receiver = %q, want to contain 'User'", greetMethod.Receiver)
 	}
+	if want := "func (u *User) Greet() string"; greetMethod.Signature != want {
+		t.Errorf("Signature = %q, want %q", greetMethod.Signature, want)
+	}
 }
 
 func TestParseFile_Imports(t *testing.T) {
