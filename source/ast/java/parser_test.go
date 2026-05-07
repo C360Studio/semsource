@@ -952,6 +952,51 @@ public class JobQueue {
 	}
 }
 
+func TestParseFile_ScopedInstanceIDs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Two top-level classes in one file, each with a method named "submit".
+	// Pre-scoped IDs would collide on `submit`; scoped IDs must differ.
+	code := `package com.example;
+
+public class Foo {
+    public void submit() {}
+}
+
+class Bar {
+    public void submit() {}
+}
+`
+	filePath := filepath.Join(tmpDir, "Mixed.java")
+	if err := os.WriteFile(filePath, []byte(code), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	p := NewParser("acme", "test", tmpDir)
+	result, err := p.ParseFile(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	var submits []*ast.CodeEntity
+	for _, e := range result.Entities {
+		if e.Type == ast.TypeMethod && e.Name == "submit" {
+			submits = append(submits, e)
+		}
+	}
+	if len(submits) != 2 {
+		t.Fatalf("expected 2 submit methods, got %d", len(submits))
+	}
+	if submits[0].ID == submits[1].ID {
+		t.Errorf("submit method IDs collide: %q", submits[0].ID)
+	}
+	for _, m := range submits {
+		if !strings.Contains(m.ID, "Foo-submit") && !strings.Contains(m.ID, "Bar-submit") {
+			t.Errorf("submit ID %q missing class qualifier", m.ID)
+		}
+	}
+}
+
 // Helper function
 func containsID(ids []string, target string) bool {
 	for _, id := range ids {

@@ -3,7 +3,6 @@ package ast
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -95,8 +94,18 @@ type CapabilityInfo struct {
 // The language and project parameters are used to construct the 6-part entity ID.
 // language should be the domain name (e.g. "golang", "typescript", "java", "python", "svelte").
 func NewCodeEntity(org, language, project string, entityType CodeEntityType, name, path string) *CodeEntity {
-	// Build instance identifier from path and name
-	instance := BuildInstanceID(path, name, entityType)
+	return NewScopedCodeEntity(org, language, project, entityType, nil, name, path)
+}
+
+// NewScopedCodeEntity is like NewCodeEntity but inserts enclosing-scope
+// segments (class names, receiver types) between the path slug and the entity
+// name. This disambiguates siblings sharing a name across different scopes —
+// e.g. two methods named "Get" on different receivers in the same Go file,
+// or methods named "submit" in two classes in one Java file would otherwise
+// collide. Pass an empty scope (nil or []) for top-level entities; in that
+// case the resulting ID matches NewCodeEntity exactly.
+func NewScopedCodeEntity(org, language, project string, entityType CodeEntityType, scope []string, name, path string) *CodeEntity {
+	instance := BuildScopedInstanceID(path, scope, name, entityType)
 
 	return &CodeEntity{
 		ID:         entityid.Build(org, entityid.PlatformSemsource, language, project, string(entityType), instance),
@@ -122,13 +131,26 @@ func SanitizePathSegment(path string) string {
 // BuildInstanceID creates a unique instance identifier from path and name.
 // Exported for use by language-specific parser packages.
 func BuildInstanceID(path, name string, entityType CodeEntityType) string {
-	sanitized := SanitizePathSegment(path)
+	return BuildScopedInstanceID(path, nil, name, entityType)
+}
 
-	if name != "" && entityType != TypeFile && entityType != TypePackage {
-		// For functions, types, etc: include name
-		return fmt.Sprintf("%s-%s", sanitized, name)
+// BuildScopedInstanceID is like BuildInstanceID but inserts enclosing-scope
+// segments (e.g. class names, receiver types) between the path slug and the
+// entity name. Each scope segment is run through SanitizePathSegment so
+// generic markers like "*", "[T]", or "Foo.Inner" produce single, valid
+// graph-ingest segments. Empty scope segments are silently skipped.
+func BuildScopedInstanceID(path string, scope []string, name string, entityType CodeEntityType) string {
+	parts := []string{SanitizePathSegment(path)}
+	for _, s := range scope {
+		clean := SanitizePathSegment(s)
+		if clean != "" {
+			parts = append(parts, clean)
+		}
 	}
-	return sanitized
+	if name != "" && entityType != TypeFile && entityType != TypePackage {
+		parts = append(parts, name)
+	}
+	return strings.Join(parts, "-")
 }
 
 // determineVisibility checks if a Go identifier is exported

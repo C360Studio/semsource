@@ -101,7 +101,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		}
 
 		// Extract top-level entities
-		entities := p.extractTopLevelNode(child, content, fileEntity.ID, relPath)
+		entities := p.extractTopLevelNode(child, content, fileEntity.ID, relPath, nil)
 		for i, entity := range entities {
 			// Only set ContainedBy for the first entity (top-level)
 			// Nested entities already have their ContainedBy set correctly
@@ -217,36 +217,39 @@ func (p *Parser) extractImports(node *sitter.Node, content []byte) []string {
 }
 
 // extractTopLevelNode extracts entities from a top-level AST node.
-// Returns all entities including nested ones.
-func (p *Parser) extractTopLevelNode(node *sitter.Node, content []byte, _ /* parentID */, filePath string) []*ast.CodeEntity {
+// Returns all entities including nested ones. The scope slice carries the
+// chain of enclosing class names so nested entities (methods, fields, inner
+// classes) get instance IDs that disambiguate same-named siblings across
+// containers.
+func (p *Parser) extractTopLevelNode(node *sitter.Node, content []byte, _ /* parentID */, filePath string, scope []string) []*ast.CodeEntity {
 	var entities []*ast.CodeEntity
 
 	switch node.Type() {
 	case "class_declaration":
-		classEntities := p.extractClass(node, content, filePath)
+		classEntities := p.extractClass(node, content, filePath, scope)
 		entities = append(entities, classEntities...)
 
 	case "interface_declaration":
-		interfaceEntities := p.extractInterface(node, content, filePath)
+		interfaceEntities := p.extractInterface(node, content, filePath, scope)
 		entities = append(entities, interfaceEntities...)
 
 	case "enum_declaration":
-		entity := p.extractEnum(node, content, filePath)
+		entity := p.extractEnum(node, content, filePath, scope)
 		if entity != nil {
 			entities = append(entities, entity)
 		}
 
 	case "record_declaration":
-		entity := p.extractRecord(node, content, filePath)
+		entity := p.extractRecord(node, content, filePath, scope)
 		if entity != nil {
 			entities = append(entities, entity)
 		}
 
 	case "field_declaration":
-		entities = append(entities, p.extractFieldDeclaration(node, content, filePath)...)
+		entities = append(entities, p.extractFieldDeclaration(node, content, filePath, scope)...)
 
 	case "method_declaration":
-		entity := p.extractMethod(node, content, filePath, "")
+		entity := p.extractMethod(node, content, filePath, "", scope)
 		if entity != nil {
 			entities = append(entities, entity)
 		}
@@ -257,7 +260,9 @@ func (p *Parser) extractTopLevelNode(node *sitter.Node, content []byte, _ /* par
 
 // extractClass extracts a class entity and all its members.
 // Returns all entities including the class itself and nested entities.
-func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string) []*ast.CodeEntity {
+// scope is the chain of containing class/interface names; methods, fields,
+// and inner classes inherit `scope + [thisClass]` as their own scope.
+func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string, scope []string) []*ast.CodeEntity {
 	// Get class name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -265,7 +270,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeClass, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeClass, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -296,16 +301,27 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	// Returns all child entities
 	allEntities := []*ast.CodeEntity{entity}
 	if body := node.ChildByFieldName("body"); body != nil {
-		childEntities := p.extractClassBody(body, content, entity, filePath)
+		childScope := extendScope(scope, name)
+		childEntities := p.extractClassBody(body, content, entity, filePath, childScope)
 		allEntities = append(allEntities, childEntities...)
 	}
 
 	return allEntities
 }
 
+// extendScope returns a new scope slice with name appended. A fresh
+// underlying array is allocated so the parent scope is never mutated by
+// later appends from a sibling subtree.
+func extendScope(scope []string, name string) []string {
+	out := make([]string, 0, len(scope)+1)
+	out = append(out, scope...)
+	out = append(out, name)
+	return out
+}
+
 // extractInterface extracts an interface entity and all its members.
 // Returns all entities including the interface itself and nested entities.
-func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath string) []*ast.CodeEntity {
+func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath string, scope []string) []*ast.CodeEntity {
 	// Get interface name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -313,7 +329,7 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeInterface, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeInterface, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -336,10 +352,11 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 	allEntities := []*ast.CodeEntity{entity}
 	if body := node.ChildByFieldName("body"); body != nil {
 		childIDs := make([]string, 0)
+		childScope := extendScope(scope, name)
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
 			if child.Type() == "method_declaration" {
-				method := p.extractMethod(child, content, filePath, entity.ID)
+				method := p.extractMethod(child, content, filePath, entity.ID, childScope)
 				if method != nil {
 					method.ContainedBy = entity.ID
 					childIDs = append(childIDs, method.ID)
@@ -354,7 +371,7 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 }
 
 // extractEnum extracts an enum entity.
-func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string) *ast.CodeEntity {
+func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string, scope []string) *ast.CodeEntity {
 	// Get enum name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -362,7 +379,7 @@ func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string)
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeEnum, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeEnum, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -385,7 +402,7 @@ func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string)
 }
 
 // extractRecord extracts a record entity (Java 14+).
-func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath string) *ast.CodeEntity {
+func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath string, scope []string) *ast.CodeEntity {
 	// Get record name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -393,7 +410,7 @@ func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath strin
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeStruct, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeStruct, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -416,7 +433,7 @@ func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath strin
 }
 
 // extractMethod extracts a method entity.
-func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath string, receiverID string) *ast.CodeEntity {
+func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath string, receiverID string, scope []string) *ast.CodeEntity {
 	// Get method name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -424,7 +441,7 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeMethod, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeMethod, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -456,7 +473,7 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 }
 
 // extractFieldDeclaration extracts field entities from a field declaration.
-func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, filePath string) []*ast.CodeEntity {
+func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, filePath string, scope []string) []*ast.CodeEntity {
 	var entities []*ast.CodeEntity
 
 	// Get field type
@@ -482,7 +499,7 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 			}
 			name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-			entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeVar, name, filePath)
+			entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeVar, scope, name, filePath)
 			entity.StartLine = int(node.StartPoint().Row) + 1
 			entity.EndLine = int(node.EndPoint().Row) + 1
 			entity.Visibility = visibility
@@ -502,7 +519,10 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 
 // extractClassBody extracts members from a class body.
 // Returns all child entities and updates classEntity.Contains.
-func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity *ast.CodeEntity, filePath string) []*ast.CodeEntity {
+// scope already includes the containing class's name; it is propagated
+// straight through to direct child methods/fields and extended for nested
+// types' own bodies.
+func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity *ast.CodeEntity, filePath string, scope []string) []*ast.CodeEntity {
 	childIDs := make([]string, 0)
 	allChildEntities := make([]*ast.CodeEntity, 0)
 
@@ -511,7 +531,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 
 		switch child.Type() {
 		case "method_declaration":
-			method := p.extractMethod(child, content, filePath, classEntity.ID)
+			method := p.extractMethod(child, content, filePath, classEntity.ID, scope)
 			if method != nil {
 				method.ContainedBy = classEntity.ID
 				childIDs = append(childIDs, method.ID)
@@ -519,7 +539,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 			}
 
 		case "constructor_declaration":
-			ctor := p.extractConstructor(child, content, filePath, classEntity.ID)
+			ctor := p.extractConstructor(child, content, filePath, classEntity.ID, scope)
 			if ctor != nil {
 				ctor.ContainedBy = classEntity.ID
 				childIDs = append(childIDs, ctor.ID)
@@ -527,7 +547,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 			}
 
 		case "field_declaration":
-			fields := p.extractFieldDeclaration(child, content, filePath)
+			fields := p.extractFieldDeclaration(child, content, filePath, scope)
 			for _, field := range fields {
 				field.ContainedBy = classEntity.ID
 				childIDs = append(childIDs, field.ID)
@@ -535,7 +555,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 			}
 
 		case "class_declaration":
-			innerClassEntities := p.extractClass(child, content, filePath)
+			innerClassEntities := p.extractClass(child, content, filePath, scope)
 			if len(innerClassEntities) > 0 {
 				// First entity is the class itself
 				innerClassEntities[0].ContainedBy = classEntity.ID
@@ -544,7 +564,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 			}
 
 		case "interface_declaration":
-			innerInterfaceEntities := p.extractInterface(child, content, filePath)
+			innerInterfaceEntities := p.extractInterface(child, content, filePath, scope)
 			if len(innerInterfaceEntities) > 0 {
 				innerInterfaceEntities[0].ContainedBy = classEntity.ID
 				childIDs = append(childIDs, innerInterfaceEntities[0].ID)
@@ -552,7 +572,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 			}
 
 		case "enum_declaration":
-			innerEnum := p.extractEnum(child, content, filePath)
+			innerEnum := p.extractEnum(child, content, filePath, scope)
 			if innerEnum != nil {
 				innerEnum.ContainedBy = classEntity.ID
 				childIDs = append(childIDs, innerEnum.ID)
@@ -566,7 +586,7 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 }
 
 // extractConstructor extracts a constructor entity.
-func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath string, receiverID string) *ast.CodeEntity {
+func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath string, receiverID string, scope []string) *ast.CodeEntity {
 	// Get constructor name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -574,7 +594,7 @@ func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath 
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
-	entity := ast.NewCodeEntity(p.org, "java", p.project, ast.TypeMethod, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeMethod, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)

@@ -234,14 +234,21 @@ func (p *Parser) extractFunction(fset *token.FileSet, fn *goast.FuncDecl, filePa
 	name := fn.Name.Name
 	entityType := ast.TypeFunction
 
-	// Check if it's a method (has receiver)
+	// Check if it's a method (has receiver). Methods inherit the receiver
+	// type as their enclosing scope so two methods named "Get" on different
+	// receivers in the same file get distinct entity IDs. Functions are
+	// package-scoped and need no extra scope segment.
 	var receiverType string
+	var scope []string
 	if fn.Recv != nil && len(fn.Recv.List) > 0 {
 		entityType = ast.TypeMethod
 		receiverType = p.extractTypeName(fn.Recv.List[0].Type)
+		if receiverType != "" {
+			scope = []string{receiverType}
+		}
 	}
 
-	entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "golang", p.project, entityType, scope, name, filePath)
 	entity.StartLine = fset.Position(fn.Pos()).Line
 	entity.EndLine = fset.Position(fn.End()).Line
 	entity.Signature = renderGoSignature(fset, fn)

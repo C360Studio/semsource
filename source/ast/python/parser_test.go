@@ -90,6 +90,47 @@ def add(a: int, b: int) -> int:
 	}
 }
 
+func TestParseFile_ScopedMethodIDs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	code := `class Foo:
+    def submit(self):
+        pass
+
+class Bar:
+    def submit(self):
+        pass
+`
+	filePath := filepath.Join(tmpDir, "scoped.py")
+	if err := os.WriteFile(filePath, []byte(code), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	p := NewParser("acme", "test", tmpDir)
+	result, err := p.ParseFile(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	var submits []*ast.CodeEntity
+	for _, e := range result.Entities {
+		if e.Type == ast.TypeMethod && e.Name == "submit" {
+			submits = append(submits, e)
+		}
+	}
+	if len(submits) != 2 {
+		t.Fatalf("expected 2 submit methods, got %d", len(submits))
+	}
+	if submits[0].ID == submits[1].ID {
+		t.Errorf("method IDs collide: %q", submits[0].ID)
+	}
+	for _, m := range submits {
+		if !strings.Contains(m.ID, "Foo-submit") && !strings.Contains(m.ID, "Bar-submit") {
+			t.Errorf("method ID %q missing class qualifier", m.ID)
+		}
+	}
+}
+
 func TestParseFile_Class(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -905,6 +905,47 @@ func TestParseFile_JSDoc(t *testing.T) {
 	}
 }
 
+func TestParseFile_ScopedMethodIDs(t *testing.T) {
+	dir := t.TempDir()
+	tsPath := filepath.Join(dir, "scoped.ts")
+
+	src := `export class Foo {
+    submit(): void {}
+}
+
+export class Bar {
+    submit(): void {}
+}
+`
+	if err := os.WriteFile(tsPath, []byte(src), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	p := NewParser("acme", "test", dir)
+	result, err := p.ParseFile(context.Background(), tsPath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	var submits []*ast.CodeEntity
+	for _, e := range result.Entities {
+		if e.Type == ast.TypeMethod && e.Name == "submit" {
+			submits = append(submits, e)
+		}
+	}
+	if len(submits) != 2 {
+		t.Fatalf("expected 2 submit methods, got %d", len(submits))
+	}
+	if submits[0].ID == submits[1].ID {
+		t.Errorf("method IDs collide: %q", submits[0].ID)
+	}
+	for _, m := range submits {
+		if !strings.Contains(m.ID, "Foo-submit") && !strings.Contains(m.ID, "Bar-submit") {
+			t.Errorf("method ID %q missing class qualifier", m.ID)
+		}
+	}
+}
+
 // containsImport checks if import path is in the slice
 func containsImport(imports []string, path string) bool {
 	for _, imp := range imports {

@@ -235,8 +235,10 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 		entity := p.extractClass(node, source, filePath, lang, parentID)
 		if entity != nil {
 			entities = append(entities, entity)
-			// Extract methods from the class body
-			methods := p.extractClassMethods(node, source, filePath, lang, entity.ID)
+			// Extract methods from the class body. Scope passes the class name
+			// so two methods named "submit" in different classes within the
+			// same file get distinct entity IDs.
+			methods := p.extractClassMethods(node, source, filePath, lang, entity.ID, []string{entity.Name})
 			for _, method := range methods {
 				entity.Contains = append(entity.Contains, method.ID)
 				entities = append(entities, method)
@@ -359,8 +361,11 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 	return entity
 }
 
-// extractClassMethods extracts methods from a class
-func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, filePath, lang, parentID string) []*ast.CodeEntity {
+// extractClassMethods extracts methods from a class. scope is the chain of
+// containing class names (typically just the class itself for non-nested
+// classes) and is propagated to every method so their instance IDs include
+// the class qualifier.
+func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, filePath, lang, parentID string, scope []string) []*ast.CodeEntity {
 	var methods []*ast.CodeEntity
 
 	bodyNode := classNode.ChildByFieldName("body")
@@ -371,7 +376,7 @@ func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, file
 	for i := 0; i < int(bodyNode.ChildCount()); i++ {
 		child := bodyNode.Child(i)
 		if child.Type() == "method_definition" {
-			method := p.extractMethod(child, source, filePath, lang, parentID)
+			method := p.extractMethod(child, source, filePath, lang, parentID, scope)
 			if method != nil {
 				methods = append(methods, method)
 			}
@@ -382,7 +387,7 @@ func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, file
 }
 
 // extractMethod extracts a method entity
-func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang, parentID string) *ast.CodeEntity {
+func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang, parentID string, scope []string) *ast.CodeEntity {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return nil
@@ -398,7 +403,7 @@ func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang,
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, lang, p.project, ast.TypeMethod, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, lang, p.project, ast.TypeMethod, scope, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine

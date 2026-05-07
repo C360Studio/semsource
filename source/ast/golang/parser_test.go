@@ -214,6 +214,50 @@ func (u *User) Greet() string {
 	}
 }
 
+func TestParseFile_ScopedMethodIDs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Two methods named Get on different receivers in the same file. With
+	// flat instance IDs both would collapse to `<path>-Get`; scoped IDs must
+	// embed the receiver type to keep them distinct.
+	code := `package example
+
+type Server struct{}
+type Client struct{}
+
+func (s *Server) Get() string { return "" }
+func (c *Client) Get() string { return "" }
+`
+	filePath := filepath.Join(tmpDir, "rpc.go")
+	if err := os.WriteFile(filePath, []byte(code), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	p := NewParser("acme", "test", tmpDir)
+	result, err := p.ParseFile(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	var gets []*ast.CodeEntity
+	for _, e := range result.Entities {
+		if e.Type == ast.TypeMethod && e.Name == "Get" {
+			gets = append(gets, e)
+		}
+	}
+	if len(gets) != 2 {
+		t.Fatalf("expected 2 Get methods, got %d", len(gets))
+	}
+	if gets[0].ID == gets[1].ID {
+		t.Errorf("method IDs collide: %q", gets[0].ID)
+	}
+	for _, m := range gets {
+		if !strings.Contains(m.ID, "Server-Get") && !strings.Contains(m.ID, "Client-Get") {
+			t.Errorf("method ID %q missing receiver qualifier", m.ID)
+		}
+	}
+}
+
 func TestParseFile_Imports(t *testing.T) {
 	tmpDir := t.TempDir()
 

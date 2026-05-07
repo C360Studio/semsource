@@ -216,7 +216,7 @@ func (p *Parser) extractNode(node *sitter.Node, content []byte, _ /* parentID */
 		entities = append(entities, classEntities...)
 
 	case "function_definition":
-		entity := p.extractFunction(node, content, filePath, false)
+		entity := p.extractFunction(node, content, filePath, false, nil)
 		if entity != nil {
 			entities = append(entities, entity)
 		}
@@ -243,7 +243,7 @@ func (p *Parser) extractNode(node *sitter.Node, content []byte, _ /* parentID */
 					entities = append(entities, classEntities...)
 				}
 			case "function_definition":
-				entity := p.extractFunction(definition, content, filePath, false)
+				entity := p.extractFunction(definition, content, filePath, false, nil)
 				if entity != nil {
 					if len(decorators) > 0 {
 						entity.DocComment = p.prependDecorators(entity.DocComment, decorators)
@@ -270,6 +270,9 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 		return nil
 	}
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
+
+	// Class scope is just the class itself; methods within will inherit it.
+	classScope := []string{name}
 
 	entity := ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
@@ -303,7 +306,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 			child := body.NamedChild(i)
 			switch child.Type() {
 			case "function_definition":
-				method := p.extractFunction(child, content, filePath, true)
+				method := p.extractFunction(child, content, filePath, true, classScope)
 				if method != nil {
 					method.ContainedBy = entity.ID
 					method.Receiver = entity.ID
@@ -314,7 +317,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 				if def := p.findDefinitionInDecorated(child); def != nil {
 					if def.Type() == "function_definition" {
 						decorators := p.extractDecorators(child, content)
-						method := p.extractFunction(def, content, filePath, true)
+						method := p.extractFunction(def, content, filePath, true, classScope)
 						if method != nil {
 							method.ContainedBy = entity.ID
 							method.Receiver = entity.ID
@@ -334,8 +337,9 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	return allEntities
 }
 
-// extractFunction extracts a function or method entity.
-func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath string, isMethod bool) *ast.CodeEntity {
+// extractFunction extracts a function or method entity. scope is the chain
+// of containing class names; pass nil for module-level functions.
+func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath string, isMethod bool, scope []string) *ast.CodeEntity {
 	// Get function name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -348,7 +352,7 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 		entityType = ast.TypeMethod
 	}
 
-	entity := ast.NewCodeEntity(p.org, "python", p.project, entityType, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.org, "python", p.project, entityType, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.determineVisibility(name)
