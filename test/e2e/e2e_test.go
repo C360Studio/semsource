@@ -1560,6 +1560,92 @@ func TestE2E_RuntimeSourceAdd_Headless(t *testing.T) {
 	runRuntimeSourceAddTest(t, "runtimeadd-headless", "headless")
 }
 
+// TestE2E_HeadlessStreamConfigWarning verifies the boot-time defensive
+// check: when the host's GRAPH stream uses a wildcard like
+// `graph.ingest.>` that would intercept the control-plane subjects
+// (graph.ingest.add.* / .remove.*), semsource logs a loud ERROR at
+// startup naming the misconfigured stream and the offending filter.
+// This protects future headless deployers from silently hitting the
+// JetStream PubAck race that bit semteams.
+func TestE2E_HeadlessStreamConfigWarning(t *testing.T) {
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	httpPort := freePort(t)
+	wsPort := freePort(t)
+
+	root := repoRoot(t)
+	configPath := writeRuntimeAddConfig(t, workDir, "stream-warn-test", "headless",
+		httpPort, wsPort, filepath.Join(root, "docs"))
+
+	// Pre-create GRAPH with the *bad* wildcard — exactly the
+	// misconfiguration semsource is meant to catch.
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect to NATS: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	if _, err := js.CreateStream(context.Background(), jetstream.StreamConfig{
+		Name:     "GRAPH",
+		Subjects: []string{"graph.ingest.>"},
+		Storage:  jetstream.MemoryStorage,
+	}); err != nil {
+		t.Fatalf("create bad GRAPH stream: %v", err)
+	}
+
+	runCtx, runCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer runCancel()
+	cmd := exec.CommandContext(runCtx, binPath, "run",
+		"--config", configPath,
+		"--log-level", "debug",
+		"--nats-url", natsURL,
+	)
+	cmd.Dir = workDir
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start semsource: %v", err)
+	}
+	defer func() {
+		cmd.Process.Signal(os.Interrupt)
+		cmd.Wait()
+	}()
+
+	deadline := time.Now().Add(20 * time.Second)
+	warnCh := make(chan struct{}, 1)
+	scan := func(label string, r interface{ Read([]byte) (int, error) }) {
+		s := bufio.NewScanner(r)
+		s.Buffer(make([]byte, 64*1024), 1024*1024)
+		for s.Scan() {
+			line := s.Text()
+			t.Logf("[%s] %s", label, line)
+			if strings.Contains(line, "host JetStream stream captures semsource control-plane subjects") &&
+				strings.Contains(line, "\"GRAPH\"") &&
+				strings.Contains(line, "graph.ingest.>") {
+				select {
+				case warnCh <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}
+	go scan("stdout", stdout)
+	go scan("stderr", stderr)
+
+	select {
+	case <-warnCh:
+		// Got it.
+	case <-time.After(time.Until(deadline)):
+		t.Fatal("did not see headless stream-config warning within 20s — defensive check is not firing")
+	}
+}
+
 func runRuntimeSourceAddTest(t *testing.T, namespace, mode string) {
 	t.Helper()
 	natsURL, cleanup := startNATS(t)

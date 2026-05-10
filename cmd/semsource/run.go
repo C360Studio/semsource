@@ -212,9 +212,89 @@ func setupNATS(
 		logger.Info("JetStream streams ready")
 	} else {
 		logger.Info("headless mode — skipping stream provisioning (host app owns infrastructure)")
+		warnIfHostStreamCapturesControlSubjects(ctx, nc, logger)
 	}
 
 	return nc, ssCfg, nil
+}
+
+// controlPlaneSubjects are the NATS request/reply subjects the
+// source-manifest serves for the curator workflow. They are intentionally
+// excluded from semsource's own GRAPH stream subjects so JetStream does
+// not store them. A host-owned stream that captures these (e.g. via a
+// `graph.ingest.>` wildcard) breaks the workflow: the broker sends a
+// PubAck to the request's reply inbox the instant the message lands in
+// the stream, the client treats that PubAck as the response, and the
+// real AddReply/RemoveReply from source-manifest loses the race. The
+// caller sees a malformed reply and the component is never spawned.
+var controlPlaneSubjects = []string{
+	"graph.ingest.add.runtimeadd-probe",
+	"graph.ingest.remove.runtimeadd-probe",
+}
+
+// warnIfHostStreamCapturesControlSubjects checks every JetStream stream
+// the broker exposes and logs a loud ERROR for each one whose subject
+// filter would intercept the source-manifest control-plane subjects.
+// Best-effort: any lookup error is logged at DEBUG and the function
+// returns silently, since we don't want to fail boot just because we
+// couldn't introspect JetStream.
+func warnIfHostStreamCapturesControlSubjects(ctx context.Context, nc *natsclient.Client, logger *slog.Logger) {
+	js, err := nc.JetStream()
+	if err != nil {
+		logger.Debug("headless: skipping stream-config validation — JetStream unavailable", "error", err)
+		return
+	}
+
+	lister := js.ListStreams(ctx)
+	for info := range lister.Info() {
+		if info == nil || info.Config.Name == "" {
+			continue
+		}
+		var bad []string
+		for _, filter := range info.Config.Subjects {
+			for _, probe := range controlPlaneSubjects {
+				if subjectFilterMatches(filter, probe) {
+					bad = append(bad, filter)
+					break
+				}
+			}
+		}
+		if len(bad) > 0 {
+			logger.Error(
+				"headless: host JetStream stream captures semsource control-plane subjects — "+
+					"graph.ingest.add.* and graph.ingest.remove.* will receive PubAcks that race "+
+					"with the real source-manifest reply; runtime add_source_repo will appear to "+
+					"succeed but no component will spawn. Narrow the host stream's subject filter "+
+					"to only the data-plane subjects (graph.ingest.entity, graph.ingest.batch, "+
+					"graph.ingest.manifest, graph.ingest.status, graph.ingest.predicates).",
+				"stream", info.Config.Name,
+				"offending_filters", bad,
+			)
+		}
+	}
+	if err := lister.Err(); err != nil {
+		logger.Debug("headless: stream-config validation incomplete", "error", err)
+	}
+}
+
+// subjectFilterMatches reports whether NATS subject filter would match
+// the concrete subject. Implements the NATS wildcard rules: "*" matches
+// exactly one token; ">" matches one or more trailing tokens.
+func subjectFilterMatches(filter, subject string) bool {
+	fParts := strings.Split(filter, ".")
+	sParts := strings.Split(subject, ".")
+	for i, fp := range fParts {
+		if fp == ">" {
+			return i < len(sParts)
+		}
+		if i >= len(sParts) {
+			return false
+		}
+		if fp != "*" && fp != sParts[i] {
+			return false
+		}
+	}
+	return len(fParts) == len(sParts)
 }
 
 // loadAndExpandConfig loads the semsource config and expands "repo" meta-sources

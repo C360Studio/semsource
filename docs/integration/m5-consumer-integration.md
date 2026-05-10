@@ -158,6 +158,47 @@ consumer-side merge logic is needed.
 | `GRAPH_MERGED` stream | Not exposed to consumers |
 | `federation.ToEntityState()` calls | Consumers receive query responses, not raw event streams |
 
+## Headless Mode: Host-Owned GRAPH Stream Configuration
+
+When SemSource runs in `mode: headless`, it shares the host application's NATS JetStream
+infrastructure rather than provisioning its own. Semsource skips `EnsureStreams` entirely
+in this mode — the host owns the `GRAPH` stream definition.
+
+The host's `GRAPH` stream subject filter **must enumerate the data-plane subjects
+explicitly**. Do not use a wildcard like `graph.ingest.>`.
+
+```text
+Subjects: [
+  "graph.ingest.entity",
+  "graph.ingest.batch",
+  "graph.ingest.manifest",
+  "graph.ingest.status",
+  "graph.ingest.predicates",
+]
+```
+
+This matches the subject list semsource's own `EnsureStreams` writes in standalone mode.
+
+### Why the wildcard breaks the curator workflow
+
+`graph.ingest.add.{namespace}` and `graph.ingest.remove.{namespace}` are NATS
+request/reply subjects served by `source-manifest`. They are **control plane**, not data
+plane. If the stream filter captures them (e.g. via `graph.ingest.>`), JetStream sends a
+`PubAck` to the request's reply inbox the moment the message lands in the stream — racing
+against, and always beating, the real `AddReply` produced by `source-manifest` (which has
+to write to KV first).
+
+The caller then decodes the `PubAck` envelope (`{"stream":"GRAPH","seq":N}`) as the
+response, sees zero components, and assumes the add failed. The KV write that would have
+triggered component spawn never happens.
+
+### Boot-time detection
+
+Semsource scans every JetStream stream on startup in headless mode. If any stream's
+subject filter captures `graph.ingest.add.*` or `graph.ingest.remove.*`, semsource logs
+a loud `ERROR` line at boot identifying the stream and the offending filter — runtime
+adds will misbehave silently otherwise.
+
 ## SemSpec Integration Checklist
 
 1. Choose a readiness gating strategy (NATS subscribe, NATS poll, or HTTP poll).
