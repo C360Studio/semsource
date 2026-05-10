@@ -8,13 +8,16 @@
 package sourcespawn
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/workspace"
 )
 
 // contentHashSlug produces a deterministic 6-hex-character slug from the
@@ -109,8 +112,9 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 }
 
 // gitComponentConfig builds a component instance name and config map for a
-// git source entry.
-func gitComponentConfig(src config.SourceEntry, org string, opts Options) (string, map[string]any, error) {
+// git source entry. ctx flows in for the `git ls-remote --symref` call
+// that resolves the remote's default branch when src.Branch is empty.
+func gitComponentConfig(ctx context.Context, src config.SourceEntry, org string, opts Options) (string, map[string]any, error) {
 	identifier := src.URL
 	if identifier == "" {
 		identifier = src.Path
@@ -122,9 +126,26 @@ func gitComponentConfig(src config.SourceEntry, org string, opts Options) (strin
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
 	instanceName := fmt.Sprintf("git-source-%s", scopedSlug)
 
+	// Resolve the remote's default branch via `git ls-remote --symref`
+	// when the caller didn't specify one. This is the load-bearing fix
+	// for the curator workflow (ADR-040 add_source_repo) — without it,
+	// pre-rename repos like osh-core (master), Apache-era projects
+	// (master/trunk), and custom defaults (develop) silently broke.
+	// Resolution runs once here per spawn, covering every code path that
+	// reaches a git component (boot expansion, runtime AddRequest for
+	// "repo", runtime AddRequest for direct "git"), so the hardcoded
+	// "main" fallback at this layer has been removed entirely. On
+	// resolution failure, branch stays empty; workspace.clone then omits
+	// --branch, and git uses the remote's actual default.
 	branch := src.Branch
-	if branch == "" {
-		branch = "main"
+	if branch == "" && src.URL != "" {
+		if resolved, err := workspace.ResolveDefaultBranch(ctx, src.URL, opts.GitToken); err == nil {
+			branch = resolved
+			slog.Debug("resolved remote default branch", "url", src.URL, "branch", resolved)
+		} else {
+			slog.Warn("default-branch resolution failed; git-source will clone the remote's actual default",
+				"url", src.URL, "error", err)
+		}
 	}
 
 	pollInterval := src.PollInterval

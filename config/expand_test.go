@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"os/exec"
 	"testing"
 )
 
@@ -135,51 +134,11 @@ func TestExpandRepoSources_LanguagePropagation(t *testing.T) {
 	t.Error("no ast entry found in expanded sources")
 }
 
-// TestExpandRepoSources_ResolvesDefaultBranch confirms the curator-workflow
-// fix: a "repo" entry with no explicit Branch and a URL gets the remote's
-// default branch stamped onto the expanded git child via `git ls-remote
-// --symref`. Uses a local repo with HEAD on "master" to prove pre-rename
-// repos (osh-core etc.) no longer fall back to a hardcoded "main".
-func TestExpandRepoSources_ResolvesDefaultBranch(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
-	repoPath := t.TempDir()
-	runGit := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repoPath
-		cmd.Env = append(cmd.Env,
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
-			"HOME="+t.TempDir(), "PATH=/usr/bin:/bin:/usr/local/bin",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	runGit("init", "-b", "master")
-	runGit("commit", "--allow-empty", "-m", "init")
-
-	// Treat the local repo path as a URL — git ls-remote accepts it.
-	sources := []SourceEntry{
-		{Type: "repo", URL: repoPath, Language: "go"},
-	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expanded := result.Sources
-	if len(expanded) != 4 {
-		t.Fatalf("expected 4 expanded sources, got %d", len(expanded))
-	}
-	if expanded[0].Type != "git" {
-		t.Fatalf("first expansion should be git, got %q", expanded[0].Type)
-	}
-	if expanded[0].Branch != "master" {
-		t.Errorf("git branch = %q, want resolved remote default %q", expanded[0].Branch, "master")
-	}
-}
+// Default-branch resolution moved from ExpandRepoSources to
+// sourcespawn.gitComponentConfig (the leaf where Branch is consumed) so it
+// covers every code path uniformly. End-to-end coverage of the curator
+// add_source_repo flow lives in
+// internal/sourcespawn/sourcespawn_test.go: TestAdd_RepoNoBranch_ResolvesRemoteDefault.
 
 func TestExpandRepoSources_LocalRepoPath(t *testing.T) {
 	sources := []SourceEntry{

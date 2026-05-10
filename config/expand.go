@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 
 	"github.com/c360studio/semsource/workspace"
@@ -81,16 +80,11 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 			continue
 		}
 
-		if src.Branch == "" && src.URL != "" {
-			if branch, err := workspace.ResolveDefaultBranch(ctx, src.URL, opts.GitToken); err == nil {
-				src.Branch = branch
-				slog.Debug("resolved remote default branch", "url", src.URL, "branch", branch)
-			} else {
-				slog.Warn("default-branch resolution failed; falling back to static default",
-					"url", src.URL, "error", err)
-			}
-		}
-
+		// Default-branch resolution lives at the leaf
+		// (sourcespawn.gitComponentConfig) so it covers every git-
+		// producing path uniformly: boot expansion, runtime AddRequest
+		// for "repo", runtime AddRequest for direct "git". Expansion
+		// here just passes src.Branch through; the leaf will resolve.
 		entries := expandSingleBranch(src, workspaceDir)
 		expanded = append(expanded, entries...)
 	}

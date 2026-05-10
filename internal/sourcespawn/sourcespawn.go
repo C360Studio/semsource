@@ -287,7 +287,7 @@ func buildSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]co
 		return []componentSpec{{name, "ast-source", "ast", cfg}}, nil
 
 	case "git":
-		name, cfg, err := gitComponentConfig(src, opts.Org, opts)
+		name, cfg, err := gitComponentConfig(ctx, src, opts.Org, opts)
 		if err != nil {
 			return nil, &Error{Code: CodeValidationFailed, Message: err.Error()}
 		}

@@ -2,7 +2,9 @@ package sourcespawn
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -156,6 +158,182 @@ func TestAdd_RepoSingleBranch_Expands(t *testing.T) {
 	}
 	if len(store.puts) != 4 {
 		t.Errorf("expected 4 KV puts, got %d", len(store.puts))
+	}
+}
+
+// TestAdd_RepoNoBranch_ResolvesRemoteDefault is the load-bearing test for
+// the curator workflow: an AddRequest with Type="repo" and no Branch must
+// resolve the remote's actual default branch and stamp it on the spawned
+// git-source component's KV config. The hardcoded "main" fallback in
+// gitComponentConfig:127 must NOT fire for repo-type adds whose remote
+// default is something else (master / trunk / develop / etc.) — that was
+// the original bug for osh-core and other pre-rename repos.
+//
+// Uses a real local git repo with HEAD on "master" so the test exercises
+// the live ResolveDefaultBranch → ExpandRepoSources → buildSpecs →
+// gitComponentConfig chain end-to-end, with no mocks of the resolution
+// layer.
+func TestAdd_RepoNoBranch_ResolvesRemoteDefault(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	// Create a local repo with HEAD pinned to "master" (pre-rename style).
+	repoPath := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoPath
+		cmd.Env = append(cmd.Env,
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+			"HOME="+t.TempDir(), "PATH=/usr/bin:/bin:/usr/local/bin",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "master")
+	run("commit", "--allow-empty", "-m", "init")
+
+	store := newFakeStore()
+	src := config.SourceEntry{
+		Type: "repo",
+		URL:  repoPath, // local path works for git ls-remote
+		// Branch deliberately empty — the curator hits this path.
+	}
+	results, err := Add(context.Background(), src, store, Options{
+		Org:          "acme",
+		WorkspaceDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	// Find the git-source result and inspect its KV config.
+	var gitInstance string
+	for _, r := range results {
+		if r.FactoryName == "git-source" {
+			gitInstance = r.InstanceName
+			break
+		}
+	}
+	if gitInstance == "" {
+		t.Fatal("no git-source component in Add results")
+	}
+
+	gitCfg, ok := store.puts[gitInstance]
+	if !ok {
+		t.Fatalf("git-source instance %q has no KV write", gitInstance)
+	}
+	var compConfig map[string]any
+	if err := json.Unmarshal(gitCfg.Config, &compConfig); err != nil {
+		t.Fatalf("decode git-source config: %v", err)
+	}
+	branch, _ := compConfig["branch"].(string)
+	if branch != "master" {
+		t.Errorf("git-source branch = %q, want %q — the hardcoded \"main\" fallback fired for a curator-style repo add even though ls-remote should have resolved \"master\"",
+			branch, "master")
+	}
+}
+
+// TestAdd_GitDirect_NoBranch_ResolvesRemoteDefault covers the path where
+// the curator (or any direct caller) submits a flat Type="git" source
+// instead of "repo". Type="git" entries skip ExpandRepoSources's
+// repo-expansion branch but still need default-branch resolution —
+// otherwise the silent "main" fallback in components.go would re-bite us
+// for non-main remotes.
+func TestAdd_GitDirect_NoBranch_ResolvesRemoteDefault(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	repoPath := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoPath
+		cmd.Env = append(cmd.Env,
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+			"HOME="+t.TempDir(), "PATH=/usr/bin:/bin:/usr/local/bin",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "trunk")
+	run("commit", "--allow-empty", "-m", "init")
+
+	store := newFakeStore()
+	src := config.SourceEntry{
+		Type: "git",
+		URL:  repoPath,
+		// Branch deliberately empty.
+	}
+	results, err := Add(context.Background(), src, store, Options{
+		Org:          "acme",
+		WorkspaceDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for flat git source, got %d", len(results))
+	}
+
+	gitCfg := store.puts[results[0].InstanceName]
+	var compConfig map[string]any
+	if err := json.Unmarshal(gitCfg.Config, &compConfig); err != nil {
+		t.Fatalf("decode git-source config: %v", err)
+	}
+	branch, _ := compConfig["branch"].(string)
+	if branch != "trunk" {
+		t.Errorf("git-source branch = %q, want %q — default-branch resolution did not run on a direct Type:\"git\" add",
+			branch, "trunk")
+	}
+}
+
+// TestAdd_GitDirect_NoBranch_ResolutionFails_LeavesBranchEmpty confirms
+// the new behavior when ls-remote can't resolve a default (URL points at
+// something that isn't a git repo, network is down, etc.): branch stays
+// empty in the component config. workspace.clone omits --branch and git
+// uses the remote's actual default — strictly better than force-cloning
+// "main" and breaking pre-rename repos. This is the explicit replacement
+// for the silent hardcoded "main" fallback the user flagged at
+// components.go:127.
+func TestAdd_GitDirect_NoBranch_ResolutionFails_LeavesBranchEmpty(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	// Point at a directory that exists but isn't a git repo — ls-remote
+	// fails fast against it.
+	notARepo := t.TempDir()
+
+	store := newFakeStore()
+	src := config.SourceEntry{
+		Type:   "git",
+		URL:    notARepo,
+		Branch: "",
+	}
+	results, err := Add(context.Background(), src, store, Options{
+		Org:          "acme",
+		WorkspaceDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	gitCfg := store.puts[results[0].InstanceName]
+	var compConfig map[string]any
+	if err := json.Unmarshal(gitCfg.Config, &compConfig); err != nil {
+		t.Fatalf("decode git-source config: %v", err)
+	}
+	branch, _ := compConfig["branch"].(string)
+	if branch != "" {
+		t.Errorf("git-source branch = %q, want empty — the silent \"main\" fallback fired when resolution failed", branch)
 	}
 }
 
