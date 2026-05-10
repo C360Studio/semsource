@@ -1494,15 +1494,22 @@ func TestE2E_HeadlessMode(t *testing.T) {
 
 // writeRuntimeAddConfig writes a semsource.json with a single baseline source
 // so the source-manifest can reach the "ready" phase at boot. The test then
-// drives a second source in at runtime via graph.ingest.add.
-func writeRuntimeAddConfig(t *testing.T, dir string, httpPort int, baselineDocs string) string {
+// drives a second source in at runtime via graph.ingest.add. namespace and
+// mode let one helper power both the standalone and headless variants.
+func writeRuntimeAddConfig(t *testing.T, dir, namespace, mode string, httpPort, wsPort int, baselineDocs string) string {
 	t.Helper()
 	cfg := map[string]any{
-		"namespace": "runtimeadd",
+		"namespace": namespace,
 		"http_port": httpPort,
 		"sources": []map[string]any{
 			{"type": "docs", "paths": []string{baselineDocs}, "watch": false},
 		},
+	}
+	if mode != "" {
+		cfg["mode"] = mode
+	}
+	if wsPort > 0 {
+		cfg["websocket_bind"] = fmt.Sprintf("0.0.0.0:%d", wsPort)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -1539,19 +1546,41 @@ type addReplyEnvelope struct {
 // fix, the AddRequest succeeds at the KV layer but no component starts —
 // this test would fail because the new instance never reports status.
 func TestE2E_RuntimeSourceAdd(t *testing.T) {
+	runRuntimeSourceAddTest(t, "runtimeadd", "")
+}
+
+// TestE2E_RuntimeSourceAdd_Headless mirrors TestE2E_RuntimeSourceAdd but
+// runs in headless mode — semsource shares the KV bucket with a notional
+// host app, no graph subsystem, no WebSocket. Semteams reported the
+// runtime-add bug while running headless, so this test guards the same
+// path in that configuration. If this fails while the standalone variant
+// passes, the bug is headless-specific (e.g. shared-bucket OnChange
+// notification drops, subscription wiring skipped in headless).
+func TestE2E_RuntimeSourceAdd_Headless(t *testing.T) {
+	runRuntimeSourceAddTest(t, "runtimeadd-headless", "headless")
+}
+
+func runRuntimeSourceAddTest(t *testing.T, namespace, mode string) {
+	t.Helper()
 	natsURL, cleanup := startNATS(t)
 	defer cleanup()
 
 	binPath := buildBinary(t)
 	workDir := t.TempDir()
 	httpPort := freePort(t)
+	wsPort := 0
+	if mode != "headless" {
+		// Standalone mode binds the WebSocket; pick a free port so
+		// parallel runs don't clash with 7890 default.
+		wsPort = freePort(t)
+	}
 
 	// Baseline source: the repo's own docs directory. The runtime-added
 	// source will point at a freshly-created temp directory with one
 	// markdown file, so the instance name will be distinct.
 	root := repoRoot(t)
 	baselineDocs := filepath.Join(root, "docs")
-	configPath := writeRuntimeAddConfig(t, workDir, httpPort, baselineDocs)
+	configPath := writeRuntimeAddConfig(t, workDir, namespace, mode, httpPort, wsPort, baselineDocs)
 
 	// Prepare the runtime-added source's content. A single docs file is
 	// enough to trigger a status report (phase: idle, watch:false).
@@ -1577,10 +1606,23 @@ func TestE2E_RuntimeSourceAdd(t *testing.T) {
 		t.Fatalf("create jetstream context: %v", err)
 	}
 	ctx := context.Background()
+	// IMPORTANT: enumerate the data-plane subjects explicitly. A
+	// `graph.ingest.>` wildcard captures the control-plane request
+	// subjects (graph.ingest.add.* / .remove.*) too, and JetStream
+	// answers those captured publishes with a PubAck on the reply
+	// inbox. That PubAck races with source-manifest's AddReply and
+	// always wins, so the caller sees `{"stream":"GRAPH","seq":N}`
+	// instead of the AddReply and concludes the add failed.
 	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "GRAPH",
-		Subjects: []string{"graph.ingest.>"},
-		Storage:  jetstream.MemoryStorage,
+		Name: "GRAPH",
+		Subjects: []string{
+			"graph.ingest.entity",
+			"graph.ingest.batch",
+			"graph.ingest.manifest",
+			"graph.ingest.status",
+			"graph.ingest.predicates",
+		},
+		Storage: jetstream.MemoryStorage,
 	}); err != nil {
 		t.Fatalf("create GRAPH stream: %v", err)
 	}
@@ -1661,12 +1703,23 @@ func TestE2E_RuntimeSourceAdd(t *testing.T) {
 		t.Fatalf("marshal AddRequest: %v", err)
 	}
 
-	// Send the request to graph.ingest.add.{namespace}.
-	reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
+	// Send the request to graph.ingest.add.{namespace}. registerIngestHandlers
+	// runs AFTER manager.StartAll, so the subscriber can briefly not exist
+	// even after /source-manifest/status reports ready (status reflects
+	// component readiness, not handler subscription). Retry the request
+	// on "no responders" with a short backoff instead of failing the test.
+	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
-	msg, err := nc.RequestWithContext(reqCtx, "graph.ingest.add.runtimeadd", addReqBytes)
-	if err != nil {
-		t.Fatalf("graph.ingest.add request failed: %v", err)
+	var msg *nats.Msg
+	for {
+		msg, err = nc.RequestWithContext(reqCtx, "graph.ingest.add."+namespace, addReqBytes)
+		if err == nil {
+			break
+		}
+		if reqCtx.Err() != nil || !strings.Contains(err.Error(), "no responders") {
+			t.Fatalf("graph.ingest.add request failed: %v", err)
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 
 	var reply addReplyEnvelope
@@ -1742,7 +1795,7 @@ func TestE2E_RuntimeSourceAdd(t *testing.T) {
 	}
 	rmCtx, rmCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer rmCancel()
-	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove.runtimeadd", removeBytes)
+	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove."+namespace, removeBytes)
 	if err != nil {
 		t.Fatalf("graph.ingest.remove request failed: %v", err)
 	}
