@@ -879,7 +879,15 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 		"component-manager": types.ServiceConfig{
 			Name:    "component-manager",
 			Enabled: true,
-			Config:  json.RawMessage(`{}`),
+			// watch_config:true wires the ComponentManager to the
+			// ConfigManager's KV watcher. Without it, runtime writes via
+			// graph.ingest.add (sourcespawn.Add → PutComponentToKV) and the
+			// branch watcher land in KV but never trigger component spawn —
+			// only the boot-time snapshot is loaded. Headless mode shares
+			// the bucket with the host app, so foreign writes can log
+			// "factory not found" — harmless (createAndStartComponent logs
+			// and continues), but a known noise source.
+			Config: json.RawMessage(`{"watch_config":true}`),
 		},
 		"metrics": types.ServiceConfig{
 			Name:    "metrics",

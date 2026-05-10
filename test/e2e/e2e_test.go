@@ -1491,3 +1491,327 @@ func TestE2E_HeadlessMode(t *testing.T) {
 	}
 	// Connection refused is expected.
 }
+
+// writeRuntimeAddConfig writes a semsource.json with a single baseline source
+// so the source-manifest can reach the "ready" phase at boot. The test then
+// drives a second source in at runtime via graph.ingest.add.
+func writeRuntimeAddConfig(t *testing.T, dir string, httpPort int, baselineDocs string) string {
+	t.Helper()
+	cfg := map[string]any{
+		"namespace": "runtimeadd",
+		"http_port": httpPort,
+		"sources": []map[string]any{
+			{"type": "docs", "paths": []string{baselineDocs}, "watch": false},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	p := filepath.Join(dir, "semsource.json")
+	if err := os.WriteFile(p, data, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return p
+}
+
+// addReplyEnvelope mirrors processor/source-manifest.AddReply for decoding.
+// Duplicated here to keep the e2e package free of semsource imports.
+type addReplyEnvelope struct {
+	Components []struct {
+		InstanceName string `json:"instance_name"`
+		FactoryName  string `json:"factory_name"`
+		SourceType   string `json:"source_type"`
+		Created      bool   `json:"created"`
+	} `json:"components"`
+	StatusSubject string `json:"status_subject"`
+	ReadyWhen     string `json:"ready_when"`
+	Error         *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// TestE2E_RuntimeSourceAdd proves the curator workflow end-to-end: with
+// watch_config:true on the ComponentManager, a runtime AddRequest written
+// to KV by source-manifest is picked up by ConfigManager's watcher and
+// triggers ComponentManager to actually spawn the component. Without the
+// fix, the AddRequest succeeds at the KV layer but no component starts —
+// this test would fail because the new instance never reports status.
+func TestE2E_RuntimeSourceAdd(t *testing.T) {
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	httpPort := freePort(t)
+
+	// Baseline source: the repo's own docs directory. The runtime-added
+	// source will point at a freshly-created temp directory with one
+	// markdown file, so the instance name will be distinct.
+	root := repoRoot(t)
+	baselineDocs := filepath.Join(root, "docs")
+	configPath := writeRuntimeAddConfig(t, workDir, httpPort, baselineDocs)
+
+	// Prepare the runtime-added source's content. A single docs file is
+	// enough to trigger a status report (phase: idle, watch:false).
+	runtimeDocs := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(runtimeDocs, "added.md"),
+		[]byte("# added at runtime\n\nProves the curator path.\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("seed runtime docs: %v", err)
+	}
+
+	// Create the GRAPH stream before semsource boots so subscribers don't
+	// race with EnsureStreams.
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect to NATS: %v", err)
+	}
+	defer nc.Close()
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     "GRAPH",
+		Subjects: []string{"graph.ingest.>"},
+		Storage:  jetstream.MemoryStorage,
+	}); err != nil {
+		t.Fatalf("create GRAPH stream: %v", err)
+	}
+
+	runCtx, runCancel := context.WithTimeout(ctx, 90*time.Second)
+	defer runCancel()
+
+	cmd := exec.CommandContext(runCtx, binPath, "run",
+		"--config", configPath,
+		"--log-level", "debug",
+		"--nats-url", natsURL,
+	)
+	cmd.Dir = workDir
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start semsource: %v", err)
+	}
+
+	// Capture child output so failures show what semsource was doing.
+	// Also scan for the lifecycle log lines we'll assert on later.
+	var logMu sync.Mutex
+	var stoppedRemovedLines []string
+	scanLog := func(label string, r interface{ Read([]byte) (int, error) }) {
+		s := bufio.NewScanner(r)
+		s.Buffer(make([]byte, 64*1024), 1024*1024)
+		for s.Scan() {
+			line := s.Text()
+			t.Logf("[%s] %s", label, line)
+			if strings.Contains(line, "Component successfully stopped and removed") {
+				logMu.Lock()
+				stoppedRemovedLines = append(stoppedRemovedLines, line)
+				logMu.Unlock()
+			}
+		}
+	}
+	go scanLog("stdout", stdout)
+	go scanLog("stderr", stderr)
+
+	defer func() {
+		cmd.Process.Signal(os.Interrupt)
+		cmd.Wait()
+	}()
+
+	// Wait for the baseline to reach "ready" so we know the component
+	// manager is fully started and the source-manifest is serving.
+	baseline := waitForReady(t, httpPort, 45*time.Second)
+	if baseline.Phase != "ready" {
+		t.Fatalf("baseline did not reach ready: phase=%q, sources=%d", baseline.Phase, len(baseline.Sources))
+	}
+	if len(baseline.Sources) != 1 {
+		t.Fatalf("baseline sources = %d, want 1", len(baseline.Sources))
+	}
+	baselineInstance := baseline.Sources[0].InstanceName
+	t.Logf("baseline ready: instance=%s", baselineInstance)
+
+	// Build the AddRequest payload. Raw JSON keeps the test free of
+	// semsource imports (matching the rest of e2e_test.go).
+	addReq := map[string]any{
+		"source": map[string]any{
+			"type":  "docs",
+			"paths": []string{runtimeDocs},
+			"watch": false,
+		},
+		"provenance": map[string]any{
+			"actor":    "e2e-test",
+			"trace_id": "runtime-add-1",
+		},
+	}
+	addReqBytes, err := json.Marshal(addReq)
+	if err != nil {
+		t.Fatalf("marshal AddRequest: %v", err)
+	}
+
+	// Send the request to graph.ingest.add.{namespace}.
+	reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer reqCancel()
+	msg, err := nc.RequestWithContext(reqCtx, "graph.ingest.add.runtimeadd", addReqBytes)
+	if err != nil {
+		t.Fatalf("graph.ingest.add request failed: %v", err)
+	}
+
+	var reply addReplyEnvelope
+	if err := json.Unmarshal(msg.Data, &reply); err != nil {
+		t.Fatalf("decode AddReply: %v\nraw=%s", err, string(msg.Data))
+	}
+	if reply.Error != nil {
+		t.Fatalf("AddReply.Error = %+v", reply.Error)
+	}
+	if len(reply.Components) != 1 {
+		t.Fatalf("AddReply.Components = %d, want 1\nraw=%s", len(reply.Components), string(msg.Data))
+	}
+	added := reply.Components[0]
+	if added.FactoryName != "doc-source" {
+		t.Errorf("added factory = %q, want doc-source", added.FactoryName)
+	}
+	if added.SourceType != "docs" {
+		t.Errorf("added source_type = %q, want docs", added.SourceType)
+	}
+	if added.InstanceName == "" {
+		t.Fatal("added instance_name is empty")
+	}
+	if added.InstanceName == baselineInstance {
+		t.Fatalf("added instance %q collides with baseline %q", added.InstanceName, baselineInstance)
+	}
+	t.Logf("AddReply ok: instance=%s factory=%s created=%v",
+		added.InstanceName, added.FactoryName, added.Created)
+
+	// Poll status until the newly-spawned instance reports. This is the
+	// load-bearing assertion: without watch_config:true, the KV write
+	// succeeds but no component spawns, so the new instance never appears.
+	deadline := time.Now().Add(30 * time.Second)
+	var sawAdded bool
+	var lastStatus statusPayload
+	for time.Now().Before(deadline) {
+		lastStatus = queryStatusHTTP(t, httpPort)
+		for _, s := range lastStatus.Sources {
+			if s.InstanceName == added.InstanceName {
+				sawAdded = true
+				break
+			}
+		}
+		if sawAdded {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !sawAdded {
+		var names []string
+		for _, s := range lastStatus.Sources {
+			names = append(names, s.InstanceName)
+		}
+		t.Fatalf("runtime-added instance %q never appeared in status within 30s; saw: %v",
+			added.InstanceName, names)
+	}
+	t.Logf("status now reports %d sources including %s", len(lastStatus.Sources), added.InstanceName)
+
+	// Manifest should also reflect the new source.
+	manifest := queryManifestHTTP(t, httpPort)
+	if len(manifest.Sources) != 2 {
+		t.Errorf("manifest sources = %d, want 2 (baseline + runtime)", len(manifest.Sources))
+	}
+
+	// Remove path: send graph.ingest.remove and assert the instance
+	// disappears. Proves the reverse path also works reactively.
+	removeReq := map[string]any{
+		"instance_name": added.InstanceName,
+		"provenance":    map[string]any{"actor": "e2e-test"},
+	}
+	removeBytes, err := json.Marshal(removeReq)
+	if err != nil {
+		t.Fatalf("marshal RemoveRequest: %v", err)
+	}
+	rmCtx, rmCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer rmCancel()
+	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove.runtimeadd", removeBytes)
+	if err != nil {
+		t.Fatalf("graph.ingest.remove request failed: %v", err)
+	}
+	var rmReply struct {
+		InstanceName string `json:"instance_name"`
+		Removed      bool   `json:"removed"`
+		Error        *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rmMsg.Data, &rmReply); err != nil {
+		t.Fatalf("decode RemoveReply: %v\nraw=%s", err, string(rmMsg.Data))
+	}
+	if rmReply.Error != nil {
+		t.Fatalf("RemoveReply.Error = %+v", rmReply.Error)
+	}
+	if !rmReply.Removed {
+		t.Fatal("RemoveReply.Removed = false")
+	}
+
+	// Poll manifest until the removed source is gone. The manifest IS
+	// updated in handleRemoveRequest, unlike the status aggregator which
+	// retains last-known reports indefinitely (a separate gap, out of
+	// scope for the watch_config fix).
+	deadline = time.Now().Add(30 * time.Second)
+	var manifestStillHas bool
+	for time.Now().Before(deadline) {
+		m := queryManifestHTTP(t, httpPort)
+		manifestStillHas = false
+		for _, src := range m.Sources {
+			// Manifest entries don't carry instance names, so the best
+			// proxy is path-match against the runtime-added directory.
+			if src.Type == "docs" {
+				for _, p := range src.Paths {
+					if p == runtimeDocs {
+						manifestStillHas = true
+						break
+					}
+				}
+			}
+			if manifestStillHas {
+				break
+			}
+		}
+		if !manifestStillHas {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if manifestStillHas {
+		t.Errorf("removed source %q still present in manifest after 30s", runtimeDocs)
+	}
+
+	// Spawn lifecycle evidence: the ComponentManager should have logged
+	// "Component successfully stopped and removed" for the runtime
+	// instance, proving the reactive path went all the way through
+	// component-manager (not just the source-manifest republish).
+	logMu.Lock()
+	var sawStopRemove bool
+	for _, line := range stoppedRemovedLines {
+		if strings.Contains(line, added.InstanceName) {
+			sawStopRemove = true
+			break
+		}
+	}
+	logMu.Unlock()
+	if !sawStopRemove {
+		t.Errorf("no 'Component successfully stopped and removed' log for %q — KV-reactive remove path may not have fired",
+			added.InstanceName)
+	}
+}
