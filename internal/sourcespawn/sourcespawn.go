@@ -159,7 +159,7 @@ func AddWithChecker(
 		}
 	}
 
-	specs, err := buildSpecs(src, opts)
+	specs, err := buildSpecs(ctx, src, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,11 @@ func Build(src config.SourceEntry, opts Options) (map[string]types.ComponentConf
 		return nil, &Error{Code: CodeValidationFailed, Message: err.Error()}
 	}
 
-	specs, err := buildSpecs(src, opts)
+	// Build is context-less by contract (used by boot/mapping callers that
+	// don't need network-side default-branch resolution). Use a non-
+	// cancellable background context so the dispatcher signature stays
+	// uniform with the AddWithChecker path.
+	specs, err := buildSpecs(context.Background(), src, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -270,8 +274,10 @@ type componentSpec struct {
 
 // buildSpecs dispatches src to the right per-type builder(s). Instance names
 // are deterministic functions of the SourceEntry's identifying fields — no
-// insertion-order or index dependency.
-func buildSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
+// insertion-order or index dependency. ctx is threaded through for the
+// "repo" path, where ExpandRepoSources runs `git ls-remote --symref` to
+// resolve the remote's default branch.
+func buildSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]componentSpec, error) {
 	switch src.Type {
 	case "ast":
 		name, cfg, err := astComponentConfig(src, opts.Org)
@@ -304,7 +310,7 @@ func buildSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
 		return []componentSpec{{name, src.Type + "-source", src.Type, cfg}}, nil
 
 	case "repo":
-		return repoSpecs(src, opts)
+		return repoSpecs(ctx, src, opts)
 
 	default:
 		return nil, &Error{
@@ -316,13 +322,15 @@ func buildSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
 
 // repoSpecs expands a single-branch repo into git+ast+docs+config specs.
 // Multi-branch (Branches set) is rejected earlier with CodeUnsupportedType.
-func repoSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
+// ctx flows into ExpandRepoSources, which uses it for the
+// `git ls-remote --symref` call that resolves the remote's default
+// branch when src.Branch is empty.
+func repoSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]componentSpec, error) {
 	expanded, err := config.ExpandRepoSources(
-		// ExpandRepoSources takes a context for branch discovery; with
-		// Branches empty it never reads the network and ctx is unused.
-		context.Background(),
+		ctx,
 		[]config.SourceEntry{src},
 		opts.WorkspaceDir,
+		config.ExpandOptions{GitToken: opts.GitToken},
 	)
 	if err != nil {
 		return nil, &Error{
@@ -334,7 +342,7 @@ func repoSpecs(src config.SourceEntry, opts Options) ([]componentSpec, error) {
 
 	var specs []componentSpec
 	for _, entry := range expanded.Sources {
-		sub, err := buildSpecs(entry, opts)
+		sub, err := buildSpecs(ctx, entry, opts)
 		if err != nil {
 			return nil, err
 		}

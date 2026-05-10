@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"os/exec"
 	"testing"
 )
 
@@ -9,7 +10,7 @@ func TestExpandRepoSources_ExpandsSingleRepo(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo", URL: "https://github.com/opensensorhub/osh-core", Language: "java", Watch: true, Branch: "master"},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestExpandRepoSources_PreservesNonRepoSources(t *testing.T) {
 		{Type: "ast", Path: "/some/path"},
 		{Type: "git", URL: "https://example.com/repo"},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,10 +79,12 @@ func TestExpandRepoSources_PreservesNonRepoSources(t *testing.T) {
 func TestExpandRepoSources_MixedSources(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "url", URLs: []string{"https://example.com"}},
-		{Type: "repo", URL: "https://github.com/example/repo"},
+		// Branch set explicitly so ExpandRepoSources doesn't try a live
+		// `git ls-remote` against a fake URL in unit tests.
+		{Type: "repo", URL: "https://github.com/example/repo", Branch: "main"},
 		{Type: "ast", Path: "."},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,7 +108,7 @@ func TestExpandRepoSources_RequiresURLOrPath(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo"},
 	}
-	_, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	_, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
 	if err == nil {
 		t.Fatal("expected error for repo without URL or path")
 	}
@@ -113,9 +116,11 @@ func TestExpandRepoSources_RequiresURLOrPath(t *testing.T) {
 
 func TestExpandRepoSources_LanguagePropagation(t *testing.T) {
 	sources := []SourceEntry{
-		{Type: "repo", URL: "https://github.com/example/repo", Language: "python"},
+		// Branch set explicitly so ExpandRepoSources doesn't try a live
+		// `git ls-remote` against a fake URL in unit tests.
+		{Type: "repo", URL: "https://github.com/example/repo", Language: "python", Branch: "main"},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,11 +135,57 @@ func TestExpandRepoSources_LanguagePropagation(t *testing.T) {
 	t.Error("no ast entry found in expanded sources")
 }
 
+// TestExpandRepoSources_ResolvesDefaultBranch confirms the curator-workflow
+// fix: a "repo" entry with no explicit Branch and a URL gets the remote's
+// default branch stamped onto the expanded git child via `git ls-remote
+// --symref`. Uses a local repo with HEAD on "master" to prove pre-rename
+// repos (osh-core etc.) no longer fall back to a hardcoded "main".
+func TestExpandRepoSources_ResolvesDefaultBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	repoPath := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoPath
+		cmd.Env = append(cmd.Env,
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+			"HOME="+t.TempDir(), "PATH=/usr/bin:/bin:/usr/local/bin",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "master")
+	runGit("commit", "--allow-empty", "-m", "init")
+
+	// Treat the local repo path as a URL — git ls-remote accepts it.
+	sources := []SourceEntry{
+		{Type: "repo", URL: repoPath, Language: "go"},
+	}
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expanded := result.Sources
+	if len(expanded) != 4 {
+		t.Fatalf("expected 4 expanded sources, got %d", len(expanded))
+	}
+	if expanded[0].Type != "git" {
+		t.Fatalf("first expansion should be git, got %q", expanded[0].Type)
+	}
+	if expanded[0].Branch != "master" {
+		t.Errorf("git branch = %q, want resolved remote default %q", expanded[0].Branch, "master")
+	}
+}
+
 func TestExpandRepoSources_LocalRepoPath(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo", Path: "/home/user/projects/my-app", Watch: true},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

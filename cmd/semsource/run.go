@@ -224,7 +224,7 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 	if err != nil {
 		return nil, nil, fmt.Errorf("load config %q: %w", path, err)
 	}
-	result, err := config.ExpandRepoSources(ctx, cfg.Sources, cfg.WorkspaceDir)
+	result, err := config.ExpandRepoSources(ctx, cfg.Sources, cfg.WorkspaceDir, config.ExpandOptions{GitToken: cfg.GitToken})
 	if err != nil {
 		return nil, nil, fmt.Errorf("expand repo sources: %w", err)
 	}

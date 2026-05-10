@@ -199,6 +199,60 @@ func validateBranchName(branch string) error {
 	return nil
 }
 
+// ResolveDefaultBranch returns the remote's default branch by running
+// `git ls-remote --symref <url> HEAD` and parsing the symref. Avoids the
+// hardcoded "main" assumption that breaks pre-rename repos (master),
+// custom defaults (develop, trunk), or repos that have switched defaults.
+//
+// repoURL may be any form git understands: https://, git://, ssh://,
+// git@host:path, or a local filesystem path.
+//
+// When git is unreachable, the URL is unauthenticated, or the remote's
+// HEAD does not resolve to a refs/heads/* target (e.g. a detached default
+// or an empty repo), the function returns an error and the caller should
+// fall back to the static default rather than blocking the workflow.
+func ResolveDefaultBranch(ctx context.Context, repoURL, token string) (string, error) {
+	if repoURL == "" {
+		return "", fmt.Errorf("workspace: repo URL is required")
+	}
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--symref", repoURL, "HEAD")
+	applyAuth(cmd, token)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("workspace: git ls-remote --symref %s HEAD: %w\n%s", repoURL, err, string(out))
+	}
+	return parseSymrefHEAD(string(out))
+}
+
+// parseSymrefHEAD extracts the branch name from `git ls-remote --symref`
+// output. The first line is shaped like:
+//
+//	ref: refs/heads/<branch>\tHEAD
+//
+// Older or unusual servers may put the symref line later, so scan all
+// lines rather than assuming line 0.
+func parseSymrefHEAD(out string) (string, error) {
+	for line := range strings.SplitSeq(out, "\n") {
+		line = strings.TrimSpace(line)
+		rest, ok := strings.CutPrefix(line, "ref: ")
+		if !ok {
+			continue
+		}
+		// Format: "ref: refs/heads/<name>\tHEAD" — split on tab/whitespace,
+		// keep the ref target.
+		ref := strings.SplitN(rest, "\t", 2)[0]
+		ref = strings.Fields(ref)[0]
+		branch, ok := strings.CutPrefix(ref, "refs/heads/")
+		if !ok {
+			// HEAD points somewhere unusual (e.g. refs/tags/* or detached);
+			// we cannot map this to a clonable branch.
+			return "", fmt.Errorf("workspace: HEAD symref %q is not under refs/heads/", ref)
+		}
+		return branch, nil
+	}
+	return "", fmt.Errorf("workspace: no symref for HEAD in ls-remote output")
+}
+
 // BranchSlug converts a branch name to a filesystem-safe slug.
 // Example: "scenario/auth-flow" → "scenario-auth-flow"
 func BranchSlug(branch string) string {

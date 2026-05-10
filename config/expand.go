@@ -3,10 +3,19 @@ package config
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/c360studio/semsource/workspace"
 )
+
+// ExpandOptions carries adjunct settings for ExpandRepoSources. Currently
+// only GitToken is used (to authenticate `git ls-remote` for private
+// remotes during default-branch resolution), but the struct lets us add
+// future knobs without churning every call site.
+type ExpandOptions struct {
+	GitToken string
+}
 
 // BranchWatcherRef captures the configuration needed to start a BranchWatcher
 // at runtime for dynamic branch discovery. Returned by ExpandRepoSources when
@@ -38,8 +47,15 @@ type ExpandResult struct {
 // branch is expanded into its own set of 4 components with branch-scoped
 // paths and entity IDs.
 //
+// When a single-branch repo source has no explicit Branch and a URL,
+// the remote's HEAD symref is consulted (git ls-remote --symref) so the
+// expanded git/ast/docs/config entries track the real default branch —
+// not a hardcoded "main", which would break repos still on master or
+// using develop/trunk. Resolution failure falls back to the static
+// default rather than blocking expansion.
+//
 // workspaceDir is the base directory where repos will be cloned.
-func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir string) (*ExpandResult, error) {
+func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir string, opts ExpandOptions) (*ExpandResult, error) {
 	var expanded []SourceEntry
 	var watchers []BranchWatcherRef
 
@@ -63,6 +79,16 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 				watchers = append(watchers, *watcher)
 			}
 			continue
+		}
+
+		if src.Branch == "" && src.URL != "" {
+			if branch, err := workspace.ResolveDefaultBranch(ctx, src.URL, opts.GitToken); err == nil {
+				src.Branch = branch
+				slog.Debug("resolved remote default branch", "url", src.URL, "branch", branch)
+			} else {
+				slog.Warn("default-branch resolution failed; falling back to static default",
+					"url", src.URL, "error", err)
+			}
 		}
 
 		entries := expandSingleBranch(src, workspaceDir)
