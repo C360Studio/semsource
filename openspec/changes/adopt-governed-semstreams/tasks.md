@@ -80,4 +80,5 @@
 - [x] 8.3 Run graph-event-reviewer review for entity identity, triples, and foreign-edge behavior
   - Live graph smoke covers representative source entities and synthetic binary proof predicates.
 - [x] 8.4 Update README, AGENTS.md, and integration docs after implementation
-- [ ] 8.5 Publish a migration PR with test evidence and a SemOps compatibility note
+- [x] 8.5 Publish a migration PR with test evidence and a SemOps compatibility note
+  - Draft PR: https://github.com/C360Studio/semsource/pull/2
