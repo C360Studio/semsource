@@ -1,8 +1,12 @@
 # Caddyfile for C360 Stack
-# Reverse proxy: Routes semsource graph WebSocket, semstreams-ui, and future backends
+# Reverse proxy: Routes semsource query/status APIs, legacy graph WebSocket,
+# semstreams-ui, and future backends.
 #
 # Port map (internal Docker network):
-#   semsource:7890  — Graph WebSocket output
+#   semsource:7890  — Legacy raw graph WebSocket output
+#   semsource:8080  — ServiceManager HTTP API
+#   semsource:8082  — GraphQL gateway
+#   semsource:9091  — Prometheus metrics
 #   ui:5173         — SemStreams UI (Vite dev)
 #   backend:8080    — Reserved for semspec/semdragon backend
 #
@@ -14,12 +18,23 @@
 }
 
 :3000 {
-	# SemSource graph WebSocket — proxied so consumers connect via Caddy
+	# SemSource legacy graph WebSocket — proxied so clients connect via Caddy
 	handle /graph {
 		reverse_proxy semsource:7890
 	}
 
-	# Health endpoint — checks semsource is alive
+	# SemSource graph query and source-manifest APIs
+	handle /graphql* {
+		reverse_proxy semsource:8082
+	}
+	handle /source-manifest/* {
+		reverse_proxy semsource:8080
+	}
+	handle /metrics {
+		reverse_proxy semsource:9091
+	}
+
+	# Health endpoint — checks the proxy is alive
 	handle /semsource/health {
 		respond "OK" 200
 	}

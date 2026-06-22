@@ -1,8 +1,13 @@
 # SemSource
 
-Graph-first knowledge ingestion for the [SemStreams](https://github.com/C360Studio/semstreams) ecosystem. Point it at code, docs, configs, URLs, or media — it builds a normalized knowledge graph and streams it to downstream consumers via WebSocket.
+Graph-first knowledge ingestion for the [SemStreams](https://github.com/C360Studio/semstreams)
+ecosystem. Point it at code, docs, configs, URLs, or media; it builds governed graph state in
+SemStreams and exposes it through `graph.query.*`, GraphQL, and source status APIs.
 
-Drop a SemSource instance next to any project you want to index. Run one or many — each produces a deterministic graph stream that any SemStreams app (SemSpec, SemDragon, or your own) can consume. Multiple SemSource instances feeding multiple consumers is the intended topology. The federation model ensures `public.*` entities merge cleanly across instances while `{org}.*` entities stay sovereign.
+Drop a SemSource instance next to any project you want to index. Run one or many; each produces
+deterministic 6-part entity IDs and exact predicate ownership claims so SemStreams can store, index,
+and query the graph consistently. Standalone mode bootstraps SemSource's ownership contract. Headless
+mode leaves graph governance to the host app, which is the mode SemSpec uses when it embeds SemSource.
 
 ## Quick Start
 
@@ -25,17 +30,31 @@ semsource init
 
 ## What It Does
 
-SemSource ingests heterogeneous sources and emits a continuously updated knowledge graph stream:
+SemSource ingests heterogeneous sources and maintains a continuously updated governed graph:
 
 ```
-[Your Code] ─┐                                              ┌─→ [SemSpec]
-[Your Docs] ─┤                                              │
-[Config]    ─┼─→ [SemSource] ─→ WebSocket :7890/graph ──────┼─→ [SemDragon]
-[URLs]      ─┤                                              │
-[Media]     ─┘                                              └─→ [Your App]
+[Your Code] ─┐
+[Your Docs] ─┤
+[Config]    ─┼─→ [SemSource processors]
+[URLs]      ─┤              │
+[Media]     ─┘              ▼
+                    graph.ingest.entity
+                             │
+                             ▼
+                       ENTITY_STATES
+                             │
+                             ▼
+                    graph-query / GraphQL
+                             │
+        ┌────────────────────┼────────────┐
+        ▼                    ▼            ▼
+     [SemSpec]          [SemDragon]  [Your App]
 ```
 
-Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`) and a set of semantic triples. Consumers receive SEED, DELTA, RETRACT, and HEARTBEAT events. Multiple SemSource instances can feed the same consumer — federation merges the graphs automatically.
+Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`), semantic
+triples, provenance, and an indexing profile (`content`, `control`, `signal`, or `trace`). Query
+consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. A legacy raw
+WebSocket export still exists in standalone mode, but it is not the primary consumer contract.
 
 ## Source Types
 
@@ -87,7 +106,7 @@ semsource remove --index 2
 
 ## Docker Compose
 
-Run the full stack with the monitoring dashboard:
+Run the local stack with bundled NATS, SemSource, Caddy, and the monitoring dashboard:
 
 ```bash
 docker compose up
@@ -97,11 +116,21 @@ This starts:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Caddy | `localhost:3000` | Reverse proxy — single entry point |
-| SemSource | internal :7890 | Graph WebSocket (proxied at `/graph`) |
-| SemStreams UI | internal :5173 | Monitoring dashboard |
+| Caddy | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and legacy `/graph` |
+| NATS | internal `:4222` | JetStream and KV substrate |
+| SemSource | internal `:7890`, `:8080`, `:8082`, `:9091` | Ingest, ServiceManager, GraphQL, metrics |
+| SemStreams UI | internal `:5173` | Monitoring dashboard |
 
-Access the UI at **http://localhost:3000** and the graph WebSocket at **ws://localhost:3000/graph**.
+Useful local endpoints:
+
+| URL | Description |
+|-----|-------------|
+| `http://localhost:3000` | SemStreams UI |
+| `http://localhost:3000/graphql` | GraphQL gateway |
+| `http://localhost:3000/source-manifest/status` | SemSource readiness/status |
+| `http://localhost:3000/source-manifest/sources` | Configured source manifest |
+| `http://localhost:3000/source-manifest/predicates` | Predicate schema by source type |
+| `ws://localhost:3000/graph` | Legacy raw GRAPH stream export |
 
 ### Configuration
 
@@ -110,13 +139,15 @@ Set these in `.env` or pass as environment variables:
 ```bash
 SEMSOURCE_CONFIG=semsource.json   # Config file in configs/ (default: semsource.json)
 SEMSOURCE_TARGET=.                # Directory to mount as /workspace for ingestion
+NATS_URL=nats://nats:4222         # NATS URL seen by the SemSource container
 LOG_LEVEL=info                    # Log level: debug, info, warn, error
 C360_PORT=3000                    # External port for Caddy
 UI_CONTEXT=../semstreams-ui       # Path to semstreams-ui repo
 ```
 
-NATS is required — SemSource runs on the semstreams ServiceManager, which requires NATS JetStream. The default
-`docker compose up` includes NATS. The `--profile nats` flag is no longer needed.
+NATS is required because SemSource runs on the SemStreams ServiceManager and uses JetStream/KV for
+graph state, ownership, and query indices. Outside Docker, SemSource defaults to
+`nats://localhost:4222`; override it with `--nats-url` or `NATS_URL`.
 
 ### Port Map
 
@@ -124,12 +155,13 @@ Ports are chosen to avoid clashes when running alongside other SemStreams servic
 
 | Port | Service | Notes |
 |------|---------|-------|
-| 3000 | Caddy entry point | UI + graph WebSocket |
-| 4222 | NATS | JetStream, included by default |
-| 7890 | SemSource WebSocket | Internal, proxied via `/graph` |
+| 3000 | Caddy entry point | UI, GraphQL, source-manifest APIs, legacy `/graph` |
+| 4222 | NATS | Internal Docker network by default |
+| 7890 | SemSource WebSocket | Internal legacy raw stream export |
+| 8080 | ServiceManager HTTP API | Internal, proxied under `/source-manifest/*` |
+| 8082 | GraphQL gateway | Internal, proxied at `/graphql` |
+| 9091 | Prometheus metrics | Internal, proxied at `/metrics` |
 | 5173 | SemStreams UI (Vite) | Internal, proxied via `/*` |
-| 8080 | ServiceManager HTTP API | Status, sources, predicates, metrics |
-| 9090 | Prometheus metrics | Scrape endpoint (semstreams alpha.61+) |
 
 ## Config File
 
@@ -151,11 +183,16 @@ Optional top-level fields:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `http_port` | `8080` | ServiceManager HTTP API port |
-| `websocket_bind` | `"0.0.0.0:7890"` | WebSocket server bind address |
-| `websocket_path` | `"/graph"` | WebSocket path |
+| `mode` | `"standalone"` | `standalone` runs graph/query locally; `headless` lets the host own graph governance |
+| `entity_store.nats_url` | — | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set |
+| `graph.gateway_bind` | `"0.0.0.0:8082"` | GraphQL gateway bind address in standalone mode |
+| `metrics.port` | `9091` | Prometheus metrics port |
+| `websocket_bind` | `"0.0.0.0:7890"` | Legacy raw GRAPH stream WebSocket bind address |
+| `websocket_path` | `"/graph"` | Legacy raw GRAPH stream WebSocket path |
 | `workspace_dir` | — | Root directory for relative source paths |
 | `git_token` | — | Token for authenticated remote repo cloning |
 | `media_store_dir` | — | Local directory for media binary storage |
+| `streams` | — | Optional JetStream stream overrides for standalone mode |
 
 Validate without starting the engine:
 
@@ -165,18 +202,34 @@ semsource validate
 
 ## Graph Query & Status API
 
-SemSource exposes graph query and status endpoints via NATS request/reply and HTTP.
+SemSource exposes graph query and status endpoints via NATS request/reply, GraphQL, and HTTP.
 
 ### NATS Subjects
 
-| Subject | Type | Description |
-|---------|------|-------------|
-| `graph.query.entity` | Request/Reply | Query a single entity by ID |
-| `graph.query.relationships` | Request/Reply | Query entity relationships |
-| `graph.query.pathSearch` | Request/Reply | Traverse paths between entities |
-| `graph.query.status` | Request/Reply | Current ingestion status |
-| `graph.query.sources` | Request/Reply | Configured source manifest |
-| `graph.query.predicates` | Request/Reply | Predicate schema by source type |
+| Subject | Description |
+|---------|-------------|
+| `graph.query.entity` | Query a single entity by ID |
+| `graph.query.entityByAlias` | Resolve an entity by alias |
+| `graph.query.batch` | Fetch multiple entities |
+| `graph.query.relationships` | Query entity relationships |
+| `graph.query.pathSearch` | Traverse paths between entities |
+| `graph.query.hierarchyStats` | Summarize hierarchy shape |
+| `graph.query.prefix` | Page entities by ID prefix |
+| `graph.query.spatial` | Spatial query surface |
+| `graph.query.temporal` | Temporal query surface |
+| `graph.query.semantic` | Semantic query surface |
+| `graph.query.similar` | Similarity query surface |
+| `graph.query.localSearch` | Local graph search |
+| `graph.query.globalSearch` | Global graph search |
+| `graph.query.summary` | Graph summary counts |
+| `graph.query.searchGraph` | Search graph result expansion |
+| `graph.query.status` | Current SemSource ingestion status |
+| `graph.query.sources` | Configured source manifest |
+| `graph.query.predicates` | Predicate schema by source type |
+
+Compatibility note: SemStreams beta.114 routes `graph.query.capabilities` from the GraphQL gateway,
+but graph-query does not currently register a responder for it. SemSource does not advertise that
+subject until the upstream responder contract is restored.
 
 ### HTTP Endpoints (ServiceManager, default :8080)
 
@@ -185,7 +238,13 @@ SemSource exposes graph query and status endpoints via NATS request/reply and HT
 | `GET /source-manifest/sources` | Configured sources |
 | `GET /source-manifest/status` | Ingestion status with per-instance phases |
 | `GET /source-manifest/predicates` | Predicate schema grouped by source type |
-| `GET /graphql` | GraphQL gateway (port 8082) |
+
+### GraphQL Gateway (default :8082)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /graphql` | GraphQL playground when enabled |
+| `POST /graphql` | GraphQL query endpoint |
 
 ### Status Phases
 

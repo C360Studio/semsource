@@ -209,19 +209,14 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler
 		},
 	}
 
-	// Only read full file content when a store is configured for binary persistence.
+	// Store the original binary when a store is configured for persistence.
 	if h.store != nil {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			h.logger.Warn("video handler: failed to read file for storage", "path", path, "error", err)
+		storageKey := fmt.Sprintf("videos/%s/%s/original", system, instance)
+		if err := handler.StoreFile(ctx, h.store, storageKey, path); err != nil {
+			h.logger.Warn("video handler: failed to store video binary",
+				"path", path, "error", err)
 		} else {
-			storageKey := fmt.Sprintf("videos/%s/%s/original", system, instance)
-			if err := h.store.Put(ctx, storageKey, content); err != nil {
-				h.logger.Warn("video handler: failed to store video binary",
-					"path", path, "error", err)
-			} else {
-				videoEntity.Properties["storage_ref"] = storageKey
-			}
+			videoEntity.Properties["storage_ref"] = storageKey
 		}
 	}
 

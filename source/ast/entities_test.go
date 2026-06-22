@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/c360studio/semsource/entityid"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 func TestNewCodeEntity(t *testing.T) {
@@ -106,6 +109,7 @@ func TestCodeEntity_Triples(t *testing.T) {
 	entity.StartLine = 10
 	entity.EndLine = 20
 	entity.DocComment = "Foo does something."
+	entity.Signature = "func Foo() error"
 	entity.ContainedBy = "acme.semsource.golang.myproject.file.pkg-foo-go"
 	entity.Calls = []string{"helper", "fmt.Println"}
 	entity.Returns = []string{"error"}
@@ -130,6 +134,7 @@ func TestCodeEntity_Triples(t *testing.T) {
 		CodeEndLine,
 		CodeLines,
 		CodeDocComment,
+		CodeSignature,
 		CodeBelongsTo,
 		DcCreated,
 	}
@@ -173,6 +178,12 @@ func TestCodeEntity_Triples(t *testing.T) {
 	}
 }
 
+func TestCodeEntity_SignaturePredicateRegistered(t *testing.T) {
+	if meta := semvocab.GetPredicateMetadata(CodeSignature); meta == nil {
+		t.Fatalf("CodeSignature predicate %q is not registered", CodeSignature)
+	}
+}
+
 func TestCodeEntity_EntityState(t *testing.T) {
 	entity := NewCodeEntity("acme", "golang", "myproject", TypeStruct, "User", "pkg/user.go")
 	entity.Package = "pkg"
@@ -188,6 +199,64 @@ func TestCodeEntity_EntityState(t *testing.T) {
 	}
 	if state.UpdatedAt.IsZero() {
 		t.Error("state.UpdatedAt should not be zero")
+	}
+	if state.IndexingProfile != semvocab.IndexingProfileContent {
+		t.Errorf("IndexingProfile = %q, want %q", state.IndexingProfile, semvocab.IndexingProfileContent)
+	}
+	assertASTEntityStateID(t, state)
+}
+
+func assertASTEntityStateID(t *testing.T, state *EntityState) {
+	t.Helper()
+
+	if err := entityid.ValidateNATSKVKey(state.ID); err != nil {
+		t.Fatalf("entity ID %q is not a valid NATS KV key: %v", state.ID, err)
+	}
+	parts := strings.Split(state.ID, ".")
+	if len(parts) != 6 {
+		t.Fatalf("entity ID %q has %d parts, want 6", state.ID, len(parts))
+	}
+	for i, part := range parts {
+		if part == "" {
+			t.Fatalf("entity ID %q has empty part %d", state.ID, i)
+		}
+	}
+}
+
+func TestCodeEntity_TriplesAreSelfSubject(t *testing.T) {
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	entity.Contains = []string{"acme.semsource.golang.myproject.method.Bar"}
+	entity.Calls = []string{"acme.semsource.golang.myproject.function.Helper"}
+	entity.Returns = []string{"error"}
+
+	state := entity.EntityState()
+	for i, triple := range state.Triples {
+		if triple.Subject != state.ID {
+			t.Fatalf("triple %d subject = %q, want %q", i, triple.Subject, state.ID)
+		}
+	}
+}
+
+func TestCodeEntity_IndexingProfile(t *testing.T) {
+	tests := []struct {
+		name       string
+		entityType CodeEntityType
+		want       string
+	}{
+		{"function", TypeFunction, semvocab.IndexingProfileContent},
+		{"component", TypeComponent, semvocab.IndexingProfileContent},
+		{"repo", TypeRepo, semvocab.IndexingProfileControl},
+		{"folder", TypeFolder, semvocab.IndexingProfileControl},
+		{"file", TypeFile, semvocab.IndexingProfileControl},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entity := NewCodeEntity("acme", "golang", "myproject", tt.entityType, tt.name, "pkg/item.go")
+			if got := entity.IndexingProfile(); got != tt.want {
+				t.Errorf("IndexingProfile() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

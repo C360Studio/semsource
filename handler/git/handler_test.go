@@ -363,6 +363,23 @@ func TestBranchEntity_Triples(t *testing.T) {
 	}
 }
 
+func TestGitHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	h := githandler.New(githandler.Config{Org: "acme"})
+	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
+		typ:  "git",
+		path: ".",
+	}, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error = %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error = %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error = %v", err)
+	}
+}
+
 func TestIngestEntityStates_NoOrg_ReturnsError(t *testing.T) {
 	h := githandler.New(githandler.DefaultConfig())
 	// No path or URL — should fail at repo resolution, not org.

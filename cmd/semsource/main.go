@@ -1,9 +1,8 @@
 // Command semsource is the SemSource graph ingestion service.
 //
 // It reads a JSON config file, ingests configured sources through registered
-// handlers, normalizes the results into a knowledge graph, and continuously
-// emits graph events (SEED, DELTA, RETRACT, HEARTBEAT) to downstream consumers
-// via the configured output (WebSocket broadcast on :7890 by default).
+// handlers, normalizes the results into governed entity-state payloads, and
+// publishes them to the SemStreams graph stack.
 //
 // Usage:
 //

@@ -10,6 +10,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	cfgfile "github.com/c360studio/semsource/handler/cfgfile"
 	source "github.com/c360studio/semsource/source/vocabulary"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // tripleObject returns the string Object of the first triple in state matching
@@ -85,6 +86,9 @@ require (
 	if modState == nil {
 		t.Fatal("expected a gomod entity state")
 	}
+	if modState.IndexingProfile != semvocab.IndexingProfileControl {
+		t.Errorf("IndexingProfile = %q, want %q", modState.IndexingProfile, semvocab.IndexingProfileControl)
+	}
 	if !strings.HasPrefix(modState.ID, "acme.semsource.config.") {
 		t.Errorf("module entity ID %q does not start with acme.semsource.config.", modState.ID)
 	}
@@ -121,6 +125,62 @@ require (
 	}
 	if !hasIndirect {
 		t.Error("expected at least one dependency entity with ConfigDepIndirect triple")
+	}
+}
+
+func TestIngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"go.mod": `module github.com/example/myapp
+
+go 1.21
+
+require github.com/some/dep v1.2.3
+`,
+		"package.json": `{
+  "name": "my-app",
+  "version": "2.0.0",
+  "dependencies": {
+    "react": "^18.0.0"
+  }
+}`,
+		"Dockerfile": `FROM alpine:3.18
+EXPOSE 8080
+`,
+		"pom.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13</version>
+    </dependency>
+  </dependencies>
+</project>`,
+		"build.gradle": `dependencies {
+    implementation 'org.springframework:spring-core:5.3.21'
+}`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	h := cfgfile.New(nil)
+	cfg := &stubSourceConfig{sourceType: "config", path: dir}
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates: %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error: %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error: %v", err)
 	}
 }
 

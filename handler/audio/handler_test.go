@@ -593,6 +593,25 @@ func TestAudioHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testin
 	}
 }
 
+func TestAudioHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalMP3(t, dir, "track.mp3")
+
+	h := audiohandler.New()
+	cfg := sourceConfig{typ: "audio", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error: %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error: %v", err)
+	}
+}
+
 func TestAudioHandler_IngestEntityStates_MediaTypeTripleIsAudio(t *testing.T) {
 	dir := t.TempDir()
 	writeMinimalMP3(t, dir, "track.mp3")

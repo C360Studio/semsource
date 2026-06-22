@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
+	semgovernance "github.com/c360studio/semsource/internal/governance"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	audiosource "github.com/c360studio/semsource/processor/audio-source"
@@ -122,6 +123,16 @@ func runCmd(args []string) error {
 	}
 	defer nc.Close(context.Background())
 
+	var governanceBoot *semgovernance.Bootstrap
+	if semsourceCfg.IsHeadless() {
+		logger.Info("headless mode — skipping SemSource ownership bootstrap; host app owns graph governance")
+	} else {
+		governanceBoot, err = semgovernance.BootstrapStandalone(signalCtx, nc, logger)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Register factories before starting the config manager so we can drop
 	// components coming from the shared KV bucket whose factory semsource
 	// doesn't own — see pruneForeignComponents.
@@ -148,7 +159,7 @@ func runCmd(args []string) error {
 		pruneForeignComponents(configMgr, registry, logger)
 	}
 
-	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, logger)
+	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, governanceBoot, logger)
 	if err != nil {
 		configMgr.Stop(5 * time.Second)
 		return err
@@ -433,6 +444,7 @@ func createServiceManager(
 	registry *component.Registry,
 	payloadReg *payloadregistry.Registry,
 	configMgr *semconfig.Manager,
+	governanceBoot *semgovernance.Bootstrap,
 	logger *slog.Logger,
 ) (*service.Manager, error) {
 	metricsRegistry := metric.NewMetricsRegistry()
@@ -447,6 +459,11 @@ func createServiceManager(
 	}
 
 	manager := service.NewServiceManager(serviceRegistry)
+	if governanceBoot != nil {
+		manager.RegisterInstance("ownership",
+			service.NewOwnershipService(governanceBoot.Registry, governanceBoot.Heartbeater, metricsRegistry, logger))
+	}
+
 	deps := &service.Dependencies{
 		NATSClient:        nc,
 		MetricsRegistry:   metricsRegistry,
@@ -722,6 +739,33 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	}, nil
 }
 
+func graphQueryInputPorts() []map[string]any {
+	return []map[string]any{
+		{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
+		{"name": "query_entity_by_alias", "type": "nats-request", "subject": "graph.query.entityByAlias"},
+		{"name": "query_batch", "type": "nats-request", "subject": "graph.query.batch"},
+		{"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
+		{"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
+		{"name": "query_hierarchy_stats", "type": "nats-request", "subject": "graph.query.hierarchyStats"},
+		{"name": "query_prefix", "type": "nats-request", "subject": "graph.query.prefix"},
+		{"name": "query_spatial", "type": "nats-request", "subject": "graph.query.spatial"},
+		{"name": "query_temporal", "type": "nats-request", "subject": "graph.query.temporal"},
+		{"name": "query_semantic", "type": "nats-request", "subject": "graph.query.semantic"},
+		{"name": "query_similar", "type": "nats-request", "subject": "graph.query.similar"},
+		{"name": "local_search", "type": "nats-request", "subject": "graph.query.localSearch"},
+		{"name": "global_search", "type": "nats-request", "subject": "graph.query.globalSearch"},
+		{"name": "query_summary", "type": "nats-request", "subject": "graph.query.summary"},
+		{"name": "query_search_graph", "type": "nats-request", "subject": "graph.query.searchGraph"},
+	}
+}
+
+func graphGatewayOutputPorts() []map[string]any {
+	return []map[string]any{
+		{"name": "queries", "type": "nats-request", "subject": "graph.query.*"},
+		{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
+	}
+}
+
 // graphSubsystemComponents returns the built-in semstreams graph components:
 // ingest, index, query, and gateway.
 func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, error) {
@@ -759,6 +803,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			name:     "graph-ingest",
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
+				"enforce_owner_lease": false,
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{
@@ -815,11 +860,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
 				"ports": map[string]any{
-					"inputs": []map[string]any{
-						{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
-						{"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
-						{"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
-					},
+					"inputs": graphQueryInputPorts(),
 				},
 			},
 		},
@@ -831,9 +872,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 					"inputs": []map[string]any{
 						{"name": "http", "type": "http", "subject": "/graphql"},
 					},
-					"outputs": []map[string]any{
-						{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
-					},
+					"outputs": graphGatewayOutputPorts(),
 				},
 				"bind_address":      gatewayBind,
 				"enable_playground": enablePlayground,

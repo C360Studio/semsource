@@ -1,6 +1,10 @@
 # ADR-0002: Tier Support and Model Registry Passthrough
 
 > **Status:** Accepted (Statistical Tier Implemented) | **Date:** 2026-03-12
+>
+> **Current integration note (2026-06):** The tiering decision still applies, but downstream
+> consumers should access SemSource through governed graph query surfaces rather than treating the
+> WebSocket export as the main integration path.
 
 ## Context
 

@@ -110,6 +110,10 @@ type EntityState struct {
 	// When set, large content (e.g. document body) lives in the store rather
 	// than inline in a triple. Nil means all content is in Triples.
 	StorageRef *message.StorageReference
+
+	// IndexingProfile declares how SemStreams should treat this entity for
+	// semantic indexing: content, control, signal, or trace.
+	IndexingProfile string
 }
 
 // ChangeEvent is emitted by a handler's Watch channel when a source change is detected.

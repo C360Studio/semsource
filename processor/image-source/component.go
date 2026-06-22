@@ -190,7 +190,14 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 	}
 
 	for _, state := range states {
-		payload := entityStateToPayload(state)
+		payload, err := entityStateToPayload(state)
+		if err != nil {
+			c.logger.Warn("Invalid image entity state",
+				"id", state.ID,
+				"error", err)
+			c.ingestErrors.Add(1)
+			continue
+		}
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish image entity",
 				"id", state.ID,
@@ -256,7 +263,14 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		"entity_states", len(event.EntityStates))
 
 	for _, state := range event.EntityStates {
-		payload := entityStateToPayload(state)
+		payload, err := entityStateToPayload(state)
+		if err != nil {
+			c.logger.Warn("Invalid image entity state on change",
+				"id", state.ID,
+				"error", err)
+			c.ingestErrors.Add(1)
+			continue
+		}
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish image entity on change",
 				"id", state.ID,
@@ -272,12 +286,8 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 
 // entityStateToPayload converts a handler.EntityState to a graph.EntityPayload
 // for publication to the NATS graph ingestion stream.
-func entityStateToPayload(state *handler.EntityState) *graph.EntityPayload {
-	return &graph.EntityPayload{
-		ID:         state.ID,
-		TripleData: state.Triples,
-		UpdatedAt:  state.UpdatedAt,
-	}
+func entityStateToPayload(state *handler.EntityState) (*graph.EntityPayload, error) {
+	return entitypub.PayloadFromState(state)
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.

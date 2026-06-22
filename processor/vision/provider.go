@@ -2,9 +2,9 @@
 // with ML-generated vision labels by sending binary content to a pluggable
 // vision model backend.
 //
-// The processor sits in the consumer flow between WebSocket input and graph
-// ingestion. It operates on handler.RawEntity slices pre-normalization, so
-// entity IDs are not yet assigned when Process is called.
+// The processor enriches handler.RawEntity slices before SemSource normalizes
+// them into governed graph payloads, so entity IDs are not yet assigned when
+// Process is called.
 //
 // Usage:
 //

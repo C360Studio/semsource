@@ -9,6 +9,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // Entity is a fully-typed video entity that produces triples using
@@ -59,9 +60,10 @@ func (e *Entity) Triples() []message.Triple {
 // EntityState converts the Entity to a handler.EntityState for graph publication.
 func (e *Entity) EntityState() *handler.EntityState {
 	state := &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileControl,
 	}
 	if e.StorageRef != "" && e.StoreBucket != "" {
 		state.StorageRef = &message.StorageReference{
@@ -125,9 +127,10 @@ func (e *KeyframeEntity) Triples() []message.Triple {
 // EntityState converts the KeyframeEntity to a handler.EntityState for graph publication.
 func (e *KeyframeEntity) EntityState() *handler.EntityState {
 	state := &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileTrace,
 	}
 	if e.StorageRef != "" && e.StoreBucket != "" {
 		state.StorageRef = &message.StorageReference{

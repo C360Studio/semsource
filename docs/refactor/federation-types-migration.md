@@ -3,6 +3,10 @@
 > **Note (2026-03):** This document records the migration completed in early March 2026.
 > The engine, emitter, and normalizer packages referenced here have since been replaced by
 > semstreams processor components. See `processor/*/` for the current architecture.
+>
+> **Current integration note (2026-06):** The active migration target is governed SemStreams graph
+> state with explicit ownership contracts and query surfaces. Treat the federation merge language
+> below as historical context, not the SemSource/SemSpec integration contract.
 
 ## What Changed
 

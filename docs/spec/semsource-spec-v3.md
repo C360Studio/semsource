@@ -2,6 +2,11 @@
 
 > Graph-first knowledge ingestion for the SemStream platform  
 > **Status:** Draft | **Version:** 0.3.0 | **Date:** March 2026
+>
+> **Historical note (2026-06):** This spec records the original WebSocket/federation-era design.
+> Current integration work uses governed SemStreams graph state, `graph.query.*`, GraphQL, explicit
+> predicate ownership, and indexing profiles. See `docs/integration/m5-consumer-integration.md` and
+> `openspec/changes/adopt-governed-semstreams/` for the active migration plan.
 
 ---
 

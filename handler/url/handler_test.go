@@ -447,6 +447,27 @@ func TestURLHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing
 	}
 }
 
+func TestURLHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html>content</html>"))
+	}))
+	defer srv.Close()
+
+	h := urlhandler.NewWithClient(nil, srv.Client())
+	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error: %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error: %v", err)
+	}
+}
+
 func TestURLHandler_IngestEntityStates_DeterministicID(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("content"))

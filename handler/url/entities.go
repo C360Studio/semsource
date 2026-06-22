@@ -9,6 +9,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // PageEntity is a fully-typed URL page entity that builds triples directly
@@ -78,9 +79,10 @@ func (e *PageEntity) Triples() []message.Triple {
 // EntityState converts the PageEntity to a handler.EntityState for direct graph publication.
 func (e *PageEntity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileContent,
 	}
 }
 

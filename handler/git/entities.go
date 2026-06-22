@@ -7,6 +7,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // BuildCommitEntity constructs a RawEntity for a git commit.
@@ -144,9 +145,10 @@ func (e *CommitEntity) Triples() []message.Triple {
 // EntityState converts the CommitEntity to a handler.EntityState for graph publication.
 func (e *CommitEntity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileContent,
 	}
 }
 
@@ -184,9 +186,10 @@ func (e *AuthorEntity) Triples() []message.Triple {
 // EntityState converts the AuthorEntity to a handler.EntityState for graph publication.
 func (e *AuthorEntity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileControl,
 	}
 }
 
@@ -224,8 +227,9 @@ func (e *BranchEntity) Triples() []message.Triple {
 // EntityState converts the BranchEntity to a handler.EntityState for graph publication.
 func (e *BranchEntity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileControl,
 	}
 }

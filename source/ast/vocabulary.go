@@ -149,6 +149,11 @@ func registerDocPredicates() {
 		vocabulary.WithDescription("Documentation comment text"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(CodeNamespace+"docComment"))
+
+	vocabulary.Register(CodeSignature,
+		vocabulary.WithDescription("Rendered source-language signature for semantic search"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(CodeNamespace+"signature"))
 }
 
 func registerCapabilityPredicates() {

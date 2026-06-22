@@ -209,19 +209,14 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 		},
 	}
 
-	// Only read full file content when a store is configured for binary persistence.
+	// Store the original binary when a store is configured for persistence.
 	if h.store != nil {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			h.logger.Warn("audio handler: failed to read file for storage", "path", path, "error", err)
+		storageKey := fmt.Sprintf("audio/%s/%s/original", system, instance)
+		if err := handler.StoreFile(ctx, h.store, storageKey, path); err != nil {
+			h.logger.Warn("audio handler: failed to store audio binary",
+				"path", path, "error", err)
 		} else {
-			storageKey := fmt.Sprintf("audio/%s/%s/original", system, instance)
-			if err := h.store.Put(ctx, storageKey, content); err != nil {
-				h.logger.Warn("audio handler: failed to store audio binary",
-					"path", path, "error", err)
-			} else {
-				audioEntity.Properties["storage_ref"] = storageKey
-			}
+			audioEntity.Properties["storage_ref"] = storageKey
 		}
 	}
 

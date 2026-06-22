@@ -799,6 +799,25 @@ func TestImageHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testin
 	}
 }
 
+func TestImageHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	dir := t.TempDir()
+	write1x1PNG(t, dir, "photo.png")
+
+	h := imagehandler.New()
+	cfg := sourceConfig{typ: "image", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error: %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error: %v", err)
+	}
+}
+
 func TestImageHandler_IngestEntityStates_MediaTypeTripleIsImage(t *testing.T) {
 	dir := t.TempDir()
 	write1x1PNG(t, dir, "photo.png")
