@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	source "github.com/c360studio/semsource/source/vocabulary"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // ---------------------------------------------------------------------------
@@ -397,6 +398,11 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	if len(states) != 2 {
 		t.Fatalf("state count: got %d, want 2", len(states))
 	}
+	for _, state := range states {
+		if state.IndexingProfile != semvocab.IndexingProfileContent {
+			t.Errorf("IndexingProfile = %q, want %q", state.IndexingProfile, semvocab.IndexingProfileContent)
+		}
+	}
 }
 
 func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
@@ -461,6 +467,25 @@ func TestDocHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing
 		if !predicates[p] {
 			t.Errorf("missing triple with predicate %q", p)
 		}
+	}
+}
+
+func TestDocHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "doc.md", "# My Doc\nSome content.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error: %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error: %v", err)
 	}
 }
 

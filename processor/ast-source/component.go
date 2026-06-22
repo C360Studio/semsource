@@ -494,10 +494,9 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult) error {
 	for _, entity := range result.Entities {
 		state := entity.EntityState()
-		payload := &graph.EntityPayload{
-			ID:         state.ID,
-			TripleData: state.Triples,
-			UpdatedAt:  state.UpdatedAt,
+		payload, err := payloadFromASTState(state)
+		if err != nil {
+			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
 		}
 		if err := c.publishEntity(ctx, payload); err != nil {
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)
@@ -514,10 +513,12 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 	entities := semsourceast.BuildHierarchy(results, org, project)
 	for _, entity := range entities {
 		state := entity.EntityState()
-		payload := &graph.EntityPayload{
-			ID:         state.ID,
-			TripleData: state.Triples,
-			UpdatedAt:  state.UpdatedAt,
+		payload, err := payloadFromASTState(state)
+		if err != nil {
+			c.logger.Warn("Invalid hierarchy entity state",
+				"id", state.ID,
+				"error", err)
+			continue
 		}
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish hierarchy entity",
@@ -535,10 +536,12 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 	entities := semsourceast.BuildFolderChain(filePath, org, project)
 	for _, entity := range entities {
 		state := entity.EntityState()
-		payload := &graph.EntityPayload{
-			ID:         state.ID,
-			TripleData: state.Triples,
-			UpdatedAt:  state.UpdatedAt,
+		payload, err := payloadFromASTState(state)
+		if err != nil {
+			c.logger.Warn("Invalid folder entity state",
+				"id", state.ID,
+				"error", err)
+			continue
 		}
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish folder entity",
@@ -548,6 +551,19 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 		c.entitiesIndexed.Add(1)
 		c.trackEntityType(state.ID)
 	}
+}
+
+func payloadFromASTState(state *semsourceast.EntityState) (*graph.EntityPayload, error) {
+	payload := &graph.EntityPayload{
+		ID:                  state.ID,
+		TripleData:          state.Triples,
+		UpdatedAt:           state.UpdatedAt,
+		IndexingProfileHint: state.IndexingProfile,
+	}
+	if err := entitypub.ValidatePayload(payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.

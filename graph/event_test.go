@@ -24,7 +24,8 @@ func TestEntityPayload_JSONRoundTrip(t *testing.T) {
 				Confidence: 1.0,
 			},
 		},
-		UpdatedAt: now,
+		UpdatedAt:           now,
+		IndexingProfileHint: graph.IndexingProfileContent,
 	}
 
 	data, err := json.Marshal(original)
@@ -46,6 +47,9 @@ func TestEntityPayload_JSONRoundTrip(t *testing.T) {
 	if restored.TripleData[0].Predicate != "git.commit.sha" {
 		t.Errorf("Triple predicate = %q, want %q", restored.TripleData[0].Predicate, "git.commit.sha")
 	}
+	if restored.IndexingProfile() != graph.IndexingProfileContent {
+		t.Errorf("IndexingProfile() = %q, want %q", restored.IndexingProfile(), graph.IndexingProfileContent)
+	}
 }
 
 func TestEntityPayload_Graphable(t *testing.T) {
@@ -54,6 +58,7 @@ func TestEntityPayload_Graphable(t *testing.T) {
 		TripleData: []message.Triple{
 			{Subject: "acme.semsource.golang.my-repo.function.New", Predicate: "golang.function.name", Object: "New"},
 		},
+		IndexingProfileHint: graph.IndexingProfileContent,
 	}
 
 	if p.EntityID() != p.ID {
@@ -61,6 +66,9 @@ func TestEntityPayload_Graphable(t *testing.T) {
 	}
 	if len(p.Triples()) != 1 {
 		t.Errorf("Triples() len = %d, want 1", len(p.Triples()))
+	}
+	if p.IndexingProfile() != graph.IndexingProfileContent {
+		t.Errorf("IndexingProfile() = %q, want %q", p.IndexingProfile(), graph.IndexingProfileContent)
 	}
 }
 
@@ -81,7 +89,10 @@ func TestEntityPayload_Schema(t *testing.T) {
 
 func TestEntityPayload_Validate(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
-		p := &graph.EntityPayload{ID: "acme.semsource.git.repo.commit.abc"}
+		p := &graph.EntityPayload{
+			ID:                  "acme.semsource.git.repo.commit.abc",
+			IndexingProfileHint: graph.IndexingProfileContent,
+		}
 		if err := p.Validate(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -91,6 +102,23 @@ func TestEntityPayload_Validate(t *testing.T) {
 		p := &graph.EntityPayload{}
 		if err := p.Validate(); err == nil {
 			t.Error("expected error for empty ID")
+		}
+	})
+
+	t.Run("missing indexing profile", func(t *testing.T) {
+		p := &graph.EntityPayload{ID: "acme.semsource.git.repo.commit.abc"}
+		if err := p.Validate(); err == nil {
+			t.Error("expected error for missing indexing profile")
+		}
+	})
+
+	t.Run("invalid indexing profile", func(t *testing.T) {
+		p := &graph.EntityPayload{
+			ID:                  "acme.semsource.git.repo.commit.abc",
+			IndexingProfileHint: "hotdog",
+		}
+		if err := p.Validate(); err == nil {
+			t.Error("expected error for invalid indexing profile")
 		}
 	})
 }

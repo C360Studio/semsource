@@ -213,11 +213,13 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 	}
 
 	for _, state := range states {
-		payload := &graph.EntityPayload{
-			ID:         state.ID,
-			TripleData: state.Triples,
-			UpdatedAt:  state.UpdatedAt,
-			Storage:    state.StorageRef,
+		payload, err := entitypub.PayloadFromState(state)
+		if err != nil {
+			c.logger.Warn("Invalid doc entity state",
+				"id", state.ID,
+				"error", err)
+			c.ingestErrors.Add(1)
+			continue
 		}
 
 		if err := c.publishEntity(ctx, payload); err != nil {
@@ -289,11 +291,13 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	// Prefer pre-built EntityStates — no normalizer pass required.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
-			payload := &graph.EntityPayload{
-				ID:         state.ID,
-				TripleData: state.Triples,
-				UpdatedAt:  state.UpdatedAt,
-				Storage:    state.StorageRef,
+			payload, err := entitypub.PayloadFromState(state)
+			if err != nil {
+				c.logger.Warn("Invalid doc entity state on change",
+					"id", state.ID,
+					"error", err)
+				c.ingestErrors.Add(1)
+				continue
 			}
 			if err := c.publishEntity(ctx, payload); err != nil {
 				c.logger.Warn("Failed to publish doc entity on change",

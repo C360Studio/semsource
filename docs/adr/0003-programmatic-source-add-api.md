@@ -58,7 +58,7 @@ Two new NATS request/reply subjects, symmetric with the existing
 
 The `{namespace}` suffix is the SemSource `Namespace` config field
 (`config/config.go:72`). Targeting by namespace gives callers a
-deterministic, federation-aware addressing model without needing a
+deterministic namespace-targeted addressing model without needing a
 service registry. SemSource subscribes only to its own namespace's
 subjects.
 
@@ -253,8 +253,8 @@ new. Callers can retry safely.
    covers SemTeams's deployment topology. If multiple physical
    SemSource instances share a namespace, which one owns a given
    add? (NATS will deliver to one queue-group member; that's the
-   simplest answer, but worth confirming this matches federation
-   expectations.)
+   simplest answer, but worth confirming this matches governed graph
+   ownership expectations.)
 2. Confirm `provenance` block contents — what shape will ADR-030's
    lifted identity arrive in? SemSource records as-is, but SemTeams
    should pin a schema so downstream consumers can rely on its keys.

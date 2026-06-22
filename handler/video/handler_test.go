@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	videohandler "github.com/c360studio/semsource/handler/video"
 	source "github.com/c360studio/semsource/source/vocabulary"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,20 @@ func ffmpegAvailable() bool {
 	return errProbe == nil && errFfmpeg == nil
 }
 
+func writeMinimalMP4(t *testing.T, dir, name string) {
+	t.Helper()
+
+	videoPath := filepath.Join(dir, name)
+	cmd := exec.Command("ffmpeg",
+		"-f", "lavfi", "-i", "color=c=red:s=160x120:d=1",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-y", videoPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v\n%s", err, out)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // SourceType / Supports
 // ---------------------------------------------------------------------------
@@ -170,6 +185,27 @@ func TestVideoHandler_FormatTimestamp(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("FormatTimestamp(%v) = %q, want %q", tt.d, got, tt.want)
 		}
+	}
+}
+
+func TestKeyframeEntityState_IndexingProfileTrace(t *testing.T) {
+	now := time.Now().UTC()
+	keyframe := &videohandler.KeyframeEntity{
+		ID:         "acme.semsource.media.videos.keyframe.demo-1s",
+		Timestamp:  "1s",
+		FrameIndex: 1,
+		Width:      160,
+		Height:     120,
+		VideoID:    "acme.semsource.media.videos.video.demo",
+		IndexedAt:  now,
+	}
+
+	state := keyframe.EntityState()
+	if state.IndexingProfile != semvocab.IndexingProfileTrace {
+		t.Fatalf("IndexingProfile = %q, want %q", state.IndexingProfile, semvocab.IndexingProfileTrace)
+	}
+	if state.IndexingProfile == semvocab.IndexingProfileContent {
+		t.Fatal("keyframe trace artifact must not be indexed as content")
 	}
 }
 
@@ -790,6 +826,33 @@ func TestVideoHandler_IngestEntityStates_WithFFmpeg(t *testing.T) {
 		if !hasKeyframeOf {
 			t.Errorf("keyframe entity %q missing source.media.keyframe_of triple", state.ID)
 		}
+	}
+}
+
+func TestVideoHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg/ffprobe not available in PATH")
+	}
+	dir := t.TempDir()
+	writeMinimalMP4(t, dir, "clip.mp4")
+
+	h := videohandler.New()
+	cfg := sourceConfig{
+		typ:              "video",
+		path:             dir,
+		keyframeMode:     "interval",
+		keyframeInterval: "1s",
+	}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if err := handler.ValidateSelfSubjectStates(states); err != nil {
+		t.Fatalf("ValidateSelfSubjectStates() error: %v", err)
+	}
+	if err := handler.ValidateEntityStateIDs(states); err != nil {
+		t.Fatalf("ValidateEntityStateIDs() error: %v", err)
 	}
 }
 

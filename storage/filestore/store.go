@@ -5,9 +5,11 @@
 package filestore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -68,8 +70,19 @@ func (s *Store) Close() error {
 // created as needed. The write is performed via a temp file in the same
 // directory as the target, then renamed to the final path.
 func (s *Store) Put(ctx context.Context, key string, data []byte) error {
+	_, err := s.putReader(ctx, key, bytes.NewReader(data))
+	return err
+}
+
+// PutReader writes streamed data to the given key atomically. It avoids forcing
+// callers to materialize large binaries in memory before persistence.
+func (s *Store) PutReader(ctx context.Context, key string, r io.Reader) (int64, error) {
+	return s.putReader(ctx, key, r)
+}
+
+func (s *Store) putReader(ctx context.Context, key string, r io.Reader) (int64, error) {
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("filestore: Put %q: %w", key, err)
+		return 0, fmt.Errorf("filestore: Put %q: %w", key, err)
 	}
 
 	s.mu.Lock()
@@ -77,20 +90,20 @@ func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 
 	target, err := s.resolve(key)
 	if err != nil {
-		return fmt.Errorf("filestore: Put %q: %w", key, err)
+		return 0, fmt.Errorf("filestore: Put %q: %w", key, err)
 	}
 
 	// Ensure the parent directory exists before creating the temp file there.
 	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("filestore: Put %q: create parent dir: %w", key, err)
+		return 0, fmt.Errorf("filestore: Put %q: create parent dir: %w", key, err)
 	}
 
 	// Write to a temp file in the same directory so the rename is atomic on
 	// POSIX systems (same filesystem, single syscall).
 	tmp, err := os.CreateTemp(dir, ".tmp-")
 	if err != nil {
-		return fmt.Errorf("filestore: Put %q: create temp file: %w", key, err)
+		return 0, fmt.Errorf("filestore: Put %q: create temp file: %w", key, err)
 	}
 	tmpName := tmp.Name()
 
@@ -103,18 +116,31 @@ func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 		}
 	}()
 
-	if _, err := tmp.Write(data); err != nil {
-		return fmt.Errorf("filestore: Put %q: write temp file: %w", key, err)
+	written, err := io.Copy(tmp, &contextReader{ctx: ctx, r: r})
+	if err != nil {
+		return written, fmt.Errorf("filestore: Put %q: write temp file: %w", key, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("filestore: Put %q: close temp file: %w", key, err)
+		return written, fmt.Errorf("filestore: Put %q: close temp file: %w", key, err)
 	}
 
 	if err := os.Rename(tmpName, target); err != nil {
-		return fmt.Errorf("filestore: Put %q: rename to target: %w", key, err)
+		return written, fmt.Errorf("filestore: Put %q: rename to target: %w", key, err)
 	}
 	committed = true
-	return nil
+	return written, nil
+}
+
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.r.Read(p)
 }
 
 // Get retrieves the data stored at key. Returns an error if the key does not

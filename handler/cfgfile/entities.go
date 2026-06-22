@@ -5,11 +5,21 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/message"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
+
+func controlState(id string, triples []message.Triple, indexedAt time.Time) *handler.EntityState {
+	return &handler.EntityState{
+		ID:              id,
+		Triples:         triples,
+		UpdatedAt:       indexedAt,
+		IndexingProfile: semvocab.IndexingProfileControl,
+	}
+}
 
 // --------------------------------------------------------------------------
 // Typed entity structs — bypass the normalizer, build triples directly.
@@ -66,7 +76,7 @@ func (e *goModuleEntity) triples() []message.Triple {
 }
 
 func (e *goModuleEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -110,7 +120,7 @@ func (e *goDependencyEntity) triples() []message.Triple {
 }
 
 func (e *goDependencyEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -166,7 +176,7 @@ func (e *npmPackageEntity) triples() []message.Triple {
 }
 
 func (e *npmPackageEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -209,7 +219,7 @@ func (e *npmDependencyEntity) triples() []message.Triple {
 }
 
 func (e *npmDependencyEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -258,7 +268,7 @@ func (e *dockerImageEntity) triples() []message.Triple {
 }
 
 func (e *dockerImageEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -331,7 +341,7 @@ func (e *mavenProjectEntity) triples() []message.Triple {
 }
 
 func (e *mavenProjectEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -381,7 +391,7 @@ func (e *mavenDependencyEntity) triples() []message.Triple {
 }
 
 func (e *mavenDependencyEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -422,7 +432,7 @@ func (e *pomModuleEntity) triples() []message.Triple {
 }
 
 func (e *pomModuleEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -476,7 +486,7 @@ func (e *gradleProjectEntity) triples() []message.Triple {
 }
 
 func (e *gradleProjectEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------
@@ -526,7 +536,7 @@ func (e *gradleDependencyEntity) triples() []message.Triple {
 }
 
 func (e *gradleDependencyEntity) entityState() *handler.EntityState {
-	return &handler.EntityState{ID: e.ID, Triples: e.triples(), UpdatedAt: e.IndexedAt}
+	return controlState(e.ID, e.triples(), e.IndexedAt)
 }
 
 // --------------------------------------------------------------------------

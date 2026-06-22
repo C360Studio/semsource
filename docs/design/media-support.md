@@ -339,28 +339,32 @@ Each keyframe entity has:
 
 ## Future: Vision Processor Integration
 
-The `source.media.vision.*` predicate namespace is reserved for downstream ML processors. The pattern follows FederationProcessor — a processor sits in the consumer flow and enriches media entities with vision labels.
+The `source.media.vision.*` predicate namespace is reserved for downstream ML processors. In the
+governed graph model, a vision processor should consume media entities from graph state or
+`graph.ingest.entity`, fetch binary content through `StorageReference`, and publish owned enrichment
+triples back through SemStreams graph ingest.
 
 ```
-[SemSource] --media entities--> [WebSocket]
-                                    |
-[Consumer Flow]                     v
-                           [VisionProcessor]
-                                    |
-                              adds triples:
-                              - vision.labels
-                              - vision.description
-                              - vision.objects
-                              - vision.text (OCR)
-                                    |
-                              [graph ingestion]
+[SemSource] -> graph.ingest.entity -> ENTITY_STATES
+                                      |
+                                      v
+                              [VisionProcessor]
+                                      |
+                                adds triples:
+                                - vision.labels
+                                - vision.description
+                                - vision.objects
+                                - vision.text (OCR)
+                                      |
+                                      v
+                               graph.ingest.entity
 ```
 
 The VisionProcessor:
-1. Receives media entities from the graph event stream
+1. Receives or queries media entities from the governed graph
 2. Fetches binary from ObjectStore via `StorageReference`
 3. Sends to vision model (Claude, OpenAI Vision, local model)
-4. Appends `source.media.vision.*` triples to the entity
+4. Publishes governed `source.media.vision.*` triples to graph ingest
 5. Optionally creates `depicts` edges linking images to code entities
 
 This keeps SemSource focused on ingestion. Vision labeling is a consumer-side concern.

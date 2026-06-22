@@ -140,7 +140,7 @@ const (
 
 // MediaTypeValue represents the media entity type discriminator.
 // Used as the value for the MediaType predicate to distinguish image, video,
-// and keyframe entities stored in the same graph.
+// keyframe, audio, and opaque binary entities stored in the same graph.
 type MediaTypeValue string
 
 const (
@@ -157,6 +157,9 @@ const (
 
 	// MediaTypeAudio identifies an audio media entity.
 	MediaTypeAudio MediaTypeValue = "audio"
+
+	// MediaTypeBinary identifies an opaque binary artifact.
+	MediaTypeBinary MediaTypeValue = "binary"
 )
 
 // RelatedDomains maps domains to conceptually related domains.

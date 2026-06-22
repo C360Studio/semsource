@@ -95,6 +95,28 @@ func TestPutGet_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestPutReaderGet_RoundTrip(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	data := bytes.Repeat([]byte("binary-fixture-"), 1024)
+
+	written, err := s.PutReader(ctx, "bin/streamed", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("PutReader: %v", err)
+	}
+	if written != int64(len(data)) {
+		t.Fatalf("written = %d, want %d", written, len(data))
+	}
+
+	got, err := s.Get(ctx, "bin/streamed")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Fatal("stored data mismatch")
+	}
+}
+
 func TestPut_CreatesIntermediateDirectories(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()

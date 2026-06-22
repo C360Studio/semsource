@@ -1,21 +1,25 @@
 # C360 SemSource Stack
 #
-# Runs semsource (graph ingestion), semstreams-ui (monitoring dashboard),
-# and Caddy (reverse proxy) with optional NATS for media object storage.
+# Runs semsource (governed graph ingestion), NATS, semstreams-ui
+# (monitoring dashboard), and Caddy (reverse proxy).
 #
 # Port map:
-#   3000  — Caddy entry point (UI + graph WebSocket)
-#   7890  — semsource graph WebSocket (internal, proxied via Caddy)
+#   3000  — Caddy entry point (UI, GraphQL, status APIs, legacy graph WebSocket)
+#   4222  — NATS JetStream/KV (internal Docker network)
+#   7890  — semsource legacy graph WebSocket (internal, proxied via Caddy)
+#   8080  — semsource ServiceManager HTTP API (internal, proxied via Caddy)
+#   8082  — semsource GraphQL gateway (internal, proxied via Caddy)
+#   9091  — semsource Prometheus metrics (internal, proxied via Caddy)
 #   5173  — semstreams-ui Vite dev (internal, proxied via Caddy)
-#   4222  — NATS (internal, only with --profile nats)
 #
 # Usage:
-#   docker compose up                    # semsource + UI + Caddy
-#   docker compose --profile nats up     # include NATS for object store
+#   docker compose up
 #
 # Access:
-#   http://localhost:3000       — SemStreams UI dashboard
-#   ws://localhost:3000/graph   — Graph WebSocket (for consumers)
+#   http://localhost:3000                         — SemStreams UI dashboard
+#   http://localhost:3000/graphql                 — GraphQL gateway
+#   http://localhost:3000/source-manifest/status  — SemSource readiness/status
+#   ws://localhost:3000/graph                     — Legacy raw GRAPH stream
 
 services:
   # SemSource — graph ingestion engine
@@ -30,6 +34,7 @@ services:
       - ${SEMSOURCE_TARGET:-.}:/workspace:ro
     environment:
       - SEMSOURCE_LOG_LEVEL=${LOG_LEVEL:-info}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
     command:
       - run
       - --config
@@ -41,6 +46,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    depends_on:
+      nats:
+        condition: service_healthy
     networks:
       - c360
     restart: unless-stopped
@@ -87,7 +95,7 @@ services:
       - c360
     restart: unless-stopped
 
-  # NATS — required only for media object storage (image, video, audio handlers)
+  # NATS — JetStream/KV substrate for SemStreams graph state and governance
   nats:
     image: nats:2-alpine
     container_name: c360-nats
@@ -99,7 +107,6 @@ services:
       retries: 10
     networks:
       - c360
-    profiles: ["nats"]
 
 networks:
   c360:

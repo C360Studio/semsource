@@ -179,10 +179,14 @@ func (c *Component) ingestAll(ctx context.Context) error {
 		}
 
 		for _, state := range states {
-			payload := &graph.EntityPayload{
-				ID:         state.ID,
-				TripleData: state.Triples,
-				UpdatedAt:  state.UpdatedAt,
+			payload, err := entitypub.PayloadFromState(state)
+			if err != nil {
+				c.logger.Warn("Invalid URL entity state",
+					"url", rawURL,
+					"id", state.ID,
+					"error", err)
+				c.ingestErrors.Add(1)
+				continue
 			}
 			if err := c.publishEntity(ctx, payload); err != nil {
 				c.logger.Warn("Failed to publish URL entity",
@@ -259,10 +263,14 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	// Prefer pre-built EntityStates — no normalizer pass required.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
-			payload := &graph.EntityPayload{
-				ID:         state.ID,
-				TripleData: state.Triples,
-				UpdatedAt:  state.UpdatedAt,
+			payload, err := entitypub.PayloadFromState(state)
+			if err != nil {
+				c.logger.Warn("Invalid URL entity state on change",
+					"url", event.Path,
+					"id", state.ID,
+					"error", err)
+				c.ingestErrors.Add(1)
+				continue
 			}
 			if err := c.publishEntity(ctx, payload); err != nil {
 				c.logger.Warn("Failed to publish URL entity on change",

@@ -9,6 +9,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // Entity is a fully-typed image entity that produces triples using
@@ -64,9 +65,10 @@ func (e *Entity) Triples() []message.Triple {
 // consumers (e.g. embedding worker) can access stored content via message.Storable.
 func (e *Entity) EntityState() *handler.EntityState {
 	state := &handler.EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: semvocab.IndexingProfileControl,
 	}
 	if e.StorageRef != "" && e.StoreBucket != "" {
 		state.StorageRef = &message.StorageReference{

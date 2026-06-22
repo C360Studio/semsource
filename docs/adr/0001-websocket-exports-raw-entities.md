@@ -1,6 +1,10 @@
 # ADR-0001: WebSocket Output Exports Raw Entities Before ENTITY_STATES
 
-> **Status:** Accepted | **Date:** 2026-03-12
+> **Status:** Accepted for the legacy raw stream | **Date:** 2026-03-12
+>
+> **Current integration note (2026-06):** WebSocket remains a standalone-mode raw export, but query
+> consumers should use governed graph state via `graph.query.*` or GraphQL. This ADR describes why the
+> legacy stream stays raw, not the primary SemSource consumer contract.
 
 ## Context
 

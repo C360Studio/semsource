@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 )
 
 func TestNewComponent_ValidConfig(t *testing.T) {
@@ -120,6 +121,13 @@ func TestManifestPayload_RoundTrip(t *testing.T) {
 	}
 	if decoded.Sources[1].URLs[0] != "https://docs.acme.com" {
 		t.Errorf("sources[1].urls[0] = %q, want %q", decoded.Sources[1].URLs[0], "https://docs.acme.com")
+	}
+}
+
+func TestManifestPayload_DoesNotDeclareIndexingProfile(t *testing.T) {
+	payload := any(&ManifestPayload{})
+	if _, ok := payload.(message.IndexingProfiler); ok {
+		t.Fatal("ManifestPayload should not declare a semantic indexing profile")
 	}
 }
 

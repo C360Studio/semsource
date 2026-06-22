@@ -13,6 +13,7 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // Entity is a fully-typed document entity that builds triples directly
@@ -79,10 +80,11 @@ func (e *Entity) Triples() []message.Triple {
 // EntityState converts the Entity to a handler.EntityState for direct graph publication.
 func (e *Entity) EntityState() *handler.EntityState {
 	return &handler.EntityState{
-		ID:         e.ID,
-		Triples:    e.Triples(),
-		UpdatedAt:  e.IndexedAt,
-		StorageRef: e.storageRef,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		StorageRef:      e.storageRef,
+		IndexingProfile: semvocab.IndexingProfileContent,
 	}
 }
 

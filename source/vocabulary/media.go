@@ -7,7 +7,7 @@ import "github.com/c360studio/semstreams/vocabulary"
 // defined and registered here but remain unused until the media handler lands.
 const (
 	// MediaType is the media entity type discriminator.
-	// Values: "image", "video", "keyframe" (see MediaTypeValue)
+	// Values: "image", "video", "keyframe", "audio", "binary" (see MediaTypeValue)
 	MediaType = "source.media.type"
 
 	// MediaMimeType is the MIME type of the media file.
@@ -41,6 +41,13 @@ const (
 	// MediaThumbnailRef is the storage URL or object key for the generated thumbnail.
 	// Present on image and video entities; absent on keyframe entities.
 	MediaThumbnailRef = "source.media.thumbnail_ref"
+
+	// MediaByteRange is the inclusive-exclusive byte range covered by an
+	// extraction or storage proof.
+	MediaByteRange = "source.media.byte_range"
+
+	// MediaExtractionFinding is a format-neutral extraction/proof finding.
+	MediaExtractionFinding = "source.media.extraction.finding"
 )
 
 // Video predicates — Phase 2.
@@ -133,7 +140,7 @@ func registerMediaPredicates() {
 	// --- Phase 1: image predicates ---
 
 	vocabulary.Register(MediaType,
-		vocabulary.WithDescription("Media entity type discriminator: image, video, keyframe"),
+		vocabulary.WithDescription("Media entity type discriminator: image, video, keyframe, audio, binary"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(MaNamespace+"hasMediaType"))
 
@@ -181,6 +188,16 @@ func registerMediaPredicates() {
 		vocabulary.WithDescription("Storage URL or object key for the generated thumbnail"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI("https://schema.org/thumbnail"))
+
+	vocabulary.Register(MediaByteRange,
+		vocabulary.WithDescription("Inclusive-exclusive byte range covered by extraction or storage proof"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"mediaByteRange"))
+
+	vocabulary.Register(MediaExtractionFinding,
+		vocabulary.WithDescription("Format-neutral extraction or storage proof finding"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"mediaExtractionFinding"))
 
 	// --- Phase 2: video predicates ---
 	// Registered now for schema stability; unused until video handler is implemented.

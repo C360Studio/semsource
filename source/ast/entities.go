@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semstreams/message"
+	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // CodeEntity represents a code artifact extracted from AST parsing.
@@ -183,6 +184,17 @@ func (e *CodeEntity) Triples() []message.Triple {
 	return triples
 }
 
+// IndexingProfile classifies code entities for SemStreams semantic indexing.
+func (e *CodeEntity) IndexingProfile() string {
+	switch e.Type {
+	case TypeFunction, TypeMethod, TypeStruct, TypeInterface, TypeClass,
+		TypeEnum, TypeComponent, TypeConst, TypeVar, TypeType:
+		return semvocab.IndexingProfileContent
+	default:
+		return semvocab.IndexingProfileControl
+	}
+}
+
 // identityTriples returns triples for identity, classification, and location predicates.
 func (e *CodeEntity) identityTriples() []message.Triple {
 	triples := []message.Triple{
@@ -291,18 +303,20 @@ func (e *CodeEntity) relationshipTriples() []message.Triple {
 // EntityState converts the CodeEntity to a graph.EntityState for storage.
 func (e *CodeEntity) EntityState() *EntityState {
 	return &EntityState{
-		ID:        e.ID,
-		Triples:   e.Triples(),
-		UpdatedAt: e.IndexedAt,
+		ID:              e.ID,
+		Triples:         e.Triples(),
+		UpdatedAt:       e.IndexedAt,
+		IndexingProfile: e.IndexingProfile(),
 	}
 }
 
 // EntityState mirrors graph.EntityState for local use without importing the full graph package.
 // This allows the AST package to prepare data for graph storage.
 type EntityState struct {
-	ID        string
-	Triples   []message.Triple
-	UpdatedAt time.Time
+	ID              string
+	Triples         []message.Triple
+	UpdatedAt       time.Time
+	IndexingProfile string
 }
 
 // ParseResult holds the results of parsing a Go file
