@@ -39,9 +39,9 @@ type BranchWatcherConfig struct {
 
 // NewBranchWatcher creates a new BranchWatcher.
 func NewBranchWatcher(cfg BranchWatcherConfig) *BranchWatcher {
-	max := cfg.MaxBranches
-	if max <= 0 {
-		max = 50
+	limit := cfg.MaxBranches
+	if limit <= 0 {
+		limit = 50
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -51,7 +51,7 @@ func NewBranchWatcher(cfg BranchWatcherConfig) *BranchWatcher {
 		repoPath:     cfg.RepoPath,
 		patterns:     cfg.Patterns,
 		worktreeBase: cfg.WorktreeBase,
-		maxBranches:  max,
+		maxBranches:  limit,
 		logger:       logger,
 		known:        make(map[string]BranchState),
 	}

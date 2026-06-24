@@ -322,16 +322,12 @@ func buildSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]co
 
 // repoSpecs expands a single-branch repo into git+ast+docs+config specs.
 // Multi-branch (Branches set) is rejected earlier with CodeUnsupportedType.
-// ctx flows into ExpandRepoSources, which uses it for the
-// `git ls-remote --symref` call that resolves the remote's default
+// ExpandRepoSources only fans the entry out; ctx flows on into buildSpecs →
+// the git leaf, where ResolveDefaultBranch runs the `git ls-remote --symref`
+// (authenticated with opts.GitToken) that resolves the remote's default
 // branch when src.Branch is empty.
 func repoSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]componentSpec, error) {
-	expanded, err := config.ExpandRepoSources(
-		ctx,
-		[]config.SourceEntry{src},
-		opts.WorkspaceDir,
-		config.ExpandOptions{GitToken: opts.GitToken},
-	)
+	expanded, err := config.ExpandRepoSources(ctx, []config.SourceEntry{src}, opts.WorkspaceDir)
 	if err != nil {
 		return nil, &Error{
 			Code:    CodeValidationFailed,

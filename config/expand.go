@@ -8,14 +8,6 @@ import (
 	"github.com/c360studio/semsource/workspace"
 )
 
-// ExpandOptions carries adjunct settings for ExpandRepoSources. Currently
-// only GitToken is used (to authenticate `git ls-remote` for private
-// remotes during default-branch resolution), but the struct lets us add
-// future knobs without churning every call site.
-type ExpandOptions struct {
-	GitToken string
-}
-
 // BranchWatcherRef captures the configuration needed to start a BranchWatcher
 // at runtime for dynamic branch discovery. Returned by ExpandRepoSources when
 // a repo source has Branches set.
@@ -46,15 +38,13 @@ type ExpandResult struct {
 // branch is expanded into its own set of 4 components with branch-scoped
 // paths and entity IDs.
 //
-// When a single-branch repo source has no explicit Branch and a URL,
-// the remote's HEAD symref is consulted (git ls-remote --symref) so the
-// expanded git/ast/docs/config entries track the real default branch —
-// not a hardcoded "main", which would break repos still on master or
-// using develop/trunk. Resolution failure falls back to the static
-// default rather than blocking expansion.
+// For single-branch repo sources, src.Branch is passed through unchanged;
+// default-branch resolution (and any git auth it needs) lives at the leaf
+// (sourcespawn.gitComponentConfig) so it covers every git-producing path
+// uniformly. See the inline note at the single-branch expansion below.
 //
 // workspaceDir is the base directory where repos will be cloned.
-func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir string, opts ExpandOptions) (*ExpandResult, error) {
+func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir string) (*ExpandResult, error) {
 	var expanded []SourceEntry
 	var watchers []BranchWatcherRef
 

@@ -6,6 +6,8 @@ import (
 
 	"github.com/c360studio/semsource/graph"
 	semast "github.com/c360studio/semsource/source/ast"
+	// Blank import: registers the source predicate vocabulary via its init()
+	// so the predicate-schema projection below sees a fully-seeded registry.
 	_ "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/pkg/ownership"
 	"github.com/c360studio/semstreams/pkg/projection"
