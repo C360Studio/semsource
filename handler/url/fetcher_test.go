@@ -10,7 +10,7 @@ import (
 )
 
 func TestSafeFetcher_FetchReturnsBody(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ETag", `"etag-v1"`)
 		_, _ = w.Write([]byte("hello world"))
 	}))
@@ -58,7 +58,7 @@ func TestSafeFetcher_FetchWithETag_NotModified(t *testing.T) {
 
 func TestSafeFetcher_FetchRejectsHTTP(t *testing.T) {
 	// HTTP (non-TLS) server — fetcher should reject the URL before dialing
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("should not reach here"))
 	}))
 	defer srv.Close()
@@ -88,7 +88,7 @@ func TestSafeFetcher_FetchRejectsPrivateIP(t *testing.T) {
 }
 
 func TestSafeFetcher_FetchHTTPError(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
@@ -101,7 +101,7 @@ func TestSafeFetcher_FetchHTTPError(t *testing.T) {
 }
 
 func TestSafeFetcher_FetchContextCancelled(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
 	defer srv.Close()

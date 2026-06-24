@@ -81,7 +81,7 @@ func TestURLHandler_Supports(t *testing.T) {
 }
 
 func TestURLHandler_Ingest_FetchesContent(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Header().Set("ETag", `"abc123"`)
 		_, _ = w.Write([]byte("<html><body>Hello SemSource</body></html>"))
@@ -119,7 +119,7 @@ func TestURLHandler_Ingest_FetchesContent(t *testing.T) {
 }
 
 func TestURLHandler_Ingest_ContentHashInProperties(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("stable content"))
 	}))
 	defer srv.Close()
@@ -144,7 +144,7 @@ func TestURLHandler_Ingest_ContentHashInProperties(t *testing.T) {
 }
 
 func TestURLHandler_Ingest_InstanceDeterministic(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
@@ -165,7 +165,7 @@ func TestURLHandler_Ingest_InstanceDeterministic(t *testing.T) {
 
 func TestURLHandler_Ingest_ContextCancelled(t *testing.T) {
 	// Server that hangs to trigger context cancellation
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
 	defer srv.Close()
@@ -210,7 +210,7 @@ func TestURLHandler_Watch_NilWhenDisabled(t *testing.T) {
 
 func TestURLHandler_Watch_PollsAndEmitsOnChange(t *testing.T) {
 	var callCount atomic.Int32
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		n := callCount.Add(1)
 		if n == 1 {
 			_, _ = w.Write([]byte("initial content"))
@@ -260,7 +260,7 @@ func TestURLHandler_Watch_PollsAndEmitsOnChange(t *testing.T) {
 
 func TestURLHandler_Watch_NoEventWhenContentUnchanged(t *testing.T) {
 	var callCount atomic.Int32
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount.Add(1)
 		_, _ = w.Write([]byte("same content every time"))
 	}))
@@ -304,7 +304,7 @@ func TestURLHandler_Watch_NoEventWhenContentUnchanged(t *testing.T) {
 }
 
 func TestURLHandler_Watch_ChannelClosedOnContextCancel(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
@@ -358,7 +358,7 @@ func (s *stubURLSourceConfig) GetPollInterval() string { return s.pollInterval }
 // ---------------------------------------------------------------------------
 
 func TestURLHandler_IngestEntityStates_ReturnsState(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte("<html><body>Hello</body></html>"))
 	}))
@@ -377,7 +377,7 @@ func TestURLHandler_IngestEntityStates_ReturnsState(t *testing.T) {
 }
 
 func TestURLHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
@@ -409,7 +409,7 @@ func TestURLHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 }
 
 func TestURLHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Header().Set("ETag", `"etag-val"`)
 		_, _ = w.Write([]byte("<html>content</html>"))
@@ -448,7 +448,7 @@ func TestURLHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing
 }
 
 func TestURLHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("<html>content</html>"))
 	}))
 	defer srv.Close()
@@ -469,7 +469,7 @@ func TestURLHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 }
 
 func TestURLHandler_IngestEntityStates_DeterministicID(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
@@ -489,7 +489,7 @@ func TestURLHandler_IngestEntityStates_DeterministicID(t *testing.T) {
 }
 
 func TestURLHandler_IngestEntityStates_NoETagTripleWhenAbsent(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// No ETag header set.
 		_, _ = w.Write([]byte("content"))
 	}))
@@ -514,7 +514,7 @@ func TestURLHandler_IngestEntityStates_NoETagTripleWhenAbsent(t *testing.T) {
 }
 
 func TestURLHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
 	defer srv.Close()

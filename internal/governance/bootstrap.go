@@ -1,3 +1,7 @@
+// Package governance wires SemSource's standalone ownership registry and the
+// static predicate-schema projection that consumers read before querying the
+// graph. It owns the bootstrap that registers the SemSource owner and seeds the
+// authoritative predicate vocabulary.
 package governance
 
 import (

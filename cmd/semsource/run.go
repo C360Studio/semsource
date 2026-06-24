@@ -165,15 +165,30 @@ func runCmd(args []string) error {
 		return err
 	}
 
+	return serveUntilSignal(signalCtx, manager, configMgr, semsourceCfg, expandResult, logger)
+}
+
+// serveUntilSignal starts all services, wires runtime ingest handlers and
+// branch watchers, then blocks until signalCtx is cancelled (shutdown signal
+// or broker-loss watchdog) and drains the manager. The caller's deferred
+// cleanups (config manager + NATS) run after this returns.
+func serveUntilSignal(
+	signalCtx context.Context,
+	manager *service.Manager,
+	configMgr *semconfig.Manager,
+	cfg *config.Config,
+	expandResult *config.ExpandResult,
+	logger *slog.Logger,
+) error {
 	if err := manager.StartAll(signalCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
 
-	if err := registerIngestHandlers(signalCtx, manager, configMgr, semsourceCfg, logger); err != nil {
+	if err := registerIngestHandlers(signalCtx, manager, configMgr, cfg, logger); err != nil {
 		logger.Warn("failed to register ingest handlers", "error", err)
 	}
 
-	startBranchWatchers(signalCtx, expandResult.Watchers, semsourceCfg, configMgr, logger)
+	startBranchWatchers(signalCtx, expandResult.Watchers, cfg, configMgr, logger)
 
 	logger.Info("semsource running — waiting for shutdown signal")
 	<-signalCtx.Done()
@@ -315,7 +330,7 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 	if err != nil {
 		return nil, nil, fmt.Errorf("load config %q: %w", path, err)
 	}
-	result, err := config.ExpandRepoSources(ctx, cfg.Sources, cfg.WorkspaceDir, config.ExpandOptions{GitToken: cfg.GitToken})
+	result, err := config.ExpandRepoSources(ctx, cfg.Sources, cfg.WorkspaceDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("expand repo sources: %w", err)
 	}

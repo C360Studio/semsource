@@ -4,8 +4,10 @@
 ignoreGeneratedHeader = false
 severity = "warning"
 confidence = 0.8
+# Warnings are pre-failures (smells that grow into dumpster fires), so they
+# fail the lint gate just like errors — keep the tree at zero warnings.
 errorCode = 1
-warningCode = 0
+warningCode = 1
 
 [rule.blank-imports]
 [rule.context-as-argument]

@@ -33,7 +33,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Install revive
-        run: go install github.com/mgechev/revive@latest
+        # Pinned (not @latest): warningCode=1 makes warnings fatal, so an
+        # unpinned revive release could fail CI on a new rule with no code
+        # change. Bump deliberately and re-run `task lint` locally to match.
+        run: go install github.com/mgechev/revive@v1.15.0
 
       - name: go vet
         run: go vet ./...

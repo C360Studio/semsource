@@ -9,7 +9,7 @@ func TestExpandRepoSources_ExpandsSingleRepo(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo", URL: "https://github.com/opensensorhub/osh-core", Language: "java", Watch: true, Branch: "master"},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestExpandRepoSources_PreservesNonRepoSources(t *testing.T) {
 		{Type: "ast", Path: "/some/path"},
 		{Type: "git", URL: "https://example.com/repo"},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestExpandRepoSources_MixedSources(t *testing.T) {
 		{Type: "repo", URL: "https://github.com/example/repo", Branch: "main"},
 		{Type: "ast", Path: "."},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestExpandRepoSources_RequiresURLOrPath(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo"},
 	}
-	_, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	_, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err == nil {
 		t.Fatal("expected error for repo without URL or path")
 	}
@@ -119,7 +119,7 @@ func TestExpandRepoSources_LanguagePropagation(t *testing.T) {
 		// `git ls-remote` against a fake URL in unit tests.
 		{Type: "repo", URL: "https://github.com/example/repo", Language: "python", Branch: "main"},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestExpandRepoSources_LocalRepoPath(t *testing.T) {
 	sources := []SourceEntry{
 		{Type: "repo", Path: "/home/user/projects/my-app", Watch: true},
 	}
-	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace", ExpandOptions{})
+	result, err := ExpandRepoSources(context.Background(), sources, "/tmp/workspace")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

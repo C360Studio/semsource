@@ -5,7 +5,6 @@ package governance
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -683,16 +682,15 @@ func requestPredicateList(
 	ctx context.Context,
 	client *natsclient.Client,
 ) (semgraph.PredicateListQueryResponse, error) {
-	body, err := client.Request(ctx, "graph.index.query.predicateList", []byte("{}"), 5*time.Second)
+	// ADR-060: query failures arrive as a typed *errs.ClassifiedError on the err
+	// channel; a success reply is the body-only QueryResponse envelope (no Error field).
+	body, err := client.RequestClassified(ctx, "graph.index.query.predicateList", []byte("{}"), 5*time.Second)
 	if err != nil {
 		return semgraph.PredicateListQueryResponse{}, err
 	}
 	var resp semgraph.PredicateListQueryResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return semgraph.PredicateListQueryResponse{}, err
-	}
-	if resp.Error != "" {
-		return semgraph.PredicateListQueryResponse{}, errors.New(resp.Error)
 	}
 	return resp, nil
 }
@@ -709,7 +707,7 @@ func requestPrefixPage(
 	if err != nil {
 		t.Fatalf("marshal prefix request: %v", err)
 	}
-	body, err := client.Request(ctx, "graph.query.prefix", reqBody, 5*time.Second)
+	body, err := client.RequestClassified(ctx, "graph.query.prefix", reqBody, 5*time.Second)
 	if err != nil {
 		t.Fatalf("graph.query.prefix request error: %v", err)
 	}
@@ -735,16 +733,13 @@ func requestGraphSummary(
 	if err != nil {
 		t.Fatalf("marshal summary request: %v", err)
 	}
-	body, err := client.Request(ctx, "graph.query.summary", reqBody, 5*time.Second)
+	body, err := client.RequestClassified(ctx, "graph.query.summary", reqBody, 5*time.Second)
 	if err != nil {
 		t.Fatalf("graph.query.summary request error: %v", err)
 	}
 	var resp semgraph.QueryResponse[semgraph.SummaryData]
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("unmarshal summary response: %v; body=%s", err, body)
-	}
-	if resp.Error != "" {
-		t.Fatalf("summary response error: %s", resp.Error)
 	}
 	return resp.Data
 }
