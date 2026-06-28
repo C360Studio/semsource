@@ -65,6 +65,9 @@ func (e *Entity) Triples() []message.Triple {
 		{Subject: e.ID, Predicate: source.DocFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DocMimeType, Object: e.MimeType, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DocFileHash, Object: e.ContentHash, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		// DocSummary still carries the title for back-compat; emit a real summary
+		// here once doc-source extracts one (then Label reads DcTitle only).
 		{Subject: e.ID, Predicate: source.DocSummary, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
 	// Only include inline content when not stored externally.

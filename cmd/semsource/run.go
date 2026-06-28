@@ -23,6 +23,7 @@ import (
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	audiosource "github.com/c360studio/semsource/processor/audio-source"
 	cfgfilesource "github.com/c360studio/semsource/processor/cfgfile-source"
+	codecontext "github.com/c360studio/semsource/processor/code-context"
 	docsource "github.com/c360studio/semsource/processor/doc-source"
 	gitsource "github.com/c360studio/semsource/processor/git-source"
 	imagesource "github.com/c360studio/semsource/processor/image-source"
@@ -238,33 +239,49 @@ func setupNATS(
 		logger.Info("JetStream streams ready")
 	} else {
 		logger.Info("headless mode — skipping stream provisioning (host app owns infrastructure)")
-		warnIfHostStreamCapturesControlSubjects(ctx, nc, logger)
+		warnIfHostStreamCapturesRPCReplySubjects(ctx, nc, logger)
 	}
 
 	return nc, ssCfg, nil
 }
 
-// controlPlaneSubjects are the NATS request/reply subjects the
-// source-manifest serves for the curator workflow. They are intentionally
-// excluded from semsource's own GRAPH stream subjects so JetStream does
-// not store them. A host-owned stream that captures these (e.g. via a
-// `graph.ingest.>` wildcard) breaks the workflow: the broker sends a
-// PubAck to the request's reply inbox the instant the message lands in
-// the stream, the client treats that PubAck as the response, and the
-// real AddReply/RemoveReply from source-manifest loses the race. The
-// caller sees a malformed reply and the component is never spawned.
-var controlPlaneSubjects = []string{
+// rpcReplySubjects are NATS request/reply subjects semsource (and its
+// graph-ingest dependency) serve over CORE request/reply. They are
+// intentionally excluded from semsource's own GRAPH stream subjects so
+// JetStream does not store them. A host-owned stream that captures any of
+// them (e.g. via a `graph.ingest.>` wildcard) breaks request/reply: the
+// broker sends a PubAck to the request's reply inbox the instant the
+// message lands in the stream, the client treats that PubAck as the
+// response, and the real reply loses the race — the caller sees a
+// malformed reply (a JetStream `{"stream":...,"seq":...}` ack, no payload).
+//
+// Two RPC planes are at risk, both under the `graph.ingest.*` prefix:
+//   - graph.ingest.add/remove.* — source-manifest curator workflow; a
+//     captured reply makes runtime add_source_repo appear to succeed while
+//     no component spawns.
+//   - graph.ingest.query.* — graph-ingest read path (entity/batch/prefix/
+//     suffix), reached via the graph-query facade; a captured reply makes
+//     batch/prefix/entity queries return ZERO results for entities that are
+//     present in ENTITY_STATES. Verified end-to-end by the fusion gateway
+//     integration test (a `graph.ingest.>` GRAPH stream silently zeroed the
+//     fused response).
+var rpcReplySubjects = []string{
 	"graph.ingest.add.runtimeadd-probe",
 	"graph.ingest.remove.runtimeadd-probe",
+	"graph.ingest.query.batch",
+	"graph.ingest.query.prefix",
+	"graph.ingest.query.entity",
+	"graph.ingest.query.suffix",
 }
 
-// warnIfHostStreamCapturesControlSubjects checks every JetStream stream
+// warnIfHostStreamCapturesRPCReplySubjects checks every JetStream stream
 // the broker exposes and logs a loud ERROR for each one whose subject
-// filter would intercept the source-manifest control-plane subjects.
+// filter would intercept a semsource core request/reply subject (curator
+// control plane OR graph read path; see rpcReplySubjects).
 // Best-effort: any lookup error is logged at DEBUG and the function
 // returns silently, since we don't want to fail boot just because we
 // couldn't introspect JetStream.
-func warnIfHostStreamCapturesControlSubjects(ctx context.Context, nc *natsclient.Client, logger *slog.Logger) {
+func warnIfHostStreamCapturesRPCReplySubjects(ctx context.Context, nc *natsclient.Client, logger *slog.Logger) {
 	js, err := nc.JetStream()
 	if err != nil {
 		logger.Debug("headless: skipping stream-config validation — JetStream unavailable", "error", err)
@@ -278,7 +295,7 @@ func warnIfHostStreamCapturesControlSubjects(ctx context.Context, nc *natsclient
 		}
 		var bad []string
 		for _, filter := range info.Config.Subjects {
-			for _, probe := range controlPlaneSubjects {
+			for _, probe := range rpcReplySubjects {
 				if subjectFilterMatches(filter, probe) {
 					bad = append(bad, filter)
 					break
@@ -287,12 +304,14 @@ func warnIfHostStreamCapturesControlSubjects(ctx context.Context, nc *natsclient
 		}
 		if len(bad) > 0 {
 			logger.Error(
-				"headless: host JetStream stream captures semsource control-plane subjects — "+
-					"graph.ingest.add.* and graph.ingest.remove.* will receive PubAcks that race "+
-					"with the real source-manifest reply; runtime add_source_repo will appear to "+
-					"succeed but no component will spawn. Narrow the host stream's subject filter "+
-					"to only the data-plane subjects (graph.ingest.entity, graph.ingest.batch, "+
-					"graph.ingest.manifest, graph.ingest.status, graph.ingest.predicates).",
+				"headless: host JetStream stream captures semsource request/reply subjects — "+
+					"graph.ingest.add/remove.* (curator) and/or graph.ingest.query.* (graph read "+
+					"path) will receive PubAcks that race with the real reply. Symptoms: runtime "+
+					"add_source_repo appears to succeed but no component spawns, AND batch/prefix/"+
+					"entity queries silently return zero results for entities that ARE in the graph. "+
+					"Narrow the host stream's subject filter to only the data-plane subjects "+
+					"(graph.ingest.entity, graph.ingest.batch, graph.ingest.manifest, "+
+					"graph.ingest.status, graph.ingest.predicates).",
 				"stream", info.Config.Name,
 				"offending_filters", bad,
 			)
@@ -443,6 +462,7 @@ func registerSemsourceFactories(registry *component.Registry) error {
 		"audio-source":    func() error { return audiosource.Register(registry) },
 		"filestore":       func() error { return filestore.Register(registry) },
 		"source-manifest": func() error { return sourcemanifest.Register(registry) },
+		"code-context":    func() error { return codecontext.Register(registry) },
 	} {
 		if err := fn(); err != nil {
 			return fmt.Errorf("register %s component: %w", name, err)
@@ -620,7 +640,10 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}
 	components["source-manifest"] = manifestCfg
 
-	// Graph subsystem and WebSocket are standalone-only.
+	// Graph subsystem, WebSocket, and the fusion gateways are standalone-only:
+	// the gateways query graph.query.* / graph.index.query.*, which the graph
+	// subsystem here serves. In headless mode the host owns the graph subsystem,
+	// so a host-side gateway would be wired there instead.
 	if !cfg.IsHeadless() {
 		graphComponents, err := graphSubsystemComponents(cfg)
 		if err != nil {
@@ -635,6 +658,17 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 			return nil, err
 		}
 		components["websocket-output"] = wsCfg
+
+		// code-context / doc-context fusion gateways (ADR-0004). Two instances of
+		// one factory; the map key is the instance name (→ HTTP prefix), the
+		// Config.Lens selects the lens, and the NATS subject root differs by lens.
+		for instance, lens := range map[string]string{"code-context": "code", "doc-context": "docs"} {
+			gwCfg, err := codeContextComponentConfig(lens)
+			if err != nil {
+				return nil, err
+			}
+			components[instance] = gwCfg
+		}
 	}
 
 	svcs, err := serviceConfigs(cfg)
@@ -691,6 +725,21 @@ func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfig
 	}
 
 	return components, nil
+}
+
+// codeContextComponentConfig builds a code-context fusion-gateway component
+// config for the given lens ("code" or "docs").
+func codeContextComponentConfig(lens string) (types.ComponentConfig, error) {
+	raw, err := json.Marshal(map[string]any{"lens": lens})
+	if err != nil {
+		return types.ComponentConfig{}, fmt.Errorf("marshal code-context config: %w", err)
+	}
+	return types.ComponentConfig{
+		Name:    "code-context",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  raw,
+	}, nil
 }
 
 // manifestComponentConfig builds the source-manifest component config.

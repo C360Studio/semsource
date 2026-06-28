@@ -30,6 +30,10 @@
 	handle /source-manifest/* {
 		reverse_proxy semsource:8080
 	}
+	# Fused code_context queries (ADR-0004)
+	handle /code-context/* {
+		reverse_proxy semsource:8080
+	}
 	handle /metrics {
 		reverse_proxy semsource:9091
 	}

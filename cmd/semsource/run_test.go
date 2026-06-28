@@ -43,6 +43,13 @@ func TestSubjectFilterMatches(t *testing.T) {
 			"graph.ingest.entity", "graph.ingest.add.runtimeadd", false},
 		{"add subject not under explicit data-plane filter set",
 			"graph.ingest.manifest", "graph.ingest.add.runtimeadd", false},
+
+		// Read-path RPC probe matches — the fusion-gateway footgun.
+		{"query batch under graph.ingest.>", "graph.ingest.>", "graph.ingest.query.batch", true},
+		{"query batch under graph.ingest.query.>",
+			"graph.ingest.query.>", "graph.ingest.query.batch", true},
+		{"query batch not under data-plane entity filter",
+			"graph.ingest.entity", "graph.ingest.query.batch", false},
 	}
 
 	for _, tt := range tests {
@@ -52,6 +59,48 @@ func TestSubjectFilterMatches(t *testing.T) {
 					tt.filter, tt.subject, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestRPCReplySubjects_GuardCoversReadPath is the regression guard for the
+// fusion-gateway footgun: a host stream bound to graph.ingest.> intercepts the
+// graph read-path RPC reply inboxes (graph.ingest.query.*), silently zeroing
+// batch/prefix queries for entities that ARE in the graph. Every rpcReplySubject
+// must be (a) caught by the graph.ingest.> wildcard the guard warns about, and
+// (b) NOT a data-plane subject the production GRAPH stream legitimately binds
+// (else the guard would false-positive on a healthy config).
+func TestRPCReplySubjects_GuardCoversReadPath(t *testing.T) {
+	// Derive the data-plane set from the authoritative production stream config
+	// (not an inlined copy) so this disjointness invariant can't silently drift
+	// if a 6th data-plane subject is added later.
+	dataPlane := map[string]bool{}
+	for _, s := range graphStreamConfig(&config.Config{})["GRAPH"].Subjects {
+		dataPlane[s] = true
+	}
+
+	// The read path must be in the probe set — its absence WAS the bug.
+	for _, want := range []string{
+		"graph.ingest.query.batch", "graph.ingest.query.prefix", "graph.ingest.query.entity",
+	} {
+		found := false
+		for _, p := range rpcReplySubjects {
+			if p == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("rpcReplySubjects missing read-path subject %q — guard would not warn on a graph.ingest.> host stream", want)
+		}
+	}
+
+	for _, probe := range rpcReplySubjects {
+		if !subjectFilterMatches("graph.ingest.>", probe) {
+			t.Errorf("guard probe %q is not caught by the graph.ingest.> wildcard it is meant to detect", probe)
+		}
+		if dataPlane[probe] {
+			t.Errorf("guard probe %q is a legitimate data-plane subject — would false-positive on the production stream", probe)
+		}
 	}
 }
 
