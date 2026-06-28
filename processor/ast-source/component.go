@@ -21,6 +21,7 @@ import (
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
 	semsourceast "github.com/c360studio/semsource/source/ast"
+	"github.com/c360studio/semsource/source/ontology"
 	"github.com/c360studio/semsource/workspace"
 )
 
@@ -556,7 +557,7 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 func payloadFromASTState(state *semsourceast.EntityState) (*graph.EntityPayload, error) {
 	payload := &graph.EntityPayload{
 		ID:                  state.ID,
-		TripleData:          state.Triples,
+		TripleData:          ontology.StampClass(state.ID, state.Triples, state.UpdatedAt),
 		UpdatedAt:           state.UpdatedAt,
 		IndexingProfileHint: state.IndexingProfile,
 	}

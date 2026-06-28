@@ -2,6 +2,11 @@ package source
 
 import "github.com/c360studio/semstreams/vocabulary"
 
+// DcTitle is the Dublin Core title predicate — the canonical human name of an
+// entity, shared across domains (code uses the same IRI). Documents emit it so a
+// consumer reads a title from one predicate regardless of source type.
+const DcTitle = "dc.terms.title"
+
 // Document metadata predicates for ingested documents.
 // These predicates track document metadata extracted during ingestion.
 const (

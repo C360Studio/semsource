@@ -7,10 +7,12 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/source/ontology"
 )
 
 // PayloadFromState converts a handler-produced entity state into the Graphable
-// payload used by graph-ingest.
+// payload used by graph-ingest. It stamps the entity's BFO/CCO ontology class
+// (ADR-0005) so results are rankable by ontology and exportable as RDF later.
 func PayloadFromState(state *handler.EntityState) (*graph.EntityPayload, error) {
 	if state == nil {
 		return nil, fmt.Errorf("entity state is nil")
@@ -18,7 +20,7 @@ func PayloadFromState(state *handler.EntityState) (*graph.EntityPayload, error) 
 
 	payload := &graph.EntityPayload{
 		ID:                  state.ID,
-		TripleData:          state.Triples,
+		TripleData:          ontology.StampClass(state.ID, state.Triples, state.UpdatedAt),
 		UpdatedAt:           state.UpdatedAt,
 		Storage:             state.StorageRef,
 		IndexingProfileHint: state.IndexingProfile,
