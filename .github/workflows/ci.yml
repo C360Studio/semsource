@@ -47,8 +47,26 @@ jobs:
       - name: revive
         run: revive -config revive.toml -formatter friendly ./...
 
+  e2e:
+    runs-on: ubuntu-latest
+    # Black-box tests: build the binary and drive it against a real NATS
+    # (docker run nats:2-alpine) + JetStream. ubuntu-latest ships Docker. These
+    # catch full-ServiceManager wiring bugs that unit/integration tests miss —
+    # e.g. the graph-gateway port-0 and curator runtime-add start-race that
+    # slipped precisely because e2e was not gated here.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: E2E tests
+        run: go test -tags=e2e -timeout 300s ./test/e2e/
+
   build-and-push:
-    needs: [test, lint]
+    needs: [test, lint, e2e]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
