@@ -6,8 +6,8 @@ SemStreams and exposes it through `graph.query.*`, GraphQL, and source status AP
 
 Drop a SemSource instance next to any project you want to index. Run one or many; each produces
 deterministic 6-part entity IDs and exact predicate ownership claims so SemStreams can store, index,
-and query the graph consistently. Standalone mode bootstraps SemSource's ownership contract. Headless
-mode leaves graph governance to the host app, which is the mode SemSpec uses when it embeds SemSource.
+and query the graph consistently. SemSource runs as a standalone external service and bootstraps its
+own ownership contract.
 
 ## Quick Start
 
@@ -183,7 +183,7 @@ Optional top-level fields:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `http_port` | `8080` | ServiceManager HTTP API port |
-| `mode` | `"standalone"` | `standalone` runs graph/query locally; `headless` lets the host own graph governance |
+| `mode` | `"standalone"` | Only `standalone` is supported (retained for back-compat); `headless` was removed in ADR-0006 and now fails validation |
 | `entity_store.nats_url` | — | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set |
 | `graph.gateway_bind` | `"0.0.0.0:8082"` | GraphQL gateway bind address in standalone mode |
 | `metrics.port` | `9091` | Prometheus metrics port |
