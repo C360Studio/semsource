@@ -13,6 +13,20 @@ Status: `candidate` (not yet filed) · `filed #NNN` · `local-stopgap` · `wontf
 
 ---
 
+## Major proposals
+
+### 0. Lift deterministic graph fusion into the framework — framework-shaped — filed [semstreams#376](https://github.com/C360Studio/semstreams/issues/376)
+The deterministic fusion gateway proven in semsource (ADR-0004) is cross-domain
+(code + docs lenses over one engine) and is the deterministic sibling of
+`research_graph` (ADR-045) — so it's framework-shaped, not product-shaped. Filed as
+a research issue to scope an upstream ADR. The gating design decision is **verbatim
+body hydration / content addressing** (where bytes come from in a headless/remote
+deployment) — this is exactly what keeps semsource's gateway standalone-only today.
+**Sub-dependencies of this proposal:** asks #1 (subclass helper), #2 (predicate
+salience), #5 (name→ranked-IDs index) below.
+
+---
+
 ## BFO/CCO alignment (ADR-0005)
 
 ### 1. BFO/CCO `SubClassOf` / hierarchy helper — framework-shaped — candidate
