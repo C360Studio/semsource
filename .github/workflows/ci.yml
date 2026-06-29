@@ -63,7 +63,9 @@ jobs:
           go-version-file: go.mod
 
       - name: E2E tests
-        run: go test -tags=e2e -timeout 300s ./test/e2e/
+        # 600s (job-capped at 15m): black-box tests build the binary and seed a
+        # real graph on a slow 2-core runner, well above local laptop timings.
+        run: go test -tags=e2e -timeout 600s ./test/e2e/
 
   build-and-push:
     needs: [test, lint, e2e]
