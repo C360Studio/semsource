@@ -120,7 +120,10 @@ and treats HTTP/MCP callers as **trusted** (sem* products, Claude Code in a trus
 mesh). But because the call now points a service at arbitrary external resources, we
 **design the seams** for untrusted/multi-tenant use so hardening is additive:
 
-- **Auth seam** on HTTP/MCP (token/principal), no-op-pluggable in v1.
+- **Auth seam** on HTTP/MCP: **API token** as the v1 mechanism, with **session-based
+  auth** for interactive callers as a follow-on. Pluggable, permissive default in v1.
+  This auth machinery likely belongs as a **semstreams framework primitive** (shared
+  across services, not re-rolled per service) — tracked as upstream ask #7.
 - **Resource allowlists** — permitted filesystem roots (path-traversal guard), URL
   host allowlist / SSRF guard, git remote allowlist.
 - **Resource limits** — clone size/time caps, max concurrent targets, per-caller
@@ -165,15 +168,22 @@ defaults, so "design for untrusted" is real, not aspirational.
   targets; breaks ephemeral worktrees and any remote/scaled gateway. Rejected as the
   default; disk remains an opt-in "live worktree / read-your-writes" mode.
 
-## Open questions
+## Decisions on initial open questions
 
-1. **MCP hosting** — does SemSource embed an MCP server, or ship an MCP façade process
-   over the HTTP/NATS contract? (Leaning façade, to keep the core transport-agnostic.)
-2. **Worktree TTL defaults** — what default lifetime + refresh policy balances agent
+- **MCP hosting → façade.** SemSource ships an MCP façade over the HTTP/NATS contract
+  rather than embedding an MCP server in the core, keeping the core transport-agnostic
+  and the MCP surface a thin, independently-deployable adapter.
+- **Auth → API token, then session.** API token is the v1 mechanism; session-based auth
+  for interactive callers follows. Both ride the pluggable auth seam (§Trust model).
+  Strong candidate to lift into semstreams as a shared framework primitive — see
+  upstream ask #7 — so sem* services don't each re-roll auth.
+
+## Still open
+
+1. **Worktree TTL defaults** — what default lifetime + refresh policy balances agent
    ergonomics against disk pressure?
-3. **Handle stability across restarts** — `instance_name` is deterministic; confirm it
+2. **Handle stability across restarts** — `instance_name` is deterministic; confirm it
    survives a service restart so a caller's handle stays valid.
-4. **Auth shape for HTTP/MCP** — align with whatever identity sem* / Claude Code present.
 
 ## References
 
