@@ -96,6 +96,38 @@ func TestGraphSubsystemComponents_GraphQueryPortsCoverSemStreamsBeta114(t *testi
 	assertPortSubjects(t, inputs, want)
 }
 
+// TestGraphSubsystemComponents_GraphGatewayHTTPPortSet guards the fix for the
+// gateway failing registration with "port 0": the registry parses the gateway's
+// network port from the http input port's SUBJECT (parsePortFromSubject), so the
+// subject must encode host:port — a path like "/graphql" parses to 0 and
+// registration fails. The GraphQL route itself is GraphQLPath, not this subject.
+func TestGraphSubsystemComponents_GraphGatewayHTTPPortSet(t *testing.T) {
+	components, err := graphSubsystemComponents(&config.Config{})
+	if err != nil {
+		t.Fatalf("graphSubsystemComponents() error = %v", err)
+	}
+	gw, ok := components["graph-gateway"]
+	if !ok {
+		t.Fatal("graph-gateway not configured")
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(gw.Config, &raw); err != nil {
+		t.Fatalf("unmarshal graph-gateway config: %v", err)
+	}
+	ports, _ := raw["ports"].(map[string]any)
+	inputs, _ := ports["inputs"].([]any)
+	if len(inputs) == 0 {
+		t.Fatal("graph-gateway has no input ports")
+	}
+	httpPort, _ := inputs[0].(map[string]any)
+	subject, _ := httpPort["subject"].(string)
+	// The default bind is 0.0.0.0:8082, whose trailing :8082 parses to a valid
+	// port. A path-style subject ("/graphql") would parse to 0 and be rejected.
+	if subject != "0.0.0.0:8082" {
+		t.Fatalf("graph-gateway http input port subject = %q, want a host:port the registry can parse to a valid port (e.g. \"0.0.0.0:8082\")", subject)
+	}
+}
+
 func TestGraphSubsystemComponents_GraphGatewayAdvertisesQueriesAndMutations(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
