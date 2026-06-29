@@ -752,7 +752,12 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			configMap: map[string]any{
 				"ports": map[string]any{
 					"inputs": []map[string]any{
-						{"name": "http", "type": "http", "subject": "/graphql"},
+						// Subject must encode host:port: the registry parses the
+						// gateway's network port from it (parsePortFromSubject), so a
+						// path like "/graphql" yields port 0 and registration fails.
+						// The GraphQL route is GraphQLPath (default /graphql), served on
+						// ServiceManager's central mux — independent of this subject.
+						{"name": "http", "type": "http", "subject": gatewayBind},
 					},
 					"outputs": graphGatewayOutputPorts(),
 				},
