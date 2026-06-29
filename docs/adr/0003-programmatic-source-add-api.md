@@ -1,6 +1,11 @@
 # ADR-0003: Programmatic Source-Add API
 
-> **Status:** Proposed | **Date:** 2026-04-29
+> **Status:** Superseded in part by ADR-0006 | **Date:** 2026-04-29
+>
+> The wire contract (`AddRequest`/`AddReply`/`RemoveRequest`, `SourceEntry`, namespace
+> targeting) stands. Its "headless mode is first-class" premise does **not** — headless
+> was removed (ADR-0006); semsource runs only as a standalone external service, and the
+> add/remove API is extended to HTTP + MCP surfaces there.
 
 ## Context
 

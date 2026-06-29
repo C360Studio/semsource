@@ -86,12 +86,13 @@ request's reply inbox and win the race against the real handler reply, so reads
 return zero results and curator spawns no component — with no error. Separating the
 RPC plane from the persisted plane (e.g. `graph.rpc.ingest.*` vs `graph.ingest.*`, or
 documenting a reserved sub-tree streams must never bind) would make a wildcard stream
-binding safe by construction. Low urgency: semsource's own stream binds only the five
-data-plane subjects, and the headless guard `warnIfHostStreamCapturesRPCReplySubjects`
-(`cmd/semsource/run.go`) now warns on both the curator and read-path RPC subjects.
+binding safe by construction. Low urgency for semsource specifically: with headless mode
+removed (ADR-0006) semsource owns its own `GRAPH` stream and binds only the five data-plane
+subjects, so it is no longer exposed to a host-owned wildcard stream — this is now a purely
+framework-shaped concern for other consumers. (The semsource-side boot guard that probed for
+this was removed alongside headless mode; it only made sense when a host owned the stream.)
 **Surfaced by:** Fusion full-pipeline integration test (ADR-0004) — a `graph.ingest.>`
-test stream zeroed the fused response; root cause confirmed against the existing
-run.go guard, which previously probed only the curator subjects.
+test stream zeroed the fused response.
 
 ---
 

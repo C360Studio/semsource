@@ -140,8 +140,8 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 		// instant the message lands in the stream; that PubAck wins the race
 		// against graph-ingest's real reply, graph-query unmarshals it (a
 		// JetStream ack, no entities), and batch/prefix silently return zero
-		// results. This is the read-path twin of the curator footgun guarded by
-		// warnIfHostStreamCapturesRPCReplySubjects in cmd/semsource/run.go.
+		// results. The framework-level subject-taxonomy concern behind this is
+		// tracked in docs/upstream/semstreams-asks.md (#6).
 		natsclient.WithStreams(natsclient.TestStreamConfig{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
