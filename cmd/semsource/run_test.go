@@ -32,6 +32,33 @@ func TestGraphSubsystemComponents_ObserveOnlyOwnerLease(t *testing.T) {
 	}
 }
 
+// TestGraphSubsystemComponents_ObjectStoreConfigured guards the ADR-0006 standup
+// of the framework NATS objectstore (storage.objectstore.api), which backs
+// location-independent verbatim content. The producer Put + Lens.Hydrate wiring
+// lands later, but the store must be present in the subsystem now.
+func TestGraphSubsystemComponents_ObjectStoreConfigured(t *testing.T) {
+	components, err := graphSubsystemComponents(&config.Config{})
+	if err != nil {
+		t.Fatalf("graphSubsystemComponents() error = %v", err)
+	}
+
+	objStore, ok := components["objectstore"]
+	if !ok {
+		t.Fatal("objectstore component not configured")
+	}
+	if objStore.Type != "storage" {
+		t.Errorf("objectstore type = %q, want %q", objStore.Type, "storage")
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(objStore.Config, &raw); err != nil {
+		t.Fatalf("unmarshal objectstore config: %v", err)
+	}
+	if raw["bucket_name"] != "CONTENT" {
+		t.Errorf("objectstore bucket_name = %v, want CONTENT", raw["bucket_name"])
+	}
+}
+
 func TestGraphSubsystemComponents_GraphQueryPortsCoverSemStreamsBeta114(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {

@@ -760,6 +760,19 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				"enable_playground": enablePlayground,
 			},
 		},
+		// objectstore backs location-independent verbatim content (code/text
+		// bodies) addressed via message.StorageReference and dereferenced over
+		// storage.objectstore.api (ADR-0006 / semstreams#376). Default ports
+		// apply (write/api/events/stored); the producer + Lens.Hydrate→StorageRef
+		// wiring lands once the upstream body/key convention is settled. Large
+		// binaries (media) deliberately stay on the local filestore, not here.
+		"objectstore": {
+			name:     "objectstore",
+			compType: types.ComponentTypeStorage,
+			configMap: map[string]any{
+				"bucket_name": "CONTENT",
+			},
+		},
 	}
 
 	result := make(semconfig.ComponentConfigs, len(configs))
