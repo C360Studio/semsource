@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/c360studio/semsource/config"
+	semconfig "github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/types"
 )
 
@@ -110,9 +113,36 @@ type Result struct {
 
 // ConfigStore is the minimal subset of *semconfig.Manager that sourcespawn
 // needs. Tests can use a fake by implementing this interface.
+//
+// Add/Remove mutate the in-memory config (GetConfig().Update), bump the config
+// version, and PushToKV — they do NOT use the lower-level PutComponentToKV.
+// PutComponentToKV marks its own KV revision as engine-owned, so the config
+// watcher skips the resulting event and the ComponentManager never reconciles
+// (the component is written to KV but never spawned). PushToKV instead writes
+// the versioned config AND notifies subscribers, which is what drives the
+// reconcile/spawn. Bumping the version ensures the change is not discarded by
+// the boot-time file-vs-KV sync ("equal versions ⇒ KV is resynced from file").
 type ConfigStore interface {
-	PutComponentToKV(ctx context.Context, name string, cfg types.ComponentConfig) error
+	GetConfig() *semconfig.SafeConfig
+	PushToKV(ctx context.Context) error
 	DeleteComponentFromKV(ctx context.Context, name string) error
+}
+
+// bumpConfigVersion increments the trailing numeric component of a semver-ish
+// version (1.0.0 → 1.0.1) so a runtime config change is recognized as newer
+// than the on-disk version. A non-numeric or empty version falls back to a
+// safe monotonic-ish bump.
+func bumpConfigVersion(v string) string {
+	if v == "" {
+		return "0.0.1"
+	}
+	parts := strings.Split(v, ".")
+	last := len(parts) - 1
+	if n, err := strconv.Atoi(parts[last]); err == nil {
+		parts[last] = strconv.Itoa(n + 1)
+		return strings.Join(parts, ".")
+	}
+	return v + ".1"
 }
 
 // ExistsChecker is an optional capability used to detect Result.Created.
@@ -164,34 +194,40 @@ func AddWithChecker(
 		return nil, err
 	}
 
+	// Mutate the in-memory config: add each component, then bump the version and
+	// PushToKV (which notifies subscribers → ComponentManager reconcile/spawn).
+	safeCfg := store.GetConfig()
+	cfg := safeCfg.Get()
+	if cfg.Components == nil {
+		cfg.Components = map[string]types.ComponentConfig{}
+	}
+
 	results := make([]Result, 0, len(specs))
 	for _, spec := range specs {
 		raw, err := json.Marshal(spec.compCfg)
 		if err != nil {
-			return results, &Error{
+			return nil, &Error{
 				Code:    CodeValidationFailed,
 				Message: fmt.Sprintf("marshal component config for %q", spec.instanceName),
 				Cause:   err,
 			}
 		}
 
+		// Created reflects whether this is a new instance vs. a refresh. Prefer
+		// the supplied checker (running components); otherwise fall back to the
+		// in-memory config we're about to mutate.
 		created := true
-		if checker != nil && checker.HasComponent(spec.instanceName) {
+		if checker != nil {
+			created = !checker.HasComponent(spec.instanceName)
+		} else if _, exists := cfg.Components[spec.instanceName]; exists {
 			created = false
 		}
 
-		cfg := types.ComponentConfig{
+		cfg.Components[spec.instanceName] = types.ComponentConfig{
 			Name:    spec.factoryName,
 			Type:    types.ComponentTypeProcessor,
 			Enabled: true,
 			Config:  raw,
-		}
-		if err := store.PutComponentToKV(ctx, spec.instanceName, cfg); err != nil {
-			return results, &Error{
-				Code:    CodeKVWriteFailed,
-				Message: fmt.Sprintf("put component %q to KV", spec.instanceName),
-				Cause:   err,
-			}
 		}
 
 		results = append(results, Result{
@@ -200,6 +236,14 @@ func AddWithChecker(
 			Created:      created,
 			SourceType:   spec.sourceType,
 		})
+	}
+
+	cfg.Version = bumpConfigVersion(cfg.Version)
+	if err := safeCfg.Update(cfg); err != nil {
+		return nil, &Error{Code: CodeKVWriteFailed, Message: "apply config in memory", Cause: err}
+	}
+	if err := store.PushToKV(ctx); err != nil {
+		return nil, &Error{Code: CodeKVWriteFailed, Message: "push config to KV", Cause: err}
 	}
 
 	return results, nil
@@ -254,12 +298,27 @@ func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 	if instanceName == "" {
 		return &Error{Code: CodeValidationFailed, Message: "instance_name is required"}
 	}
+
+	// Drop from the in-memory config + bump version, delete the KV key, then
+	// PushToKV so subscribers are notified and the ComponentManager reconciles
+	// the component away (DeleteComponentFromKV alone marks its revision
+	// engine-owned, so the watcher skips it and the component keeps running).
+	safeCfg := store.GetConfig()
+	cfg := safeCfg.Get()
+	delete(cfg.Components, instanceName)
+	cfg.Version = bumpConfigVersion(cfg.Version)
+	if err := safeCfg.Update(cfg); err != nil {
+		return &Error{Code: CodeKVWriteFailed, Message: "apply config in memory", Cause: err}
+	}
 	if err := store.DeleteComponentFromKV(ctx, instanceName); err != nil {
 		return &Error{
 			Code:    CodeKVWriteFailed,
 			Message: fmt.Sprintf("delete component %q from KV", instanceName),
 			Cause:   err,
 		}
+	}
+	if err := store.PushToKV(ctx); err != nil {
+		return &Error{Code: CodeKVWriteFailed, Message: "push config to KV", Cause: err}
 	}
 	return nil
 }
