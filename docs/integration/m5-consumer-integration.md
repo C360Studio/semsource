@@ -6,8 +6,8 @@ Instructions for connecting SemSpec and SemDragon to SemSource's graph.
 
 Consumers query SemSource's graph directly via NATS request/reply endpoints or GraphQL. No WebSocket
 client setup, no FederationProcessor registration, and no bridge processor are required on the consumer
-side. In standalone mode, SemSource owns the full graph pipeline and binds its governed ownership
-contract. In headless mode, the host app owns graph infrastructure and governance.
+side. SemSource owns the full graph pipeline and binds its governed ownership contract as a
+standalone external service.
 
 ### Internal pipeline (SemSource)
 
@@ -162,8 +162,7 @@ Multiple SemSource instances are a graph-substrate concern. Consumers do not mer
 When multiple SemSource instances run against the same or overlapping codebases:
 
 - Deterministic 6-part IDs keep entity identity stable across runs.
-- SemSource declares exact predicate ownership for `semsource.entity.v1` in standalone mode.
-- Headless hosts bind their own graph governance and decide how SemSource entities join the host graph.
+- SemSource declares exact predicate ownership for `semsource.entity.v1`.
 
 Consumers query graph state through `graph.query.*` or GraphQL. No consumer-side stream merge logic is
 needed.
@@ -179,46 +178,18 @@ needed.
 | `GRAPH_MERGED` stream | Not exposed to query consumers |
 | `federation.ToEntityState()` calls | Consumers receive query responses, not raw event streams |
 
-## Headless Mode: Host-Owned Governance And GRAPH Stream Configuration
+## Headless Mode: Removed (ADR-0006)
 
-When SemSource runs in `mode: headless`, it shares the host application's NATS JetStream
-infrastructure rather than provisioning its own. SemSource skips stream provisioning and ownership
-bootstrap in this mode; the host owns the `GRAPH` stream definition and governed graph contracts.
+SemSource no longer supports embedded / host-shared **headless** mode — it runs only as a
+standalone external service (ADR-0006). It provisions and owns its own `GRAPH` stream and
+governed graph contracts; consumers integrate over `graph.query.*` / GraphQL as described
+above and do **not** share JetStream infrastructure with SemSource. A `mode: "headless"`
+config now fails validation with a migration message pointing here.
 
-The host's `GRAPH` stream subject filter **must enumerate the data-plane subjects
-explicitly**. Do not use a wildcard like `graph.ingest.>`.
-
-```text
-Subjects: [
-  "graph.ingest.entity",
-  "graph.ingest.batch",
-  "graph.ingest.manifest",
-  "graph.ingest.status",
-  "graph.ingest.predicates",
-]
-```
-
-This matches the subject list semsource's own `EnsureStreams` writes in standalone mode.
-
-### Why the wildcard breaks the curator workflow
-
-`graph.ingest.add.{namespace}` and `graph.ingest.remove.{namespace}` are NATS
-request/reply subjects served by `source-manifest`. They are **control plane**, not data
-plane. If the stream filter captures them (e.g. via `graph.ingest.>`), JetStream sends a
-`PubAck` to the request's reply inbox the moment the message lands in the stream — racing
-against, and always beating, the real `AddReply` produced by `source-manifest` (which has
-to write to KV first).
-
-The caller then decodes the `PubAck` envelope (`{"stream":"GRAPH","seq":N}`) as the
-response, sees zero components, and assumes the add failed. The KV write that would have
-triggered component spawn never happens.
-
-### Boot-time detection
-
-Semsource scans every JetStream stream on startup in headless mode. If any stream's
-subject filter captures `graph.ingest.add.*` or `graph.ingest.remove.*`, semsource logs
-a loud `ERROR` line at boot identifying the stream and the offending filter — runtime
-adds will misbehave silently otherwise.
+(The JetStream `PubAck`-wins-the-race footgun that the old headless boot-time guard checked
+for only arose when a *host* owned the `GRAPH` stream; with SemSource owning its own stream
+and binding only the explicit data-plane subjects, it no longer applies. The framework-level
+subject-taxonomy concern behind it is tracked upstream — see `docs/upstream/semstreams-asks.md`.)
 
 ## SemSpec Integration Checklist
 

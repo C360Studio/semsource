@@ -1294,209 +1294,10 @@ func TestE2E_RunFailsGracefullyWithoutNATS(t *testing.T) {
 	t.Logf("graceful failure output: %s", strings.TrimSpace(output))
 }
 
-func TestE2E_HeadlessMode(t *testing.T) {
-	// Start NATS via Docker.
-	natsURL, cleanup := startNATS(t)
-	defer cleanup()
-
-	binPath := buildBinary(t)
-	workDir := t.TempDir()
-	httpPort := freePort(t)
-	wsPort := freePort(t)
-
-	// Write headless config — no graph subsystem, no WebSocket.
-	root := repoRoot(t)
-	cfg := map[string]any{
-		"namespace":      "headless-test",
-		"mode":           "headless",
-		"http_port":      httpPort,
-		"websocket_bind": fmt.Sprintf("0.0.0.0:%d", wsPort),
-		"sources": []map[string]any{
-			{"type": "ast", "path": root, "language": "go", "watch": false},
-			{"type": "docs", "paths": []string{filepath.Join(root, "docs")}, "watch": false},
-			{"type": "config", "paths": []string{root}, "watch": false},
-		},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal config: %v", err)
-	}
-	configPath := filepath.Join(workDir, "semsource.json")
-	if err := os.WriteFile(configPath, data, 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	// Subscribe to graph ingest subject BEFORE starting semsource.
-	nc, err := nats.Connect(natsURL)
-	if err != nil {
-		t.Fatalf("connect to NATS: %v", err)
-	}
-	defer nc.Close()
-
-	js, err := jetstream.New(nc)
-	if err != nil {
-		t.Fatalf("create jetstream context: %v", err)
-	}
-
-	ctx := context.Background()
-	stream, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "GRAPH",
-		Subjects: []string{"graph.ingest.>"},
-		Storage:  jetstream.MemoryStorage,
-	})
-	if err != nil {
-		t.Fatalf("create GRAPH stream: %v", err)
-	}
-
-	cons, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
-		DeliverPolicy: jetstream.DeliverAllPolicy,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-	})
-	if err != nil {
-		t.Fatalf("create consumer: %v", err)
-	}
-
-	// Start semsource in headless mode.
-	runCtx, runCancel := context.WithTimeout(ctx, 60*time.Second)
-	defer runCancel()
-
-	cmd := exec.CommandContext(runCtx, binPath, "run",
-		"--config", configPath,
-		"--log-level", "debug",
-		"--nats-url", natsURL,
-	)
-	cmd.Dir = workDir
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatalf("stderr pipe: %v", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start semsource: %v", err)
-	}
-
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			t.Logf("[stderr] %s", scanner.Text())
-		}
-	}()
-
-	logsDone := make(chan struct{})
-	go func() {
-		defer close(logsDone)
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			t.Logf("[stdout] %s", scanner.Text())
-		}
-	}()
-
-	// Collect entity messages from NATS.
-	var entities []entityPayload
-	collectCtx, collectCancel := context.WithTimeout(ctx, 45*time.Second)
-	defer collectCancel()
-
-	fetchDone := make(chan struct{})
-	go func() {
-		defer close(fetchDone)
-		for {
-			if collectCtx.Err() != nil {
-				return
-			}
-			msgs, err := cons.Fetch(10, jetstream.FetchMaxWait(2*time.Second))
-			if err != nil {
-				continue
-			}
-			for msg := range msgs.Messages() {
-				var raw map[string]json.RawMessage
-				if err := json.Unmarshal(msg.Data(), &raw); err != nil {
-					msg.Ack()
-					continue
-				}
-				payloadJSON, ok := raw["payload"]
-				if !ok {
-					payloadJSON, ok = raw["data"]
-				}
-				if !ok {
-					msg.Ack()
-					continue
-				}
-				var payload entityPayload
-				if err := json.Unmarshal(payloadJSON, &payload); err != nil {
-					msg.Ack()
-					continue
-				}
-				if payload.ID == "" {
-					msg.Ack()
-					continue
-				}
-				entities = append(entities, payload)
-				msg.Ack()
-				if len(entities) >= 20 {
-					return
-				}
-			}
-		}
-	}()
-
-	select {
-	case <-fetchDone:
-		t.Logf("collected %d entities", len(entities))
-	case <-collectCtx.Done():
-		t.Logf("collection timed out with %d entities", len(entities))
-	}
-
-	// Query status — should reach "ready" in headless mode.
-	status := waitForReady(t, httpPort, 30*time.Second)
-	t.Logf("headless status: phase=%s, total_entities=%d, sources=%d",
-		status.Phase, status.TotalEntities, len(status.Sources))
-
-	// Stop semsource.
-	cmd.Process.Signal(os.Interrupt)
-	cmd.Wait()
-	<-logsDone
-
-	// --- Assertions ---
-
-	// Entities were published to NATS even without graph subsystem.
-	if len(entities) == 0 {
-		t.Fatal("no entities received — headless mode should still publish to graph.ingest.entity")
-	}
-
-	// Status gating works in headless mode.
-	if status.Phase != "ready" {
-		t.Errorf("status phase = %q, want 'ready'", status.Phase)
-	}
-	if status.Namespace != "headless-test" {
-		t.Errorf("status namespace = %q, want %q", status.Namespace, "headless-test")
-	}
-	if len(status.Sources) != 3 {
-		t.Errorf("status sources = %d, want 3", len(status.Sources))
-	}
-	if status.TotalEntities == 0 {
-		t.Error("status total_entities = 0")
-	}
-
-	// WebSocket should NOT be listening (headless mode skips it).
-	wsURL := fmt.Sprintf("http://127.0.0.1:%d/graph", wsPort)
-	resp, err := http.Get(wsURL)
-	if err == nil {
-		resp.Body.Close()
-		t.Errorf("WebSocket port %d should not be listening in headless mode, but got response", wsPort)
-	}
-	// Connection refused is expected.
-}
-
 // writeRuntimeAddConfig writes a semsource.json with a single baseline source
 // so the source-manifest can reach the "ready" phase at boot. The test then
-// drives a second source in at runtime via graph.ingest.add. namespace and
-// mode let one helper power both the standalone and headless variants.
-func writeRuntimeAddConfig(t *testing.T, dir, namespace, mode string, httpPort, wsPort int, baselineDocs string) string {
+// drives a second source in at runtime via graph.ingest.add.
+func writeRuntimeAddConfig(t *testing.T, dir, namespace string, httpPort, wsPort int, baselineDocs string) string {
 	t.Helper()
 	cfg := map[string]any{
 		"namespace": namespace,
@@ -1504,9 +1305,6 @@ func writeRuntimeAddConfig(t *testing.T, dir, namespace, mode string, httpPort, 
 		"sources": []map[string]any{
 			{"type": "docs", "paths": []string{baselineDocs}, "watch": false},
 		},
-	}
-	if mode != "" {
-		cfg["mode"] = mode
 	}
 	if wsPort > 0 {
 		cfg["websocket_bind"] = fmt.Sprintf("0.0.0.0:%d", wsPort)
@@ -1546,107 +1344,10 @@ type addReplyEnvelope struct {
 // fix, the AddRequest succeeds at the KV layer but no component starts —
 // this test would fail because the new instance never reports status.
 func TestE2E_RuntimeSourceAdd(t *testing.T) {
-	runRuntimeSourceAddTest(t, "runtimeadd", "")
+	runRuntimeSourceAddTest(t, "runtimeadd")
 }
 
-// TestE2E_RuntimeSourceAdd_Headless mirrors TestE2E_RuntimeSourceAdd but
-// runs in headless mode — semsource shares the KV bucket with a notional
-// host app, no graph subsystem, no WebSocket. Semteams reported the
-// runtime-add bug while running headless, so this test guards the same
-// path in that configuration. If this fails while the standalone variant
-// passes, the bug is headless-specific (e.g. shared-bucket OnChange
-// notification drops, subscription wiring skipped in headless).
-func TestE2E_RuntimeSourceAdd_Headless(t *testing.T) {
-	runRuntimeSourceAddTest(t, "runtimeadd-headless", "headless")
-}
-
-// TestE2E_HeadlessStreamConfigWarning verifies the boot-time defensive
-// check: when the host's GRAPH stream uses a wildcard like
-// `graph.ingest.>` that would intercept the control-plane subjects
-// (graph.ingest.add.* / .remove.*), semsource logs a loud ERROR at
-// startup naming the misconfigured stream and the offending filter.
-// This protects future headless deployers from silently hitting the
-// JetStream PubAck race that bit semteams.
-func TestE2E_HeadlessStreamConfigWarning(t *testing.T) {
-	natsURL, cleanup := startNATS(t)
-	defer cleanup()
-
-	binPath := buildBinary(t)
-	workDir := t.TempDir()
-	httpPort := freePort(t)
-	wsPort := freePort(t)
-
-	root := repoRoot(t)
-	configPath := writeRuntimeAddConfig(t, workDir, "stream-warn-test", "headless",
-		httpPort, wsPort, filepath.Join(root, "docs"))
-
-	// Pre-create GRAPH with the *bad* wildcard — exactly the
-	// misconfiguration semsource is meant to catch.
-	nc, err := nats.Connect(natsURL)
-	if err != nil {
-		t.Fatalf("connect to NATS: %v", err)
-	}
-	defer nc.Close()
-	js, err := jetstream.New(nc)
-	if err != nil {
-		t.Fatalf("create jetstream context: %v", err)
-	}
-	if _, err := js.CreateStream(context.Background(), jetstream.StreamConfig{
-		Name:     "GRAPH",
-		Subjects: []string{"graph.ingest.>"},
-		Storage:  jetstream.MemoryStorage,
-	}); err != nil {
-		t.Fatalf("create bad GRAPH stream: %v", err)
-	}
-
-	runCtx, runCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer runCancel()
-	cmd := exec.CommandContext(runCtx, binPath, "run",
-		"--config", configPath,
-		"--log-level", "debug",
-		"--nats-url", natsURL,
-	)
-	cmd.Dir = workDir
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start semsource: %v", err)
-	}
-	defer func() {
-		cmd.Process.Signal(os.Interrupt)
-		cmd.Wait()
-	}()
-
-	deadline := time.Now().Add(20 * time.Second)
-	warnCh := make(chan struct{}, 1)
-	scan := func(label string, r interface{ Read([]byte) (int, error) }) {
-		s := bufio.NewScanner(r)
-		s.Buffer(make([]byte, 64*1024), 1024*1024)
-		for s.Scan() {
-			line := s.Text()
-			t.Logf("[%s] %s", label, line)
-			if strings.Contains(line, "host JetStream stream captures semsource control-plane subjects") &&
-				strings.Contains(line, "\"GRAPH\"") &&
-				strings.Contains(line, "graph.ingest.>") {
-				select {
-				case warnCh <- struct{}{}:
-				default:
-				}
-			}
-		}
-	}
-	go scan("stdout", stdout)
-	go scan("stderr", stderr)
-
-	select {
-	case <-warnCh:
-		// Got it.
-	case <-time.After(time.Until(deadline)):
-		t.Fatal("did not see headless stream-config warning within 20s — defensive check is not firing")
-	}
-}
-
-func runRuntimeSourceAddTest(t *testing.T, namespace, mode string) {
+func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	t.Helper()
 	natsURL, cleanup := startNATS(t)
 	defer cleanup()
@@ -1654,19 +1355,16 @@ func runRuntimeSourceAddTest(t *testing.T, namespace, mode string) {
 	binPath := buildBinary(t)
 	workDir := t.TempDir()
 	httpPort := freePort(t)
-	wsPort := 0
-	if mode != "headless" {
-		// Standalone mode binds the WebSocket; pick a free port so
-		// parallel runs don't clash with 7890 default.
-		wsPort = freePort(t)
-	}
+	// semsource binds the WebSocket; pick a free port so parallel runs
+	// don't clash with the 7890 default.
+	wsPort := freePort(t)
 
 	// Baseline source: the repo's own docs directory. The runtime-added
 	// source will point at a freshly-created temp directory with one
 	// markdown file, so the instance name will be distinct.
 	root := repoRoot(t)
 	baselineDocs := filepath.Join(root, "docs")
-	configPath := writeRuntimeAddConfig(t, workDir, namespace, mode, httpPort, wsPort, baselineDocs)
+	configPath := writeRuntimeAddConfig(t, workDir, namespace, httpPort, wsPort, baselineDocs)
 
 	// Prepare the runtime-added source's content. A single docs file is
 	// enough to trigger a status report (phase: idle, watch:false).

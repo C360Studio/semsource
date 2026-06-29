@@ -8,18 +8,12 @@ import (
 	"strconv"
 )
 
-// Mode constants for semsource operation.
-const (
-	// ModeStandalone runs the full graph subsystem (ingest, index, embedding,
-	// query, gateway) and WebSocket output. This is the default.
-	ModeStandalone = "standalone"
-
-	// ModeHeadless runs source components only. Entities are published to
-	// graph.ingest.entity for consumption by a host app (SemSpec, SemDragon)
-	// that manages its own graph infrastructure. No graph processing, no
-	// WebSocket server, no GraphQL gateway.
-	ModeHeadless = "headless"
-)
+// ModeStandalone is the sole supported operation mode: semsource runs the full
+// graph subsystem (ingest, index, embedding, query, fusion gateway) and the
+// WebSocket output as a standalone external service. The headless embed mode was
+// removed in ADR-0006 (semsource is an external service now, not a host-embedded
+// component). The Mode field is retained only for config back-compat.
+const ModeStandalone = "standalone"
 
 // EntityStoreConfig configures persistent graph storage via NATS KV.
 // When present, entities are persisted to the shared ENTITY_STATES bucket.
@@ -29,8 +23,7 @@ type EntityStoreConfig struct {
 	NATSUrl string `json:"nats_url"`
 }
 
-// GraphConfig configures graph subsystem components (standalone mode only).
-// In headless mode these settings are ignored.
+// GraphConfig configures graph subsystem components.
 type GraphConfig struct {
 	// GatewayBind is the bind address for the GraphQL gateway. Defaults to "0.0.0.0:8082".
 	GatewayBind string `json:"gateway_bind,omitempty"`
@@ -107,12 +100,12 @@ type Config struct {
 	// Defaults to "/graph".
 	WebSocketPath string `json:"websocket_path,omitempty"`
 
-	// Mode controls semsource operation: "standalone" (default) runs the full
-	// graph subsystem; "headless" publishes entities only for a host app.
-	// Can also be set via the SEMSOURCE_MODE environment variable.
+	// Mode is retained for config back-compat and accepts only "standalone"
+	// (the default). The removed "headless" value now fails validation with a
+	// migration error (ADR-0006). Can be set via the SEMSOURCE_MODE env var.
 	Mode string `json:"mode,omitempty"`
 
-	// Graph configures graph subsystem components (standalone mode only).
+	// Graph configures graph subsystem components.
 	Graph *GraphConfig `json:"graph,omitempty"`
 
 	// Metrics configures the Prometheus metrics endpoint.
@@ -165,11 +158,6 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// IsHeadless returns true when semsource is running in headless mode.
-func (c *Config) IsHeadless() bool {
-	return c.Mode == ModeHeadless
-}
-
 // Validate checks that all required fields are present and each source is valid.
 func (c *Config) Validate() error {
 	if c.Namespace == "" {
@@ -178,8 +166,13 @@ func (c *Config) Validate() error {
 	if len(c.Sources) == 0 {
 		return fmt.Errorf("config: sources must contain at least one source")
 	}
-	if c.Mode != "" && c.Mode != ModeStandalone && c.Mode != ModeHeadless {
-		return fmt.Errorf("config: mode must be %q or %q, got %q", ModeStandalone, ModeHeadless, c.Mode)
+	if c.Mode == "headless" {
+		return fmt.Errorf("config: headless mode was removed in ADR-0006 — semsource now "+
+			"runs only as a standalone external service; remove the \"mode\" setting or set "+
+			"it to %q", ModeStandalone)
+	}
+	if c.Mode != "" && c.Mode != ModeStandalone {
+		return fmt.Errorf("config: mode must be %q, got %q", ModeStandalone, c.Mode)
 	}
 
 	for i, src := range c.Sources {

@@ -6,8 +6,8 @@ SemSource is the source-knowledge ingestion service for the C360 graph stack. It
 turns repositories, documents, URLs, configuration files, media, and future
 binary/protocol sources into typed SemStreams graph facts.
 
-SemSource should be useful both as a standalone graph service and as a headless
-source sidecar for a host product such as SemOps. The repo should stay source
+SemSource is a standalone external graph service (the embedded headless sidecar
+mode was removed in ADR-0006). The repo should stay source
 focused: protocol decoding, media metadata extraction, storage-by-reference, and
 graph projection are in scope; product-specific COP fusion, alerting, or UI
 behavior belongs in SemOps or another consuming product.
@@ -33,7 +33,6 @@ behavior belongs in SemOps or another consuming product.
   project metadata, provenance, hashes, offsets, and extraction findings.
 - Every graph writer path must carry a semantic envelope. After SemStreams
   ADR-055, no source may rely on `triple.add` auto-vivifying an entity.
-- Standalone SemSource should run a governed SemStreams graph substrate. Headless
-  SemSource should publish governed source payloads to the host substrate and
-  document which ownership responsibilities are host-owned.
+- SemSource runs a governed SemStreams graph substrate as a standalone external
+  service.
 - Large dependency migrations use OpenSpec before code changes.

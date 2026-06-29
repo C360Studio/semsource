@@ -569,26 +569,22 @@ func TestLoadConfigFromReader_ModeDefault(t *testing.T) {
 	if cfg.Mode != config.ModeStandalone {
 		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeStandalone)
 	}
-	if cfg.IsHeadless() {
-		t.Error("IsHeadless() = true, want false for default mode")
-	}
 }
 
-func TestLoadConfigFromReader_ModeHeadless(t *testing.T) {
+// TestLoadConfigFromReader_ModeHeadlessRejected verifies the ADR-0006 migration
+// guard: the removed "headless" mode now fails validation with a clear message.
+func TestLoadConfigFromReader_ModeHeadlessRejected(t *testing.T) {
 	input := `{
   "namespace": "acme",
   "mode": "headless",
   "sources": [{"type": "ast", "path": "./", "language": "go"}]
 }`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error for removed headless mode")
 	}
-	if cfg.Mode != config.ModeHeadless {
-		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeHeadless)
-	}
-	if !cfg.IsHeadless() {
-		t.Error("IsHeadless() = false, want true")
+	if !strings.Contains(err.Error(), "headless") {
+		t.Errorf("error should explain headless removal, got: %v", err)
 	}
 }
 
@@ -622,6 +618,8 @@ func TestLoadConfigFromReader_ModeInvalid(t *testing.T) {
 	}
 }
 
+// TestLoadConfigFromReader_ModeEnvOverride confirms SEMSOURCE_MODE is read (it
+// overrides the file value) and that an env-set headless is rejected too.
 func TestLoadConfigFromReader_ModeEnvOverride(t *testing.T) {
 	t.Setenv("SEMSOURCE_MODE", "headless")
 	input := `{
@@ -629,12 +627,12 @@ func TestLoadConfigFromReader_ModeEnvOverride(t *testing.T) {
   "mode": "standalone",
   "sources": [{"type": "ast", "path": "./", "language": "go"}]
 }`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected validation error: env SEMSOURCE_MODE=headless must be rejected")
 	}
-	if cfg.Mode != config.ModeHeadless {
-		t.Errorf("mode: got %q, want %q (env should override config)", cfg.Mode, config.ModeHeadless)
+	if !strings.Contains(err.Error(), "headless") {
+		t.Errorf("error should explain headless removal, got: %v", err)
 	}
 }
 

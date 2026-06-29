@@ -109,9 +109,8 @@ consumer contract for governed graph integrations.
 
 ### Governance
 
-SemSource owns source-ingestion predicates through SemStreams owner claims. Standalone mode bootstraps
-`OWNER_CLAIMS` and `OWNER_PRESENCE` before graph ingest starts. Headless/embedded mode expects the host platform
-to own governance bootstrap.
+SemSource owns source-ingestion predicates through SemStreams owner claims. As a standalone external
+service it bootstraps `OWNER_CLAIMS` and `OWNER_PRESENCE` before graph ingest starts.
 
 Ownership is exact-predicate only. Do not use wildcard predicate ownership for SemSource until SemStreams exposes
 and tests that contract upstream.

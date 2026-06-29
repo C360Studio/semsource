@@ -23,8 +23,8 @@ type Bootstrap struct {
 }
 
 // BootstrapStandalone creates the governed graph ownership buckets and binds
-// SemSource's source projection contract. Headless hosts must do this outside
-// SemSource, so this function is standalone-only.
+// SemSource's source projection contract. semsource runs as a standalone
+// external service and always owns this bootstrap.
 func BootstrapStandalone(ctx context.Context, nc *natsclient.Client, logger *slog.Logger) (*Bootstrap, error) {
 	if logger == nil {
 		logger = slog.Default()

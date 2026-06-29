@@ -124,21 +124,13 @@ func runCmd(args []string) error {
 	}
 	defer nc.Close(context.Background())
 
-	var governanceBoot *semgovernance.Bootstrap
-	if semsourceCfg.IsHeadless() {
-		logger.Info("headless mode — skipping SemSource ownership bootstrap; host app owns graph governance")
-	} else {
-		governanceBoot, err = semgovernance.BootstrapStandalone(signalCtx, nc, logger)
-		if err != nil {
-			return err
-		}
+	governanceBoot, err := semgovernance.BootstrapStandalone(signalCtx, nc, logger)
+	if err != nil {
+		return err
 	}
 
-	// Register factories before starting the config manager so we can drop
-	// components coming from the shared KV bucket whose factory semsource
-	// doesn't own — see pruneForeignComponents.
 	registry := component.NewRegistry()
-	if err := registerComponentFactories(registry, semsourceCfg.IsHeadless()); err != nil {
+	if err := registerComponentFactories(registry); err != nil {
 		return err
 	}
 
@@ -155,10 +147,6 @@ func runCmd(args []string) error {
 		return fmt.Errorf("start config manager: %w", err)
 	}
 	defer configMgr.Stop(5 * time.Second)
-
-	if semsourceCfg.IsHeadless() {
-		pruneForeignComponents(configMgr, registry, logger)
-	}
 
 	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, governanceBoot, logger)
 	if err != nil {
@@ -228,118 +216,14 @@ func setupNATS(
 		return nil, nil, fmt.Errorf("build semstreams config: %w", err)
 	}
 
-	// In headless mode the host app owns JetStream infrastructure —
-	// skip stream creation/updates to avoid conflicts.
-	if !cfg.IsHeadless() {
-		streamsManager := semconfig.NewStreamsManager(nc, logger)
-		if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
-			nc.Close(context.Background())
-			return nil, nil, fmt.Errorf("ensure JetStream streams: %w", err)
-		}
-		logger.Info("JetStream streams ready")
-	} else {
-		logger.Info("headless mode — skipping stream provisioning (host app owns infrastructure)")
-		warnIfHostStreamCapturesRPCReplySubjects(ctx, nc, logger)
+	streamsManager := semconfig.NewStreamsManager(nc, logger)
+	if err := streamsManager.EnsureStreams(ctx, ssCfg); err != nil {
+		nc.Close(context.Background())
+		return nil, nil, fmt.Errorf("ensure JetStream streams: %w", err)
 	}
+	logger.Info("JetStream streams ready")
 
 	return nc, ssCfg, nil
-}
-
-// rpcReplySubjects are NATS request/reply subjects semsource (and its
-// graph-ingest dependency) serve over CORE request/reply. They are
-// intentionally excluded from semsource's own GRAPH stream subjects so
-// JetStream does not store them. A host-owned stream that captures any of
-// them (e.g. via a `graph.ingest.>` wildcard) breaks request/reply: the
-// broker sends a PubAck to the request's reply inbox the instant the
-// message lands in the stream, the client treats that PubAck as the
-// response, and the real reply loses the race — the caller sees a
-// malformed reply (a JetStream `{"stream":...,"seq":...}` ack, no payload).
-//
-// Two RPC planes are at risk, both under the `graph.ingest.*` prefix:
-//   - graph.ingest.add/remove.* — source-manifest curator workflow; a
-//     captured reply makes runtime add_source_repo appear to succeed while
-//     no component spawns.
-//   - graph.ingest.query.* — graph-ingest read path (entity/batch/prefix/
-//     suffix), reached via the graph-query facade; a captured reply makes
-//     batch/prefix/entity queries return ZERO results for entities that are
-//     present in ENTITY_STATES. Verified end-to-end by the fusion gateway
-//     integration test (a `graph.ingest.>` GRAPH stream silently zeroed the
-//     fused response).
-var rpcReplySubjects = []string{
-	"graph.ingest.add.runtimeadd-probe",
-	"graph.ingest.remove.runtimeadd-probe",
-	"graph.ingest.query.batch",
-	"graph.ingest.query.prefix",
-	"graph.ingest.query.entity",
-	"graph.ingest.query.suffix",
-}
-
-// warnIfHostStreamCapturesRPCReplySubjects checks every JetStream stream
-// the broker exposes and logs a loud ERROR for each one whose subject
-// filter would intercept a semsource core request/reply subject (curator
-// control plane OR graph read path; see rpcReplySubjects).
-// Best-effort: any lookup error is logged at DEBUG and the function
-// returns silently, since we don't want to fail boot just because we
-// couldn't introspect JetStream.
-func warnIfHostStreamCapturesRPCReplySubjects(ctx context.Context, nc *natsclient.Client, logger *slog.Logger) {
-	js, err := nc.JetStream()
-	if err != nil {
-		logger.Debug("headless: skipping stream-config validation — JetStream unavailable", "error", err)
-		return
-	}
-
-	lister := js.ListStreams(ctx)
-	for info := range lister.Info() {
-		if info == nil || info.Config.Name == "" {
-			continue
-		}
-		var bad []string
-		for _, filter := range info.Config.Subjects {
-			for _, probe := range rpcReplySubjects {
-				if subjectFilterMatches(filter, probe) {
-					bad = append(bad, filter)
-					break
-				}
-			}
-		}
-		if len(bad) > 0 {
-			logger.Error(
-				"headless: host JetStream stream captures semsource request/reply subjects — "+
-					"graph.ingest.add/remove.* (curator) and/or graph.ingest.query.* (graph read "+
-					"path) will receive PubAcks that race with the real reply. Symptoms: runtime "+
-					"add_source_repo appears to succeed but no component spawns, AND batch/prefix/"+
-					"entity queries silently return zero results for entities that ARE in the graph. "+
-					"Narrow the host stream's subject filter to only the data-plane subjects "+
-					"(graph.ingest.entity, graph.ingest.batch, graph.ingest.manifest, "+
-					"graph.ingest.status, graph.ingest.predicates).",
-				"stream", info.Config.Name,
-				"offending_filters", bad,
-			)
-		}
-	}
-	if err := lister.Err(); err != nil {
-		logger.Debug("headless: stream-config validation incomplete", "error", err)
-	}
-}
-
-// subjectFilterMatches reports whether NATS subject filter would match
-// the concrete subject. Implements the NATS wildcard rules: "*" matches
-// exactly one token; ">" matches one or more trailing tokens.
-func subjectFilterMatches(filter, subject string) bool {
-	fParts := strings.Split(filter, ".")
-	sParts := strings.Split(subject, ".")
-	for i, fp := range fParts {
-		if fp == ">" {
-			return i < len(sParts)
-		}
-		if i >= len(sParts) {
-			return false
-		}
-		if fp != "*" && fp != sParts[i] {
-			return false
-		}
-	}
-	return len(fParts) == len(sParts)
 }
 
 // loadAndExpandConfig loads the semsource config and expands "repo" meta-sources
@@ -357,72 +241,12 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 	return cfg, result, nil
 }
 
-// pruneForeignComponents removes components from the config manager's KV-synced
-// state whose factory name isn't in the local registry. In headless mode
-// semsource shares the "semstreams_config" KV bucket with the host app
-// (SemSpec, SemDragon, etc.), so the synced Components map includes the host's
-// component definitions. Without pruning, semstreams' ComponentManager tries
-// to instantiate every one of them at startup and logs a loud
-// "factory lookup failed" ERROR for each foreign component — noisy and alarming
-// even though the instantiation is harmless (semsource only runs the 5 it owns).
-//
-// The registry holds only the factories semsource registered; anything not in
-// it is by definition foreign. We keep foreign entries out of the in-memory
-// SafeConfig but leave them untouched in the KV bucket so the owning app still
-// sees its own config.
-func pruneForeignComponents(configMgr *semconfig.Manager, registry *component.Registry, logger *slog.Logger) {
-	safeCfg := configMgr.GetConfig()
-	if safeCfg == nil {
-		return
-	}
-	cfg := safeCfg.Get()
-	if cfg == nil || len(cfg.Components) == 0 {
-		return
-	}
-
-	factories := registry.ListFactories()
-	known := make(map[string]bool, len(factories))
-	for name := range factories {
-		known[name] = true
-	}
-
-	var foreign []string
-	for instance, comp := range cfg.Components {
-		if !known[comp.Name] {
-			foreign = append(foreign, instance)
-		}
-	}
-	if len(foreign) == 0 {
-		return
-	}
-
-	for _, instance := range foreign {
-		delete(cfg.Components, instance)
-	}
-	if err := safeCfg.Update(cfg); err != nil {
-		logger.Warn("headless: failed to prune foreign components from synced config",
-			"error", err,
-			"foreign_count", len(foreign))
-		return
-	}
-	logger.Info("headless: pruned foreign components from synced config",
-		"pruned", len(foreign),
-		"owned", len(cfg.Components))
-	logger.Debug("headless: foreign components pruned",
-		"instances", foreign)
-}
-
-// registerComponentFactories registers component factories based on mode.
-// In standalone mode, all semstreams built-in factories (graph, agentic, etc.)
-// are registered alongside semsource factories. In headless mode, only
-// semsource's own factories plus the graph-layer factories needed for
-// standalone are registered — no agentic, protocol, or other factories that
-// could collide with the host app's components on the shared KV bucket.
-func registerComponentFactories(registry *component.Registry, headless bool) error {
-	if !headless {
-		if err := componentregistry.Register(registry); err != nil {
-			return fmt.Errorf("register semstreams components: %w", err)
-		}
+// registerComponentFactories registers the semstreams built-in factories
+// (graph, agentic, etc.) alongside semsource's own factories. semsource runs as
+// a standalone service that owns its full component set.
+func registerComponentFactories(registry *component.Registry) error {
+	if err := componentregistry.Register(registry); err != nil {
+		return fmt.Errorf("register semstreams components: %w", err)
 	}
 	if err := registerSemsourceFactories(registry); err != nil {
 		return err
@@ -626,8 +450,8 @@ func wrapNATSConnError(err error, url string) error {
 }
 
 // buildSemstreamsConfig constructs a semstreams config.Config from the semsource
-// config. In standalone mode it wires the full graph subsystem and WebSocket
-// output. In headless mode only source components and the manifest are included.
+// config: source components, the manifest, the full graph subsystem, the
+// WebSocket output, and the fusion gateways.
 func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, error) {
 	components, err := sourceComponents(cfg, org)
 	if err != nil {
@@ -640,35 +464,32 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}
 	components["source-manifest"] = manifestCfg
 
-	// Graph subsystem, WebSocket, and the fusion gateways are standalone-only:
-	// the gateways query graph.query.* / graph.index.query.*, which the graph
-	// subsystem here serves. In headless mode the host owns the graph subsystem,
-	// so a host-side gateway would be wired there instead.
-	if !cfg.IsHeadless() {
-		graphComponents, err := graphSubsystemComponents(cfg)
+	// Graph subsystem + WebSocket output + the fusion gateways. The gateways
+	// query graph.query.* / graph.index.query.*, which the graph subsystem here
+	// serves; semsource owns the full set as a standalone external service.
+	graphComponents, err := graphSubsystemComponents(cfg)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range graphComponents {
+		components[k] = v
+	}
+
+	wsCfg, err := websocketComponentConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	components["websocket-output"] = wsCfg
+
+	// code-context / doc-context fusion gateways (ADR-0004). Two instances of
+	// one factory; the map key is the instance name (→ HTTP prefix), the
+	// Config.Lens selects the lens, and the NATS subject root differs by lens.
+	for instance, lens := range map[string]string{"code-context": "code", "doc-context": "docs"} {
+		gwCfg, err := codeContextComponentConfig(lens)
 		if err != nil {
 			return nil, err
 		}
-		for k, v := range graphComponents {
-			components[k] = v
-		}
-
-		wsCfg, err := websocketComponentConfig(cfg)
-		if err != nil {
-			return nil, err
-		}
-		components["websocket-output"] = wsCfg
-
-		// code-context / doc-context fusion gateways (ADR-0004). Two instances of
-		// one factory; the map key is the instance name (→ HTTP prefix), the
-		// Config.Lens selects the lens, and the NATS subject root differs by lens.
-		for instance, lens := range map[string]string{"code-context": "code", "doc-context": "docs"} {
-			gwCfg, err := codeContextComponentConfig(lens)
-			if err != nil {
-				return nil, err
-			}
-			components[instance] = gwCfg
-		}
+		components[instance] = gwCfg
 	}
 
 	svcs, err := serviceConfigs(cfg)
@@ -690,11 +511,8 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		Components: components,
 	}
 
-	// In headless mode, no stream config — the host app owns infrastructure.
-	// In standalone mode, declare the full GRAPH stream with user overrides.
-	if !cfg.IsHeadless() {
-		ssCfg.Streams = graphStreamConfig(cfg)
-	}
+	// Declare the full GRAPH stream with user overrides.
+	ssCfg.Streams = graphStreamConfig(cfg)
 
 	return ssCfg, nil
 }
@@ -1066,10 +884,7 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 			// ConfigManager's KV watcher. Without it, runtime writes via
 			// graph.ingest.add (sourcespawn.Add → PutComponentToKV) and the
 			// branch watcher land in KV but never trigger component spawn —
-			// only the boot-time snapshot is loaded. Headless mode shares
-			// the bucket with the host app, so foreign writes can log
-			// "factory not found" — harmless (createAndStartComponent logs
-			// and continues), but a known noise source.
+			// only the boot-time snapshot is loaded.
 			Config: json.RawMessage(`{"watch_config":true}`),
 		},
 		"metrics": types.ServiceConfig{
