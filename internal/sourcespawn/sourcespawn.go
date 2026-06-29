@@ -298,27 +298,19 @@ func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 	if instanceName == "" {
 		return &Error{Code: CodeValidationFailed, Message: "instance_name is required"}
 	}
-
-	// Drop from the in-memory config + bump version, delete the KV key, then
-	// PushToKV so subscribers are notified and the ComponentManager reconciles
-	// the component away (DeleteComponentFromKV alone marks its revision
-	// engine-owned, so the watcher skips it and the component keeps running).
-	safeCfg := store.GetConfig()
-	cfg := safeCfg.Get()
-	delete(cfg.Components, instanceName)
-	cfg.Version = bumpConfigVersion(cfg.Version)
-	if err := safeCfg.Update(cfg); err != nil {
-		return &Error{Code: CodeKVWriteFailed, Message: "apply config in memory", Cause: err}
-	}
+	// NOTE: this deletes the KV key but does NOT trigger a reconcile, so the
+	// running component is not torn down until the next reconcile (the same
+	// engine-owned-revision watcher skip that Add works around via PushToKV).
+	// We deliberately do NOT PushToKV here: driving a reconcile *stop* from
+	// within the remove request handler deadlocks (unlike Add's reconcile
+	// spawn). The manifest is updated by the handler directly, so callers see
+	// the removal immediately; full teardown-on-remove is tracked separately.
 	if err := store.DeleteComponentFromKV(ctx, instanceName); err != nil {
 		return &Error{
 			Code:    CodeKVWriteFailed,
 			Message: fmt.Sprintf("delete component %q from KV", instanceName),
 			Cause:   err,
 		}
-	}
-	if err := store.PushToKV(ctx); err != nil {
-		return &Error{Code: CodeKVWriteFailed, Message: "push config to KV", Cause: err}
 	}
 	return nil
 }
