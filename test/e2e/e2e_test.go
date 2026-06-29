@@ -1641,6 +1641,13 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	// "Component successfully stopped and removed" for the runtime
 	// instance, proving the reactive path went all the way through
 	// component-manager (not just the source-manifest republish).
+	//
+	// KNOWN FAILURE — blocked on semstreams#388: runtime remove does not tear
+	// the component down (the engine-owned-revision watcher skip drops the
+	// delete event, and driving the reconcile-stop in-handler via PushToKV
+	// deadlocks). The add path is fixed; teardown waits on the upstream fix.
+	// This assertion is the regression check that will go green once #388 lands;
+	// e2e is not gated in CI until then.
 	logMu.Lock()
 	var sawStopRemove bool
 	for _, line := range stoppedRemovedLines {
