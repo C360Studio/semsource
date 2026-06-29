@@ -92,3 +92,19 @@ data-plane subjects, and the headless guard `warnIfHostStreamCapturesRPCReplySub
 **Surfaced by:** Fusion full-pipeline integration test (ADR-0004) — a `graph.ingest.>`
 test stream zeroed the fused response; root cause confirmed against the existing
 run.go guard, which previously probed only the curator subjects.
+
+---
+
+## Service auth
+
+### 7. Service-level auth (API token / session) as a framework primitive — framework-shaped — candidate
+As semsource becomes an external service (ADR-0006) it needs auth on its HTTP/MCP
+surfaces — API token first, session-based for interactive callers later. Every sem*
+service exposed externally faces the same need. Rolling auth per service means N
+incompatible token schemes, no shared principal/tenancy model, and per-service drift.
+A framework primitive — pluggable auth middleware + a principal/identity type carried
+through `component.Dependencies`, reusable across HTTP/NATS/MCP surfaces — would give
+the mesh one auth story. semsource will ship a local pluggable seam (permissive
+default) per ADR-0006; if the shape generalizes, propose lifting it upstream so it
+isn't re-rolled.
+**Surfaced by:** ADR-0006 trust model (trusted-now / untrusted-ready).
