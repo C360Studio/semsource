@@ -943,18 +943,7 @@ func registerIngestHandlers(
 		return fmt.Errorf("component-manager has unexpected type %T", cmService)
 	}
 
-	managed := cm.GetManagedComponents()
-	mc, ok := managed["source-manifest"]
-	if !ok {
-		logger.Debug("source-manifest not running; skipping ingest handler registration")
-		return nil
-	}
-	smComponent, ok := mc.Component.(*sourcemanifest.Component)
-	if !ok {
-		return fmt.Errorf("source-manifest has unexpected type %T", mc.Component)
-	}
-
-	return smComponent.RegisterIngestHandlers(ctx, sourcemanifest.IngestHandlerConfig{
+	ingestCfg := sourcemanifest.IngestHandlerConfig{
 		Namespace: cfg.Namespace,
 		Store:     configMgr,
 		Spawn: sourcespawn.Options{
@@ -963,7 +952,49 @@ func registerIngestHandlers(
 			GitToken:      cfg.GitToken,
 			MediaStoreDir: cfg.MediaStoreDir,
 		},
-	})
+	}
+
+	// source-manifest's Start (which flips its running flag) can lag StartAll's
+	// return, so poll until it is both managed AND started before wiring the
+	// curator ingest handlers. A one-shot registration loses that race —
+	// RegisterIngestHandlers returns "component not started" and the
+	// graph.ingest.add/remove subjects would then never get handlers (runtime
+	// source-add silently no-ops). Bounded so a genuinely-absent component
+	// surfaces an error instead of blocking forever.
+	const (
+		readyDeadline = 10 * time.Second
+		pollInterval  = 100 * time.Millisecond
+	)
+	deadline := time.Now().Add(readyDeadline)
+	lastErr := fmt.Errorf("source-manifest not yet managed")
+	for {
+		if mc, ok := cm.GetManagedComponents()["source-manifest"]; ok {
+			smComponent, ok := mc.Component.(*sourcemanifest.Component)
+			if !ok {
+				return fmt.Errorf("source-manifest has unexpected type %T", mc.Component)
+			}
+			err := smComponent.RegisterIngestHandlers(ctx, ingestCfg)
+			if err == nil {
+				logger.Debug("source-manifest ingest handlers registered")
+				return nil
+			}
+			// "component not started" is the start-race — retry (it returns
+			// before any subscription, so retrying can't double-register). Any
+			// other error is terminal.
+			if !strings.Contains(err.Error(), "component not started") {
+				return err
+			}
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("source-manifest ingest handlers not registered within %s: %w", readyDeadline, lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
 }
 
 // startBranchWatchers starts a poll goroutine for each multi-branch repo.
