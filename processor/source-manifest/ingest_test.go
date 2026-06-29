@@ -9,16 +9,22 @@ import (
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/sourcespawn"
+	semconfig "github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/types"
 )
 
 // stubStore satisfies sourcespawn.ConfigStore for tests that exercise the
-// ingest handler's pre-flight checks without writing to KV.
+// ingest handler's pre-flight checks without committing to KV (PushToKV is a
+// no-op).
 type stubStore struct{}
 
-func (stubStore) PutComponentToKV(_ context.Context, _ string, _ types.ComponentConfig) error {
-	return nil
+func (stubStore) GetConfig() *semconfig.SafeConfig {
+	return semconfig.NewSafeConfig(&semconfig.Config{
+		Platform:   semconfig.PlatformConfig{Org: "test", ID: "test"},
+		Components: map[string]types.ComponentConfig{},
+	})
 }
+func (stubStore) PushToKV(_ context.Context) error                        { return nil }
 func (stubStore) DeleteComponentFromKV(_ context.Context, _ string) error { return nil }
 
 func TestMapSpawnError_AllCodes(t *testing.T) {

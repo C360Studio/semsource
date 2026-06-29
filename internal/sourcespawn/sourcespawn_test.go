@@ -9,26 +9,40 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/config"
+	semconfig "github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/types"
 )
 
-// fakeStore captures KV writes and lets us assert on them.
+// fakeStore wraps an in-memory SafeConfig (the real Add/Remove path) and mirrors
+// the components into `puts` on PushToKV so assertions can inspect what was
+// committed. `deletes` records DeleteComponentFromKV calls.
 type fakeStore struct {
+	cfg     *semconfig.SafeConfig
 	puts    map[string]types.ComponentConfig
 	deletes []string
-	failPut bool
+	failPut bool // fails PushToKV
 	failDel bool
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{puts: make(map[string]types.ComponentConfig)}
+	return &fakeStore{
+		cfg: semconfig.NewSafeConfig(&semconfig.Config{
+			Platform:   semconfig.PlatformConfig{Org: "test", ID: "test"},
+			Components: map[string]types.ComponentConfig{},
+		}),
+		puts: make(map[string]types.ComponentConfig),
+	}
 }
 
-func (f *fakeStore) PutComponentToKV(_ context.Context, name string, cfg types.ComponentConfig) error {
+func (f *fakeStore) GetConfig() *semconfig.SafeConfig { return f.cfg }
+
+func (f *fakeStore) PushToKV(_ context.Context) error {
 	if f.failPut {
 		return errors.New("kv unavailable")
 	}
-	f.puts[name] = cfg
+	for name, c := range f.cfg.Get().Components {
+		f.puts[name] = c
+	}
 	return nil
 }
 
@@ -406,59 +420,15 @@ func TestAdd_KVFailure_ReportsKVCode(t *testing.T) {
 	}
 }
 
-// flakyStore fails after N successful puts. Used to exercise repo-expansion
-// partial-success: writes 1..N-1 land, write N fails, write N+1 never runs.
-type flakyStore struct {
-	puts    map[string]types.ComponentConfig
-	deletes []string
-	failAt  int // 1-based; 0 disables
-	count   int
-}
-
-func newFlakyStore(failAt int) *flakyStore {
-	return &flakyStore{puts: make(map[string]types.ComponentConfig), failAt: failAt}
-}
-
-func (f *flakyStore) PutComponentToKV(_ context.Context, name string, cfg types.ComponentConfig) error {
-	f.count++
-	if f.failAt > 0 && f.count == f.failAt {
-		return errors.New("kv unavailable on write " + itoa(f.count))
-	}
-	f.puts[name] = cfg
-	return nil
-}
-
-func (f *flakyStore) DeleteComponentFromKV(_ context.Context, name string) error {
-	f.deletes = append(f.deletes, name)
-	return nil
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [4]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}
-
-// TestAdd_PartialSuccess_ReturnsResultsAndError verifies the contract that
-// callers depend on for retry safety: when a repo write fails mid-loop, the
-// caller sees both the partial results (committed instances) and the error.
-func TestAdd_PartialSuccess_ReturnsResultsAndError(t *testing.T) {
+// TestAdd_PushFailure_IsAtomic verifies that a PushToKV failure surfaces as a
+// KV-write error and commits nothing. Add now applies the whole batch via one
+// versioned PushToKV (which notifies subscribers → reconcile/spawn), so there
+// are no per-component partial writes — the operation is atomic.
+func TestAdd_PushFailure_IsAtomic(t *testing.T) {
 	t.Parallel()
-	// Repo expands to 4 components; fail on the 3rd write.
-	store := newFlakyStore(3)
-	src := config.SourceEntry{
-		Type:   "repo",
-		URL:    "https://github.com/acme/foo",
-		Branch: "main",
-	}
+	store := newFakeStore()
+	store.failPut = true
+	src := config.SourceEntry{Type: "docs", Paths: []string{"/tmp/docs"}}
 	results, err := Add(context.Background(), src, store, Options{Org: "acme", WorkspaceDir: "/tmp/ws"})
 	if err == nil {
 		t.Fatal("Add returned nil error; want KV failure")
@@ -466,11 +436,11 @@ func TestAdd_PartialSuccess_ReturnsResultsAndError(t *testing.T) {
 	if CodeOf(err) != CodeKVWriteFailed {
 		t.Errorf("CodeOf = %q, want %q", CodeOf(err), CodeKVWriteFailed)
 	}
-	if len(results) != 2 {
-		t.Errorf("len(results) = %d, want 2 (committed before failure)", len(results))
+	if len(results) != 0 {
+		t.Errorf("len(results) = %d, want 0 (atomic: nothing committed on push failure)", len(results))
 	}
-	if len(store.puts) != 2 {
-		t.Errorf("len(store.puts) = %d, want 2", len(store.puts))
+	if len(store.puts) != 0 {
+		t.Errorf("len(store.puts) = %d, want 0", len(store.puts))
 	}
 }
 

@@ -47,6 +47,12 @@ jobs:
       - name: revive
         run: revive -config revive.toml -formatter friendly ./...
 
+  # NOTE: an `e2e` job (go test -tags=e2e) is intentionally NOT wired in yet.
+  # Wiring it surfaced two real bugs (graph-gateway port-0, curator runtime-add
+  # start-race) that are now fixed, plus a framework-level remove-teardown bug
+  # tracked as semstreams#388. We defer gating CI on e2e until #388 is fixed so
+  # TestE2E_RuntimeSourceAdd can pass end to end. See docs/upstream/semstreams-asks.md.
+
   build-and-push:
     needs: [test, lint]
     runs-on: ubuntu-latest

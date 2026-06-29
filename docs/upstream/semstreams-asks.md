@@ -109,3 +109,21 @@ the mesh one auth story. semsource will ship a local pluggable seam (permissive
 default) per ADR-0006; if the shape generalizes, propose lifting it upstream so it
 isn't re-rolled.
 **Surfaced by:** ADR-0006 trust model (trusted-now / untrusted-ready).
+
+---
+
+## Runtime config / ComponentManager
+
+### 8. Runtime config writes skipped by engine-owned-revision watcher — framework-shaped — filed [semstreams#388](https://github.com/C360Studio/semstreams/issues/388)
+`ConfigManager.handleUpdate` skips events whose revision `<= engineHighWaterRev`
+and `return`s **before notifying subscribers** — contradicting its own doc comment
+("the skip only affects the in-memory cache update, not subscriber notification").
+`PutComponentToKV`/`DeleteComponentFromKV` bump the high-water without applying
+in-memory, so a runtime add is written to KV but **never spawned**, and a remove is
+**never torn down** (the `ComponentManager` is never notified to reconcile).
+**Stopgap (semsource):** runtime *add* mutates the in-memory config + bumps the
+config version + `PushToKV` (which DOES notify) → spawns correctly. Runtime *remove*
+can't use the same trick — driving the reconcile-stop from the request handler
+deadlocks — so remove-teardown stays broken pending the fix. **Blocks:** gating CI
+on e2e (`TestE2E_RuntimeSourceAdd` remove-teardown assertion) — deferred until #388.
+**Surfaced by:** wiring e2e into CI (curator runtime add/remove, ADR-040 / ADR-0006).

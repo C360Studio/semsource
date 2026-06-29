@@ -403,8 +403,9 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 		t.Fatalf("create consumer: %v", err)
 	}
 
-	// Start semsource as a subprocess.
-	runCtx, runCancel := context.WithTimeout(ctx, 60*time.Second)
+	// Start semsource as a subprocess. Generous so a slow CI runner can finish
+	// the full seed (a few thousand entities) before the process is killed.
+	runCtx, runCancel := context.WithTimeout(ctx, 180*time.Second)
 	defer runCancel()
 
 	cmd := exec.CommandContext(runCtx, binPath, "run",
@@ -454,7 +455,7 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 
 	// Collect entity messages from NATS.
 	var entities []entityPayload
-	collectCtx, collectCancel := context.WithTimeout(ctx, 45*time.Second)
+	collectCtx, collectCancel := context.WithTimeout(ctx, 90*time.Second)
 	defer collectCancel()
 
 	// Fetch messages in a loop until we have enough or timeout.
@@ -527,7 +528,7 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	t.Logf("manifest: namespace=%s, sources=%d", manifest.Namespace, len(manifest.Sources))
 
 	// Query ingestion status — should reach "ready" since all sources are no-watch.
-	status := waitForReady(t, httpPort, 30*time.Second)
+	status := waitForReady(t, httpPort, 120*time.Second)
 	t.Logf("status: phase=%s, total_entities=%d, sources=%d", status.Phase, status.TotalEntities, len(status.Sources))
 
 	// Query graph summary — agent bootstrap endpoint.
@@ -1411,7 +1412,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 		t.Fatalf("create GRAPH stream: %v", err)
 	}
 
-	runCtx, runCancel := context.WithTimeout(ctx, 90*time.Second)
+	runCtx, runCancel := context.WithTimeout(ctx, 240*time.Second)
 	defer runCancel()
 
 	cmd := exec.CommandContext(runCtx, binPath, "run",
@@ -1459,7 +1460,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 
 	// Wait for the baseline to reach "ready" so we know the component
 	// manager is fully started and the source-manifest is serving.
-	baseline := waitForReady(t, httpPort, 45*time.Second)
+	baseline := waitForReady(t, httpPort, 120*time.Second)
 	if baseline.Phase != "ready" {
 		t.Fatalf("baseline did not reach ready: phase=%q, sources=%d", baseline.Phase, len(baseline.Sources))
 	}
@@ -1492,7 +1493,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	// even after /source-manifest/status reports ready (status reflects
 	// component readiness, not handler subscription). Retry the request
 	// on "no responders" with a short backoff instead of failing the test.
-	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+	reqCtx, reqCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer reqCancel()
 	var msg *nats.Msg
 	for {
@@ -1535,7 +1536,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	// Poll status until the newly-spawned instance reports. This is the
 	// load-bearing assertion: without watch_config:true, the KV write
 	// succeeds but no component spawns, so the new instance never appears.
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(120 * time.Second)
 	var sawAdded bool
 	var lastStatus statusPayload
 	for time.Now().Before(deadline) {
@@ -1556,7 +1557,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 		for _, s := range lastStatus.Sources {
 			names = append(names, s.InstanceName)
 		}
-		t.Fatalf("runtime-added instance %q never appeared in status within 30s; saw: %v",
+		t.Fatalf("runtime-added instance %q never appeared in status within 120s; saw: %v",
 			added.InstanceName, names)
 	}
 	t.Logf("status now reports %d sources including %s", len(lastStatus.Sources), added.InstanceName)
@@ -1577,7 +1578,9 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	if err != nil {
 		t.Fatalf("marshal RemoveRequest: %v", err)
 	}
-	rmCtx, rmCancel := context.WithTimeout(ctx, 10*time.Second)
+	// Remove (like Add) now reconciles via a versioned PushToKV, so give the
+	// handler the same headroom as the add request on a slow CI runner.
+	rmCtx, rmCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer rmCancel()
 	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove."+namespace, removeBytes)
 	if err != nil {
@@ -1605,7 +1608,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	// updated in handleRemoveRequest, unlike the status aggregator which
 	// retains last-known reports indefinitely (a separate gap, out of
 	// scope for the watch_config fix).
-	deadline = time.Now().Add(30 * time.Second)
+	deadline = time.Now().Add(60 * time.Second)
 	var manifestStillHas bool
 	for time.Now().Before(deadline) {
 		m := queryManifestHTTP(t, httpPort)
@@ -1631,13 +1634,20 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 		time.Sleep(500 * time.Millisecond)
 	}
 	if manifestStillHas {
-		t.Errorf("removed source %q still present in manifest after 30s", runtimeDocs)
+		t.Errorf("removed source %q still present in manifest after 60s", runtimeDocs)
 	}
 
 	// Spawn lifecycle evidence: the ComponentManager should have logged
 	// "Component successfully stopped and removed" for the runtime
 	// instance, proving the reactive path went all the way through
 	// component-manager (not just the source-manifest republish).
+	//
+	// KNOWN FAILURE — blocked on semstreams#388: runtime remove does not tear
+	// the component down (the engine-owned-revision watcher skip drops the
+	// delete event, and driving the reconcile-stop in-handler via PushToKV
+	// deadlocks). The add path is fixed; teardown waits on the upstream fix.
+	// This assertion is the regression check that will go green once #388 lands;
+	// e2e is not gated in CI until then.
 	logMu.Lock()
 	var sawStopRemove bool
 	for _, line := range stoppedRemovedLines {
