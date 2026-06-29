@@ -1578,7 +1578,9 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	if err != nil {
 		t.Fatalf("marshal RemoveRequest: %v", err)
 	}
-	rmCtx, rmCancel := context.WithTimeout(ctx, 10*time.Second)
+	// Remove (like Add) now reconciles via a versioned PushToKV, so give the
+	// handler the same headroom as the add request on a slow CI runner.
+	rmCtx, rmCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer rmCancel()
 	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove."+namespace, removeBytes)
 	if err != nil {
