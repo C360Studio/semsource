@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/storage"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -45,6 +46,11 @@ type Component struct {
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 	platform   component.PlatformMeta
+
+	// bodyStore holds verbatim code bodies offloaded at ingest so the fusion
+	// code lens can hydrate them by handle, location-independently (ADR-062 /
+	// ADR-0006 §5). nil when unavailable — bodies are then simply not offloaded.
+	bodyStore storage.Store
 
 	// Per-path watchers
 	watchers []*pathWatcher
@@ -172,6 +178,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	c.publisher.Start(ctx)
+	c.initBodyStore(ctx)
 
 	c.publishStatusReport(ctx, "ingesting")
 
@@ -493,8 +500,12 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
 func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult) error {
+	bodyTriples := c.bodyTriplesForResult(ctx, result)
 	for _, entity := range result.Entities {
 		state := entity.EntityState()
+		if bt := bodyTriples[state.ID]; bt != nil {
+			state.Triples = append(state.Triples, bt...)
+		}
 		payload, err := payloadFromASTState(state)
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
