@@ -76,7 +76,12 @@ lookup truly deterministic.
 
 ## Fusion (pkg/fusion, ADR-062)
 
-### 9. Paths / Impact facets deferred from the framework engine — framework-shaped — filed [semstreams#409](https://github.com/C360Studio/semstreams/issues/409)
+### 9. Paths / Impact facets deferred from the framework engine — framework-shaped — RESOLVED in beta.123 ([semstreams#409](https://github.com/C360Studio/semstreams/issues/409), PR #413)
+**Status:** Shipped. The engine now computes `Response.Paths`/`Response.Impact` when the request
+Wants them (`WantPaths`/`WantImpact`). semsource adopted beta.123 and retired its local
+`source/fusion/impact` extension + `contextResponse` wrapper — the code-context "impact" verb reads
+`Response.Impact` directly. (Original ask below.)
+
 `pkg/fusion` (beta.122) lifts the engine, Lens SPI, and hydration contract, but
 `WantPaths`/`WantImpact` are reserved constants the engine ignores — the
 transitive relation-path and reverse-closure facets are a deferred follow-on.
@@ -89,7 +94,11 @@ engine computes, carried on `Response`) would retire this extension the way the
 Lens SPI retired our local engine.
 **Surfaced by:** ADR-062 increment-6 convergence (source/fusion → pkg/fusion).
 
-### 10. `graph.query.byName` readiness depends on products registering label predicates — framework-shaped — filed [semstreams#410](https://github.com/C360Studio/semstreams/issues/410)
+### 10. `graph.query.byName` readiness depends on products registering label predicates — framework-shaped — RESOLVED in beta.123 ([semstreams#410](https://github.com/C360Studio/semstreams/issues/410), PR #412)
+**Status:** Shipped. `vocabulary.Register` now amends rather than replaces, so a role-less re-Register
+retains a previously-declared `AliasTypeLabel`. semsource's `WithAlias(AliasTypeLabel, 1)` on
+`dc.terms.title` is now belt-and-suspenders (still correct, no longer load-bearing). (Original ask below.)
+
 graph-index's `graph.index.query.status` readiness (and `graph.query.byName`
 itself) is driven by the NAME_INDEX, populated only for predicates
 `vocabulary.DiscoverLabelPredicates()` returns — i.e. those registered
@@ -104,6 +113,19 @@ merge-mode Register, or at minimum document that label aliases must be
 re-declared on any re-Register of a name predicate.
 **Surfaced by:** ADR-062 convergence — fusionnats readiness stuck `building` in the
 live-graph integration test until DcTitle's label alias was restored.
+
+### 11. graph-embedding fetches offloaded content by one fixed bucket, not `StorageReference.StorageInstance` — framework-shaped — filed [semstreams#414](https://github.com/C360Studio/semstreams/issues/414)
+graph-embedding's ContentStorable fetch builds ONE `objectstore.Store` from a single `store-read`
+input-port bucket, with no `StorageInstance` resolution — unlike the fusion hydration helper (#399),
+which resolves `StorageReference.StorageInstance` → a registered `storage.Store`. So embedding can't
+fetch content whose instance differs from its one configured bucket, and when it can't fetch it
+silently degrades to inline text extraction — which is ABSENT for offloaded entities (offloading omits
+the inline triple). Net: offloaded body text is silently dropped from embeddings/BM25/search. semsource
+hit this — its graph-embedding wires no `store-read` port, so doc/media/code bodies offloaded by the
+producers aren't embedded. Ask: reuse the #399 `StoreResolver` in graph-embedding; at minimum make the
+"StorageRef set but unfetchable → inline absent → body dropped" case loud, not a silent Debug.
+**Blocks:** the doc-store unification (semsource task #19) — a true unify needs instance-aware embedding.
+**Surfaced by:** ADR-062 convergence — investigating why doc bodies were double-stored (CONTENT vs MESSAGES).
 
 ## Transport / subject taxonomy
 

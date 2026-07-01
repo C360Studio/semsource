@@ -24,7 +24,6 @@ import (
 	"github.com/c360studio/semstreams/storage/objectstore"
 
 	"github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semsource/source/fusion/impact"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
 )
@@ -70,7 +69,7 @@ type Component struct {
 // NewComponent creates a new code-context component. It builds the fusion
 // retrieval client (graph.query.* over NATS) now; the ObjectStore-backed body
 // resolver and engine are built in Start, where a context exists to attach the
-// store. The graph client also backs the impact facet (source/fusion/impact).
+// store.
 func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	config := DefaultConfig()
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
@@ -173,20 +172,11 @@ func (c *Component) subscribeVerb(ctx context.Context, verb string) error {
 	return nil
 }
 
-// contextResponse extends the fused response with the impact facet (transitive
-// reverse-relation closure). ADR-062 deferred Paths/Impact from the framework
-// engine, so semsource attaches it here over source/fusion/impact. The embedded
-// Response promotes its fields, so the wire shape is the engine's response plus
-// an optional "impact" object. See docs/upstream/semstreams-asks.md.
-type contextResponse struct {
-	fusion.Response
-	Impact *impact.Summary `json:"impact,omitempty"`
-}
-
 // serve decodes a request, fuses it through the configured lens, and returns the
 // marshaled response. The response always carries the readiness envelope, so a
-// "not ready" answer (graph still seeding) is distinct from "not found". When
-// the caller wants the impact facet, it is attached over the local extension.
+// "not ready" answer (graph still seeding) is distinct from "not found". The
+// engine populates the Paths/Impact facets on the response itself when the
+// request Wants them (beta.123, semstreams#409) — no local extension.
 func (c *Component) serve(ctx context.Context, verb string, body []byte) ([]byte, error) {
 	var req fusion.Request
 	if len(body) > 0 {
@@ -204,22 +194,7 @@ func (c *Component) serve(ctx context.Context, verb string, body []byte) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	if hasWant(req.Want, fusion.WantImpact) {
-		return c.marshalWithImpact(ctx, resp, lens, req.Query)
-	}
 	return json.Marshal(resp)
-}
-
-// marshalWithImpact attaches the impact summary and marshals the extended
-// response. A failed impact walk degrades to the plain fused response (the nodes
-// still answer the query) rather than failing the request.
-func (c *Component) marshalWithImpact(ctx context.Context, resp fusion.Response, lens fusion.Lens, query string) ([]byte, error) {
-	sum, err := impact.Compute(ctx, c.graph, lens, query)
-	if err != nil {
-		c.logger.Warn("impact facet failed", "error", err)
-		return json.Marshal(resp)
-	}
-	return json.Marshal(contextResponse{Response: resp, Impact: sum})
 }
 
 // lensFor builds a fresh lens for the configured domain. Both lenses are
@@ -245,16 +220,6 @@ func defaultWants(verb string) []fusion.Want {
 	default:
 		return nil
 	}
-}
-
-// hasWant reports whether w is in the requested facet set.
-func hasWant(wants []fusion.Want, w fusion.Want) bool {
-	for _, x := range wants {
-		if x == w {
-			return true
-		}
-	}
-	return false
 }
 
 // RegisterHTTPHandlers mounts POST /<prefix>/{verb} on the ServiceManager's
