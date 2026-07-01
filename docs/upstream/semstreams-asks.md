@@ -76,7 +76,7 @@ lookup truly deterministic.
 
 ## Fusion (pkg/fusion, ADR-062)
 
-### 9. Paths / Impact facets deferred from the framework engine — framework-shaped — candidate
+### 9. Paths / Impact facets deferred from the framework engine — framework-shaped — filed [semstreams#409](https://github.com/C360Studio/semstreams/issues/409)
 `pkg/fusion` (beta.122) lifts the engine, Lens SPI, and hydration contract, but
 `WantPaths`/`WantImpact` are reserved constants the engine ignores — the
 transitive relation-path and reverse-closure facets are a deferred follow-on.
@@ -89,7 +89,7 @@ engine computes, carried on `Response`) would retire this extension the way the
 Lens SPI retired our local engine.
 **Surfaced by:** ADR-062 increment-6 convergence (source/fusion → pkg/fusion).
 
-### 10. `graph.query.byName` readiness depends on products registering label predicates — framework-shaped (doc) — candidate
+### 10. `graph.query.byName` readiness depends on products registering label predicates — framework-shaped — filed [semstreams#410](https://github.com/C360Studio/semstreams/issues/410)
 graph-index's `graph.index.query.status` readiness (and `graph.query.byName`
 itself) is driven by the NAME_INDEX, populated only for predicates
 `vocabulary.DiscoverLabelPredicates()` returns — i.e. those registered
