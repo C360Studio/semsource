@@ -34,8 +34,10 @@ func TestBodyTriplesForResult(t *testing.T) {
 	store := newFakeStore()
 	c := &Component{logger: slog.Default(), bodyStore: store}
 
+	// ParseResult.Path is relative to the watcher root (as the parser emits it);
+	// the producer joins root back to read the file.
 	result := &semsourceast.ParseResult{
-		Path: path,
+		Path: "svc.go",
 		Entities: []*semsourceast.CodeEntity{
 			// A file container: no body of its own, must be skipped.
 			{ID: "o.p.golang.s.file.svc", Type: semsourceast.TypeFile, StartLine: 1, EndLine: 7},
@@ -44,7 +46,7 @@ func TestBodyTriplesForResult(t *testing.T) {
 		},
 	}
 
-	got := c.bodyTriplesForResult(context.Background(), result)
+	got := c.bodyTriplesForResult(context.Background(), result, root)
 
 	if _, ok := got["o.p.golang.s.file.svc"]; ok {
 		t.Error("file container should not get body triples")
@@ -97,7 +99,7 @@ func TestSliceLines(t *testing.T) {
 // TestBodyTriplesForResult_NoStore: with no store, the producer is a clean no-op.
 func TestBodyTriplesForResult_NoStore(t *testing.T) {
 	c := &Component{logger: slog.Default()}
-	if got := c.bodyTriplesForResult(context.Background(), &semsourceast.ParseResult{Path: "x.go"}); got != nil {
+	if got := c.bodyTriplesForResult(context.Background(), &semsourceast.ParseResult{Path: "x.go"}, "/tmp"); got != nil {
 		t.Fatalf("no store should yield nil triples, got %+v", got)
 	}
 }

@@ -217,7 +217,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.publishHierarchy(ctx, results, pw.config.Org, pw.config.Project)
 
 		for _, result := range results {
-			if err := c.publishParseResult(ctx, result); err != nil {
+			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", result.Path,
 					"error", err)
@@ -345,7 +345,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 			// edges exist even for directories created between full reindexes.
 			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.config.Project)
 
-			if err := c.publishParseResult(ctx, event.Result); err != nil {
+			if err := c.publishParseResult(ctx, event.Result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", event.Path,
 					"error", err)
@@ -423,7 +423,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 				c.setFileHash(result.Path, result.Hash)
 			}
 
-			if err := c.publishParseResult(ctx, result); err != nil {
+			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result during reindex",
 					"path", result.Path,
 					"error", err)
@@ -499,8 +499,8 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 }
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
-func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult) error {
-	bodyTriples := c.bodyTriplesForResult(ctx, result)
+func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, root string) error {
+	bodyTriples := c.bodyTriplesForResult(ctx, result, root)
 	for _, entity := range result.Entities {
 		state := entity.EntityState()
 		if bt := bodyTriples[state.ID]; bt != nil {

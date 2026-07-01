@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/c360studio/semstreams/message"
@@ -60,15 +61,17 @@ func (c *Component) initBodyStore(ctx context.Context) {
 
 // bodyTriplesForResult offloads each body-bearing entity's verbatim source from
 // the parsed file and returns per-entity-ID body-handle triples. The file is read
-// once. Any read/offload fault degrades that entity to no body rather than
-// failing ingest. Returns nil when no store is configured.
-func (c *Component) bodyTriplesForResult(ctx context.Context, result *semsourceast.ParseResult) map[string][]message.Triple {
+// once. result.Path is relative to the watcher root (the parser's repoRoot), so
+// root is joined back to reach the file. Any read/offload fault degrades that
+// entity to no body rather than failing ingest. Returns nil when no store is set.
+func (c *Component) bodyTriplesForResult(ctx context.Context, result *semsourceast.ParseResult, root string) map[string][]message.Triple {
 	if c.bodyStore == nil || result == nil || result.Path == "" {
 		return nil
 	}
-	content, err := os.ReadFile(result.Path)
+	absPath := filepath.Join(root, result.Path)
+	content, err := os.ReadFile(absPath)
 	if err != nil {
-		c.logger.Debug("read source for body offload failed", "path", result.Path, "error", err)
+		c.logger.Debug("read source for body offload failed", "path", absPath, "error", err)
 		return nil
 	}
 	lines := strings.Split(string(content), "\n")
