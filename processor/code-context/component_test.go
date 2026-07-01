@@ -103,8 +103,9 @@ func TestServeDocs(t *testing.T) {
 	}
 }
 
-// TestServeImpact exercises the local impact facet: the "impact" verb attaches an
-// impact summary (transitive reverse-relation closure) alongside the fused nodes.
+// TestServeImpact exercises the "impact" verb: the engine computes the impact
+// facet (transitive reverse-relation closure) onto the response itself when the
+// request Wants it (beta.123, semstreams#409).
 func TestServeImpact(t *testing.T) {
 	g := fusiontest.NewMemGraph()
 	store := fusiontest.NewMemStore()
@@ -123,16 +124,7 @@ func TestServeImpact(t *testing.T) {
 	c := newTestComponent("code", g, store)
 
 	raw := mustServe(t, c, "impact", mustJSON(fusion.Request{Query: "Core"}))
-	var resp struct {
-		fusion.Response
-		Impact *struct {
-			Files, Nodes int
-			Truncated    bool
-		} `json:"impact"`
-	}
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	resp := decodeResp(t, raw)
 	if resp.Impact == nil || resp.Impact.Nodes != 1 || resp.Impact.Files != 1 {
 		t.Fatalf("expected impact {nodes:1, files:1}, got %+v", resp.Impact)
 	}
