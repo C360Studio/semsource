@@ -1,4 +1,4 @@
-// Package fusiontest provides an in-memory fusion.GraphQueryClient for testing
+// Package fusiontest provides an in-memory fusion.RetrievalClient for testing
 // lenses and the engine without a live graph.
 package fusiontest
 
@@ -7,11 +7,10 @@ import (
 	"slices"
 
 	"github.com/c360studio/semstreams/message"
-
-	"github.com/c360studio/semsource/source/fusion"
+	"github.com/c360studio/semstreams/pkg/fusion"
 )
 
-// MemGraph is an in-memory fusion.GraphQueryClient. Build it with AddEntity /
+// MemGraph is an in-memory fusion.RetrievalClient. Build it with AddEntity /
 // AddEdge / SetResolve, then hand it to fusion.NewEngine.
 type MemGraph struct {
 	status   fusion.IndexStatus
@@ -61,20 +60,20 @@ func (m *MemGraph) AddEdge(from, predicate, to string) {
 	m.out[from] = append(m.out[from], fusion.Edge{Predicate: predicate, Target: to})
 }
 
-// Status implements fusion.GraphQueryClient.
+// Status implements fusion.RetrievalClient.
 func (m *MemGraph) Status(context.Context) (fusion.IndexStatus, error) { return m.status, nil }
 
-// Resolve implements fusion.GraphQueryClient.
+// Resolve implements fusion.RetrievalClient.
 func (m *MemGraph) Resolve(_ context.Context, query string, _ fusion.ResolveMode, _ int) ([]string, error) {
 	return m.resolve[query], nil
 }
 
-// Entity implements fusion.GraphQueryClient.
+// Entity implements fusion.RetrievalClient.
 func (m *MemGraph) Entity(_ context.Context, id string) (*fusion.Entity, error) {
 	return m.entities[id], nil
 }
 
-// Entities implements fusion.GraphQueryClient.
+// Entities implements fusion.RetrievalClient.
 func (m *MemGraph) Entities(_ context.Context, ids []string) ([]*fusion.Entity, error) {
 	var out []*fusion.Entity
 	for _, id := range ids {
@@ -85,7 +84,7 @@ func (m *MemGraph) Entities(_ context.Context, ids []string) ([]*fusion.Entity, 
 	return out, nil
 }
 
-// Neighbors implements fusion.GraphQueryClient (Incoming returns sources as Target).
+// Neighbors implements fusion.RetrievalClient (Incoming returns sources as Target).
 func (m *MemGraph) Neighbors(_ context.Context, id string, preds []string, dir fusion.Direction) ([]fusion.Edge, error) {
 	if dir == fusion.Outgoing {
 		var out []fusion.Edge
@@ -107,7 +106,7 @@ func (m *MemGraph) Neighbors(_ context.Context, id string, preds []string, dir f
 	return in, nil
 }
 
-// Names implements fusion.GraphQueryClient.
+// Names implements fusion.RetrievalClient.
 func (m *MemGraph) Names(_ context.Context, _ string, limit int) ([]string, error) {
 	if len(m.names) > limit {
 		return m.names[:limit], nil

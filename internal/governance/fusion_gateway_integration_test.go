@@ -4,8 +4,6 @@ package governance
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,23 +11,34 @@ import (
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
+	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/vocabulary/cco"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/ast"
-	"github.com/c360studio/semsource/source/fusion"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
-	"github.com/c360studio/semsource/source/fusion/natsgraph"
 	"github.com/c360studio/semsource/source/ontology"
 )
 
-// TestIntegration_NatsGraphClientAgainstLiveGraph validates the fusion natsgraph
-// client's wire-format mappings against a REAL graph subsystem (graph-ingest,
-// graph-index, graph-query) — the highest-risk, can't-unit-test surface. It
-// ingests two code entities with a call edge, then asserts the client correctly
-// speaks graph.query.batch, graph.index.query.{outgoing,incoming}, and
-// graph.query.prefix end to end.
-func TestIntegration_NatsGraphClientAgainstLiveGraph(t *testing.T) {
+// bodyBucket / bodyInstance address the verbatim-body ObjectStore the fusion
+// engine dereferences Hydrate handles against (ADR-062 increment 4). They mirror
+// the code-context component's constants; the producer stamps bodyInstance into
+// each entity's body triples.
+const (
+	bodyBucket   = "CONTENT"
+	bodyInstance = "objectstore"
+)
+
+// TestIntegration_FusionNatsClientAgainstLiveGraph validates the fusionnats
+// retrieval client's wire-format mappings against a REAL graph subsystem
+// (graph-ingest, graph-index, graph-query) — the highest-risk, can't-unit-test
+// surface. It ingests two code entities with a call edge, then asserts the
+// client correctly speaks graph.index.query.status, graph.query.batch/entity,
+// graph.query.relationships, and graph.query.prefix end to end.
+func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	ctx := context.Background()
 	tc := natsclient.NewTestClient(t,
 		natsclient.WithKV(),
@@ -72,7 +81,14 @@ func TestIntegration_NatsGraphClientAgainstLiveGraph(t *testing.T) {
 	waitForEntityState(t, ctx, tc.Client, caller, 5*time.Second)
 	waitForEntityState(t, ctx, tc.Client, callee, 5*time.Second)
 
-	gc := natsgraph.New(tc.Client)
+	gc := fusionnats.New(tc.Client, 0)
+
+	t.Run("Status resolves the readiness envelope", func(t *testing.T) {
+		// graph.index.query.status must decode; readiness may still be building.
+		if _, err := gc.Status(ctx); err != nil {
+			t.Fatalf("Status: %v", err)
+		}
+	})
 
 	t.Run("Entities batch returns triples", func(t *testing.T) {
 		ents, err := gc.Entities(ctx, []string{caller, callee})
@@ -112,7 +128,7 @@ func TestIntegration_NatsGraphClientAgainstLiveGraph(t *testing.T) {
 	})
 
 	t.Run("Resolve prefix returns the ingested IDs", func(t *testing.T) {
-		ids, err := gc.Resolve(ctx, "acme.semsource.golang.gw", fusion.ResolvePrefix, 10)
+		ids, err := gc.Resolve(ctx, "acme.semsource.golang.gw", fusion.ResolveModePrefix, 10)
 		if err != nil {
 			t.Fatalf("Resolve prefix: %v", err)
 		}
@@ -123,25 +139,21 @@ func TestIntegration_NatsGraphClientAgainstLiveGraph(t *testing.T) {
 }
 
 // TestIntegration_FusionPipelineEndToEnd drives the WHOLE fusion gateway against
-// a live graph: a ready graph.query.status, real graph-ingest/index/query,
-// a real fusion engine over the natsgraph client, and the code lens hydrating
-// verbatim source from disk. It ingests a caller→callee pair and asserts the
-// fused response carries the readiness envelope, verbatim source, the callee
-// relation, and the BFO/CCO class — i.e. the full code_context shape, no fake.
+// a live graph: real graph-ingest/index/query, a real fusion engine over the
+// fusionnats client, and the code lens hydrating verbatim source by dereferencing
+// its StorageReference handle against a real ObjectStore (ADR-062 increment 4 —
+// the location-independent body path, no worktree). It ingests a caller→callee
+// pair (the caller stamped with body handle triples), offloads the body, and
+// asserts the fused response carries the readiness envelope, the ObjectStore-
+// dereferenced verbatim source, the callee relation, and the BFO/CCO class.
 func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	tc := natsclient.NewTestClient(t,
 		natsclient.WithKV(),
 		// The GRAPH stream must bind ONLY the entity ingest subject, NOT a
-		// wildcard like "graph.ingest.>". graph-query forwards batch/prefix
-		// queries to graph-ingest over graph.ingest.query.{batch,prefix} as core
-		// request/reply. A "graph.ingest.>" stream also matches those request
-		// subjects, so the broker sends a PubAck to the query's reply inbox the
-		// instant the message lands in the stream; that PubAck wins the race
-		// against graph-ingest's real reply, graph-query unmarshals it (a
-		// JetStream ack, no entities), and batch/prefix silently return zero
-		// results. The framework-level subject-taxonomy concern behind this is
-		// tracked in docs/upstream/semstreams-asks.md (#6).
+		// wildcard like "graph.ingest.>": a wildcard also matches graph-query's
+		// request/reply forwards and races a PubAck onto the reply inbox, silently
+		// zeroing batch/prefix results (docs/upstream/semstreams-asks.md #6).
 		natsclient.WithStreams(natsclient.TestStreamConfig{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
@@ -164,21 +176,20 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
 	t.Cleanup(func() { _ = query.Stop(5 * time.Second) })
 
-	// Serve graph.query.status as a ready stub (source-manifest's readiness is
-	// covered elsewhere; here we isolate the fusion path).
-	statusSub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status", func(_ context.Context, _ []byte) ([]byte, error) {
-		return []byte(`{"phase":"ready"}`), nil
+	// Offload the verbatim body to a real ObjectStore and address it by handle —
+	// the producer side of the hydration contract. The engine's BodyResolver
+	// Gets it back through the same store.
+	store, err := objectstore.NewStoreWithConfig(ctx, tc.Client, objectstore.Config{
+		BucketName:   bodyBucket,
+		InstanceName: bodyInstance,
 	})
 	if err != nil {
-		t.Fatalf("subscribe status stub: %v", err)
+		t.Fatalf("objectstore: %v", err)
 	}
-	t.Cleanup(func() { _ = statusSub.Unsubscribe() })
-
-	// A real worktree for the code lens to hydrate from.
-	root := t.TempDir()
-	src := "package svc\n\nfunc Dispatch() {\n\tOnEvent()\n}\n\nfunc OnEvent() {}\n"
-	if err := os.WriteFile(filepath.Join(root, "svc.go"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
+	const dispatchBody = "func Dispatch() {\n\tOnEvent()\n}"
+	const bodyKey = "body:dispatch"
+	if err := store.Put(ctx, bodyKey, []byte(dispatchBody)); err != nil {
+		t.Fatalf("put body: %v", err)
 	}
 
 	const (
@@ -192,11 +203,12 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 		{Subject: caller, Predicate: ast.CodeStartLine, Object: 3},
 		{Subject: caller, Predicate: ast.CodeEndLine, Object: 5},
 		{Subject: caller, Predicate: ast.CodeCalls, Object: callee},
+		// Body handle triples: the code lens reads these into a StorageReference.
+		{Subject: caller, Predicate: ast.CodeBodyStore, Object: bodyInstance},
+		{Subject: caller, Predicate: ast.CodeBodyKey, Object: bodyKey},
 		// Stamp SoftwareCode, NOT Algorithm: a `function` entity's ID-derived
 		// fallback is cco.Algorithm, so stamping Algorithm would let the class
-		// assertion pass via the fallback even if the stamped triple were
-		// dropped. SoftwareCode can only reach the response through the real
-		// entity.ontology.class read path — making the assertion load-bearing.
+		// assertion pass via the fallback even if the stamped triple were dropped.
 		{Subject: caller, Predicate: ontology.ClassPredicate, Object: cco.SoftwareCode},
 	})
 	publishSemsourceEntity(t, ctx, tc.Client, callee, semsourcegraph.IndexingProfileContent, []message.Triple{
@@ -210,24 +222,24 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	waitForEntityState(t, ctx, tc.Client, caller, 5*time.Second)
 	waitForEntityState(t, ctx, tc.Client, callee, 5*time.Second)
 
-	engine := fusion.NewEngine(natsgraph.New(tc.Client))
+	engine := fusion.NewEngine(
+		fusionnats.New(tc.Client, 0),
+		fusion.NewBodyResolver(fusion.MapStoreResolver{bodyInstance: storage.Store(store)}),
+	)
 	// Use the REAL code lens for edges/fields/hydration, but force prefix
 	// resolution so the seed resolves deterministically via graph.query.prefix
 	// (the symbol path needs graph-embedding, validated elsewhere). The query is
-	// the caller's full ID, which prefix-matches exactly that one entity.
-	lens := prefixLens{code.New(root)}
-
-	// Query the shared ID prefix (matches both entities); poll until status is
-	// ready AND graph-index has surfaced the call edge on the Dispatch node.
+	// the shared ID prefix, matching exactly these entities.
+	lens := prefixLens{code.New()}
 	const prefix = "acme.semsource.golang.gw"
 
 	var resp fusion.Response
 	var dispatch *fusion.Node
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		r, err := engine.Fuse(ctx, fusion.Request{
-			Query: prefix, Repo: root,
-			Want: []fusion.Want{fusion.WantBody, fusion.WantRelations},
+			Query: prefix,
+			Want:  []fusion.Want{fusion.WantBody, fusion.WantRelations},
 		}, lens)
 		if err != nil {
 			t.Fatalf("Fuse: %v", err)
@@ -246,8 +258,8 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	if dispatch == nil {
 		t.Fatalf("no Dispatch node in fused response: %+v", resp.Nodes)
 	}
-	if dispatch.Body != "func Dispatch() {\n\tOnEvent()\n}" {
-		t.Fatalf("verbatim body mismatch: %q", dispatch.Body)
+	if dispatch.Body != dispatchBody {
+		t.Fatalf("verbatim body mismatch (want ObjectStore deref): %q", dispatch.Body)
 	}
 	if got := dispatch.Relations["callee"]; len(got) != 1 || got[0].Name != "OnEvent" {
 		t.Fatalf("expected callee OnEvent, got %+v", dispatch.Relations)
@@ -277,14 +289,14 @@ func findNode(nodes []fusion.Node, name string) *fusion.Node {
 // prefixLens wraps the real code lens but forces prefix resolution, so the
 // end-to-end test resolves seeds via graph.query.prefix (deterministic, no
 // graph-embedding) while still exercising the real lens's edges, field
-// extraction, and disk hydration.
+// extraction, and handle hydration.
 type prefixLens struct{ *code.Lens }
 
-func (prefixLens) ResolveMode(string) fusion.ResolveMode { return fusion.ResolvePrefix }
+func (prefixLens) ResolveMode(string) fusion.ResolveMode { return fusion.ResolveModePrefix }
 
 // pollNeighbors retries Neighbors until it returns edges or the deadline passes
 // (graph-index builds the OUTGOING/INCOMING indexes asynchronously).
-func pollNeighbors(t *testing.T, ctx context.Context, gc *natsgraph.Client, id string, preds []string, dir fusion.Direction) []fusion.Edge {
+func pollNeighbors(t *testing.T, ctx context.Context, gc *fusionnats.Client, id string, preds []string, dir fusion.Direction) []fusion.Edge {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {

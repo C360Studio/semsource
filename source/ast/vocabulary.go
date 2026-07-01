@@ -184,10 +184,18 @@ func registerCapabilityPredicates() {
 }
 
 func registerDublinCorePredicates() {
+	// WithAlias(AliasTypeLabel) is load-bearing: the framework registers
+	// dc.terms.title as a label predicate (vocabulary/labels.go), and
+	// vocabulary.Register OVERWRITES rather than merges. Re-registering without
+	// the label alias would drop it from DiscoverLabelPredicates(), which is what
+	// graph-index keys the NAME_INDEX on — silently breaking graph.query.byName
+	// symbol resolution AND graph-index readiness (its ready signal is a non-empty
+	// NAME_INDEX). Priority 1 matches the framework's title salience.
 	vocabulary.Register(DcTitle,
 		vocabulary.WithDescription("Human-readable entity name"),
 		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI("http://purl.org/dc/terms/title"))
+		vocabulary.WithIRI("http://purl.org/dc/terms/title"),
+		vocabulary.WithAlias(vocabulary.AliasTypeLabel, 1))
 
 	vocabulary.Register(DcCreated,
 		vocabulary.WithDescription("Creation timestamp"),

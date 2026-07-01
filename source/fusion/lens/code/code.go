@@ -1,6 +1,10 @@
 // Package code is the fusion code lens: it walks call and containment edges and
-// hydrates verbatim source from the worktree, turning the generic fusion engine
-// into code_context. Construct one per worktree with New(root).
+// hydrates verbatim source, turning the generic pkg/fusion engine into
+// code_context. Since ADR-062 increment 4 the lens is stateless — bodies are
+// offloaded to a storage.Store at ingest and Hydrate returns the entity's
+// StorageReference HANDLE (read from triples), never a worktree read. The engine
+// dereferences the handle, so a remote caller of a standalone service (ADR-0006)
+// gets bodies without access to the ingesting host's disk.
 package code
 
 import (
@@ -8,38 +12,35 @@ import (
 	"path"
 	"strings"
 
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/fusion"
+
 	"github.com/c360studio/semsource/source/ast"
-	"github.com/c360studio/semsource/source/fusion"
 )
 
-// Lens implements fusion.Lens for code. It is request-scoped: New is given the
-// worktree root so Hydrate can read source files by their relative path.
-type Lens struct {
-	root string
-	src  *sourceReader
-}
+// Lens implements fusion.Lens for code. It is stateless: every domain fact —
+// including where the verbatim body lives — comes off the entity's triples.
+type Lens struct{}
 
-// New creates a code lens rooted at the given worktree absolute path.
-func New(root string) *Lens {
-	return &Lens{root: root, src: newSourceReader(root)}
-}
+// New creates a code lens.
+func New() *Lens { return &Lens{} }
 
 // Name identifies the lens.
 func (*Lens) Name() string { return "code" }
 
-// ResolveMode routes anything with whitespace to semantic (NL), a single
-// path-like token to prefix, and a single identifier to symbol. The NL check is
+// ResolveMode routes anything with whitespace to nl (semantic), a single
+// path-like token to prefix, and a single identifier to symbol. The nl check is
 // first so a question that merely ends in a code-extension word (e.g. "where is
 // foo.go") is not misrouted to a path lookup.
 func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	q := strings.TrimSpace(query)
 	if strings.ContainsAny(q, " \t\n") {
-		return fusion.ResolveSemantic
+		return fusion.ResolveModeNL
 	}
 	if strings.ContainsAny(q, "/\\") || codeExtensions[strings.ToLower(path.Ext(q))] {
-		return fusion.ResolvePrefix
+		return fusion.ResolveModePrefix
 	}
-	return fusion.ResolveSymbol
+	return fusion.ResolveModeSymbol
 }
 
 // Edges are the code relationships to expand: calls (callee/caller) and
@@ -57,7 +58,8 @@ func (*Lens) Label(e *fusion.Entity) string { return e.First(ast.DcTitle) }
 // Kind is the code entity type (function, method, struct, …).
 func (*Lens) Kind(e *fusion.Entity) string { return e.First(ast.CodeType) }
 
-// Location is the file path and line range.
+// Location is the file path and line range (citation/display only — the body
+// rides the handle, pre-sliced, so the engine does no line math).
 func (*Lens) Location(e *fusion.Entity) fusion.Locator {
 	return fusion.Locator{
 		Path:  e.First(ast.CodePath),
@@ -65,15 +67,21 @@ func (*Lens) Location(e *fusion.Entity) fusion.Locator {
 	}
 }
 
-// Hydrate reads the verbatim source for the entity's line range from the
-// worktree. A missing path or unreadable file yields "" (no body), never an
-// error — a body is a best-effort facet.
-func (l *Lens) Hydrate(_ context.Context, e *fusion.Entity) (string, error) {
-	p := e.First(ast.CodePath)
-	if p == "" {
-		return "", nil
+// Hydrate returns the handle to the entity's verbatim body, read from the body
+// triples the producer stamped at ingest (CodeBodyStore + CodeBodyKey). It is
+// (nil, nil) when no body was offloaded — a body is a best-effort facet, and the
+// engine degrades the node rather than failing.
+func (*Lens) Hydrate(_ context.Context, e *fusion.Entity) (*message.StorageReference, error) {
+	instance := e.First(ast.CodeBodyStore)
+	key := e.First(ast.CodeBodyKey)
+	if instance == "" || key == "" {
+		return nil, nil
 	}
-	return l.src.extract(p, e.FirstInt(ast.CodeStartLine), e.FirstInt(ast.CodeEndLine)), nil
+	return &message.StorageReference{
+		StorageInstance: instance,
+		Key:             key,
+		ContentType:     "text/plain; charset=utf-8",
+	}, nil
 }
 
 // codeExtensions marks a query as a file path.
