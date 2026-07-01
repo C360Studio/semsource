@@ -12,6 +12,12 @@ import (
 
 // MemGraph is an in-memory fusion.RetrievalClient. Build it with AddEntity /
 // AddEdge / SetResolve, then hand it to fusion.NewEngine.
+//
+// NOT safe for concurrent mutation: build it fully (AddEntity/AddEdge/SetResolve)
+// BEFORE the first Fuse. Concurrent read-only access during the engine's fan-out
+// is fine (Go map reads without a concurrent writer); a test that mutates while
+// querying would race silently. (Unlike MemStore, which is mutex-guarded because
+// producers Put into it during a run.)
 type MemGraph struct {
 	status   fusion.IndexStatus
 	entities map[string]*fusion.Entity

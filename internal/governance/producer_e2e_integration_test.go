@@ -69,6 +69,9 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 
 	// Drive the REAL ast-source component. Its Start runs the initial index, whose
 	// producer offloads bodies to the CONTENT store and stamps the handle triples.
+	// watch_enabled:false exercises the initial-index path; the watch re-ingest
+	// path funnels through the same publishParseResult(..., pw.root) → producer
+	// join, so the relative-path body read (c7cc36e) is covered for both.
 	astCfg, err := json.Marshal(map[string]any{
 		"watch_paths": []map[string]any{
 			{"path": root, "org": "acme", "project": "svc", "languages": []string{"go"}},
@@ -95,15 +98,15 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 
 	// The engine derefs handles over the SAME CONTENT store the producer wrote.
 	store, err := objectstore.NewStoreWithConfig(ctx, tc.Client, objectstore.Config{
-		BucketName:   bodyBucket,
-		InstanceName: bodyInstance,
+		BucketName:   semsourcegraph.BodyStoreBucket,
+		InstanceName: semsourcegraph.BodyStoreInstance,
 	})
 	if err != nil {
 		t.Fatalf("objectstore: %v", err)
 	}
 	engine := fusion.NewEngine(
 		fusionnats.New(tc.Client, 0),
-		fusion.NewBodyResolver(fusion.MapStoreResolver{bodyInstance: storage.Store(store)}),
+		fusion.NewBodyResolver(fusion.MapStoreResolver{semsourcegraph.BodyStoreInstance: storage.Store(store)}),
 	)
 	lens := code.New()
 

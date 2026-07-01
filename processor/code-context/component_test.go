@@ -13,6 +13,8 @@ import (
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/vocabulary/cco"
 
+	"github.com/c360studio/semsource/graph"
+
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
 	"github.com/c360studio/semsource/source/ontology"
@@ -22,7 +24,7 @@ import (
 // newTestComponent builds a running component over the given graph + body store
 // (no NATS). The engine is injected directly, bypassing Start's store attach.
 func newTestComponent(lensKind string, g fusion.RetrievalClient, store *fusiontest.MemStore) *Component {
-	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{bodyStoreInstance: store})
+	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: store})
 	return &Component{
 		name:        "code-context",
 		lensKind:    lensKind,
@@ -52,7 +54,7 @@ func TestServeCodeReadyHit(t *testing.T) {
 	g.AddEntity(id, map[string]any{
 		ast.DcTitle: "Dispatch", ast.CodeType: "function", ast.CodePath: "svc.go",
 		ast.CodeStartLine: 3, ast.CodeEndLine: 3, ontology.ClassPredicate: cco.Algorithm,
-		ast.CodeBodyStore: bodyStoreInstance, ast.CodeBodyKey: "body:dispatch",
+		ast.CodeBodyStore: graph.BodyStoreInstance, ast.CodeBodyKey: "body:dispatch",
 	})
 	g.SetResolve("Dispatch", id)
 	c := newTestComponent("code", g, store)
@@ -88,7 +90,7 @@ func TestServeDocs(t *testing.T) {
 	g.AddEntity(id, map[string]any{
 		srcvocab.DocType: "document", srcvocab.DcTitle: "Retry Policy",
 		srcvocab.DocFilePath:  "docs/retry.md",
-		srcvocab.DocBodyStore: bodyStoreInstance, srcvocab.DocBodyKey: "body:retry",
+		srcvocab.DocBodyStore: graph.BodyStoreInstance, srcvocab.DocBodyKey: "body:retry",
 		ontology.ClassPredicate: cco.Document,
 	})
 	g.SetResolve("how to retry", id)
@@ -111,7 +113,7 @@ func TestServeImpact(t *testing.T) {
 	caller := "o.semsource.golang.s.function.caller"
 	g.AddEntity(core, map[string]any{
 		ast.DcTitle: "Core", ast.CodeType: "function", ast.CodePath: "core.go",
-		ast.CodeBodyStore: bodyStoreInstance, ast.CodeBodyKey: "body:core",
+		ast.CodeBodyStore: graph.BodyStoreInstance, ast.CodeBodyKey: "body:core",
 	})
 	g.AddEntity(caller, map[string]any{
 		ast.DcTitle: "Caller", ast.CodeType: "function", ast.CodePath: "caller.go",

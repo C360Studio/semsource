@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
@@ -65,8 +66,8 @@ func TestBodyTriplesForResult(t *testing.T) {
 			key, _ = tr.Object.(string)
 		}
 	}
-	if instance != bodyStoreInstance {
-		t.Errorf("body store instance = %q; want %q", instance, bodyStoreInstance)
+	if instance != graph.BodyStoreInstance {
+		t.Errorf("body store instance = %q; want %q", instance, graph.BodyStoreInstance)
 	}
 	// The stored blob must be the exact verbatim range [3,5], byte-for-byte.
 	want := "func Dispatch() {\n\tOnEvent()\n}"

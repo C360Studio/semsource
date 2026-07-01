@@ -36,6 +36,10 @@ type Summary struct {
 // domain with no relationships has no reverse closure to report. A Resolve
 // backend failure is surfaced; per-node Neighbors/Entity faults degrade (that
 // node just does not extend the closure), matching the engine's best-effort walk.
+//
+// The walk is level-by-level: each frontier's newly-discovered nodes are
+// batch-fetched with Entities (one round-trip per BFS level for the file paths,
+// not one per node), so the NATS cost is O(depth) fetches rather than O(nodes).
 func Compute(ctx context.Context, client fusion.RetrievalClient, lens fusion.Lens, query string) (*Summary, error) {
 	preds := edgePredicates(lens.Edges())
 	if len(preds) == 0 {
@@ -48,29 +52,38 @@ func Compute(ctx context.Context, client fusion.RetrievalClient, lens fusion.Len
 
 	visited := map[string]bool{}
 	files := map[string]bool{}
-	queue := append([]string(nil), seeds...)
+	frontier := append([]string(nil), seeds...)
 	truncated := false
-	for len(queue) > 0 {
-		if len(visited) >= maxImpactNodes {
-			truncated = true // counts are a floor from here on
-			break
-		}
-		id := queue[0]
-		queue = queue[1:]
-		edges, _ := client.Neighbors(ctx, id, preds, fusion.Incoming)
-		for _, ed := range edges {
-			src := ed.Target
-			if visited[src] {
-				continue
+	for len(frontier) > 0 && !truncated {
+		// Expand the frontier: collect this level's newly-discovered sources.
+		var next []string
+		for _, id := range frontier {
+			edges, _ := client.Neighbors(ctx, id, preds, fusion.Incoming)
+			for _, ed := range edges {
+				if visited[ed.Target] {
+					continue
+				}
+				visited[ed.Target] = true
+				next = append(next, ed.Target)
+				if len(visited) >= maxImpactNodes {
+					truncated = true // counts are a floor from here on
+					break
+				}
 			}
-			visited[src] = true
-			if te, err := client.Entity(ctx, src); err == nil && te != nil {
+			if truncated {
+				break
+			}
+		}
+		// One batched fetch for the whole level, for the file count.
+		if len(next) > 0 {
+			ents, _ := client.Entities(ctx, next)
+			for _, te := range ents {
 				if loc := lens.Location(te); loc.Path != "" {
 					files[loc.Path] = true
 				}
 			}
-			queue = append(queue, src)
 		}
+		frontier = next
 	}
 	return &Summary{Files: len(files), Nodes: len(visited), Truncated: truncated}, nil
 }

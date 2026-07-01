@@ -23,6 +23,7 @@ import (
 	"github.com/c360studio/semstreams/storage"
 	"github.com/c360studio/semstreams/storage/objectstore"
 
+	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/impact"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
@@ -35,15 +36,10 @@ const maxBodyBytes = 1 << 20
 // slow or wedged query cannot run unbounded and a caller disconnect cancels it.
 const requestTimeout = 30 * time.Second
 
-// bodyStoreInstance / bodyBucket address the verbatim-body ObjectStore the
-// producer offloads to (ADR-0006 §5 / semstreams#399). instance is the
-// StorageReference.StorageInstance the code/docs lens stamps into its Hydrate
-// handle; the BodyResolver maps it to the store the engine Gets bodies from. It
-// MUST match the producer's stamp and run.go's "objectstore" component name.
-const (
-	bodyStoreInstance = "objectstore"
-	bodyBucket        = "CONTENT"
-)
+// The verbatim-body ObjectStore the producers offload to and this gateway
+// dereferences (ADR-0006 §5 / semstreams#399). The instance + bucket are shared
+// with the producers in graph.BodyStore{Instance,Bucket} so the addressing
+// cannot silently drift between producer and resolver.
 
 // verbs are the query verbs exposed over both NATS and HTTP. "context" is the
 // primary fused query; the rest preset a default facet set.
@@ -57,9 +53,13 @@ type Component struct {
 	lensKind    string // "code" | "docs"
 	subjectRoot string // NATS subject root, e.g. "code.v1."
 	graph       fusion.RetrievalClient
-	engine      *fusion.Engine
-	client      *natsclient.Client
-	logger      *slog.Logger
+	// engine is written once in Start (buildEngine) BEFORE running is set, and
+	// read lock-free thereafter — the running-gate ordering (running is set under
+	// mu after buildEngine returns; serve only runs once running/subscribed)
+	// publishes it safely. Guarded by that ordering, not by mu; keep it that way.
+	engine *fusion.Engine
+	client *natsclient.Client
+	logger *slog.Logger
 
 	mu        sync.RWMutex
 	running   bool
@@ -134,20 +134,25 @@ func (c *Component) Start(ctx context.Context) error {
 }
 
 // buildEngine attaches the verbatim-body ObjectStore and constructs the
-// lens-driven fusion engine over it. With no NATS client (unit tests inject an
-// engine directly) it is a no-op.
+// lens-driven fusion engine over it. A pre-set engine (unit tests inject one) is
+// left as-is. A nil NATS client is a hard error: a gateway with no graph client
+// cannot answer, and letting Start set running=true without an engine would let
+// a request nil-deref Fuse — so Start fails fast rather than run half-built.
 func (c *Component) buildEngine(ctx context.Context) error {
-	if c.client == nil || c.engine != nil {
+	if c.engine != nil {
 		return nil
 	}
+	if c.client == nil {
+		return fmt.Errorf("code-context requires a NATS client")
+	}
 	store, err := objectstore.NewStoreWithConfig(ctx, c.client, objectstore.Config{
-		BucketName:   bodyBucket,
-		InstanceName: bodyStoreInstance,
+		BucketName:   graph.BodyStoreBucket,
+		InstanceName: graph.BodyStoreInstance,
 	})
 	if err != nil {
-		return fmt.Errorf("attach body store %q: %w", bodyStoreInstance, err)
+		return fmt.Errorf("attach body store %q: %w", graph.BodyStoreInstance, err)
 	}
-	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{bodyStoreInstance: storage.Store(store)})
+	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: storage.Store(store)})
 	c.engine = fusion.NewEngine(c.graph, resolver)
 	return nil
 }

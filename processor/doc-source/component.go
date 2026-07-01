@@ -26,16 +26,6 @@ import (
 // docSourceSchema defines the configuration schema for the doc-source component.
 var docSourceSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
-// bodyBucket / bodyInstance address the verbatim-body ObjectStore fusion
-// dereferences doc passages from (ADR-062). They MUST match code-context's
-// resolver key and run.go's "objectstore" component (gh#400: the StorageInstance
-// is the storage component instance name). Shared with the code body path so one
-// resolver serves both domains.
-const (
-	bodyBucket   = "CONTENT"
-	bodyInstance = "objectstore"
-)
-
 // sourceCfg is a minimal handler.SourceConfig adapter for the doc handler.
 // It satisfies the handler.SourceConfig interface without coupling this package
 // to the full semsource config model.
@@ -103,6 +93,9 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
 
+	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
+	// with the wired ObjectStores (the body store + optional large-content store),
+	// which need a context to attach. The live handler is the one built in Start.
 	var handlerOpts []dochandler.Option
 	if config.ContentThreshold > 0 {
 		handlerOpts = append(handlerOpts, dochandler.WithContentThreshold(config.ContentThreshold))
@@ -157,12 +150,12 @@ func (c *Component) Start(ctx context.Context) error {
 	// wired options.
 	opts := []dochandler.Option{dochandler.WithContentThreshold(c.config.ContentThreshold)}
 	if bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
-		BucketName:   bodyBucket,
-		InstanceName: bodyInstance,
+		BucketName:   graph.BodyStoreBucket,
+		InstanceName: graph.BodyStoreInstance,
 	}); err != nil {
 		c.logger.Warn("verbatim body store unavailable; doc bodies will not be offloaded", "error", err)
 	} else {
-		opts = append(opts, dochandler.WithBodyStore(bodyStore, bodyInstance))
+		opts = append(opts, dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
 	}
 	if c.config.ContentThreshold > 0 && c.config.ContentBucket != "" {
 		if store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{

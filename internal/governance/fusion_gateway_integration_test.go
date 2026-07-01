@@ -23,15 +23,6 @@ import (
 	"github.com/c360studio/semsource/source/ontology"
 )
 
-// bodyBucket / bodyInstance address the verbatim-body ObjectStore the fusion
-// engine dereferences Hydrate handles against (ADR-062 increment 4). They mirror
-// the code-context component's constants; the producer stamps bodyInstance into
-// each entity's body triples.
-const (
-	bodyBucket   = "CONTENT"
-	bodyInstance = "objectstore"
-)
-
 // TestIntegration_FusionNatsClientAgainstLiveGraph validates the fusionnats
 // retrieval client's wire-format mappings against a REAL graph subsystem
 // (graph-ingest, graph-index, graph-query) — the highest-risk, can't-unit-test
@@ -180,8 +171,8 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	// the producer side of the hydration contract. The engine's BodyResolver
 	// Gets it back through the same store.
 	store, err := objectstore.NewStoreWithConfig(ctx, tc.Client, objectstore.Config{
-		BucketName:   bodyBucket,
-		InstanceName: bodyInstance,
+		BucketName:   semsourcegraph.BodyStoreBucket,
+		InstanceName: semsourcegraph.BodyStoreInstance,
 	})
 	if err != nil {
 		t.Fatalf("objectstore: %v", err)
@@ -204,7 +195,7 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 		{Subject: caller, Predicate: ast.CodeEndLine, Object: 5},
 		{Subject: caller, Predicate: ast.CodeCalls, Object: callee},
 		// Body handle triples: the code lens reads these into a StorageReference.
-		{Subject: caller, Predicate: ast.CodeBodyStore, Object: bodyInstance},
+		{Subject: caller, Predicate: ast.CodeBodyStore, Object: semsourcegraph.BodyStoreInstance},
 		{Subject: caller, Predicate: ast.CodeBodyKey, Object: bodyKey},
 		// Stamp SoftwareCode, NOT Algorithm: a `function` entity's ID-derived
 		// fallback is cco.Algorithm, so stamping Algorithm would let the class
@@ -224,7 +215,7 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 
 	engine := fusion.NewEngine(
 		fusionnats.New(tc.Client, 0),
-		fusion.NewBodyResolver(fusion.MapStoreResolver{bodyInstance: storage.Store(store)}),
+		fusion.NewBodyResolver(fusion.MapStoreResolver{semsourcegraph.BodyStoreInstance: storage.Store(store)}),
 	)
 	// Use the REAL code lens for edges/fields/hydration, but force prefix
 	// resolution so the seed resolves deterministically via graph.query.prefix

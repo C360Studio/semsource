@@ -11,6 +11,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage/objectstore"
 
+	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
@@ -21,16 +22,12 @@ import (
 // engine's BodyResolver Gets the bytes — so a standalone/remote gateway serves
 // verbatim source without access to the ingesting host's worktree. Bodies are
 // content-addressed (sha256), so an unchanged symbol re-ingests to the same key.
-const (
-	// bodyStoreInstance is the StorageReference.StorageInstance stamped into body
-	// handles; it MUST match the resolver's map key (code-context) and run.go's
-	// "objectstore" component name (gh#400: instance name is the canonical handle).
-	bodyStoreInstance = "objectstore"
-	// bodyBucket is the JetStream ObjectStore bucket the bodies live in.
-	bodyBucket = "CONTENT"
-	// bodyKeyPrefix namespaces code bodies within the shared CONTENT bucket.
-	bodyKeyPrefix = "code:"
-)
+//
+// The store instance + bucket are graph.BodyStore{Instance,Bucket} (shared with
+// the resolver so the addressing cannot drift).
+
+// bodyKeyPrefix namespaces code bodies within the shared CONTENT bucket.
+const bodyKeyPrefix = "code:"
 
 // containerTypes are entity types with no verbatim body of their own (repo,
 // folder, file, package) — their "body" would be a whole tree/file, not a symbol.
@@ -49,8 +46,8 @@ func (c *Component) initBodyStore(ctx context.Context) {
 		return
 	}
 	store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
-		BucketName:   bodyBucket,
-		InstanceName: bodyStoreInstance,
+		BucketName:   graph.BodyStoreBucket,
+		InstanceName: graph.BodyStoreInstance,
 	})
 	if err != nil {
 		c.logger.Warn("verbatim body store unavailable; code bodies will not be offloaded", "error", err)
@@ -91,7 +88,7 @@ func (c *Component) bodyTriplesForResult(ctx context.Context, result *semsourcea
 			continue
 		}
 		out[e.ID] = []message.Triple{
-			{Subject: e.ID, Predicate: semsourceast.CodeBodyStore, Object: bodyStoreInstance},
+			{Subject: e.ID, Predicate: semsourceast.CodeBodyStore, Object: graph.BodyStoreInstance},
 			{Subject: e.ID, Predicate: semsourceast.CodeBodyKey, Object: key},
 		}
 	}
