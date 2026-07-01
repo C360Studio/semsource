@@ -47,6 +47,14 @@ type Handler struct {
 	// contentThreshold is the byte size above which content is stored in
 	// ObjectStore. Documents at or below this size keep content inline.
 	contentThreshold int
+
+	// bodyStore / bodyInstance are the verbatim-body store for fusion hydration
+	// (ADR-062). Distinct from `store` above (the large-content offload that
+	// feeds message.Storable consumers): every doc's passage is offloaded here
+	// and addressed by DocBodyStore/DocBodyKey triples so the fusion docs lens
+	// hydrates by handle. When nil, no body triples are stamped.
+	bodyStore    storage.Store
+	bodyInstance string
 }
 
 // Option is a functional option for configuring a Handler.
@@ -66,6 +74,18 @@ func WithStore(s storage.Store, bucket string) Option {
 // stored in ObjectStore. Defaults to 4096.
 func WithContentThreshold(n int) Option {
 	return func(h *Handler) { h.contentThreshold = n }
+}
+
+// WithBodyStore sets the verbatim-body store for fusion hydration (ADR-062).
+// When set, every document's passage is offloaded and the entity carries
+// DocBodyStore/DocBodyKey triples so the fusion docs lens hydrates by handle.
+// instance is the StorageReference.StorageInstance the resolver maps back to
+// this store (the storage component instance name, e.g. "objectstore").
+func WithBodyStore(s storage.Store, instance string) Option {
+	return func(h *Handler) {
+		h.bodyStore = s
+		h.bodyInstance = instance
+	}
 }
 
 // New returns a ready-to-use Handler.

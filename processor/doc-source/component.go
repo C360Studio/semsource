@@ -93,6 +93,9 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
 
+	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
+	// with the wired ObjectStores (the body store + optional large-content store),
+	// which need a context to attach. The live handler is the one built in Start.
 	var handlerOpts []dochandler.Option
 	if config.ContentThreshold > 0 {
 		handlerOpts = append(handlerOpts, dochandler.WithContentThreshold(config.ContentThreshold))
@@ -141,24 +144,32 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
-	// Wire ObjectStore for large document content if configured.
+	// Assemble handler storage: the fusion verbatim-body store (always, so
+	// doc_context hydrates passages by handle — ADR-062) plus the optional
+	// large-content store (message.Storable consumers). Rebuilt once with all
+	// wired options.
+	opts := []dochandler.Option{dochandler.WithContentThreshold(c.config.ContentThreshold)}
+	if bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+		BucketName:   graph.BodyStoreBucket,
+		InstanceName: graph.BodyStoreInstance,
+	}); err != nil {
+		c.logger.Warn("verbatim body store unavailable; doc bodies will not be offloaded", "error", err)
+	} else {
+		opts = append(opts, dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
+	}
 	if c.config.ContentThreshold > 0 && c.config.ContentBucket != "" {
-		store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+		if store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
 			BucketName: c.config.ContentBucket,
-		})
-		if err != nil {
-			c.logger.Debug("content store not available, all doc content will be inline",
+		}); err != nil {
+			c.logger.Debug("content store not available, large doc content will be inline",
 				"bucket", c.config.ContentBucket, "error", err)
 		} else {
-			c.handler = dochandler.NewWithOrg(c.config.Org,
-				dochandler.WithStore(store, c.config.ContentBucket),
-				dochandler.WithContentThreshold(c.config.ContentThreshold),
-			)
+			opts = append(opts, dochandler.WithStore(store, c.config.ContentBucket))
 			c.logger.Info("content store wired for large document storage",
-				"bucket", c.config.ContentBucket,
-				"threshold", c.config.ContentThreshold)
+				"bucket", c.config.ContentBucket, "threshold", c.config.ContentThreshold)
 		}
 	}
+	c.handler = dochandler.NewWithOrg(c.config.Org, opts...)
 
 	c.publishStatusReport(ctx, "ingesting")
 

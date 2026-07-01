@@ -1,34 +1,36 @@
 package codecontext
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/vocabulary/cco"
 
+	"github.com/c360studio/semsource/graph"
+
 	"github.com/c360studio/semsource/source/ast"
-	"github.com/c360studio/semsource/source/fusion"
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
 	"github.com/c360studio/semsource/source/ontology"
 	srcvocab "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// newTestComponent builds a running component over the given graph + lens (no NATS).
-func newTestComponent(lensKind string, g fusion.GraphQueryClient) *Component {
+// newTestComponent builds a running component over the given graph + body store
+// (no NATS). The engine is injected directly, bypassing Start's store attach.
+func newTestComponent(lensKind string, g fusion.RetrievalClient, store *fusiontest.MemStore) *Component {
+	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: store})
 	return &Component{
 		name:        "code-context",
 		lensKind:    lensKind,
 		subjectRoot: lensKind + ".v1.",
-		engine:      fusion.NewEngine(g),
+		graph:       g,
+		engine:      fusion.NewEngine(g, resolver),
 		logger:      slog.Default(),
 		running:     true,
 		startTime:   time.Now(),
@@ -45,21 +47,19 @@ func decodeResp(t *testing.T, raw []byte) fusion.Response {
 }
 
 func TestServeCodeReadyHit(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "svc.go"),
-		[]byte("package svc\n\nfunc Dispatch() {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	g := fusiontest.NewMemGraph()
+	store := fusiontest.NewMemStore()
+	store.Set("body:dispatch", "func Dispatch() {}")
 	id := "o.semsource.golang.s.function.dispatch"
 	g.AddEntity(id, map[string]any{
 		ast.DcTitle: "Dispatch", ast.CodeType: "function", ast.CodePath: "svc.go",
 		ast.CodeStartLine: 3, ast.CodeEndLine: 3, ontology.ClassPredicate: cco.Algorithm,
+		ast.CodeBodyStore: graph.BodyStoreInstance, ast.CodeBodyKey: "body:dispatch",
 	})
 	g.SetResolve("Dispatch", id)
-	c := newTestComponent("code", g)
+	c := newTestComponent("code", g, store)
 
-	body, _ := json.Marshal(fusion.Request{Query: "Dispatch", Repo: root, Want: []fusion.Want{fusion.WantBody}})
+	body, _ := json.Marshal(fusion.Request{Query: "Dispatch", Want: []fusion.Want{fusion.WantBody}})
 	raw, err := c.serve(context.Background(), "context", body)
 	if err != nil {
 		t.Fatal(err)
@@ -73,42 +73,73 @@ func TestServeCodeReadyHit(t *testing.T) {
 func TestServeNotReady(t *testing.T) {
 	g := fusiontest.NewMemGraph()
 	g.SetStatus(fusion.IndexStatus{Ready: false, State: fusion.StateBuilding})
-	c := newTestComponent("code", g)
+	c := newTestComponent("code", g, fusiontest.NewMemStore())
 
-	body, _ := json.Marshal(fusion.Request{Query: "Dispatch", Repo: "/x"})
+	body, _ := json.Marshal(fusion.Request{Query: "Dispatch"})
 	resp := decodeResp(t, mustServe(t, c, "context", body))
 	if resp.Index.Ready || len(resp.Nodes) != 0 || len(resp.Misses) != 0 {
 		t.Fatalf("not-ready must be empty + no misses, got %+v", resp)
 	}
 }
 
-func TestServeCodeRequiresRepo(t *testing.T) {
-	c := newTestComponent("code", fusiontest.NewMemGraph())
-	if _, err := c.serve(context.Background(), "context", []byte(`{"query":"X"}`)); err == nil {
-		t.Fatal("code query without repo must error")
-	}
-}
-
-func TestServeDocsNoRepoNeeded(t *testing.T) {
+func TestServeDocs(t *testing.T) {
 	g := fusiontest.NewMemGraph()
+	store := fusiontest.NewMemStore()
+	store.Set("body:retry", "# Retry\nbackoff.")
 	id := "o.semsource.web.s.doc.abc"
 	g.AddEntity(id, map[string]any{
 		srcvocab.DocType: "document", srcvocab.DcTitle: "Retry Policy",
-		srcvocab.DocFilePath: "docs/retry.md", srcvocab.DocContent: "# Retry\nbackoff.",
+		srcvocab.DocFilePath:  "docs/retry.md",
+		srcvocab.DocBodyStore: graph.BodyStoreInstance, srcvocab.DocBodyKey: "body:retry",
 		ontology.ClassPredicate: cco.Document,
 	})
 	g.SetResolve("how to retry", id)
-	c := newTestComponent("docs", g)
+	c := newTestComponent("docs", g, store)
 
-	body, _ := json.Marshal(fusion.Request{Query: "how to retry"}) // no repo
+	body, _ := json.Marshal(fusion.Request{Query: "how to retry"})
 	resp := decodeResp(t, mustServe(t, c, "context", body))
 	if len(resp.Nodes) != 1 || resp.Nodes[0].Name != "Retry Policy" || resp.Nodes[0].Body != "# Retry\nbackoff." {
-		t.Fatalf("expected fused doc with body from graph, got %+v", resp.Nodes)
+		t.Fatalf("expected fused doc with body from store, got %+v", resp.Nodes)
+	}
+}
+
+// TestServeImpact exercises the local impact facet: the "impact" verb attaches an
+// impact summary (transitive reverse-relation closure) alongside the fused nodes.
+func TestServeImpact(t *testing.T) {
+	g := fusiontest.NewMemGraph()
+	store := fusiontest.NewMemStore()
+	store.Set("body:core", "func Core() {}")
+	core := "o.semsource.golang.s.function.core"
+	caller := "o.semsource.golang.s.function.caller"
+	g.AddEntity(core, map[string]any{
+		ast.DcTitle: "Core", ast.CodeType: "function", ast.CodePath: "core.go",
+		ast.CodeBodyStore: graph.BodyStoreInstance, ast.CodeBodyKey: "body:core",
+	})
+	g.AddEntity(caller, map[string]any{
+		ast.DcTitle: "Caller", ast.CodeType: "function", ast.CodePath: "caller.go",
+	})
+	g.AddEdge(caller, ast.CodeCalls, core) // caller → core, so core's reverse closure = {caller}
+	g.SetResolve("Core", core)
+	c := newTestComponent("code", g, store)
+
+	raw := mustServe(t, c, "impact", mustJSON(fusion.Request{Query: "Core"}))
+	var resp struct {
+		fusion.Response
+		Impact *struct {
+			Files, Nodes int
+			Truncated    bool
+		} `json:"impact"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Impact == nil || resp.Impact.Nodes != 1 || resp.Impact.Files != 1 {
+		t.Fatalf("expected impact {nodes:1, files:1}, got %+v", resp.Impact)
 	}
 }
 
 func TestHTTPMethodAndReadiness(t *testing.T) {
-	c := newTestComponent("code", fusiontest.NewMemGraph())
+	c := newTestComponent("code", fusiontest.NewMemGraph(), fusiontest.NewMemStore())
 
 	rec := httptest.NewRecorder()
 	c.handleHTTP(rec, httptest.NewRequest(http.MethodGet, "/code-context/context", nil), "context")
@@ -121,16 +152,6 @@ func TestHTTPMethodAndReadiness(t *testing.T) {
 	c.handleHTTP(rec, httptest.NewRequest(http.MethodPost, "/code-context/context", nil), "context")
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("not-running should be 503, got %d", rec.Code)
-	}
-}
-
-func TestHTTPCodeRequiresRepoIs400(t *testing.T) {
-	c := newTestComponent("code", fusiontest.NewMemGraph())
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/code-context/context", bytes.NewReader([]byte(`{"query":"X"}`)))
-	c.handleHTTP(rec, req, "context")
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("missing repo should be 400, got %d", rec.Code)
 	}
 }
 
@@ -147,4 +168,9 @@ func mustServe(t *testing.T, c *Component, verb string, body []byte) []byte {
 		t.Fatalf("serve(%s): %v", verb, err)
 	}
 	return raw
+}
+
+func mustJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }

@@ -39,6 +39,14 @@ const (
 	CodeEndLine    = "code.metric.end_line"   // ending line number
 	CodeComplexity = "code.metric.complexity" // cyclomatic complexity (future)
 
+	// Verbatim body handle (ADR-062 hydration contract). The producer offloads
+	// an entity's pre-sliced source to a storage.Store at ingest and stamps these
+	// two triples; the fusion code lens reads them back into a StorageReference so
+	// the engine's BodyResolver can Get the bytes location-independently — no
+	// worktree read. Absent when no body was offloaded (e.g. container entities).
+	CodeBodyStore = "code.body.store" // storage component instance name (e.g. "objectstore")
+	CodeBodyKey   = "code.body.key"   // storage key: the entity's body blob (content hash)
+
 	// Documentation
 	CodeDocComment = "code.doc.comment"   // documentation comment
 	CodeSignature  = "code.doc.signature" // rendered signature, e.g. "submit(item: Job): Promise<string>"

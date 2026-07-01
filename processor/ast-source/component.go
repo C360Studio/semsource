@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/storage"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -45,6 +46,11 @@ type Component struct {
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 	platform   component.PlatformMeta
+
+	// bodyStore holds verbatim code bodies offloaded at ingest so the fusion
+	// code lens can hydrate them by handle, location-independently (ADR-062 /
+	// ADR-0006 §5). nil when unavailable — bodies are then simply not offloaded.
+	bodyStore storage.Store
 
 	// Per-path watchers
 	watchers []*pathWatcher
@@ -172,6 +178,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	c.publisher.Start(ctx)
+	c.initBodyStore(ctx)
 
 	c.publishStatusReport(ctx, "ingesting")
 
@@ -210,7 +217,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.publishHierarchy(ctx, results, pw.config.Org, pw.config.Project)
 
 		for _, result := range results {
-			if err := c.publishParseResult(ctx, result); err != nil {
+			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", result.Path,
 					"error", err)
@@ -338,7 +345,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 			// edges exist even for directories created between full reindexes.
 			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.config.Project)
 
-			if err := c.publishParseResult(ctx, event.Result); err != nil {
+			if err := c.publishParseResult(ctx, event.Result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", event.Path,
 					"error", err)
@@ -416,7 +423,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 				c.setFileHash(result.Path, result.Hash)
 			}
 
-			if err := c.publishParseResult(ctx, result); err != nil {
+			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result during reindex",
 					"path", result.Path,
 					"error", err)
@@ -492,9 +499,13 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 }
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
-func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult) error {
+func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, root string) error {
+	bodyTriples := c.bodyTriplesForResult(ctx, result, root)
 	for _, entity := range result.Entities {
 		state := entity.EntityState()
+		if bt := bodyTriples[state.ID]; bt != nil {
+			state.Triples = append(state.Triples, bt...)
+		}
 		payload, err := payloadFromASTState(state)
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)

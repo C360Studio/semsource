@@ -2,27 +2,25 @@ package code
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/vocabulary/cco"
 
 	"github.com/c360studio/semsource/source/ast"
-	"github.com/c360studio/semsource/source/fusion"
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
 	"github.com/c360studio/semsource/source/ontology"
 )
 
 func TestResolveMode(t *testing.T) {
-	l := New("/tmp")
+	l := New()
 	cases := map[string]fusion.ResolveMode{
-		"OnEvent":             fusion.ResolveSymbol,
-		"PlanManager.OnEvent": fusion.ResolveSymbol,
-		"pkg/comp.go":         fusion.ResolvePrefix,
-		"comp.go":             fusion.ResolvePrefix,
-		"where is dispatch":   fusion.ResolveSemantic,
+		"OnEvent":             fusion.ResolveModeSymbol,
+		"PlanManager.OnEvent": fusion.ResolveModeSymbol,
+		"pkg/comp.go":         fusion.ResolveModePrefix,
+		"comp.go":             fusion.ResolveModePrefix,
+		"where is dispatch":   fusion.ResolveModeNL,
 	}
 	for q, want := range cases {
 		if got := l.ResolveMode(q); got != want {
@@ -32,7 +30,7 @@ func TestResolveMode(t *testing.T) {
 }
 
 func TestFieldExtraction(t *testing.T) {
-	l := New("/tmp")
+	l := New()
 	e := &fusion.Entity{Triples: []message.Triple{
 		{Predicate: ast.DcTitle, Object: "OnEvent"},
 		{Predicate: ast.CodeType, Object: "method"},
@@ -49,39 +47,50 @@ func TestFieldExtraction(t *testing.T) {
 	}
 }
 
+// TestHydrate: the lens returns the StorageReference HANDLE built from the body
+// triples the producer stamped — never bytes, never a filesystem read (ADR-062).
 func TestHydrate(t *testing.T) {
-	root := t.TempDir()
-	body := "func Foo() int {\n\treturn 1\n}"
-	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("package p\n\n"+body+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	l := New(root)
+	l := New()
 	e := &fusion.Entity{Triples: []message.Triple{
 		{Predicate: ast.CodePath, Object: "a.go"},
-		{Predicate: ast.CodeStartLine, Object: 3},
-		{Predicate: ast.CodeEndLine, Object: 5},
+		{Predicate: ast.CodeBodyStore, Object: "objectstore"},
+		{Predicate: ast.CodeBodyKey, Object: "sha256:abc123"},
 	}}
-	got, _ := l.Hydrate(context.Background(), e)
-	if got != body {
-		t.Fatalf("Hydrate = %q; want %q", got, body)
+	ref, err := l.Hydrate(context.Background(), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref == nil || ref.StorageInstance != "objectstore" || ref.Key != "sha256:abc123" {
+		t.Fatalf("Hydrate handle = %+v; want objectstore/sha256:abc123", ref)
+	}
+}
+
+// TestHydrateNoBody: an entity without body triples yields no handle (nil, nil)
+// so the engine degrades the node rather than erroring.
+func TestHydrateNoBody(t *testing.T) {
+	l := New()
+	e := &fusion.Entity{Triples: []message.Triple{{Predicate: ast.CodePath, Object: "a.go"}}}
+	if ref, err := l.Hydrate(context.Background(), e); ref != nil || err != nil {
+		t.Fatalf("Hydrate = (%+v, %v); want (nil, nil)", ref, err)
 	}
 }
 
 // TestCodeLensViaEngine drives the real fusion engine with the code lens: it
-// must return verbatim source plus callers/callees — the code_context shape.
+// must return verbatim source (dereferenced from the body store) plus
+// callers/callees — the code_context shape.
 func TestCodeLensViaEngine(t *testing.T) {
-	root := t.TempDir()
-	src := "package svc\n\nfunc Dispatch() {\n\tOnEvent()\n}\n\nfunc OnEvent() {}\n"
-	if err := os.WriteFile(filepath.Join(root, "svc.go"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	dispatchBody := "func Dispatch() {\n\tOnEvent()\n}"
 
 	g := fusiontest.NewMemGraph()
+	store := fusiontest.NewMemStore()
+	store.Set("body:dispatch", dispatchBody)
+
 	dispatch := "o.semsource.golang.s.function.dispatch"
 	onEvent := "o.semsource.golang.s.function.onevent"
 	g.AddEntity(dispatch, map[string]any{
 		ast.DcTitle: "Dispatch", ast.CodeType: "function", ast.CodePath: "svc.go",
 		ast.CodeStartLine: 3, ast.CodeEndLine: 5, ontology.ClassPredicate: cco.Algorithm,
+		ast.CodeBodyStore: "objectstore", ast.CodeBodyKey: "body:dispatch",
 	})
 	g.AddEntity(onEvent, map[string]any{
 		ast.DcTitle: "OnEvent", ast.CodeType: "function", ast.CodePath: "svc.go",
@@ -90,9 +99,10 @@ func TestCodeLensViaEngine(t *testing.T) {
 	g.AddEdge(dispatch, ast.CodeCalls, onEvent)
 	g.SetResolve("Dispatch", dispatch)
 
-	resp, err := fusion.NewEngine(g).Fuse(context.Background(),
+	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}))
+	resp, err := engine.Fuse(context.Background(),
 		fusion.Request{Query: "Dispatch", Want: []fusion.Want{fusion.WantBody, fusion.WantRelations}},
-		New(root))
+		New())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +110,7 @@ func TestCodeLensViaEngine(t *testing.T) {
 		t.Fatalf("expected 1 node, got %d", len(resp.Nodes))
 	}
 	n := resp.Nodes[0]
-	if n.Name != "Dispatch" || n.Body != "func Dispatch() {\n\tOnEvent()\n}" {
+	if n.Name != "Dispatch" || n.Body != dispatchBody {
 		t.Fatalf("node body mismatch: name=%q body=%q", n.Name, n.Body)
 	}
 	if got := n.Relations["callee"]; len(got) != 1 || got[0].Name != "OnEvent" {

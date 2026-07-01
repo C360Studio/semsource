@@ -59,6 +59,14 @@ const (
 	// DocFileHash is the content hash for staleness detection.
 	DocFileHash = "source.doc.file_hash"
 
+	// DocBodyStore and DocBodyKey are the verbatim body handle (ADR-062 hydration
+	// contract), the doc analogue of ast.CodeBodyStore/CodeBodyKey: a doc producer
+	// offloads the passage to a storage.Store and stamps these so the fusion docs
+	// lens returns a StorageReference instead of inline content. Absent until the
+	// doc body producer lands (tracked follow-up); the lens then yields no body.
+	DocBodyStore = "source.doc.body_store" // storage component instance name
+	DocBodyKey   = "source.doc.body_key"   // storage key: the passage blob
+
 	// DocScope specifies when this document applies.
 	// Values: plan (planning phase), code (implementation), all (both phases)
 	// For SOPs, this determines whether the SOP is checked during plan approval,

@@ -74,6 +74,37 @@ lookup truly deterministic.
 
 ---
 
+## Fusion (pkg/fusion, ADR-062)
+
+### 9. Paths / Impact facets deferred from the framework engine — framework-shaped — filed [semstreams#409](https://github.com/C360Studio/semstreams/issues/409)
+`pkg/fusion` (beta.122) lifts the engine, Lens SPI, and hydration contract, but
+`WantPaths`/`WantImpact` are reserved constants the engine ignores — the
+transitive relation-path and reverse-closure facets are a deferred follow-on.
+semsource's `code_context` "impact" verb needs the reverse closure, so on the
+convergence we kept a thin local extension (`source/fusion/impact`) that walks
+`fusion.RetrievalClient.Neighbors` and attaches an impact summary to the response
+(`contextResponse`). It's the deterministic sibling of the relations facet the
+engine already owns; lifting Paths/Impact into the engine (a `Want`→facet the
+engine computes, carried on `Response`) would retire this extension the way the
+Lens SPI retired our local engine.
+**Surfaced by:** ADR-062 increment-6 convergence (source/fusion → pkg/fusion).
+
+### 10. `graph.query.byName` readiness depends on products registering label predicates — framework-shaped — filed [semstreams#410](https://github.com/C360Studio/semstreams/issues/410)
+graph-index's `graph.index.query.status` readiness (and `graph.query.byName`
+itself) is driven by the NAME_INDEX, populated only for predicates
+`vocabulary.DiscoverLabelPredicates()` returns — i.e. those registered
+`WithAlias(AliasTypeLabel, …)`. Because `vocabulary.Register` OVERWRITES rather
+than merges, a product that re-registers `dc.terms.title` (for a description/IRI)
+without re-declaring the label alias silently drops it from the label set —
+breaking both byName symbol resolution and fusion readiness, with no error.
+semsource hit exactly this (`source/ast/vocabulary.go` re-registered DcTitle
+without the alias; fixed by re-adding `WithAlias(AliasTypeLabel, 1)`). The
+framework could make label roles sticky across re-registration, or expose a
+merge-mode Register, or at minimum document that label aliases must be
+re-declared on any re-Register of a name predicate.
+**Surfaced by:** ADR-062 convergence — fusionnats readiness stuck `building` in the
+live-graph integration test until DcTitle's label alias was restored.
+
 ## Transport / subject taxonomy
 
 ### 6. RPC reply subjects share the `graph.ingest.*` prefix with the persisted data plane — framework-shaped — candidate

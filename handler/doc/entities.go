@@ -2,6 +2,8 @@ package doc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +34,13 @@ type Entity struct {
 	// storageRef is set when content is stored in ObjectStore rather than
 	// inline in a triple. When non-nil, Triples() omits the DocContent triple.
 	storageRef *message.StorageReference
+
+	// bodyInstance / bodyKey are the fusion verbatim-body handle (ADR-062):
+	// the store instance + key the passage was offloaded to, emitted as
+	// DocBodyStore/DocBodyKey triples so the fusion docs lens hydrates by handle.
+	// Independent of storageRef (which serves message.Storable consumers).
+	bodyInstance string
+	bodyKey      string
 }
 
 // newEntity constructs a Entity with a deterministic 6-part ID.
@@ -76,6 +85,14 @@ func (e *Entity) Triples() []message.Triple {
 			Subject: e.ID, Predicate: source.DocContent, Object: e.Content,
 			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
 		})
+	}
+	// Fusion verbatim-body handle (ADR-062): the docs lens reads these to
+	// hydrate the passage by handle, location-independently.
+	if e.bodyKey != "" && e.bodyInstance != "" {
+		triples = append(triples,
+			message.Triple{Subject: e.ID, Predicate: source.DocBodyStore, Object: e.bodyInstance, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+			message.Triple{Subject: e.ID, Predicate: source.DocBodyKey, Object: e.bodyKey, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		)
 	}
 	return triples
 }
@@ -160,11 +177,33 @@ func (h *Handler) ingestFileEntityState(ctx context.Context, path, root, system,
 
 	e := newEntity(org, title, relPath, mime, hash, string(content), system, now)
 
+	// Offload the verbatim passage to the fusion body store and stamp the handle
+	// triples FIRST, while e.Content is still populated (storeContentIfLarge may
+	// clear it below). Non-fatal: the docs lens degrades to no body on failure.
+	offloadDocBody(ctx, e, h.bodyStore, h.bodyInstance)
+
 	// Store large content in ObjectStore when configured.
 	// Non-fatal: on failure the entity keeps content inline in the DocContent triple.
 	_ = storeContentIfLarge(ctx, e, h.store, h.storeBucket, h.contentThreshold)
 
 	return e.EntityState(), nil
+}
+
+// offloadDocBody offloads the entity's verbatim passage to the fusion body store
+// (content-addressed) and sets the body handle so Triples() emits DocBodyStore/
+// DocBodyKey. A nil store or empty content is a no-op; a Put fault leaves the
+// entity without a body handle (best-effort facet), not a failed ingest.
+func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instance string) {
+	if store == nil || instance == "" || e.Content == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte(e.Content))
+	key := "doc:" + hex.EncodeToString(sum[:])
+	if err := store.Put(ctx, key, []byte(e.Content)); err != nil {
+		return
+	}
+	e.bodyInstance = instance
+	e.bodyKey = key
 }
 
 // storeContentIfLarge stores the entity's content in ObjectStore when it
