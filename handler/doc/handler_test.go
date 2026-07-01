@@ -405,6 +405,45 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	}
 }
 
+// TestDocHandler_IngestEntityStates_BodyHandle: with a fusion body store, every
+// doc's passage is offloaded and the entity carries DocBodyStore/DocBodyKey
+// triples the fusion docs lens hydrates by handle (ADR-062).
+func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
+	dir := t.TempDir()
+	body := "# Retry\n\nUse exponential backoff."
+	writeMD(t, dir, "retry.md", body)
+
+	store := newMemStore()
+	h := dochandler.New(dochandler.WithBodyStore(store, "objectstore"))
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("state count: got %d, want 1", len(states))
+	}
+
+	var instance, key string
+	for _, tr := range states[0].Triples {
+		switch tr.Predicate {
+		case source.DocBodyStore:
+			instance, _ = tr.Object.(string)
+		case source.DocBodyKey:
+			key, _ = tr.Object.(string)
+		}
+	}
+	if instance != "objectstore" || key == "" {
+		t.Fatalf("body handle triples missing: instance=%q key=%q", instance, key)
+	}
+	// The offloaded blob must be the exact passage, byte-for-byte.
+	got, err := store.Get(context.Background(), key)
+	if err != nil || string(got) != body {
+		t.Fatalf("offloaded body = %q (err %v); want %q", got, err, body)
+	}
+}
+
 func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Title\nBody.")

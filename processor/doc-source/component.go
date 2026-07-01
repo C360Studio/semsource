@@ -26,6 +26,16 @@ import (
 // docSourceSchema defines the configuration schema for the doc-source component.
 var docSourceSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
+// bodyBucket / bodyInstance address the verbatim-body ObjectStore fusion
+// dereferences doc passages from (ADR-062). They MUST match code-context's
+// resolver key and run.go's "objectstore" component (gh#400: the StorageInstance
+// is the storage component instance name). Shared with the code body path so one
+// resolver serves both domains.
+const (
+	bodyBucket   = "CONTENT"
+	bodyInstance = "objectstore"
+)
+
 // sourceCfg is a minimal handler.SourceConfig adapter for the doc handler.
 // It satisfies the handler.SourceConfig interface without coupling this package
 // to the full semsource config model.
@@ -141,24 +151,32 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
-	// Wire ObjectStore for large document content if configured.
+	// Assemble handler storage: the fusion verbatim-body store (always, so
+	// doc_context hydrates passages by handle — ADR-062) plus the optional
+	// large-content store (message.Storable consumers). Rebuilt once with all
+	// wired options.
+	opts := []dochandler.Option{dochandler.WithContentThreshold(c.config.ContentThreshold)}
+	if bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+		BucketName:   bodyBucket,
+		InstanceName: bodyInstance,
+	}); err != nil {
+		c.logger.Warn("verbatim body store unavailable; doc bodies will not be offloaded", "error", err)
+	} else {
+		opts = append(opts, dochandler.WithBodyStore(bodyStore, bodyInstance))
+	}
 	if c.config.ContentThreshold > 0 && c.config.ContentBucket != "" {
-		store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+		if store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
 			BucketName: c.config.ContentBucket,
-		})
-		if err != nil {
-			c.logger.Debug("content store not available, all doc content will be inline",
+		}); err != nil {
+			c.logger.Debug("content store not available, large doc content will be inline",
 				"bucket", c.config.ContentBucket, "error", err)
 		} else {
-			c.handler = dochandler.NewWithOrg(c.config.Org,
-				dochandler.WithStore(store, c.config.ContentBucket),
-				dochandler.WithContentThreshold(c.config.ContentThreshold),
-			)
+			opts = append(opts, dochandler.WithStore(store, c.config.ContentBucket))
 			c.logger.Info("content store wired for large document storage",
-				"bucket", c.config.ContentBucket,
-				"threshold", c.config.ContentThreshold)
+				"bucket", c.config.ContentBucket, "threshold", c.config.ContentThreshold)
 		}
 	}
+	c.handler = dochandler.NewWithOrg(c.config.Org, opts...)
 
 	c.publishStatusReport(ctx, "ingesting")
 
