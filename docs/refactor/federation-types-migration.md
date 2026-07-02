@@ -20,7 +20,7 @@ Replaced all semsource-local graph types with shared `semstreams/federation` typ
 - `processor/federation/` — entire directory (6 files), federation is consumer-side concern
 
 ### Kept
-- `graph/event_payload.go` — `GraphEventPayload` is a concrete struct (not alias) because `federation.EventPayload.Schema()` returns `Domain: "federation"` while our payload registry requires `Domain: "semsource"`. The semstreams `RegisterPayload` function enforces Schema/registration domain consistency.
+- `graph/event_payload.go` — a concrete payload struct (not an alias) because the framework payload registry requires `Domain: "semsource"`. (Since renamed: the type is now `EntityPayload` with `EntityType = {Domain: "semsource", Category: "entity", Version: "v1"}`, and `graph/` also gained `bodystore.go` — this doc is a point-in-time migration record.)
 - `graph/event_test.go` — payload-specific tests (Schema domain, JSON round-trip, Validate delegation)
 
 ### Updated Files (import `federation` instead of `graph`)

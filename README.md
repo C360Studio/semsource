@@ -210,6 +210,7 @@ SemSource exposes graph query and status endpoints via NATS request/reply, Graph
 |---------|-------------|
 | `graph.query.entity` | Query a single entity by ID |
 | `graph.query.entityByAlias` | Resolve an entity by alias |
+| `graph.query.byName` | Resolve a name/title to ranked entity IDs (deterministic symbol lookup) |
 | `graph.query.batch` | Fetch multiple entities |
 | `graph.query.relationships` | Query entity relationships |
 | `graph.query.pathSearch` | Traverse paths between entities |
@@ -219,7 +220,6 @@ SemSource exposes graph query and status endpoints via NATS request/reply, Graph
 | `graph.query.temporal` | Temporal query surface |
 | `graph.query.semantic` | Semantic query surface |
 | `graph.query.similar` | Similarity query surface |
-| `graph.query.localSearch` | Local graph search |
 | `graph.query.globalSearch` | Global graph search |
 | `graph.query.summary` | Graph summary counts |
 | `graph.query.searchGraph` | Search graph result expansion |
@@ -264,6 +264,38 @@ The status endpoint reports aggregate and per-source lifecycle:
 | `errored` | Error encountered |
 
 Downstream consumers should gate on `phase: "ready"` before querying the graph.
+
+## Fused Code & Doc Context (Agent API)
+
+For agents (e.g. Claude Code) that want a source-first answer instead of raw triples,
+SemSource runs a **deterministic fusion gateway** (ADR-0004, built on semstreams
+`pkg/fusion`): it resolves a query, expands the structure around it, hydrates verbatim
+bodies, and returns one ranked answer with a readiness/provenance envelope. Two instances:
+
+| Instance | Domain | NATS subjects | HTTP |
+|----------|--------|---------------|------|
+| `code-context` | code symbols | `code.v1.<verb>` | `POST /code-context/<verb>` (proxied via Caddy) |
+| `doc-context` | documents | `docs.v1.<verb>` | `POST /doc-context/<verb>` (ServiceManager :8080; not Caddy-proxied yet) |
+
+**Verbs:** `context` (the primary fused answer), `callers`, `callees`, `impact`
+(transitive reverse-relation closure), `file`, `search`.
+
+**Request** (JSON):
+
+```json
+{ "query": "Dispatch", "want": ["body", "relations", "impact"], "budget": { "max_nodes": 20, "max_bytes": 60000 } }
+```
+
+`query` is what the agent already knows — a symbol, a path, or a natural-language question
+(the lens routes it to exact, prefix, or semantic resolution). `want` and `budget` are
+optional; verbs preset sensible defaults.
+
+**Response:** the readiness/provenance envelope plus ranked `nodes` (each with verbatim
+`body`, `relations`, and location), optional `paths`/`impact` facets, and `misses` carrying
+`did_you_mean`. A not-ready graph returns an empty envelope (the caller should fall back to
+grep) — never a false "not found". Verbatim bodies are dereferenced from an ObjectStore
+handle, so a standalone or remote gateway serves source without access to the ingesting
+host's worktree.
 
 ## Building from Source
 
