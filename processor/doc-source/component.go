@@ -94,14 +94,9 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
-	// with the wired ObjectStores (the body store + optional large-content store),
-	// which need a context to attach. The live handler is the one built in Start.
-	var handlerOpts []dochandler.Option
-	if config.ContentThreshold > 0 {
-		handlerOpts = append(handlerOpts, dochandler.WithContentThreshold(config.ContentThreshold))
-	}
-
-	h := dochandler.NewWithOrg(config.Org, handlerOpts...)
+	// with the wired body store (which needs a context to attach). The live
+	// handler is the one built in Start.
+	h := dochandler.NewWithOrg(config.Org)
 
 	sc := &sourceCfg{
 		paths:        config.Paths,
@@ -144,11 +139,11 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
-	// Assemble handler storage: the fusion verbatim-body store (always, so
-	// doc_context hydrates passages by handle — ADR-062) plus the optional
-	// large-content store (message.Storable consumers). Rebuilt once with all
-	// wired options.
-	opts := []dochandler.Option{dochandler.WithContentThreshold(c.config.ContentThreshold)}
+	// Assemble handler storage: the fusion verbatim-body store, so doc-context
+	// hydrates passages by handle (ADR-062) and graph-embedding embeds the same
+	// offloaded body via the shared StoreRegistry (ADR-063). One CONTENT blob,
+	// two consumers — no separate large-content store.
+	var opts []dochandler.Option
 	if bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
 		BucketName:   graph.BodyStoreBucket,
 		InstanceName: graph.BodyStoreInstance,
@@ -156,18 +151,6 @@ func (c *Component) Start(ctx context.Context) error {
 		c.logger.Warn("verbatim body store unavailable; doc bodies will not be offloaded", "error", err)
 	} else {
 		opts = append(opts, dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
-	}
-	if c.config.ContentThreshold > 0 && c.config.ContentBucket != "" {
-		if store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
-			BucketName: c.config.ContentBucket,
-		}); err != nil {
-			c.logger.Debug("content store not available, large doc content will be inline",
-				"bucket", c.config.ContentBucket, "error", err)
-		} else {
-			opts = append(opts, dochandler.WithStore(store, c.config.ContentBucket))
-			c.logger.Info("content store wired for large document storage",
-				"bucket", c.config.ContentBucket, "threshold", c.config.ContentThreshold)
-		}
 	}
 	c.handler = dochandler.NewWithOrg(c.config.Org, opts...)
 

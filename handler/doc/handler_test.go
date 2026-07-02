@@ -406,8 +406,10 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 }
 
 // TestDocHandler_IngestEntityStates_BodyHandle: with a fusion body store, every
-// doc's passage is offloaded and the entity carries DocBodyStore/DocBodyKey
-// triples the fusion docs lens hydrates by handle (ADR-062).
+// doc's passage is offloaded to a single CONTENT blob wired two ways — the
+// DocBodyStore/DocBodyKey handle triples (docs lens hydrates by handle, ADR-062)
+// and EntityState.StorageRef (graph-embedding embeds the body via the shared
+// StoreRegistry, ADR-063). The inline DocContent triple is dropped.
 func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 	dir := t.TempDir()
 	body := "# Retry\n\nUse exponential backoff."
@@ -424,20 +426,44 @@ func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 	if len(states) != 1 {
 		t.Fatalf("state count: got %d, want 1", len(states))
 	}
+	state := states[0]
 
 	var instance, key string
-	for _, tr := range states[0].Triples {
+	hasContent := false
+	for _, tr := range state.Triples {
 		switch tr.Predicate {
 		case source.DocBodyStore:
 			instance, _ = tr.Object.(string)
 		case source.DocBodyKey:
 			key, _ = tr.Object.(string)
+		case source.DocContent:
+			hasContent = true
 		}
 	}
 	if instance != "objectstore" || key == "" {
 		t.Fatalf("body handle triples missing: instance=%q key=%q", instance, key)
 	}
-	// The offloaded blob must be the exact passage, byte-for-byte.
+	if hasContent {
+		t.Error("inline DocContent triple should be dropped when the body is offloaded")
+	}
+
+	// StorageRef must point at the SAME blob as the body handle so graph-embedding
+	// and the docs lens resolve one CONTENT object (ADR-063 unification).
+	if state.StorageRef == nil {
+		t.Fatal("StorageRef should be set when the body is offloaded")
+	}
+	if state.StorageRef.StorageInstance != instance {
+		t.Errorf("StorageRef.StorageInstance = %q, want %q (body handle instance)",
+			state.StorageRef.StorageInstance, instance)
+	}
+	if state.StorageRef.Key != key {
+		t.Errorf("StorageRef.Key = %q, want %q (body handle key)", state.StorageRef.Key, key)
+	}
+
+	// Exactly one blob, and it is the exact passage byte-for-byte.
+	if got := store.keys(); len(got) != 1 {
+		t.Fatalf("store blob count: got %d, want 1", len(got))
+	}
 	got, err := store.Get(context.Background(), key)
 	if err != nil || string(got) != body {
 		t.Fatalf("offloaded body = %q (err %v); want %q", got, err, body)
@@ -607,7 +633,7 @@ func TestDocHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// ObjectStore content threshold
+// Verbatim body offload
 // ---------------------------------------------------------------------------
 
 // memStore is an in-memory storage.Store for testing.
@@ -664,119 +690,14 @@ func (s *memStore) keys() []string {
 	return keys
 }
 
-func TestDocHandler_IngestEntityStates_LargeDocGoesToStore(t *testing.T) {
-	dir := t.TempDir()
-	// Create a doc larger than the 100-byte threshold we'll set.
-	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
-	writeMD(t, dir, "large.md", largeContent)
-
-	store := newMemStore()
-	h := dochandler.NewWithOrg("acme",
-		dochandler.WithStore(store, "MESSAGES"),
-		dochandler.WithContentThreshold(100),
-	)
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
-	if err != nil {
-		t.Fatalf("IngestEntityStates() error: %v", err)
-	}
-	if len(states) != 1 {
-		t.Fatalf("state count: got %d, want 1", len(states))
-	}
-
-	state := states[0]
-
-	// StorageRef should be set.
-	if state.StorageRef == nil {
-		t.Fatal("StorageRef should be set for large doc")
-	}
-	if state.StorageRef.StorageInstance != "MESSAGES" {
-		t.Errorf("StorageInstance: got %q, want MESSAGES", state.StorageRef.StorageInstance)
-	}
-
-	// DocContent triple should be absent.
-	for _, triple := range state.Triples {
-		if triple.Predicate == source.DocContent {
-			t.Error("DocContent triple should be absent when content is in ObjectStore")
-		}
-	}
-
-	// Metadata triples should still be present.
-	hasHash := false
-	for _, triple := range state.Triples {
-		if triple.Predicate == source.DocFileHash {
-			hasHash = true
-		}
-	}
-	if !hasHash {
-		t.Error("DocFileHash triple should still be present")
-	}
-
-	// Store should contain the raw content.
-	storedKeys := store.keys()
-	if len(storedKeys) != 1 {
-		t.Fatalf("store key count: got %d, want 1", len(storedKeys))
-	}
-	stored, _ := store.Get(context.Background(), storedKeys[0])
-	if string(stored) != largeContent {
-		t.Error("stored content does not match original")
-	}
-}
-
-func TestDocHandler_IngestEntityStates_SmallDocStaysInline(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "small.md", "# Small\nTiny doc.")
-
-	store := newMemStore()
-	h := dochandler.NewWithOrg("acme",
-		dochandler.WithStore(store, "MESSAGES"),
-		dochandler.WithContentThreshold(4096),
-	)
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
-	if err != nil {
-		t.Fatalf("IngestEntityStates() error: %v", err)
-	}
-	if len(states) != 1 {
-		t.Fatalf("state count: got %d, want 1", len(states))
-	}
-
-	state := states[0]
-
-	// StorageRef should be nil.
-	if state.StorageRef != nil {
-		t.Error("StorageRef should be nil for small doc")
-	}
-
-	// DocContent triple should be present.
-	hasContent := false
-	for _, triple := range state.Triples {
-		if triple.Predicate == source.DocContent {
-			hasContent = true
-		}
-	}
-	if !hasContent {
-		t.Error("DocContent triple should be present for small doc")
-	}
-
-	// Store should be empty.
-	if len(store.keys()) != 0 {
-		t.Error("store should be empty for small doc")
-	}
-}
-
 func TestDocHandler_IngestEntityStates_StoreFailureFallsBackToInline(t *testing.T) {
 	dir := t.TempDir()
-	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
-	writeMD(t, dir, "large.md", largeContent)
+	writeMD(t, dir, "doc.md", "# Doc\n"+strings.Repeat("word ", 200))
 
-	store := &failStore{}
-	h := dochandler.NewWithOrg("acme",
-		dochandler.WithStore(store, "MESSAGES"),
-		dochandler.WithContentThreshold(100),
-	)
+	// A body store whose Put always fails: the entity degrades to inline content
+	// with no body handle and no StorageRef — a best-effort facet, not a failed
+	// ingest.
+	h := dochandler.NewWithOrg("acme", dochandler.WithBodyStore(&failStore{}, "objectstore"))
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -786,23 +707,26 @@ func TestDocHandler_IngestEntityStates_StoreFailureFallsBackToInline(t *testing.
 	if len(states) != 1 {
 		t.Fatalf("state count: got %d, want 1", len(states))
 	}
-
 	state := states[0]
 
-	// StorageRef should be nil because store.Put failed.
 	if state.StorageRef != nil {
-		t.Error("StorageRef should be nil when store fails")
+		t.Error("StorageRef should be nil when the body store Put fails")
 	}
 
-	// DocContent triple should be present (fallback to inline).
-	hasContent := false
-	for _, triple := range state.Triples {
-		if triple.Predicate == source.DocContent {
+	hasContent, hasHandle := false, false
+	for _, tr := range state.Triples {
+		switch tr.Predicate {
+		case source.DocContent:
 			hasContent = true
+		case source.DocBodyStore, source.DocBodyKey:
+			hasHandle = true
 		}
 	}
 	if !hasContent {
-		t.Error("DocContent triple should be present when store fails")
+		t.Error("DocContent triple should be present (inline fallback) when the store fails")
+	}
+	if hasHandle {
+		t.Error("body handle triples should be absent when the store fails")
 	}
 }
 

@@ -25,10 +25,6 @@ var docExtensions = map[string]bool{
 	".txt":  true,
 }
 
-// defaultContentThreshold is the byte size above which document content is
-// stored in ObjectStore rather than inline in a triple.
-const defaultContentThreshold = 4096
-
 // Handler handles document sources (markdown, plain text).
 // It implements handler.SourceHandler.
 type Handler struct {
@@ -37,22 +33,11 @@ type Handler struct {
 	// EntityStates are not populated on watch events.
 	org string
 
-	// store is the ObjectStore backend for large document content. When nil,
-	// all content is stored inline in triples regardless of size.
-	store storage.Store
-
-	// storeBucket is the ObjectStore bucket name, used to build StorageReference.
-	storeBucket string
-
-	// contentThreshold is the byte size above which content is stored in
-	// ObjectStore. Documents at or below this size keep content inline.
-	contentThreshold int
-
-	// bodyStore / bodyInstance are the verbatim-body store for fusion hydration
-	// (ADR-062). Distinct from `store` above (the large-content offload that
-	// feeds message.Storable consumers): every doc's passage is offloaded here
-	// and addressed by DocBodyStore/DocBodyKey triples so the fusion docs lens
-	// hydrates by handle. When nil, no body triples are stamped.
+	// bodyStore / bodyInstance are the fusion verbatim-body store (ADR-062). Every
+	// doc's passage is offloaded here (content-addressed) and wired to a single
+	// CONTENT blob two ways: DocBodyStore/DocBodyKey triples (the fusion docs lens
+	// hydrates by handle) and EntityState.StorageRef (graph-embedding fetches the
+	// body via the shared StoreRegistry — ADR-063). When nil, content stays inline.
 	bodyStore    storage.Store
 	bodyInstance string
 }
@@ -60,27 +45,12 @@ type Handler struct {
 // Option is a functional option for configuring a Handler.
 type Option func(*Handler)
 
-// WithStore sets the ObjectStore backend for large document content.
-// When set, documents exceeding the content threshold store their body
-// as raw bytes in the store (same pattern as image/video handlers).
-func WithStore(s storage.Store, bucket string) Option {
-	return func(h *Handler) {
-		h.store = s
-		h.storeBucket = bucket
-	}
-}
-
-// WithContentThreshold sets the byte size above which document content is
-// stored in ObjectStore. Defaults to 4096.
-func WithContentThreshold(n int) Option {
-	return func(h *Handler) { h.contentThreshold = n }
-}
-
 // WithBodyStore sets the verbatim-body store for fusion hydration (ADR-062).
 // When set, every document's passage is offloaded and the entity carries
-// DocBodyStore/DocBodyKey triples so the fusion docs lens hydrates by handle.
-// instance is the StorageReference.StorageInstance the resolver maps back to
-// this store (the storage component instance name, e.g. "objectstore").
+// DocBodyStore/DocBodyKey triples plus a StorageRef so the fusion docs lens
+// hydrates by handle and graph-embedding embeds the offloaded body. instance is
+// the StorageReference.StorageInstance the resolver maps back to this store (the
+// storage component instance name, e.g. "objectstore").
 func WithBodyStore(s storage.Store, instance string) Option {
 	return func(h *Handler) {
 		h.bodyStore = s
@@ -90,7 +60,7 @@ func WithBodyStore(s storage.Store, instance string) Option {
 
 // New returns a ready-to-use Handler.
 func New(opts ...Option) *Handler {
-	h := &Handler{contentThreshold: defaultContentThreshold}
+	h := &Handler{}
 	for _, o := range opts {
 		o(h)
 	}
@@ -247,12 +217,4 @@ func mimeForExt(ext string) string {
 	default:
 		return "application/octet-stream"
 	}
-}
-
-// slugify converts a filesystem path into a slug safe for use in entity IDs:
-// slashes become hyphens.
-func slugify(path string) string {
-	s := filepath.ToSlash(path)
-	s = strings.TrimPrefix(s, "/")
-	return strings.ReplaceAll(s, "/", "-")
 }
