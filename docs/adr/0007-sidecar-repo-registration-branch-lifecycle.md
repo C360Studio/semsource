@@ -1,9 +1,9 @@
 # ADR-0007: SemSource Sidecar — Dynamic Repo Registration & Branch Lifecycle
 
-> **Status:** Proposed — needs semspec + semteams input on the open questions (§5) before implementation | **Date:** 2026-07-02
+> **Status:** Accepted — both consumers (SemTeams, SemSpec) signed off 2026-07-02; the remaining design items (below) are follow-on, not acceptance blockers | **Date:** 2026-07-02
 > **Pairs with:** ADR-0006 (external-service source registration), ADR-0004 (deterministic fusion gateway), ADR-0003 (programmatic source-add API)
 > **Depends on:** the ObjectStore-for-code move (landed — code bodies offload to the CONTENT bucket; the fusion lenses are stateless and hydrate by handle, so answers survive worktree teardown).
-> **Consumer input:** SemTeams reviewed & endorsed 2026-07-02 (feedback incorporated below, tagged _SemTeams_); SemSpec pending.
+> **Consumer input:** SemTeams & SemSpec reviewed & endorsed 2026-07-02 — feedback incorporated below (tagged _SemTeams_ / _SemSpec_).
 
 ## Context
 
@@ -51,7 +51,7 @@ allocation under that root**. SemSource receives either a SemSource-visible path
 **never deletes caller-owned worktree disk** for in-place sidecar registrations. semspec already
 places setup burden on the operator, so a declared shared mount is acceptable. This split is the
 concrete fix for the headless churn eviction: targets are **declared over HTTP**, never inferred from
-ambient state. _(SemTeams-confirmed; concrete `root-id` scheme still to pin — see §5.)_
+ambient state. _(SemTeams-confirmed; concrete `root-id` scheme still to pin — see Remaining design items.)_
 
 ### 2. HTTP registration façade (ADR-0006 §1)
 
@@ -87,7 +87,31 @@ Default to indexing **coherent states**, never keystroke churn (the eviction cau
   reference docs, base/PR branches, review snapshots), not tracking an agent's half-written code —
   which is redundant with the agent's own context and better served by the compiler/tests/LSP.
 
-## The open problem (needs decision) — branch lifecycle & deletion
+### 5. Registration handle — stable & auditable _(SemSpec-required, v1)_
+
+SemSpec runs last **hours** and must **prove which graph view a plan/execution used** (carried into
+OpenSpec artifacts and paid-run evidence). So the handle returned by `POST /sources` and resolvable
+via `GET /sources/{id}` must carry stable, auditable metadata, not just an instance name:
+
+- `root-id` + relative path (the allowlisted-mount coordinates, §1)
+- `mode` — `snapshot` vs `watch`
+- `ref`/`commit` or **content epoch/generation** (what was actually indexed)
+- **readiness + indexed timestamps**
+
+A **source-set/group** handle may be a **client-side list in v1** (SemSpec composes handles);
+first-class grouping is post-v1.
+
+### 6. Read/query stays external too — pairs with ADR-0004 _(SemSpec-required)_
+
+This ADR is the **write/control** side. The **read** side must be equally external: fused
+`code_context`/`doc_context` **and source readiness** over **HTTP/MCP**, never requiring
+`graph.query.*` NATS from an external consumer. **ADR-0004** owns the fused query path (already HTTP
+via the code-context/doc-context gateways). Concretely: **readiness must be HTTP-pollable** via
+`GET /sources/{id}` — the existing `AddReply.StatusSubject` is a NATS subject usable **in-mesh only**;
+external consumers poll the HTTP status endpoint. Treat ADR-0004 as a required companion so we never
+accidentally couple SemSpec to NATS on the read path.
+
+## The hard problem (resolved: B + C) — branch lifecycle & deletion
 
 **Lifecycle (proposed, simple):** keep a branch's graph data as long as the branch exists. The hard
 part is **deletion** — specifically a feature branch deleted **after it merges to `main`**.
@@ -134,17 +158,24 @@ axis:
 **Prerequisite regardless of A/B/C:** **retraction-on-remove must actually be built** — it does not
 exist today (Context fact #1). Branch deletion / source removal currently leaks entities.
 
-### Recommendation (tentative, for cross-team review)
+### Decision — branch lifecycle (B + C)
 
-Lean **B (fact-layer provenance/refcount) with C (staleness GC) as the safety net**, endorsed by
-SemTeams: provenance is keyed at the **(source × ref/commit)** contribution level so divergent
-per-branch facts reconcile correctly; branch deletion removes that source's fact contributions and
-only retracts a fact/entity once no active source still produces it, with a GC backstop for anything
-missed — so deletion is never a hard, irreversible retraction of shared data. **Explicitly reject**
-the naive "delete branch → retract its entities." This matches SemSource's intrinsic-ID spec and
-federation model, and makes the merge-then-delete flow safe by construction.
+Adopt **B (fact-layer provenance/refcount) with C (staleness GC) as the safety net** — endorsed by
+**both SemTeams and SemSpec**. Provenance is keyed at the **(source × ref/commit × generation)**
+contribution level (SemSpec: contribution identity is **not** path-only) so divergent per-branch
+facts reconcile correctly; branch deletion removes that source's fact contributions and only retracts
+a fact/entity once no active source still produces it, with a GC backstop for anything missed — so
+deletion is never a hard, irreversible retraction of shared data. **Explicitly reject** the naive
+"delete branch → retract its entities." This matches SemSource's intrinsic-ID spec and federation
+model, and makes the merge-then-delete flow safe by construction.
 
-## No-regret implementation (proceed after this ADR is accepted)
+**Sequencing guardrail (SemSpec, hard):** **no eager retraction ships until fact-layer provenance +
+staleness GC exist.** Until then, source removal / branch deletion **stops ingestion without eager
+retraction** — today's non-retraction (Context fact #1) is therefore the *safe default*, not a bug to
+rush-fix; adding naive retraction-on-remove first would reintroduce the exact data-loss hazard this
+ADR exists to prevent.
+
+## No-regret implementation (unblocked — ADR accepted)
 
 These are prerequisites for **every** version of the sidecar design and do not depend on resolving
 the branch-identity question:
@@ -153,26 +184,22 @@ the branch-identity question:
    `sourcespawn` path.
 2. **Issue #1** — accept path-only `git`/`repo`, enabling in-place indexing of the mounted repo root.
 
-## Open questions (§5)
+## Remaining design items (follow-on)
 
-_SemTeams input recorded 2026-07-02; SemSpec pending. Remaining opens narrowed to concrete design +
-SemSpec confirmation._
+_Both SemTeams and SemSpec signed off 2026-07-02. These are concrete design items, **not** acceptance
+blockers — the decisions above are settled; these are how-to detail._
 
-1. **Mount contract** — _SemTeams:_ operator-declared shared root; consumer owns per-run allocation
-   under it; SemSource resolves a `root-id` + relative path against an allowlisted, read-only mount
-   and never deletes caller worktree disk. **Still open:** the concrete `root-id` registration/
-   allowlist scheme, and SemSpec confirmation.
-2. **What we index & when** — _SemTeams:_ stable substrate first (`main`/stable refs, dependency
-   repos, reference docs); in-flight agent worktrees only as explicit one-shot snapshots at phase
-   boundaries (review / `code_context`), never live watches. **Open:** SemSpec confirmation.
-3. **Branch → identity model** — B + C, with **fact-layer provenance keyed by (source × ref/commit)**
-   (SemTeams). **Still open (design):** the concrete provenance/refcount data model and how divergent
-   branch facts reconcile — whether it rides existing triple `Source` provenance or a new
-   contribution index.
-4. **Dependency + reference-doc substrate** — _SemTeams:_ their highest-value use case. Curator flows
-   register dependency repos/docs explicitly, **wait for readiness**, and carry **source handles**
-   into artifacts. A **source-set/group handle** is a useful future nicety, **not required** for the
-   first HTTP façade. **Open:** SemSpec confirmation; timing of the group handle.
+1. **`root-id` / allowlist scheme** — how operator roots are declared and allowlisted, and how a
+   `root-id` + relative path resolves against them with a traversal guard. _(Both endorsed the model;
+   scheme TBD.)_
+2. **Fact-provenance data model** — the concrete (source × ref/commit × generation) contribution
+   store and divergent-fact reconciliation: whether it rides the existing triple `Source` provenance
+   or a new contribution index; the staleness-GC policy/TTL. **Gates any retraction work** (sequencing
+   guardrail above).
+3. **Registration-handle payload** — finalize the `GET /sources/{id}` / `AddReply` fields from §5
+   (root-id, relative path, mode, ref/commit-or-generation, readiness/indexed timestamps) and the
+   HTTP readiness endpoint (§6).
+4. **Source-set/group handle** — client-side list in v1; first-class grouping is post-v1 (both agree).
 
 ## Consequences
 
