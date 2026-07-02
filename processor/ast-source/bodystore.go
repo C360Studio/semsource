@@ -56,12 +56,22 @@ func (c *Component) initBodyStore(ctx context.Context) {
 	c.bodyStore = store
 }
 
-// bodyTriplesForResult offloads each body-bearing entity's verbatim source from
-// the parsed file and returns per-entity-ID body-handle triples. The file is read
-// once. result.Path is relative to the watcher root (the parser's repoRoot), so
-// root is joined back to reach the file. Any read/offload fault degrades that
-// entity to no body rather than failing ingest. Returns nil when no store is set.
-func (c *Component) bodyTriplesForResult(ctx context.Context, result *semsourceast.ParseResult, root string) map[string][]message.Triple {
+// codeBody is a body-bearing entity's offload result, wiring one CONTENT blob to
+// both consumers (ADR-063, mirroring the #19 doc unify): the handle triples the
+// fusion code lens reads, and a StorageReference to the SAME blob that
+// graph-embedding fetches via the shared StoreRegistry to embed the body.
+type codeBody struct {
+	triples []message.Triple
+	ref     *message.StorageReference
+}
+
+// bodiesForResult offloads each body-bearing entity's verbatim source from the
+// parsed file and returns per-entity-ID offload results (handle triples + a
+// StorageRef to the same blob). The file is read once. result.Path is relative to
+// the watcher root (the parser's repoRoot), so root is joined back to reach the
+// file. Any read/offload fault degrades that entity to no body rather than failing
+// ingest. Returns nil when no store is set.
+func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.ParseResult, root string) map[string]codeBody {
 	if c.bodyStore == nil || result == nil || result.Path == "" {
 		return nil
 	}
@@ -73,7 +83,7 @@ func (c *Component) bodyTriplesForResult(ctx context.Context, result *semsourcea
 	}
 	lines := strings.Split(string(content), "\n")
 
-	out := make(map[string][]message.Triple)
+	out := make(map[string]codeBody)
 	for _, e := range result.Entities {
 		if e == nil || containerTypes[e.Type] {
 			continue
@@ -87,9 +97,17 @@ func (c *Component) bodyTriplesForResult(ctx context.Context, result *semsourcea
 			c.logger.Warn("offload code body failed", "entity", e.ID, "error", err)
 			continue
 		}
-		out[e.ID] = []message.Triple{
-			{Subject: e.ID, Predicate: semsourceast.CodeBodyStore, Object: graph.BodyStoreInstance},
-			{Subject: e.ID, Predicate: semsourceast.CodeBodyKey, Object: key},
+		out[e.ID] = codeBody{
+			triples: []message.Triple{
+				{Subject: e.ID, Predicate: semsourceast.CodeBodyStore, Object: graph.BodyStoreInstance},
+				{Subject: e.ID, Predicate: semsourceast.CodeBodyKey, Object: key},
+			},
+			ref: &message.StorageReference{
+				StorageInstance: graph.BodyStoreInstance,
+				Key:             key,
+				ContentType:     "text/plain; charset=utf-8",
+				Size:            int64(len(body)),
+			},
 		}
 	}
 	return out

@@ -24,7 +24,7 @@ func (f *fakeStore) Get(_ context.Context, key string) ([]byte, error)  { return
 func (f *fakeStore) List(_ context.Context, _ string) ([]string, error) { return nil, nil }
 func (f *fakeStore) Delete(_ context.Context, key string) error         { delete(f.data, key); return nil }
 
-func TestBodyTriplesForResult(t *testing.T) {
+func TestBodiesForResult(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "svc.go")
 	src := "package svc\n\nfunc Dispatch() {\n\tOnEvent()\n}\n\nfunc OnEvent() {}\n"
@@ -47,18 +47,18 @@ func TestBodyTriplesForResult(t *testing.T) {
 		},
 	}
 
-	got := c.bodyTriplesForResult(context.Background(), result, root)
+	got := c.bodiesForResult(context.Background(), result, root)
 
 	if _, ok := got["o.p.golang.s.file.svc"]; ok {
-		t.Error("file container should not get body triples")
+		t.Error("file container should not get a body")
 	}
-	triples := got["o.p.golang.s.function.dispatch"]
-	if len(triples) != 2 {
-		t.Fatalf("expected 2 body triples for the function, got %d", len(triples))
+	body := got["o.p.golang.s.function.dispatch"]
+	if len(body.triples) != 2 {
+		t.Fatalf("expected 2 body handle triples for the function, got %d", len(body.triples))
 	}
 
 	var instance, key string
-	for _, tr := range triples {
+	for _, tr := range body.triples {
 		switch tr.Predicate {
 		case semsourceast.CodeBodyStore:
 			instance, _ = tr.Object.(string)
@@ -69,10 +69,25 @@ func TestBodyTriplesForResult(t *testing.T) {
 	if instance != graph.BodyStoreInstance {
 		t.Errorf("body store instance = %q; want %q", instance, graph.BodyStoreInstance)
 	}
-	// The stored blob must be the exact verbatim range [3,5], byte-for-byte.
+
+	// The StorageRef must point at the SAME blob as the handle triples so
+	// graph-embedding embeds the body via the shared StoreRegistry (ADR-063).
 	want := "func Dispatch() {\n\tOnEvent()\n}"
-	if body := string(store.data[key]); body != want {
-		t.Fatalf("offloaded body = %q; want %q", body, want)
+	if body.ref == nil {
+		t.Fatal("a body-bearing entity must carry a StorageRef")
+	}
+	if body.ref.StorageInstance != instance {
+		t.Errorf("StorageRef.StorageInstance = %q; want %q (handle instance)", body.ref.StorageInstance, instance)
+	}
+	if body.ref.Key != key {
+		t.Errorf("StorageRef.Key = %q; want %q (handle key)", body.ref.Key, key)
+	}
+	if int(body.ref.Size) != len(want) {
+		t.Errorf("StorageRef.Size = %d; want %d", body.ref.Size, len(want))
+	}
+	// The stored blob must be the exact verbatim range [3,5], byte-for-byte.
+	if got := string(store.data[key]); got != want {
+		t.Fatalf("offloaded body = %q; want %q", got, want)
 	}
 }
 
@@ -97,10 +112,10 @@ func TestSliceLines(t *testing.T) {
 	}
 }
 
-// TestBodyTriplesForResult_NoStore: with no store, the producer is a clean no-op.
-func TestBodyTriplesForResult_NoStore(t *testing.T) {
+// TestBodiesForResult_NoStore: with no store, the producer is a clean no-op.
+func TestBodiesForResult_NoStore(t *testing.T) {
 	c := &Component{logger: slog.Default()}
-	if got := c.bodyTriplesForResult(context.Background(), &semsourceast.ParseResult{Path: "x.go"}, "/tmp"); got != nil {
-		t.Fatalf("no store should yield nil triples, got %+v", got)
+	if got := c.bodiesForResult(context.Background(), &semsourceast.ParseResult{Path: "x.go"}, "/tmp"); got != nil {
+		t.Fatalf("no store should yield nil, got %+v", got)
 	}
 }
