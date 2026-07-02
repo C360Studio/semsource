@@ -22,6 +22,7 @@ import (
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 	"github.com/c360studio/semstreams/storage"
 	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/c360studio/semstreams/storage/storeregistry"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
@@ -58,7 +59,12 @@ type Component struct {
 	// publishes it safely. Guarded by that ordering, not by mu; keep it that way.
 	engine *fusion.Engine
 	client *natsclient.Client
-	logger *slog.Logger
+	// storeRegistry is the shared {StorageInstance → store} resolver (ADR-063),
+	// injected via deps. When set, body hydration resolves offloaded bodies
+	// through it (lazily, per query); nil in standalone/tests, where buildEngine
+	// falls back to its own objectstore attach.
+	storeRegistry *storeregistry.Registry
+	logger        *slog.Logger
 
 	mu        sync.RWMutex
 	running   bool
@@ -88,12 +94,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		graph = fusionnats.New(deps.NATSClient, 0)
 	}
 	return &Component{
-		name:        name,
-		lensKind:    config.Lens,
-		subjectRoot: config.Lens + ".v1.",
-		graph:       graph,
-		client:      deps.NATSClient,
-		logger:      deps.GetLogger(),
+		name:          name,
+		lensKind:      config.Lens,
+		subjectRoot:   config.Lens + ".v1.",
+		graph:         graph,
+		client:        deps.NATSClient,
+		storeRegistry: deps.StoreRegistry,
+		logger:        deps.GetLogger(),
 	}, nil
 }
 
@@ -132,11 +139,11 @@ func (c *Component) Start(ctx context.Context) error {
 	return nil
 }
 
-// buildEngine attaches the verbatim-body ObjectStore and constructs the
-// lens-driven fusion engine over it. A pre-set engine (unit tests inject one) is
-// left as-is. A nil NATS client is a hard error: a gateway with no graph client
-// cannot answer, and letting Start set running=true without an engine would let
-// a request nil-deref Fuse — so Start fails fast rather than run half-built.
+// buildEngine constructs the lens-driven fusion engine over the verbatim-body
+// resolver. A pre-set engine (unit tests inject one) is left as-is. A nil NATS
+// client is a hard error: a gateway with no graph client cannot answer, and
+// letting Start set running=true without an engine would let a request nil-deref
+// Fuse — so Start fails fast rather than run half-built.
 func (c *Component) buildEngine(ctx context.Context) error {
 	if c.engine != nil {
 		return nil
@@ -144,16 +151,33 @@ func (c *Component) buildEngine(ctx context.Context) error {
 	if c.client == nil {
 		return fmt.Errorf("code-context requires a NATS client")
 	}
+	resolver, err := c.bodyResolver(ctx)
+	if err != nil {
+		return err
+	}
+	c.engine = fusion.NewEngine(c.graph, resolver)
+	return nil
+}
+
+// bodyResolver builds the verbatim-body resolver for hydration. It prefers the
+// shared StoreRegistry (ADR-063), resolved lazily per query, so it dereferences
+// bodies offloaded to ANY registered instance (e.g. "objectstore") without this
+// gateway opening its own store connection. When no registry is wired
+// (standalone/tests), it falls back to attaching its own objectstore over the
+// shared CONTENT bucket. Either way a missing store is fatal to Start — a gateway
+// that cannot return bodies is misconfigured, not degraded.
+func (c *Component) bodyResolver(ctx context.Context) (*fusion.BodyResolver, error) {
+	if c.storeRegistry != nil {
+		return fusion.NewBodyResolver(c.storeRegistry), nil
+	}
 	store, err := objectstore.NewStoreWithConfig(ctx, c.client, objectstore.Config{
 		BucketName:   graph.BodyStoreBucket,
 		InstanceName: graph.BodyStoreInstance,
 	})
 	if err != nil {
-		return fmt.Errorf("attach body store %q: %w", graph.BodyStoreInstance, err)
+		return nil, fmt.Errorf("attach body store %q: %w", graph.BodyStoreInstance, err)
 	}
-	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: storage.Store(store)})
-	c.engine = fusion.NewEngine(c.graph, resolver)
-	return nil
+	return fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: storage.Store(store)}), nil
 }
 
 // subscribeVerb wires one NATS request/reply subject to the shared query path.
