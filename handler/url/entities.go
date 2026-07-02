@@ -90,6 +90,9 @@ func (e *PageEntity) EntityState() *handler.EntityState {
 // embeds vocabulary-predicate triples directly, bypassing the normalizer entirely.
 // org is the organisation namespace (e.g. "acme") used in the 6-part entity ID.
 func (h *URLHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	rawURL := cfg.GetURL()
 	result, err := h.fetcher.Fetch(ctx, rawURL, "")
 	if err != nil {
