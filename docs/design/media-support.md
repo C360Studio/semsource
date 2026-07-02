@@ -2,6 +2,15 @@
 
 > **Status:** Draft | **Date:** March 2026
 > **Scope:** Image ingestion (Phase 1), Video + keyframe extraction (Phase 2)
+>
+> **Update (2026-07):** Phases 1–2 shipped (image + video/audio metadata handlers/processors;
+> ffmpeg keyframe extraction still deferred). **Storage decision:** media binaries are stored on
+> the local **filestore** (`storage/filestore`, wired via `file_store_root` / `media_store_dir`),
+> **not** NATS ObjectStore — a deliberate choice (large immutable binaries are a poor ObjectStore
+> fit; see `cmd/semsource/run.go`: "binaries (media) deliberately stay on the local filestore").
+> The "ObjectStore integration" / Phase 3 sections below describe a path that was **not** taken for
+> media; treat the filestore as the decision, not an interim step. (Small text bodies — code/doc —
+> *do* use ObjectStore for fusion hydration; that's a separate path.)
 
 ---
 

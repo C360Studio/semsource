@@ -1,10 +1,16 @@
 # Fusion Gateway A/B Validation — `mavlink-hard` — Design Document
 
-> **Status:** Draft | **Date:** June 2026
+> **Status:** Draft (test design) | **Date:** June 2026
 > **Scope:** Downstream A/B test proving the fused `code_context` tool beats the
 > status quo on a hard, realistic agent task. Supplies the empirical evidence
 > behind [semstreams#376](https://github.com/C360Studio/semstreams/issues/376)
 > and Fusion E (ADR-0004).
+>
+> **Update (2026-07):** The gateway under test has since **shipped and converged** onto
+> semstreams `pkg/fusion` (see ADR-0004's convergence note; PRs #15/#16). This remains the A/B
+> *test design* that motivated the upstream proposal — it predates the convergence, the recorded
+> measurement result is not here, and one internal detail is now stale (the request no longer
+> carries a server-side repo path; bodies are dereferenced from an ObjectStore handle).
 
 ---
 

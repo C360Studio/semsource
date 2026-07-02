@@ -1,8 +1,17 @@
 # ADR-0006: External-Service Source Registration
 
-> **Status:** Proposed | **Date:** 2026-06-29
+> **Status:** Proposed — partially landed (2026-07-01) | **Date:** 2026-06-29
 > **Supersedes premises of:** ADR-0003 (programmatic source-add API)
 > **Pairs with:** ADR-0004 (fusion query side), [semstreams#376](https://github.com/C360Studio/semstreams/issues/376)
+>
+> **Landed since:** headless mode is removed (`config` rejects `mode: "headless"`); the NATS
+> registration path exists (`graph.ingest.add/remove.{namespace}`); and the "durable bytes"
+> precondition in §5 is done — code/doc bodies are offloaded to ObjectStore (the `CONTENT`
+> bucket) at ingest and dereferenced by handle, so §5's "currently code-on-disk" framing is
+> superseded. **Media binaries deliberately stay on the local filestore, not ObjectStore.**
+> **Still Proposed:** the HTTP (`POST/DELETE/GET /sources`) and MCP (`add_source`/`remove_source`/
+> `source_status`/`code_context`) surfaces in §1, the folder/ephemeral-worktree targets (§2), and
+> the trust model (§6) are not yet implemented — only the NATS transport.
 
 ## Context
 

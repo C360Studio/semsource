@@ -3,10 +3,20 @@
 > Graph-first knowledge ingestion for the SemStream platform  
 > **Status:** Draft | **Version:** 0.3.0 | **Date:** March 2026
 >
-> **Historical note (2026-06):** This spec records the original WebSocket/federation-era design.
-> Current integration work uses governed SemStreams graph state, `graph.query.*`, GraphQL, explicit
-> predicate ownership, and indexing profiles. See `docs/integration/m5-consumer-integration.md` and
-> `openspec/changes/adopt-governed-semstreams/` for the active migration plan.
+> **Historical note (updated 2026-07):** This spec records the original WebSocket/federation-era
+> design. Several sections below are **superseded** and will mislead if read as current — treat only
+> the 6-part entity ID scheme (§4) as authoritative. Superseded specifics:
+> - **Transport / consumers (§§ Transport Model, 8.2):** the WebSocket-server → `input/websocket`
+>   (ModeClient) → per-consumer `FederationProcessor` model is gone. `FederationProcessor` does **not**
+>   exist in code; consumers query over NATS `graph.query.*` (external-service model, ADR-0006,
+>   headless removed).
+> - **Config format:** JSON (`semsource.json`), not YAML.
+> - **Event types:** there is no SEED/DELTA/RETRACT/HEARTBEAT envelope or `GraphEvent` type; emission
+>   is per-entity to `graph.ingest.entity` as payload `semsource.entity.v1`.
+> - **Milestones (§10):** M1–M5 are complete; see `CLAUDE.md` for the current milestone status.
+>
+> For current architecture see `CLAUDE.md`, ADR-0004 (fusion gateway), ADR-0005 (ontology),
+> ADR-0006 (external service), and `docs/integration/m5-consumer-integration.md`.
 
 ---
 

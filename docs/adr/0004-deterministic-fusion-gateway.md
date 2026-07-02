@@ -1,6 +1,18 @@
 # ADR-0004: Deterministic Fusion Gateway for Agent Context
 
-> **Status:** Accepted | **Date:** 2026-06-27
+> **Status:** Accepted → **Converged upstream** (2026-07-01) | **Date:** 2026-06-27
+>
+> **Update (beta.123):** The decision stands, but the *implementation* moved. The engine,
+> Lens SPI, honesty envelope, and hydration contract were lifted into semstreams `pkg/fusion`
+> ([semstreams#376](https://github.com/C360Studio/semstreams/issues/376) / ADR-062) and
+> semsource converged onto it (PRs #15, #16) — the local `source/fusion` engine, the
+> `natsgraph` client, and the `impact` extension were **deleted**. semsource now keeps only
+> the `code`/`docs` lenses (`source/fusion/lens/*`) over `pkg/fusion` + `pkg/fusion/fusionnats`.
+> Anything below describing the *local* engine is historical: `Lens.Hydrate` returns a
+> `*message.StorageReference` handle (no worktree read), the fusion `Request` has no `repo`
+> field, fusion readiness reads `graph.index.query.status` (not `graph.query.status`),
+> deterministic symbol resolution uses `graph.query.byName`, and verbatim bodies are offloaded
+> to an ObjectStore at ingest and dereferenced by the engine.
 
 ## Context
 

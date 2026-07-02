@@ -110,6 +110,7 @@ All endpoints use NATS request/reply. Send a JSON request body; receive a JSON r
 |---------|-------------|
 | `graph.query.entity` | Fetch a single entity by 6-part ID |
 | `graph.query.entityByAlias` | Resolve an entity by alias |
+| `graph.query.byName` | Resolve a name/title to ranked entity IDs (deterministic symbol lookup) |
 | `graph.query.batch` | Fetch multiple entities |
 | `graph.query.relationships` | Fetch edges for an entity |
 | `graph.query.pathSearch` | Traverse paths between two entities |
@@ -119,7 +120,6 @@ All endpoints use NATS request/reply. Send a JSON request body; receive a JSON r
 | `graph.query.temporal` | Temporal query surface |
 | `graph.query.semantic` | Semantic query surface |
 | `graph.query.similar` | Similarity query surface |
-| `graph.query.localSearch` | Local graph search |
 | `graph.query.globalSearch` | Global graph search |
 | `graph.query.summary` | Graph summary counts |
 | `graph.query.searchGraph` | Search graph result expansion |
@@ -133,6 +133,15 @@ and predicate subjects are served by `source-manifest`.
 Compatibility note: SemStreams beta.114 routes `graph.query.capabilities` from the GraphQL gateway,
 but graph-query does not currently register a responder for it. SemSource should not be treated as
 advertising that subject until the upstream responder contract is restored.
+
+### Fused code_context / doc_context (agent consumers)
+
+Consumers that want a source-first answer rather than raw triples — an agent assembling context —
+should prefer the **fusion gateway** over hand-composing `graph.query.*` walks. It resolves a query,
+expands structure, hydrates verbatim bodies, and returns one ranked answer with the same
+readiness/provenance envelope. Subjects: `code.v1.<verb>` (code) and `docs.v1.<verb>` (docs), verbs
+`context`/`callers`/`callees`/`impact`/`file`/`search`; also over HTTP at `/code-context/<verb>`. See
+the "Fused Code & Doc Context" section of the root README for the request/response shape.
 
 ## HTTP Endpoints (ServiceManager, default :8080)
 

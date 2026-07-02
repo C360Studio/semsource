@@ -29,15 +29,18 @@ SemSource CLI provides an interactive setup wizard and subcommand structure to h
 - `cli/` -- Terminal I/O (`Term`), wizard registry (`SourceWizard` interface), all source wizards, add/validate/sources commands
 - `cmd/semsource/` -- Subcommand dispatch via `os.Args` switch + `flag.NewFlagSet`
 
-**Source wizards registered:**
+**Source wizards registered** (`cli/wizard_*.go`):
 | Wizard | TypeKey | Status |
 |--------|---------|--------|
 | AST | `ast` | Available |
 | Git | `git` | Available |
+| Repo | `repo` | Available |
 | Docs | `docs` | Available |
 | Config | `config` | Available |
 | URL | `url` | Available |
-| Video | `video` | Coming soon (placeholder) |
+| Image | `image` | Available |
+| Audio | `audio` | Available |
+| Video | `video` | Available (metadata-only; ffmpeg keyframes deferred) |
 
 ### Phase 2: Post-Review Fixes -- COMPLETE
 

@@ -1,6 +1,13 @@
 # ADR-0005: BFO/CCO Ontology Alignment for Ranking
 
-> **Status:** Accepted | **Date:** 2026-06-27
+> **Status:** Implemented (2026-07-01) | **Date:** 2026-06-27
+>
+> **Update:** Shipped. `source/ontology/` maps entities to BFO/CCO classes over
+> semstreams `vocabulary/bfo`+`cco` and stamps the low-cardinality
+> `entity.ontology.class` triple at the emission seam (`ontology.StampClass`, wired in
+> `processor/ast-source/component.go`). Ontology-specificity ranking now lives in the
+> converged semstreams `pkg/fusion` engine (see ADR-0004's convergence note), consumed via
+> its predicate-salience/ontology signals.
 
 ## Context
 
@@ -12,8 +19,8 @@ semantic relatedness) — and our sponsors and academic/government stakeholders
 specifically value **BFO/CCO** alignment ("standards at work," not standards
 bolted on at export).
 
-**semstreams already provides the foundation** (beta.116; confirmed not yet
-used by semsource):
+**semstreams already provides the foundation** (now beta.123; originally surveyed on
+beta.116 as not-yet-used — since adopted, see the Status note above):
 
 - `vocabulary/bfo` — full BFO 2.0 (ISO 21838-2) class tree + relations as
   OBO-PURL IRI constants (`Entity`→`Continuant`/`Occurrent`, `Object`, `Quality`,
