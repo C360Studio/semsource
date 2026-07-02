@@ -727,6 +727,17 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				"coalesce_ms":   coalesceMs,
 				"embedder_type": embedderType,
 				"batch_size":    batchSize,
+				// graph-embedding embeds a triple's value only when its predicate
+				// ends with a text_suffix. A non-empty list REPLACES the built-in
+				// defaults, so we restate them and add the code doc predicates
+				// (code.doc.signature, code.doc.comment) — otherwise code entities
+				// embed dc.terms.title (the symbol name) ALONE, and signatures /
+				// docstrings never enter the semantic index.
+				"text_suffixes": []string{
+					".title", ".content", ".description", ".summary", ".text",
+					".name", ".body", ".abstract", ".subject",
+					".signature", ".comment",
+				},
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
