@@ -164,7 +164,8 @@ func TestURLHandler_Ingest_InstanceDeterministic(t *testing.T) {
 }
 
 func TestURLHandler_Ingest_ContextCancelled(t *testing.T) {
-	// Server that hangs to trigger context cancellation
+	// A server that would hang if reached — proves an already-cancelled context
+	// short-circuits in the handler before any network call.
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
@@ -173,8 +174,8 @@ func TestURLHandler_Ingest_ContextCancelled(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled — deterministic, no timeout race
 
 	_, err := h.Ingest(ctx, cfg)
 	if err == nil {
@@ -522,8 +523,8 @@ func TestURLHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled — deterministic, no timeout race
 
 	_, err := h.IngestEntityStates(ctx, cfg, "acme")
 	if err == nil {

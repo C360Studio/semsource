@@ -97,6 +97,9 @@ func (h *URLHandler) Supports(cfg handler.SourceConfig) bool {
 // Ingest implements handler.SourceHandler.
 // Fetches the URL and returns a single page entity with content metadata.
 func (h *URLHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	rawURL := cfg.GetURL()
 	result, err := h.fetcher.Fetch(ctx, rawURL, "")
 	if err != nil {
