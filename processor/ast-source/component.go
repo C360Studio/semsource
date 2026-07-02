@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
 	"github.com/c360studio/semstreams/storage"
@@ -500,13 +501,14 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
 func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, root string) error {
-	bodyTriples := c.bodyTriplesForResult(ctx, result, root)
+	bodies := c.bodiesForResult(ctx, result, root)
 	for _, entity := range result.Entities {
 		state := entity.EntityState()
-		if bt := bodyTriples[state.ID]; bt != nil {
-			state.Triples = append(state.Triples, bt...)
-		}
-		payload, err := payloadFromASTState(state)
+		// Zero value for a container / body-less entity: nil triples (append is a
+		// no-op) and a nil StorageRef.
+		body := bodies[state.ID]
+		state.Triples = append(state.Triples, body.triples...)
+		payload, err := payloadFromASTState(state, body.ref)
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
 		}
@@ -525,7 +527,7 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 	entities := semsourceast.BuildHierarchy(results, org, project)
 	for _, entity := range entities {
 		state := entity.EntityState()
-		payload, err := payloadFromASTState(state)
+		payload, err := payloadFromASTState(state, nil)
 		if err != nil {
 			c.logger.Warn("Invalid hierarchy entity state",
 				"id", state.ID,
@@ -548,7 +550,7 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 	entities := semsourceast.BuildFolderChain(filePath, org, project)
 	for _, entity := range entities {
 		state := entity.EntityState()
-		payload, err := payloadFromASTState(state)
+		payload, err := payloadFromASTState(state, nil)
 		if err != nil {
 			c.logger.Warn("Invalid folder entity state",
 				"id", state.ID,
@@ -565,11 +567,17 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 	}
 }
 
-func payloadFromASTState(state *semsourceast.EntityState) (*graph.EntityPayload, error) {
+// payloadFromASTState builds a Graphable payload from an AST entity state. ref is
+// the entity's verbatim-body StorageReference (nil for entities with no offloaded
+// body — containers, or when no body store is wired); when set it points at the
+// same CONTENT blob as the code.body.* handle triples so graph-embedding embeds
+// the body via the shared StoreRegistry (ADR-063).
+func payloadFromASTState(state *semsourceast.EntityState, ref *message.StorageReference) (*graph.EntityPayload, error) {
 	payload := &graph.EntityPayload{
 		ID:                  state.ID,
 		TripleData:          ontology.StampClass(state.ID, state.Triples, state.UpdatedAt),
 		UpdatedAt:           state.UpdatedAt,
+		Storage:             ref,
 		IndexingProfileHint: state.IndexingProfile,
 	}
 	if err := entitypub.ValidatePayload(payload); err != nil {
