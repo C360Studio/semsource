@@ -161,9 +161,9 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 }
 
 // ingestFileEntityState reads a single document file and builds a Entity,
-// returning its EntityState. When the handler has a store configured and
-// content exceeds the threshold, the body is stored as raw bytes in
-// ObjectStore and the DocContent triple is omitted.
+// returning its EntityState. When a fusion body store is configured the verbatim
+// passage is offloaded to it (content-addressed) and the inline DocContent triple
+// is dropped in favour of the body handle triples + StorageRef.
 func (h *Handler) ingestFileEntityState(ctx context.Context, path, root, system, org string, now time.Time) (*handler.EntityState, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -177,22 +177,23 @@ func (h *Handler) ingestFileEntityState(ctx context.Context, path, root, system,
 
 	e := newEntity(org, title, relPath, mime, hash, string(content), system, now)
 
-	// Offload the verbatim passage to the fusion body store and stamp the handle
-	// triples FIRST, while e.Content is still populated (storeContentIfLarge may
-	// clear it below). Non-fatal: the docs lens degrades to no body on failure.
-	offloadDocBody(ctx, e, h.bodyStore, h.bodyInstance)
-
-	// Store large content in ObjectStore when configured.
+	// Offload the verbatim passage to the fusion body store, wiring both consumers
+	// to that single CONTENT blob (fusion body handle + EntityState.StorageRef).
 	// Non-fatal: on failure the entity keeps content inline in the DocContent triple.
-	_ = storeContentIfLarge(ctx, e, h.store, h.storeBucket, h.contentThreshold)
+	offloadDocBody(ctx, e, h.bodyStore, h.bodyInstance)
 
 	return e.EntityState(), nil
 }
 
 // offloadDocBody offloads the entity's verbatim passage to the fusion body store
-// (content-addressed) and sets the body handle so Triples() emits DocBodyStore/
-// DocBodyKey. A nil store or empty content is a no-op; a Put fault leaves the
-// entity without a body handle (best-effort facet), not a failed ingest.
+// (content-addressed) and wires BOTH consumers to that single blob (ADR-063 store
+// unification): it stamps the fusion body handle (DocBodyStore/DocBodyKey triples,
+// read by the docs lens) AND sets EntityState.StorageRef to the same instance+key
+// so graph-embedding resolves and embeds the body via the shared StoreRegistry.
+// With the body offloaded, Triples() drops the inline DocContent triple. A nil
+// store or empty content is a no-op; a Put fault leaves the entity without a
+// handle or ref (inline content retained) — a best-effort facet, not a failed
+// ingest.
 func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instance string) {
 	if store == nil || instance == "" || e.Content == "" {
 		return
@@ -204,27 +205,15 @@ func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instanc
 	}
 	e.bodyInstance = instance
 	e.bodyKey = key
-}
-
-// storeContentIfLarge stores the entity's content in ObjectStore when it
-// exceeds the threshold. On success it sets the entity's storageRef so
-// Triples() will omit the inline DocContent triple.
-func storeContentIfLarge(ctx context.Context, e *Entity, store storage.Store, bucket string, threshold int) error {
-	if store == nil || len(e.Content) <= threshold {
-		return nil
-	}
-	key := fmt.Sprintf("docs/%s/%s/body", e.System, e.ID)
-	if err := store.Put(ctx, key, []byte(e.Content)); err != nil {
-		return fmt.Errorf("store doc content: %w", err)
-	}
+	// Point message.Storable consumers (graph-embedding) at the same CONTENT blob
+	// so the body is fetched via the StoreRegistry and embedded — one blob, no
+	// separate offload, no inline duplicate.
 	e.storageRef = &message.StorageReference{
-		StorageInstance: bucket,
+		StorageInstance: instance,
 		Key:             key,
 		ContentType:     e.MimeType,
 		Size:            int64(len(e.Content)),
 	}
-	e.Content = "" // Release large string for GC; content is in ObjectStore.
-	return nil
 }
 
 // enrichEventEntityStates re-reads the changed file and populates ev.EntityStates
