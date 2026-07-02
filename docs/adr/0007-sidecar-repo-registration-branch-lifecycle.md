@@ -3,6 +3,7 @@
 > **Status:** Proposed — needs semspec + semteams input on the open questions (§5) before implementation | **Date:** 2026-07-02
 > **Pairs with:** ADR-0006 (external-service source registration), ADR-0004 (deterministic fusion gateway), ADR-0003 (programmatic source-add API)
 > **Depends on:** the ObjectStore-for-code move (landed — code bodies offload to the CONTENT bucket; the fusion lenses are stateless and hydrate by handle, so answers survive worktree teardown).
+> **Consumer input:** SemTeams reviewed & endorsed 2026-07-02 (feedback incorporated below, tagged _SemTeams_); SemSpec pending.
 
 ## Context
 
@@ -44,10 +45,13 @@ SemSource runs alongside the semspec sandbox. Responsibilities split by plane:
 | **Control** (register / deregister / status) | **HTTP** (later MCP) | Respects the no-external-NATS rule; the consumer declares intent explicitly. |
 | **Data** (read the repo bytes) | **Shared filesystem mount** | The sandbox is a Docker container; expose the repo root as a mount SemSource reads **in place**. No byte-shipping, no NATS exposure. |
 
-The operator declares **one shared folder** that both the semspec sandbox and SemSource can access.
-semspec already places setup burden on the operator, so a declared shared mount is acceptable.
-This split is the concrete fix for the headless churn eviction: targets are **declared over HTTP**,
-never inferred from ambient state.
+The **operator declares a shared root**; the consumer (semspec/semteams) owns **per-run workspace
+allocation under that root**. SemSource receives either a SemSource-visible path or — preferably — a
+**`root-id` + relative path** it resolves against an **allowlisted mount**, mounts **read-only**, and
+**never deletes caller-owned worktree disk** for in-place sidecar registrations. semspec already
+places setup burden on the operator, so a declared shared mount is acceptable. This split is the
+concrete fix for the headless churn eviction: targets are **declared over HTTP**, never inferred from
+ambient state. _(SemTeams-confirmed; concrete `root-id` scheme still to pin — see §5.)_
 
 ### 2. HTTP registration façade (ADR-0006 §1)
 
@@ -62,6 +66,12 @@ Accept **path-only** `git`/`repo` config so the mounted repo root is indexed **i
 cloned. Today `config/source.go` rejects `git` without a `url`; the handler's `resolveRepoPath`
 already reads a local path in place. This is the semspec#142 gate.
 
+**Filesystem-root allowlisting / root-relative resolution ships in v1 of the sidecar path** — a
+path-only `git`/`repo` over HTTP must **not** accept arbitrary host paths, even under permissive
+auth. The path (or `root-id` + relative path) resolves against the allowlisted mount root(s) with a
+path-traversal guard; anything outside is rejected. _(SemTeams-requested tightening — this is a v1
+requirement, not a deferred seam.)_
+
 ### 4. Cadence: coherent checkpoints, not churn
 
 Default to indexing **coherent states**, never keystroke churn (the eviction cause):
@@ -70,8 +80,9 @@ Default to indexing **coherent states**, never keystroke churn (the eviction cau
   watched ref; the git source's hook/poll catches it. (Seam to nail: the git ref-change must
   re-drive AST/doc re-indexing; today AST/doc refresh via fsnotify when files on disk change, which
   holds when SemSource reads the live working tree the merge lands in.)
-- **Do not fsnotify-watch churning agent worktrees by default.** If an agent's in-flight worktree
-  is registered for one-shot `code_context` during a task, it is a snapshot, not a live watch.
+- **Do not fsnotify-watch churning agent worktrees by default.** If an agent's in-flight worktree is
+  registered, it is an **explicit one-shot snapshot at a phase boundary** (e.g. review, or an
+  on-demand `code_context`), never a live watch over a churning workspace. _(SemTeams-confirmed.)_
 - Rationale: SemSource's value is a **stable graph substrate + reasoning** (dependency repos,
   reference docs, base/PR branches, review snapshots), not tracking an agent's half-written code —
   which is redundant with the agent's own context and better served by the compiler/tests/LSP.
@@ -100,12 +111,21 @@ axis:
   as on main?"); graph size grows with branch count; merge-to-main creates a fresh copy and orphans
   the feature copy. Contradicts the spec's intrinsic, branch-free ID.
 - **Option B — Branch-independent identity + provenance/refcount.** One entity per intrinsic ID;
-  track which sources/branches currently produce it. Branch deletion **decrements provenance**;
-  retract an entity **only when no active source still produces it**. *Pro:* correct dedup + safe
-  deletion; a symbol on both `feature/x` and `main` survives the feature's deletion because `main`
-  still references it; a symbol unique to the deleted branch is retracted. Aligns with the intrinsic
-  ID spec and the existing federation merge direction (`public.*` merges, `{org}.*` sovereign).
-  *Con:* requires per-entity provenance/refcounting and defined merge semantics.
+  track which sources/branches currently produce it. Branch deletion **removes that source's
+  contribution**; retract **only when no active source still produces it**. *Pro:* correct dedup +
+  safe deletion; a symbol on both `feature/x` and `main` survives the feature's deletion because
+  `main` still references it; a symbol unique to the deleted branch is retracted. Aligns with the
+  intrinsic ID spec and the existing federation merge direction (`public.*` merges, `{org}.*`
+  sovereign). *Con:* requires provenance/refcounting and defined merge semantics.
+  **_SemTeams sharpening (load-bearing):_** provenance must be at the **fact/contribution layer —
+  keyed by (source × ref/commit) — not the entity row alone.** The same intrinsic symbol ID carries
+  **divergent per-branch facts**: different body blob (`code:<sha>` — feature and main hash to
+  different keys), line ranges, and relationships (calls/imports). So you cannot merely refcount
+  "does the entity exist"; you must track *which source contributes which facts*, so branch deletion
+  removes exactly that branch's facts (its body-key, its line range, its edges) while `main`'s facts
+  for the same ID survive — and the entity vanishes only when no source contributes any fact.
+  Triples already carry `Source`/`Timestamp`/`Confidence`; extend that provenance with the concrete
+  source-contribution identity (source instance + ref/commit).
 - **Option C — No eager delete; staleness GC.** Never hard-retract on branch deletion. Stamp
   `last_seen`; a GC pass retracts entities unreferenced by any active source after a TTL. *Pro:*
   the catastrophe is impossible — shared entities are never eagerly deleted; convergence is
@@ -116,11 +136,13 @@ exist today (Context fact #1). Branch deletion / source removal currently leaks 
 
 ### Recommendation (tentative, for cross-team review)
 
-Lean **B (provenance/refcount) with C (staleness GC) as the safety net**: branch deletion decrements
-provenance and only retracts entities no active source still produces, and a GC backstop catches
-anything missed — so deletion is never a hard, irreversible retraction of shared data. **Explicitly
-reject** the naive "delete branch → retract its entities." This matches SemSource's intrinsic-ID
-spec and federation model, and it makes the merge-then-delete flow safe by construction.
+Lean **B (fact-layer provenance/refcount) with C (staleness GC) as the safety net**, endorsed by
+SemTeams: provenance is keyed at the **(source × ref/commit)** contribution level so divergent
+per-branch facts reconcile correctly; branch deletion removes that source's fact contributions and
+only retracts a fact/entity once no active source still produces it, with a GC backstop for anything
+missed — so deletion is never a hard, irreversible retraction of shared data. **Explicitly reject**
+the naive "delete branch → retract its entities." This matches SemSource's intrinsic-ID spec and
+federation model, and makes the merge-then-delete flow safe by construction.
 
 ## No-regret implementation (proceed after this ADR is accepted)
 
@@ -131,17 +153,26 @@ the branch-identity question:
    `sourcespawn` path.
 2. **Issue #1** — accept path-only `git`/`repo`, enabling in-place indexing of the mounted repo root.
 
-## Open questions for semspec + semteams (§5)
+## Open questions (§5)
 
-1. **Mount contract** — who declares the shared folder, its path convention, read-only for SemSource,
-   and its lifecycle relative to the sandbox container.
-2. **What we index & when** — stable `main` (watch + re-index on merge) is in. Do we *also* register
-   in-flight agent worktrees for one-shot `code_context`, or only provide the stable substrate + deps
-   + docs?
-3. **Branch → identity model** — Option A / B / C, and the concrete deletion semantics.
-4. **Dependency + reference-doc substrate** — pointing SemSource at dependency repos and reference
-   docs is the highest-value, lowest-churn use of the graph and is orthogonal to the branch question;
-   settle how those get registered.
+_SemTeams input recorded 2026-07-02; SemSpec pending. Remaining opens narrowed to concrete design +
+SemSpec confirmation._
+
+1. **Mount contract** — _SemTeams:_ operator-declared shared root; consumer owns per-run allocation
+   under it; SemSource resolves a `root-id` + relative path against an allowlisted, read-only mount
+   and never deletes caller worktree disk. **Still open:** the concrete `root-id` registration/
+   allowlist scheme, and SemSpec confirmation.
+2. **What we index & when** — _SemTeams:_ stable substrate first (`main`/stable refs, dependency
+   repos, reference docs); in-flight agent worktrees only as explicit one-shot snapshots at phase
+   boundaries (review / `code_context`), never live watches. **Open:** SemSpec confirmation.
+3. **Branch → identity model** — B + C, with **fact-layer provenance keyed by (source × ref/commit)**
+   (SemTeams). **Still open (design):** the concrete provenance/refcount data model and how divergent
+   branch facts reconcile — whether it rides existing triple `Source` provenance or a new
+   contribution index.
+4. **Dependency + reference-doc substrate** — _SemTeams:_ their highest-value use case. Curator flows
+   register dependency repos/docs explicitly, **wait for readiness**, and carry **source handles**
+   into artifacts. A **source-set/group handle** is a useful future nicety, **not required** for the
+   first HTTP façade. **Open:** SemSpec confirmation; timing of the group handle.
 
 ## Consequences
 
@@ -162,4 +193,5 @@ the branch-identity question:
 - SemSource-materialized ephemeral worktrees with TTL/GC (ADR-0006 §2) — semspec brings its own
   worktree, so SemSource indexes in place and **never deletes the caller's worktree disk**.
 - MCP surface (tracked as the follow-on after HTTP).
-- Enforced quotas / resource allowlists (seams only, per ADR-0006 §6).
+- Enforced quotas (seams only, per ADR-0006 §6) — **except filesystem-root allowlisting, promoted to
+  a v1 requirement** for the sidecar path (§3, SemTeams).
