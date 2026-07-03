@@ -140,8 +140,12 @@ func (s SourceEntry) Validate() error {
 
 	switch s.Type {
 	case "git":
-		if s.URL == "" {
-			return fmt.Errorf("source type %q: url is required", s.Type)
+		// Accept a remote url OR a local path. A path-only git source is read in
+		// place (handler resolveRepoPath prefers Path; sourcespawn passes it as
+		// repo_path) — required to index a mounted/agent worktree without cloning
+		// (issue #1 / ADR-0007 sidecar). Mirrors the "repo" rule below.
+		if s.URL == "" && s.Path == "" {
+			return fmt.Errorf("source type %q: url or path is required", s.Type)
 		}
 	case "repo":
 		if s.URL == "" && s.Path == "" {
