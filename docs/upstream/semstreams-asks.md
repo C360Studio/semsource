@@ -243,7 +243,15 @@ Not a gap — a positive. semsource added a `--pprof-port` flag (blank-import `n
 
 ## Semantic tiers (ADR-0002 / model registry)
 
-### 13. `graph-embedding` has no asymmetric query/document embedding — framework-shaped — filed [semstreams#438](https://github.com/C360Studio/semstreams/issues/438)
+### 13. `graph-embedding` has no asymmetric query/document embedding — framework-shaped — RESOLVED in beta.129 ([semstreams#438](https://github.com/C360Studio/semstreams/issues/438), PR #440)
+**Status:** Shipped. beta.129 added `EndpointConfig.query_prefix` + a `GenerateQuery` interface method
+(HTTP prepends the prefix on the query side only; BM25 `GenerateQuery == Generate`). semsource set
+`query_prefix` on the semembed endpoint in `configs/tiers/tier1-semantic.json` / `tier2-semantic-instruct.json`.
+Re-ran the A/B (dogfood, 21k entities): with the prefix, tier-1 `code_search` beats tier-0 BM25 on
+paraphrase queries BM25 misses (e.g. *"prevent processing the same message twice"* → the msgid dedup
+test; *"compute a sha256 hash"* → the content-addressed cache) and stays relevant at full population
+(no-prefix degraded to `const` noise). (Original ask below.)
+
 The HTTP embedder (`graph/embedding/http_embedder.go`) exposes a single
 `Generate(ctx, texts)` and both ingest (documents) and `graph.query.semantic`
 (the query) go through it identically — there is no query-side instruction
