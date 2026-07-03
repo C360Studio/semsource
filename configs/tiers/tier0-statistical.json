@@ -1,0 +1,12 @@
+{
+  "namespace": "acme",
+  "sources": [
+    { "type": "repo", "path": "/mnt/workspace/myrepo", "language": "go", "watch": false }
+  ],
+  "source_roots": ["/mnt/workspace"],
+  "graph": {
+    "embedder_type": "bm25",
+    "index_workers": 4,
+    "coalesce_ms": 200
+  }
+}
