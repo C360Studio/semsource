@@ -77,23 +77,23 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.removeSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "source_status",
-		Description: "Report semsource graph readiness: the source-manifest ingest phase + per-source counts AND the graph-index NAME_INDEX readiness, plus a note. Gate queries on this — but byName/search can lag 'ready' on large ingests (poll until index.ready and total_entities is stable).",
+		Description: "Report semsource graph readiness: the source-manifest ingest phase + per-source counts, the graph-index structural readiness (index), and the graph-embedding semantic readiness (embedding), plus a note. Readiness is honest (semstreams ADR-066): 'ready' means caught up to the latest committed write. Gate structural queries (byName / code_context / code_impact) on index.ready; code_search reliability tracks embedding.ready.",
 	}, c.sourceStatus)
 
-	// Fused query tools (ADR-0004 read side over MCP). On a large one-shot ingest
-	// the index lags readiness — an unexpected miss may mean it's still building;
-	// call source_status and retry (see semstreams#431).
+	// Fused query tools (ADR-0004 read side over MCP). Readiness is honest as of
+	// beta.128 (ADR-066): a miss once the relevant source_status signal is ready
+	// is a genuine absence, not a build-window lag.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_context",
-		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. Use to understand a symbol and how it connects. If a symbol you expect misses, the index may still be building on a large ingest — check source_status and retry.",
+		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. Use to understand a symbol and how it connects. If a symbol misses while index.ready is false (check source_status), the structural index is still catching up — retry once ready.",
 	}, c.codeContext)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_impact",
-		Description: "Reverse-dependency closure of a symbol — what depends on it, i.e. what would break if you change it. Answers questions grep cannot. On an unexpected miss, check source_status (the index may still be building) and retry.",
+		Description: "Reverse-dependency closure of a symbol — what depends on it, i.e. what would break if you change it. Answers questions grep cannot. If it misses while index.ready is false (check source_status), the structural index is still catching up — retry once ready.",
 	}, c.codeImpact)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_search",
-		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies. Quality depends on the embedder tier; results lag readiness until embeddings finish — check source_status.",
+		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies. Quality depends on the embedder tier; results are reliable once embedding.ready is true (check source_status).",
 	}, c.codeSearch)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "doc_context",
