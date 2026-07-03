@@ -63,8 +63,12 @@ type Component struct {
 	// Summary query
 	summaryQuerySub *natsclient.Subscription
 
-	// Ingest API (graph.ingest.add/remove)
+	// Ingest API (graph.ingest.add/remove + HTTP POST/DELETE/GET /sources).
+	// ingestCfg is nil until RegisterIngestHandlers runs (host wires it after
+	// Start); the HTTP façade handlers read it at request time and 503 while nil.
+	// Guarded by c.mu.
 	ingestSubs []*natsclient.Subscription
+	ingestCfg  *IngestHandlerConfig
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
@@ -165,6 +169,13 @@ func (c *Component) publishManifest(ctx context.Context) error {
 	c.manifestMu.Lock()
 	c.responseData = raw
 	c.manifestMu.Unlock()
+
+	// The HTTP responseData is prepared above regardless; only the NATS broadcast
+	// needs a client. A nil client (e.g. a manifest-only test harness) skips the
+	// publish rather than panicking — consumers still read the manifest over HTTP.
+	if c.client == nil {
+		return nil
+	}
 
 	if err := c.publishPayload(ctx, ManifestType, payload, manifestSubject); err != nil {
 		return fmt.Errorf("publish manifest: %w", err)
@@ -604,9 +615,15 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 		prefix = prefix + "/"
 	}
 
+	// The /sources surface: GET list (existing) plus the ADR-0007 registration
+	// façade — POST add, GET/{id} handle, DELETE/{id} remove. Method-scoped
+	// patterns (Go 1.22+) so the write endpoints coexist with the list.
 	sourcesPath := prefix + "sources"
-	mux.HandleFunc(sourcesPath, c.handleSources)
-	c.logger.Info("registered HTTP handler", "path", sourcesPath)
+	mux.HandleFunc("GET "+sourcesPath, c.handleSources)
+	mux.HandleFunc("POST "+sourcesPath, c.handleAddHTTP)
+	mux.HandleFunc("GET "+sourcesPath+"/{id}", c.handleSourceHTTP)
+	mux.HandleFunc("DELETE "+sourcesPath+"/{id}", c.handleRemoveHTTP)
+	c.logger.Info("registered HTTP handlers", "path", sourcesPath)
 
 	statusPath := prefix + "status"
 	mux.HandleFunc(statusPath, c.handleStatus)

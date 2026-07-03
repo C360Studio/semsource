@@ -37,6 +37,14 @@ type IngestHandlerConfig struct {
 	// Checker is optional. When non-nil, AddReply distinguishes new vs.
 	// refresh via the per-component Created flag.
 	Checker sourcespawn.ExistsChecker
+	// APIToken, when non-empty, is the bearer token the HTTP façade requires on
+	// its write/read endpoints (ADR-0007 §6 auth seam). Empty = permissive
+	// (trusted-network) default. Unused by the NATS path.
+	APIToken string
+	// AllowedRoots is the filesystem-root allowlist enforced on path-based source
+	// registration over HTTP (ADR-0007 §3). Empty rejects path-based HTTP adds.
+	// Unused by the NATS path (in-mesh trusted).
+	AllowedRoots []string
 }
 
 // RegisterIngestHandlers subscribes the component to graph.ingest.add and
@@ -95,6 +103,11 @@ func (c *Component) RegisterIngestHandlers(ctx context.Context, cfg IngestHandle
 	}
 	c.mu.Lock()
 	c.ingestSubs = append(c.ingestSubs, removeSub)
+	// Publish the config to the HTTP façade (registered separately by the
+	// ServiceManager, so its handlers read it here at request time). Copy so the
+	// stored value can't be mutated by the caller after the fact.
+	cfgCopy := cfg
+	c.ingestCfg = &cfgCopy
 	c.mu.Unlock()
 
 	c.logger.Info("listening for ingest requests",
@@ -127,7 +140,14 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 			Timestamp: time.Now(),
 		})
 	}
+	return marshalAddReply(c.addSource(ctx, req, cfg))
+}
 
+// addSource dispatches an AddRequest to sourcespawn and returns the AddReply. It
+// is the single source-add code path shared by the NATS ingest handler and the
+// HTTP façade (ADR-0007). Transport-level concerns (auth, path allowlisting)
+// are the caller's responsibility and must run BEFORE this.
+func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHandlerConfig) *AddReply {
 	results, err := sourcespawn.AddWithChecker(ctx, req.Source, cfg.Store, cfg.Checker, cfg.Spawn)
 
 	// AddWithChecker may return partial results alongside an error when a
@@ -172,7 +192,7 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 		}
 	}
 
-	return marshalAddReply(reply)
+	return reply
 }
 
 // appendManifestSources adds entries reflecting src to c.manifestSources. A
@@ -278,31 +298,38 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 			Timestamp: time.Now(),
 		})
 	}
+	return marshalRemoveReply(c.removeSource(ctx, req.InstanceName, req.Provenance.Actor, cfg))
+}
 
-	if err := sourcespawn.Remove(ctx, req.InstanceName, cfg.Store); err != nil {
-		return marshalRemoveReply(&RemoveReply{
-			InstanceName: req.InstanceName,
+// removeSource deletes a component config from the KV store and returns the
+// RemoveReply. Shared by the NATS ingest handler and the HTTP façade. Removal
+// stops ingestion but does NOT retract entities — eager retraction is parked
+// behind the fact-layer provenance model (ADR-0007 sequencing guardrail).
+func (c *Component) removeSource(ctx context.Context, instanceName, actor string, cfg IngestHandlerConfig) *RemoveReply {
+	if err := sourcespawn.Remove(ctx, instanceName, cfg.Store); err != nil {
+		return &RemoveReply{
+			InstanceName: instanceName,
 			Error:        mapSpawnError(err),
 			Timestamp:    time.Now(),
-		})
+		}
 	}
 
 	c.logger.Info("source removed via ingest API",
 		"namespace", cfg.Namespace,
-		"instance_name", req.InstanceName,
-		"actor", req.Provenance.Actor)
+		"instance_name", instanceName,
+		"actor", actor)
 
-	if c.removeManifestSourceByInstance(req.InstanceName, cfg.Spawn) {
+	if c.removeManifestSourceByInstance(instanceName, cfg.Spawn) {
 		if err := c.publishManifest(ctx); err != nil {
 			c.logger.Warn("failed to republish manifest after remove", "error", err)
 		}
 	}
 
-	return marshalRemoveReply(&RemoveReply{
-		InstanceName: req.InstanceName,
+	return &RemoveReply{
+		InstanceName: instanceName,
 		Removed:      true,
 		Timestamp:    time.Now(),
-	})
+	}
 }
 
 // mapSpawnError maps a sourcespawn.Error code onto the wire IngestErrorCode.

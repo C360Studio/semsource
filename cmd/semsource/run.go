@@ -963,6 +963,10 @@ func registerIngestHandlers(
 			GitToken:      cfg.GitToken,
 			MediaStoreDir: cfg.MediaStoreDir,
 		},
+		// HTTP façade guards (ADR-0007): optional bearer token (permissive when
+		// unset) and the filesystem-root allowlist for path-based HTTP adds.
+		APIToken:     os.Getenv("SEMSOURCE_API_TOKEN"),
+		AllowedRoots: cfg.SourceRoots,
 	}
 
 	// source-manifest's Start (which flips its running flag) can lag StartAll's
