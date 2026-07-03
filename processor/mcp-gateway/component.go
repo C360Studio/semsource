@@ -79,6 +79,24 @@ func (c *Component) buildServer() *mcp.Server {
 		Name:        "source_status",
 		Description: "Report semsource graph readiness/status (the phase to gate queries on).",
 	}, c.sourceStatus)
+
+	// Fused query tools (ADR-0004 read side over MCP).
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "code_context",
+		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. Use to understand a symbol and how it connects.",
+	}, c.codeContext)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "code_impact",
+		Description: "Reverse-dependency closure of a symbol — what depends on it, i.e. what would break if you change it. Answers questions grep cannot.",
+	}, c.codeImpact)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "code_search",
+		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies.",
+	}, c.codeSearch)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "doc_context",
+		Description: "Fused documentation context (READMEs/ADRs/prose) for a query — the intended design, not just the code.",
+	}, c.docContext)
 	return s
 }
 
