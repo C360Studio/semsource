@@ -81,10 +81,13 @@ func registerDependencyPredicates() {
 }
 
 func registerRelationshipPredicates() {
+	// Salience 2.0: implementing an interface marks a concrete, pluggable
+	// component — a high-value retrieval target ("the X implementation").
 	vocabulary.Register(CodeImplements,
 		vocabulary.WithDescription("Struct implements interface"),
 		vocabulary.WithDataType("entity_id"),
-		vocabulary.WithIRI(CodeNamespace+"implements"))
+		vocabulary.WithIRI(CodeNamespace+"implements"),
+		vocabulary.WithWeight(2.0))
 
 	vocabulary.Register(CodeExtends,
 		vocabulary.WithDescription("Class extends superclass (TypeScript/JavaScript)"),
@@ -145,27 +148,39 @@ func registerMetricPredicates() {
 }
 
 func registerDocPredicates() {
+	// Salience gradient (max-over-predicates → 3.0×weight added to the rank
+	// score, a secondary nudge): a documented symbol is the canonical, intent-
+	// explained one (2.5); a rendered signature marks a callable API surface
+	// (1.5). Together they float documented callables above bare const/var/
+	// metadata-only entities, which carry no weighted predicate (salience 0).
 	vocabulary.Register(CodeDocComment,
 		vocabulary.WithDescription("Documentation comment text"),
 		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI(CodeNamespace+"docComment"))
+		vocabulary.WithIRI(CodeNamespace+"docComment"),
+		vocabulary.WithWeight(2.5))
 
 	vocabulary.Register(CodeSignature,
 		vocabulary.WithDescription("Rendered source-language signature for semantic search"),
 		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI(CodeNamespace+"signature"))
+		vocabulary.WithIRI(CodeNamespace+"signature"),
+		vocabulary.WithWeight(1.5))
 }
 
 func registerCapabilityPredicates() {
+	// Salience 3.0 (top of the band): a declared agentic capability is the most
+	// salient functional unit in this ecosystem — when it matches a query it
+	// should lead. name + description both mark it (max, so either suffices).
 	vocabulary.Register(CodeCapabilityName,
 		vocabulary.WithDescription("Agentic capability identifier"),
 		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI(AgenticNamespace+"name"))
+		vocabulary.WithIRI(AgenticNamespace+"name"),
+		vocabulary.WithWeight(3.0))
 
 	vocabulary.Register(CodeCapabilityDescription,
 		vocabulary.WithDescription("Human-readable capability description"),
 		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI(AgenticNamespace+"description"))
+		vocabulary.WithIRI(AgenticNamespace+"description"),
+		vocabulary.WithWeight(3.0))
 
 	vocabulary.Register(CodeCapabilityTools,
 		vocabulary.WithDescription("Tools this code provides or uses"),
