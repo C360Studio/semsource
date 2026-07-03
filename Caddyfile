@@ -38,6 +38,11 @@
 	handle /doc-context/* {
 		reverse_proxy semsource:8080
 	}
+	# MCP gateway (ADR-0007) — Streamable HTTP MCP for agents (Claude Code).
+	# Endpoint: /mcp-gateway/mcp
+	handle /mcp-gateway/* {
+		reverse_proxy semsource:8080
+	}
 	handle /metrics {
 		reverse_proxy semsource:9091
 	}

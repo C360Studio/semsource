@@ -27,6 +27,7 @@ import (
 	docsource "github.com/c360studio/semsource/processor/doc-source"
 	gitsource "github.com/c360studio/semsource/processor/git-source"
 	imagesource "github.com/c360studio/semsource/processor/image-source"
+	mcpgateway "github.com/c360studio/semsource/processor/mcp-gateway"
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 	urlsource "github.com/c360studio/semsource/processor/url-source"
 	videosource "github.com/c360studio/semsource/processor/video-source"
@@ -287,6 +288,7 @@ func registerSemsourceFactories(registry *component.Registry) error {
 		"filestore":       func() error { return filestore.Register(registry) },
 		"source-manifest": func() error { return sourcemanifest.Register(registry) },
 		"code-context":    func() error { return codecontext.Register(registry) },
+		"mcp-gateway":     func() error { return mcpgateway.Register(registry) },
 	} {
 		if err := fn(); err != nil {
 			return fmt.Errorf("register %s component: %w", name, err)
@@ -492,6 +494,13 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		components[instance] = gwCfg
 	}
 
+	// MCP gateway (ADR-0007 §1): source-registration tools over Streamable HTTP.
+	mcpCfg, err := mcpGatewayComponentConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	components["mcp-gateway"] = mcpCfg
+
 	svcs, err := serviceConfigs(cfg)
 	if err != nil {
 		return nil, err
@@ -554,6 +563,27 @@ func codeContextComponentConfig(lens string) (types.ComponentConfig, error) {
 	}
 	return types.ComponentConfig{
 		Name:    "code-context",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  raw,
+	}, nil
+}
+
+// mcpGatewayComponentConfig builds the mcp-gateway component config. The bearer
+// token is NOT set here — the component reads SEMSOURCE_API_TOKEN from the
+// environment so the secret never lands in the config KV.
+func mcpGatewayComponentConfig(cfg *config.Config) (types.ComponentConfig, error) {
+	raw, err := json.Marshal(map[string]any{
+		"namespace":     cfg.Namespace,
+		"mcp_path":      "/mcp",
+		"allowed_roots": cfg.SourceRoots,
+		"instance_name": "mcp-gateway",
+	})
+	if err != nil {
+		return types.ComponentConfig{}, fmt.Errorf("marshal mcp-gateway config: %w", err)
+	}
+	return types.ComponentConfig{
+		Name:    "mcp-gateway",
 		Type:    types.ComponentTypeProcessor,
 		Enabled: true,
 		Config:  raw,
