@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
+	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
 	"github.com/c360studio/semstreams/storage"
 	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/storage/storeregistry"
@@ -155,7 +156,12 @@ func (c *Component) buildEngine(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	c.engine = fusion.NewEngine(c.graph, resolver)
+	// Attach the framework ranking signals (ADR-062 increment 5): ontology
+	// specificity (BFO/CCO subclass depth on our stamped entity.ontology.class)
+	// + predicate salience (vocabulary WithWeight). Without this the engine
+	// ranks on resolve-order + lexical only, ignoring the ontology class we emit
+	// on every entity. fusionvocab resolves both against the framework registries.
+	c.engine = fusion.NewEngine(c.graph, resolver).WithSignals(fusionvocab.New())
 	return nil
 }
 

@@ -308,15 +308,21 @@ func registerDocPredicates() {
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(Namespace+"severity"))
 
+	// Salience 2.0: a doc's distilled thesis (summary) / its extracted rules
+	// (requirements) are the highest-value facts a doc entity carries — float
+	// summarized/normative docs above raw chunks (which carry no weighted
+	// predicate). Mirrors the code side's doc-comment salience.
 	vocabulary.Register(DocSummary,
 		vocabulary.WithDescription("Short extracted summary for context assembly"),
 		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI(DcAbstract))
+		vocabulary.WithIRI(DcAbstract),
+		vocabulary.WithWeight(2.0))
 
 	vocabulary.Register(DocRequirements,
 		vocabulary.WithDescription("Extracted key requirements for review validation"),
 		vocabulary.WithDataType("array"),
-		vocabulary.WithIRI(Namespace+"requirements"))
+		vocabulary.WithIRI(Namespace+"requirements"),
+		vocabulary.WithWeight(2.0))
 
 	vocabulary.Register(DocContent,
 		vocabulary.WithDescription("Chunk text content"),
