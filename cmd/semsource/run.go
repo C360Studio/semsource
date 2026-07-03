@@ -530,6 +530,12 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		},
 		Services:   svcs,
 		Components: components,
+		// Tier 1/2 enablement: passed straight through so the ComponentManager
+		// injects it into deps.ModelRegistry (verified: component_manager.go
+		// buildComponentDependencies). graph-embedding's HTTP embedder resolves
+		// "embedding" (→ semembed); graph-clustering's summarizer resolves
+		// "community_summary" (→ seminstruct). Nil = tier 0 (BM25).
+		ModelRegistry: cfg.ModelRegistry,
 	}
 
 	// Declare the full GRAPH stream with user overrides.
@@ -700,6 +706,8 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 	batchSize := 50
 	coalesceMs := 200
 	indexWorkers := 0 // 0 → semstreams graph-index default (1)
+	enableClustering := false
+	clusteringLLM := false
 
 	if g := cfg.Graph; g != nil {
 		if g.GatewayBind != "" {
@@ -720,6 +728,8 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		if g.IndexWorkers > 0 {
 			indexWorkers = g.IndexWorkers
 		}
+		enableClustering = g.EnableClustering
+		clusteringLLM = g.EnableClustering && g.ClusteringLLM
 	}
 
 	configs := map[string]struct {
@@ -838,6 +848,34 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				"bucket_name": "CONTENT",
 			},
 		},
+	}
+
+	// graph-clustering (tier 2, opt-in via graph.enable_clustering): LPA
+	// community detection over ENTITY_STATES → COMMUNITY_INDEX, feeding the
+	// already-declared local/global/summary query routes. Pure-Go LPA runs with
+	// no external service; clustering_llm adds GraphRAG summaries via the
+	// model_registry "community_summary" capability (→ seminstruct).
+	if enableClustering {
+		configs["graph-clustering"] = struct {
+			name      string
+			compType  types.ComponentType
+			configMap map[string]any
+		}{
+			name:     "graph-clustering",
+			compType: types.ComponentTypeProcessor,
+			configMap: map[string]any{
+				"detection_interval": "30s",
+				"enable_llm":         clusteringLLM,
+				"ports": map[string]any{
+					"inputs": []map[string]any{
+						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+					},
+					"outputs": []map[string]any{
+						{"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"},
+					},
+				},
+			},
+		}
 	}
 
 	result := make(semconfig.ComponentConfigs, len(configs))

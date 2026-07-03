@@ -1,0 +1,34 @@
+{
+  "namespace": "acme",
+  "sources": [
+    { "type": "repo", "path": "/mnt/workspace/myrepo", "language": "go", "watch": false }
+  ],
+  "source_roots": ["/mnt/workspace"],
+  "graph": {
+    "embedder_type": "http",
+    "index_workers": 4,
+    "coalesce_ms": 200,
+    "enable_clustering": true,
+    "clustering_llm": true
+  },
+  "model_registry": {
+    "endpoints": {
+      "semembed": {
+        "provider": "openai",
+        "url": "http://localhost:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s"
+      },
+      "seminstruct": {
+        "provider": "openai",
+        "url": "http://localhost:8083/v1",
+        "model": "qwen3-0.6b",
+        "max_tokens": 16384
+      }
+    },
+    "capabilities": {
+      "embedding": { "preferred": ["semembed"] },
+      "community_summary": { "preferred": ["seminstruct"] }
+    },
+    "defaults": { "model": "semembed" }
+  }
+}
