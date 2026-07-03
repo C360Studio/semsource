@@ -90,6 +90,14 @@ type Config struct {
 	// Defaults to 8080.
 	HTTPPort int `json:"http_port,omitempty"`
 
+	// SourceRoots is the allowlist of filesystem roots under which a path-based
+	// source may be registered over the HTTP façade (ADR-0007 sidecar). A
+	// path-only git/repo/docs/config add over HTTP must resolve to a path under
+	// one of these roots (with a traversal guard) — arbitrary host paths are
+	// rejected. Empty means path-based HTTP registration is refused. Does NOT
+	// constrain the in-mesh NATS path or config-file sources (operator-trusted).
+	SourceRoots []string `json:"source_roots,omitempty"`
+
 	// WebSocketBind is the host:port for the WebSocket output server.
 	// Can also be set via the SEMSOURCE_WS_BIND environment variable.
 	// Defaults to "0.0.0.0:7890".
