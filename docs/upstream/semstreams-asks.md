@@ -227,7 +227,7 @@ e.g. append-only per-entity sub-keys (`PREDICATE_INDEX.<predicate>.<entityID>`),
 sharded keys, or batched/coalesced index writes. **Surfaced by:** indexing beta.124 in semsource
 (dogfood). Profile artifact retained in the session.
 
-### 11. `phase: ready` fires long before the query indexes are populated — framework-shaped
+### 11. `phase: ready` fires long before the query indexes are populated — framework-shaped — filed [semstreams#431](https://github.com/C360Studio/semstreams/issues/431)
 Consumers gate on `graph.query.status` → `phase: ready` before querying (ADR-0003). But at 22k
 scale `phase` flips ready at ~30s while byName/NAME_INDEX + embeddings keep populating for
 **minutes** afterward (byName hit-rate climbed 17% → 50% → plateauing over 6+ min). So a
