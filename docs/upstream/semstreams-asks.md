@@ -282,3 +282,24 @@ that graph-query calls. Until then, tier-1 quality is capped regardless of
 model size. **Surfaced by:** wiring the http embedder (semsource task #35).
 Product-side note: even with the prefix, a 33M general model discriminates code
 weakly — a code-specialized or larger embedder is the complementary lever.
+
+## Fusion ranking (RankSignals, ADR-062 increment 5)
+
+### 14. `fusion.RankSignals` is additive-only — no way to down-rank noise — framework-shaped — filed [semstreams#441](https://github.com/C360Studio/semstreams/issues/441)
+`PredicateSalience` returns a weight ≥ 0, `entitySalience` takes the **max** over
+an entity's predicates, and the engine **adds** `salienceScale × maxWeight` — so a
+consumer can boost high-value entities but can never **demote** low-value ones. For
+code retrieval the entities I most want *out* of the top hits are structurally
+identifiable but unboostable-away: **tests** (`*_test.go`, mocks — they carry the
+same boosted predicates as the real impl, e.g. a test with a doc-comment gets the
+same salience as `retry.go`) and **generated code**. A negative `WithWeight` is
+inert (max over predicates never picks it; the model has no "subtract"). **Fix
+directions:** (1) allow negative salience + sum-with-floor (or a `PredicateDemotion`
+that subtracts); (2) value-conditioned `PredicateSalience(predicate, value)` — also
+solves boost-public-over-private (visibility is a *value* on a universal predicate,
+so per-predicate-name weight can't reach it); (3) a distinct `Penalty` signal the
+engine subtracts, preserving the "strictly additive" invariant on salience.
+**Product half is ours** (semsource task #38: emit a presence predicate
+`code.artifact.exported` + weight it — the boost side needs no framework change; the
+demote side is the framework gap here). **Surfaced by:** wiring semsource's fusion
+ranking (`.WithSignals(fusionvocab.New())` + predicate `WithWeight`, PR #36).
