@@ -14,6 +14,12 @@ const (
 	// Classification predicates
 	CodeType       = "code.artifact.type"       // file|package|function|method|struct|interface|const|var|type
 	CodeVisibility = "code.artifact.visibility" // public|private (exported vs unexported in Go)
+	// CodeExported is a PRESENCE-only ranking marker: stamped (object "true")
+	// ONLY on exported/public symbols. Ranking salience keys on predicate
+	// presence (fusionvocab.PredicateSalience → the vocabulary Weight), and it
+	// can't condition on a predicate's VALUE — so boosting public over private
+	// needs a distinct predicate, not the visibility value. See task #38.
+	CodeExported = "code.artifact.exported"
 
 	// Structure relationships
 	CodeContains  = "code.structure.contains" // parent → child (file → functions)
