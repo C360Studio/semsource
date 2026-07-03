@@ -7,7 +7,7 @@ enrichment layer is running. The layers stack; each adds capability on top of th
 |------|------|--------------------|------------------|------------------------------|
 | **Structural** | graph-ingest / index / query / gateway | — (byName / prefix / relations / impact only) | none | ✅ |
 | **0 — Statistical** | graph-embedding (**BM25**) | keyword-statistical: good for term overlap, weak for paraphrase | none | ✅ (`tier0-statistical.json`) |
-| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | semantic similarity (paraphrase-robust *in principle* — see the query-prefix caveat) | **semembed** (:8081, OpenAI-compatible embeddings) | ✅ (`tier1-semantic.json`) |
+| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | true semantic similarity, paraphrase-robust (needs `query_prefix` — beats BM25 once set) | **semembed** (:8081, OpenAI-compatible embeddings) | ✅ (`tier1-semantic.json`) |
 | **2 — Semantic + Instruct** | graph-clustering (LPA + **LLM → seminstruct**), GraphRAG/community summaries | + community/summary reasoning (`local`/`global`/`summary` search) | **seminstruct** (:8083, inference proxy) | ✅ (`tier2-semantic-instruct.json`) |
 
 The other query verbs — `code_context`, `code_impact`, `doc_context`, and byName/prefix resolution —
@@ -38,6 +38,9 @@ straight through to `ssCfg.ModelRegistry`, and the ComponentManager injects it i
 `deps.ModelRegistry`. Config validation fails fast: `embedder_type: "http"` without a resolvable
 `embedding` capability is rejected at load, not degraded silently at runtime.
 
+**Set `query_prefix` for arctic/BGE/E5 models** (see the caveat below): it applies to the query side
+only (documents are embedded raw). Without it, retrieval quality collapses toward short generic entities.
+
 ```jsonc
 {
   "namespace": "acme",
@@ -45,7 +48,8 @@ straight through to `ssCfg.ModelRegistry`, and the ComponentManager injects it i
   "graph": { "embedder_type": "http" },
   "model_registry": {
     "endpoints": {
-      "semembed": { "provider": "openai", "url": "http://localhost:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s" }
+      "semembed": { "provider": "openai", "url": "http://localhost:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s",
+        "query_prefix": "Represent this sentence for searching relevant passages: " }
     },
     "capabilities": { "embedding": { "preferred": ["semembed"] } },
     "defaults": { "model": "semembed" }
@@ -58,15 +62,17 @@ docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:latest   # OpenAI-compati
 semsource run --config configs/tiers/tier1-semantic.json
 ```
 
-> **Query-prefix caveat (semstreams#-ask 13).** arctic-embed / BGE / E5 retrieval models are
-> *asymmetric*: the query must carry an instruction prefix (arctic: `"Represent this sentence for
-> searching relevant passages: "`) while documents are embedded raw. graph-embedding's HTTP embedder
-> has a single `Generate` path (no `EmbedQuery`), so the query prefix is **not** applied. Measured on
-> the dogfood corpus, the prefix ~doubles the relevant-vs-noise cosine margin (+0.090 → +0.158); without
-> it, tier-1 `code_search` can rank *below* tier-0 BM25 (short generic entities crowd the top). Wiring is
-> correct and complete; retrieval quality is capped until semstreams supports an asymmetric query
-> instruction (tracked in `docs/upstream/semstreams-asks.md` #13). A code-specialized or larger embedder
-> is the complementary product-side lever.
+> **Query prefix — REQUIRED for arctic/BGE/E5 (resolved semstreams#438, beta.129).** These retrieval
+> models are *asymmetric*: the query must carry an instruction prefix (arctic:
+> `"Represent this sentence for searching relevant passages: "`) while documents are embedded raw.
+> semstreams beta.129 (PR #440) added `EndpointConfig.query_prefix` + `GenerateQuery` — set it on the
+> endpoint (as above) and the semantic-search path applies it to the query only. **Measured impact
+> (dogfood, 21k entities):** with the prefix the arctic relevant-vs-noise cosine margin ~doubles
+> (+0.090 → +0.158), and end-to-end `code_search` beats tier-0 BM25 on paraphrase queries where the
+> query words don't appear in the code (e.g. *"prevent processing the same message twice"* →
+> `publish_msgid_integration_test.go`; *"compute a sha256 hash"* → `graph/embedding/cache.go`) — BM25
+> whiffs those (no lexical overlap). Omit the prefix and tier-1 ranks *below* BM25. A code-specialized
+> or larger embedder is a complementary product-side lever.
 
 ## Tier 2 — Semantic + Instruct (seminstruct) — wired (`tier2-semantic-instruct.json`)
 
@@ -90,6 +96,6 @@ Requires **seminstruct** running (Rust proxy, :8083, OpenAI-compatible inference
 - **Tier 1/2 are wired** (`config.ModelRegistry` → `ssCfg.ModelRegistry`; `graph.enable_clustering`
   adds graph-clustering). Validated end-to-end against local semembed: http embedder active,
   embeddings generated with 0 errors, `provenance: embedding` on `code_search`.
-- **Tier-1 quality is gated on the query-prefix gap above** — the wiring is proven, but on the dogfood
-  corpus tier-1 (arctic-embed-s, no query prefix) underperformed tier-0 BM25. Fixing the prefix
-  (framework) and/or choosing a code-specialized embedder (product) is the next lever.
+- **Tier-1 beats BM25 with the query prefix set** (semstreams#438 resolved, beta.129). On the dogfood
+  corpus, semembed + `query_prefix` nails paraphrase queries that BM25 misses; omit the prefix and it
+  regresses below BM25. A code-specialized or larger embedder is the complementary product-side lever.

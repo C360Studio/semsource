@@ -16,7 +16,8 @@
       "semembed": {
         "provider": "openai",
         "url": "http://localhost:8081/v1",
-        "model": "Snowflake/snowflake-arctic-embed-s"
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "query_prefix": "Represent this sentence for searching relevant passages: "
       },
       "seminstruct": {
         "provider": "openai",
