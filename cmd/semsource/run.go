@@ -15,6 +15,10 @@ import (
 	// Register language parsers and vocabulary in the semstreams registries.
 	_ "github.com/c360studio/semsource/source/ast"
 
+	// Register net/http/pprof handlers on http.DefaultServeMux; served only when
+	// --pprof-port is set (service.MaybeStartPProf). Import does not arm it.
+	_ "net/http/pprof"
+
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -50,6 +54,7 @@ type runFlags struct {
 	logLevel            string
 	natsURL             string
 	natsDisconnectGrace time.Duration
+	pprofPort           int
 }
 
 // parseRunFlags parses the `semsource run` flag set.
@@ -60,6 +65,8 @@ func parseRunFlags(args []string) (*runFlags, error) {
 	natsURL := fs.String("nats-url", "", "NATS server URL (overrides NATS_URL env and config)")
 	natsDisconnectGrace := fs.Duration("nats-disconnect-grace", resolveNATSDisconnectGrace(),
 		"shut down if NATS is disconnected continuously beyond this duration; 0 disables the watchdog")
+	pprofPort := fs.Int("pprof-port", 0,
+		"if >0, serve net/http/pprof (/debug/pprof) on this port for profiling")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -68,6 +75,7 @@ func parseRunFlags(args []string) (*runFlags, error) {
 		logLevel:            *logLevel,
 		natsURL:             *natsURL,
 		natsDisconnectGrace: *natsDisconnectGrace,
+		pprofPort:           *pprofPort,
 	}, nil
 }
 
@@ -88,6 +96,10 @@ func runCmd(args []string) error {
 
 	logger := buildLogger(flags.logLevel)
 	slog.SetDefault(logger)
+
+	// Arm pprof early (before NATS) so a slow/wedged boot stays profilable. No-op
+	// unless --pprof-port > 0. Handlers come from the blank net/http/pprof import.
+	service.MaybeStartPProf(flags.pprofPort > 0, flags.pprofPort)
 
 	ctx := context.Background()
 
@@ -687,6 +699,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 	embedderType := "bm25"
 	batchSize := 50
 	coalesceMs := 200
+	indexWorkers := 0 // 0 → semstreams graph-index default (1)
 
 	if g := cfg.Graph; g != nil {
 		if g.GatewayBind != "" {
@@ -703,6 +716,9 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		}
 		if g.CoalesceMs > 0 {
 			coalesceMs = g.CoalesceMs
+		}
+		if g.IndexWorkers > 0 {
+			indexWorkers = g.IndexWorkers
 		}
 	}
 
@@ -737,6 +753,9 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
 				"coalesce_ms": coalesceMs,
+				// workers=0 → graph-index applies its own default (1); raise via
+				// graph.index_workers to parallelize bulk index builds.
+				"workers": indexWorkers,
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},

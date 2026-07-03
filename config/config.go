@@ -40,6 +40,11 @@ type GraphConfig struct {
 	// CoalesceMs is the debounce window in ms for graph-index and graph-embedding.
 	// Defaults to 200.
 	CoalesceMs int `json:"coalesce_ms,omitempty"`
+
+	// IndexWorkers is the number of graph-index worker goroutines. 0 uses the
+	// semstreams default (1), which is a throughput bottleneck for large one-shot
+	// ingests (indexing a whole dependency) — raise it to parallelize index build.
+	IndexWorkers int `json:"index_workers,omitempty"`
 }
 
 // MetricsConfig configures the Prometheus metrics endpoint.

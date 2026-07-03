@@ -198,3 +198,45 @@ official `github.com/modelcontextprotocol/go-sdk` (Streamable HTTP) exposing sem
 source-registration tools, translating tool calls → NATS. If the shape generalizes,
 propose lifting the MCP-server machinery upstream so it isn't re-rolled per service.
 **Surfaced by:** adding MCP to semsource (ADR-0007 §1; first MCP across sem\*).
+
+---
+
+## Graph indexing at scale (found dogfooding — first real, non-synthetic corpus)
+
+Indexed **beta.124 itself** (21k+ code entities from 957 Go files + 289 docs) in a live
+semsource and queried it over MCP. This is the first time the graph/query stack ran on a
+real, high-cardinality corpus rather than fixtures. Three findings, one with a CPU profile.
+
+### 10. graph-index `UpdatePredicateIndex` is O(N²) at scale — framework-shaped — **CPU-profiled** — filed [semstreams#430](https://github.com/C360Studio/semstreams/issues/430)
+The dominant cost of indexing a real codebase. A 30s CPU profile during ingest
+(`--pprof-port`, see #12) showed **63% of CPU in
+`graph-index.(*Component).UpdatePredicateIndex → natsclient.KVStore.UpdateWithRetry`**
+(`processor/graph-index/component.go:1305`), with **~37% flat in `encoding/json`**
+(unquoteBytes / checkValid / rescanLiteral / stateInString) and ~29% in network syscalls.
+Mechanism: the PREDICATE_INDEX stores **one monolithic JSON list per predicate**, updated
+per-entity via a **CAS read-modify-write** (`UpdateWithRetry`). For a high-cardinality
+predicate (e.g. `code.artifact.type`, carried by ~all 21k code entities) the value grows to
+~21k entries, so each of N updates re-reads + re-parses + re-writes an O(N) blob → **O(N²)**,
+and under concurrency the hot keys thrash on CAS conflicts (retry storms re-parsing the blob).
+Evidence it is NOT worker-bound: raising graph-index `workers` 1→8 moved byName coverage only
+9/15 → 10/15 — more workers just add CAS contention on the hot keys. Consequences: indexing
+22k entities takes **many minutes** (not seconds), the NAME_INDEX lags, and graph-embedding is
+starved (EMBEDDINGS_CACHE had ~1 entry — semantic search effectively non-functional during
+ingest). **Fix direction (semstreams):** stop storing a monolithic JSON list per predicate —
+e.g. append-only per-entity sub-keys (`PREDICATE_INDEX.<predicate>.<entityID>`), a set/CRDT,
+sharded keys, or batched/coalesced index writes. **Surfaced by:** indexing beta.124 in semsource
+(dogfood). Profile artifact retained in the session.
+
+### 11. `phase: ready` fires long before the query indexes are populated — framework-shaped
+Consumers gate on `graph.query.status` → `phase: ready` before querying (ADR-0003). But at 22k
+scale `phase` flips ready at ~30s while byName/NAME_INDEX + embeddings keep populating for
+**minutes** afterward (byName hit-rate climbed 17% → 50% → plateauing over 6+ min). So a
+consumer that correctly waits for `ready` still gets unreliable byName/search results. Readiness
+should reflect **query-index completeness**, or the contract should distinguish "ingest ready"
+from "indexes ready" (and expose index-build progress). Related to #10 (the indexes are slow
+because of it). **Surfaced by:** the same dogfood; byName coverage measured over time.
+
+### 12. `service.MaybeStartPProf` validated under real load — works ✓ (note)
+Not a gap — a positive. semsource added a `--pprof-port` flag (blank-import `net/http/pprof` +
+`service.MaybeStartPProf`); the pprof HTTP server came up and produced the profile that found
+#10. This is believed to be the first hard use of that helper "as a service" — it works.
