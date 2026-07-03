@@ -219,6 +219,12 @@ func (e *CodeEntity) identityTriples() []message.Triple {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeFramework, Object: e.Framework})
 	}
 	triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeVisibility, Object: string(e.Visibility)})
+	// Presence-only ranking marker on exported symbols (task #38): floats the
+	// public API surface above internals. Emitted only when public so its mere
+	// presence carries the salience — visibility as a value can't be weighted.
+	if e.Visibility == VisibilityPublic {
+		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeExported, Object: "true"})
+	}
 	if e.StartLine > 0 {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeStartLine, Object: e.StartLine})
 	}

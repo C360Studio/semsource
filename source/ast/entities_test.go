@@ -102,6 +102,28 @@ func TestComputeHash(t *testing.T) {
 	}
 }
 
+// TestCodeEntity_ExportedMarker verifies the presence-only ranking marker
+// (task #38): stamped on exported symbols, absent on unexported ones — the
+// asymmetry is what lets salience boost public API over internals.
+func TestCodeEntity_ExportedMarker(t *testing.T) {
+	hasExported := func(e *CodeEntity) bool {
+		for _, tr := range e.Triples() {
+			if tr.Predicate == CodeExported {
+				return true
+			}
+		}
+		return false
+	}
+	pub := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	if !hasExported(pub) {
+		t.Error("exported symbol Foo: missing CodeExported marker")
+	}
+	priv := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "foo", "pkg/foo.go")
+	if hasExported(priv) {
+		t.Error("unexported symbol foo: CodeExported marker must NOT be stamped")
+	}
+}
+
 func TestCodeEntity_Triples(t *testing.T) {
 	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 	entity.Package = "pkg"
@@ -130,6 +152,7 @@ func TestCodeEntity_Triples(t *testing.T) {
 		CodeHash,
 		CodeLanguage,
 		CodeVisibility,
+		CodeExported, // "Foo" is exported → presence marker stamped
 		CodeStartLine,
 		CodeEndLine,
 		CodeLines,

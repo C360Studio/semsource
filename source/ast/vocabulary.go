@@ -54,6 +54,17 @@ func registerArtifactPredicates() {
 		vocabulary.WithDescription("Symbol visibility: public (exported) or private (unexported)"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(CodeNamespace+"visibility"))
+
+	// Salience 2.0: presence marks an exported/public symbol — the API surface
+	// a consumer usually wants first. Emitted only on public symbols (see
+	// entities.go), so weighting the predicate boosts exactly that set;
+	// unexported internals carry no CodeExported triple → no boost. Sits just
+	// below doc-comment (2.5): documented-and-public leads, then either alone.
+	vocabulary.Register(CodeExported,
+		vocabulary.WithDescription("Presence marks an exported (public) symbol"),
+		vocabulary.WithDataType("bool"),
+		vocabulary.WithIRI(CodeNamespace+"exported"),
+		vocabulary.WithWeight(2.0))
 }
 
 func registerStructurePredicates() {

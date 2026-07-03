@@ -20,6 +20,7 @@ func TestPredicateSalienceWeights(t *testing.T) {
 		ast.CodeCapabilityDescription: 3.0,
 		ast.CodeDocComment:            2.5,
 		ast.CodeImplements:            2.0,
+		ast.CodeExported:              2.0,
 		ast.CodeSignature:             1.5,
 	}
 	for pred, want := range weighted {
