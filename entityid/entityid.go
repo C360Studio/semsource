@@ -62,17 +62,27 @@ func SystemSlug(canonicalPath string) string {
 		canonicalPath = filepath.Base(canonicalPath)
 	}
 
-	// Replace segment-breaking characters with hyphens. Dots must be
-	// translated too — graph-ingest treats '.' as the segment separator
-	// for the 6-part entity ID, so a host like "pkg.go.dev" would
-	// inflate the part count.
-	slug := strings.ReplaceAll(canonicalPath, "/", "-")
-	slug = strings.ReplaceAll(slug, ":", "-")
-	slug = strings.ReplaceAll(slug, ".", "-")
+	// Map any character outside the entity-ID allowlist ([A-Za-z0-9_-]) to a
+	// hyphen. This is an ALLOWLIST, not a denylist: a denylist (only /,:,.) let
+	// '@' through from Go module-cache paths (e.g. "semstreams@v1.2.3"), which
+	// produced invalid NATS KV keys and failed component-name validation. Dots
+	// break the 6-part ID's segment separator, so they map here too.
+	var b strings.Builder
+	b.Grow(len(canonicalPath))
+	for _, r := range canonicalPath {
+		if isAllowedInstanceRune(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	slug := b.String()
 	for strings.Contains(slug, "--") {
 		slug = strings.ReplaceAll(slug, "--", "-")
 	}
-	slug = strings.Trim(slug, "-")
+	// Trim to an alphanumeric boundary so the slug is a valid ID segment
+	// (^[A-Za-z0-9]…): a leading/trailing '-' or '_' would violate it.
+	slug = strings.TrimFunc(slug, func(r rune) bool { return !isASCIIAlnum(r) })
 
 	// Safety cap: truncate and append a short content hash when the slug
 	// still exceeds the limit (e.g. extremely long directory names).
