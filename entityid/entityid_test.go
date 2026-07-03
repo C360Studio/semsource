@@ -121,6 +121,11 @@ func TestSystemSlug(t *testing.T) {
 		{"/var/folders/db/long-temp-path/github-com-opensensorhub-osh-core", "github-com-opensensorhub-osh-core"},
 		{"./src", "src"},
 		{"///leading-slashes///", "leading-slashes"},
+		// Go module-cache paths carry '@version' — the '@' must be sanitized
+		// (regression for the allowlist fix; a denylist left it invalid).
+		{"/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.124", "semstreams-v1-0-0-beta-124"},
+		{"pkg@v1.2.3", "pkg-v1-2-3"},
+		{"weird name+chars!", "weird-name-chars"},
 		{"", ""},
 	}
 
