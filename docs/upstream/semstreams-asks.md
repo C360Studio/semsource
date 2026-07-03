@@ -180,3 +180,21 @@ can't use the same trick — driving the reconcile-stop from the request handler
 deadlocks — so remove-teardown stays broken pending the fix. **Blocks:** gating CI
 on e2e (`TestE2E_RuntimeSourceAdd` remove-teardown assertion) — deferred until #388.
 **Surfaced by:** wiring e2e into CI (curator runtime add/remove, ADR-040 / ADR-0006).
+
+---
+
+## Gateways
+
+### 9. graph-gateway MCP endpoint is a stub — framework-shaped
+`gateway/graph-gateway` advertises an `mcp_path` (default `/mcp`, in the schema + OpenAPI
+doc) and mounts `handleMCP`, but the handler is a **placeholder** — it returns
+`{"message":"MCP endpoint"}` with the comment *"In real implementation, this would handle
+MCP protocol."* So there is no working MCP surface in the framework, and a service that
+configures the graph-gateway exposes a dead `/mcp`. A real, ideally **pluggable** MCP
+gateway (tools contributed by components, not hard-wired to graph queries) would let every
+sem\* service expose its own tools over one framework MCP implementation.
+**Stopgap (semsource):** shipped a **product-shaped** `mcp-gateway` component using the
+official `github.com/modelcontextprotocol/go-sdk` (Streamable HTTP) exposing semsource's
+source-registration tools, translating tool calls → NATS. If the shape generalizes,
+propose lifting the MCP-server machinery upstream so it isn't re-rolled per service.
+**Surfaced by:** adding MCP to semsource (ADR-0007 §1; first MCP across sem\*).

@@ -3,15 +3,11 @@ package sourcemanifest
 import (
 	"crypto/subtle"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/internal/sourceallow"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 )
 
@@ -63,7 +59,7 @@ func (c *Component) handleAddHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Path allowlist (ADR-0007 §3): a path-based source over HTTP must resolve
 	// under an allowlisted root; arbitrary host paths are rejected.
-	if err := enforceAllowedRoots(req.Source, cfg.AllowedRoots); err != nil {
+	if err := sourceallow.Enforce(req.Source, cfg.AllowedRoots); err != nil {
 		writeJSON(w, http.StatusForbidden, &AddReply{
 			Error:     &IngestError{Code: CodeValidationFailed, Message: err.Error()},
 			Timestamp: time.Now(),
@@ -182,57 +178,6 @@ func watchMode(watch bool) string {
 		return "watch"
 	}
 	return "snapshot"
-}
-
-// enforceAllowedRoots rejects a path-based source whose path is not under an
-// allowlisted root (ADR-0007 §3). URL-only sources are unaffected. An empty
-// allowlist refuses all path-based registrations (no arbitrary host paths).
-func enforceAllowedRoots(src config.SourceEntry, roots []string) error {
-	paths := sourcePaths(src)
-	if len(paths) == 0 {
-		return nil // url-only source — allowlist not applicable
-	}
-	if len(roots) == 0 {
-		return errors.New("path-based source registration over HTTP requires configured source_roots (none set)")
-	}
-	absRoots := make([]string, 0, len(roots))
-	for _, root := range roots {
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return fmt.Errorf("invalid source_root %q: %w", root, err)
-		}
-		absRoots = append(absRoots, filepath.Clean(abs))
-	}
-	for _, p := range paths {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return fmt.Errorf("invalid path %q: %w", p, err)
-		}
-		// filepath.Clean collapses any "../" traversal, so a prefix check against
-		// the cleaned absolute path is a sound containment guard.
-		if !underAnyRoot(filepath.Clean(abs), absRoots) {
-			return fmt.Errorf("path %q is outside the allowlisted source_roots", p)
-		}
-	}
-	return nil
-}
-
-func sourcePaths(src config.SourceEntry) []string {
-	out := make([]string, 0, 1+len(src.Paths))
-	if src.Path != "" {
-		out = append(out, src.Path)
-	}
-	out = append(out, src.Paths...)
-	return out
-}
-
-func underAnyRoot(path string, roots []string) bool {
-	for _, root := range roots {
-		if path == root || strings.HasPrefix(path, root+string(os.PathSeparator)) {
-			return true
-		}
-	}
-	return false
 }
 
 // httpStatusForIngestError maps a wire error code to an HTTP status.
