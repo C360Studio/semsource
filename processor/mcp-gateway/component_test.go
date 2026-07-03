@@ -54,13 +54,26 @@ func TestListTools(t *testing.T) {
 		}
 	}
 	sort.Strings(got)
-	want := []string{"add_source", "remove_source", "source_status"}
+	want := []string{
+		"add_source", "code_context", "code_impact", "code_search",
+		"doc_context", "remove_source", "source_status",
+	}
 	if len(got) != len(want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("tools = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestQueryToolRequiresQuery(t *testing.T) {
+	cs := connect(t, newTestComponent(nil))
+	for _, tool := range []string{"code_context", "code_impact", "code_search", "doc_context"} {
+		res := callTool(t, cs, tool, map[string]any{})
+		if !res.IsError {
+			t.Errorf("%s: expected tool error when query is missing", tool)
 		}
 	}
 }

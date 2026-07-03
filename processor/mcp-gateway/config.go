@@ -44,10 +44,12 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// DefaultConfig returns the default MCP gateway configuration.
+// DefaultConfig returns the default MCP gateway configuration. The timeout is
+// generous because a fused query traverses the graph (many bounded round-trips);
+// registration replies are fast, so the ceiling is harmless there.
 func DefaultConfig() Config {
 	return Config{
 		MCPPath:          "/mcp",
-		RequestTimeoutMs: 10000,
+		RequestTimeoutMs: 30000,
 	}
 }
