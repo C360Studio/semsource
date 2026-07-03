@@ -243,7 +243,7 @@ Not a gap — a positive. semsource added a `--pprof-port` flag (blank-import `n
 
 ## Semantic tiers (ADR-0002 / model registry)
 
-### 13. `graph-embedding` has no asymmetric query/document embedding — framework-shaped — candidate
+### 13. `graph-embedding` has no asymmetric query/document embedding — framework-shaped — filed [semstreams#438](https://github.com/C360Studio/semstreams/issues/438)
 The HTTP embedder (`graph/embedding/http_embedder.go`) exposes a single
 `Generate(ctx, texts)` and both ingest (documents) and `graph.query.semantic`
 (the query) go through it identically — there is no query-side instruction
