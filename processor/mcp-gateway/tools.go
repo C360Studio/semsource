@@ -94,18 +94,23 @@ func (c *Component) removeSource(ctx context.Context, _ *mcp.CallToolRequest, in
 	return textResult(resp), nil, nil
 }
 
-// readinessNote warns callers that ingest phase precedes query-index
-// completeness on a large one-shot ingest (semstreams#431).
-const readinessNote = "phase can report 'ready' before the byName/search indexes finish " +
-	"populating on a large one-shot ingest (semstreams#431). If code_context / code_impact / " +
-	"code_search misses a symbol you expect, poll source_status until index.ready is true AND " +
-	"total_entities has stopped climbing, then retry — a miss during that window may be the index " +
-	"still building, not a genuine absence."
+// readinessNote explains the honest, caught-up readiness signals (semstreams
+// beta.128 / ADR-066, gh#431). `ready` now means the index has caught up to the
+// latest committed write — not merely "indexing started" — so the pre-beta.128
+// "poll until total_entities stops climbing" workaround is retired.
+const readinessNote = "readiness is honest (semstreams ADR-066): index.ready means the structural " +
+	"index (NAME_INDEX) has caught up to the latest committed write — byName / code_context / " +
+	"code_impact are reliable. embedding.ready means the semantic pipeline has caught up — code_search " +
+	"is reliable (surfaced, not gated). A miss once the relevant signal is ready is a genuine absence, " +
+	"not a build-window lag. For exact read-your-write freshness, compare the numeric indexed_revision " +
+	"field against your write's revision."
 
-// sourceStatus reports graph readiness. It merges TWO distinct signals so a
-// caller isn't misled by either alone: the source-manifest ingest phase
-// (graph.query.status: phase + per-source counts + total_entities) and the
-// graph-index NAME_INDEX readiness (graph.index.query.status: ready/state).
+// sourceStatus reports graph readiness. It merges THREE honest signals (ADR-066)
+// so a caller isn't misled by any alone: the source-manifest ingest phase
+// (graph.query.status: phase + per-source counts + total_entities), the
+// graph-index structural readiness (graph.index.query.status: caught-up
+// Ready/Lag/State), and the graph-embedding semantic readiness
+// (graph.embedding.query.status — surfaced, not gated).
 func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ SourceStatusInput) (*mcp.CallToolResult, any, error) {
 	statusResp, err := c.request(ctx, "graph.query.status", nil)
 	if err != nil {
@@ -115,10 +120,16 @@ func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ 
 		"status": json.RawMessage(statusResp),
 		"note":   readinessNote,
 	}
-	// Best-effort: the graph-index's own NAME_INDEX readiness, distinct from the
-	// ingest phase. Omitted (not fatal) if the index status is unavailable.
+	// Best-effort: the graph-index's own structural (NAME_INDEX) readiness,
+	// distinct from the ingest phase. Omitted (not fatal) if unavailable.
 	if idxResp, idxErr := c.request(ctx, "graph.index.query.status", nil); idxErr == nil && len(idxResp) > 0 {
 		out["index"] = json.RawMessage(idxResp)
+	}
+	// Best-effort: graph-embedding's caught-up readiness, gating code_search
+	// reliability. Surfaced, not gated (ADR-066 §3 — no consumer gates on
+	// embedding.ready until it's proven). Omitted if unavailable.
+	if embResp, embErr := c.request(ctx, "graph.embedding.query.status", nil); embErr == nil && len(embResp) > 0 {
+		out["embedding"] = json.RawMessage(embResp)
 	}
 	data, err := json.Marshal(out)
 	if err != nil {

@@ -70,9 +70,11 @@ func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 	}
 }
 
-// TestIntegration_SourceStatusMergesSignals proves source_status merges the two
-// readiness signals — the source-manifest ingest status (graph.query.status) and
-// the graph-index NAME_INDEX readiness (graph.index.query.status) — plus the note.
+// TestIntegration_SourceStatusMergesSignals proves source_status merges the three
+// honest readiness signals (ADR-066) — the source-manifest ingest status
+// (graph.query.status), the graph-index structural readiness
+// (graph.index.query.status), and the graph-embedding semantic readiness
+// (graph.embedding.query.status) — plus the note.
 func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	ctx := context.Background()
 	tc := natsclient.NewTestClient(t)
@@ -95,6 +97,15 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sub2.Unsubscribe() })
 
+	sub3, err := tc.Client.SubscribeForRequests(ctx, "graph.embedding.query.status",
+		func(_ context.Context, _ []byte) ([]byte, error) {
+			return []byte(`{"ready":true,"state":"ready"}`), nil
+		})
+	if err != nil {
+		t.Fatalf("subscribe embedding status: %v", err)
+	}
+	t.Cleanup(func() { _ = sub3.Unsubscribe() })
+
 	c := &Component{
 		name:   "mcp-gateway",
 		config: Config{Namespace: "ss", RequestTimeoutMs: 3000},
@@ -111,9 +122,10 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	body := res.Content[0].(*mcp.TextContent).Text
 
 	var merged struct {
-		Status json.RawMessage `json:"status"`
-		Index  json.RawMessage `json:"index"`
-		Note   string          `json:"note"`
+		Status    json.RawMessage `json:"status"`
+		Index     json.RawMessage `json:"index"`
+		Embedding json.RawMessage `json:"embedding"`
+		Note      string          `json:"note"`
 	}
 	if err := json.Unmarshal([]byte(body), &merged); err != nil {
 		t.Fatalf("decode merged status: %v; body=%s", err, body)
@@ -123,6 +135,9 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	}
 	if !strings.Contains(string(merged.Index), `"state":"building"`) {
 		t.Errorf("index signal missing: %s", merged.Index)
+	}
+	if !strings.Contains(string(merged.Embedding), `"state":"ready"`) {
+		t.Errorf("embedding signal missing: %s", merged.Embedding)
 	}
 	if merged.Note == "" {
 		t.Error("readiness note missing")
