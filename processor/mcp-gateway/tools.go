@@ -94,14 +94,37 @@ func (c *Component) removeSource(ctx context.Context, _ *mcp.CallToolRequest, in
 	return textResult(resp), nil, nil
 }
 
-// sourceStatus returns the graph readiness/status an agent gates on before
-// querying (graph.query.status → phase). No arguments.
+// readinessNote warns callers that ingest phase precedes query-index
+// completeness on a large one-shot ingest (semstreams#431).
+const readinessNote = "phase can report 'ready' before the byName/search indexes finish " +
+	"populating on a large one-shot ingest (semstreams#431). If code_context / code_impact / " +
+	"code_search misses a symbol you expect, poll source_status until index.ready is true AND " +
+	"total_entities has stopped climbing, then retry — a miss during that window may be the index " +
+	"still building, not a genuine absence."
+
+// sourceStatus reports graph readiness. It merges TWO distinct signals so a
+// caller isn't misled by either alone: the source-manifest ingest phase
+// (graph.query.status: phase + per-source counts + total_entities) and the
+// graph-index NAME_INDEX readiness (graph.index.query.status: ready/state).
 func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ SourceStatusInput) (*mcp.CallToolResult, any, error) {
-	resp, err := c.request(ctx, "graph.query.status", nil)
+	statusResp, err := c.request(ctx, "graph.query.status", nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("status request failed: %w", err)
 	}
-	return textResult(resp), nil, nil
+	out := map[string]any{
+		"status": json.RawMessage(statusResp),
+		"note":   readinessNote,
+	}
+	// Best-effort: the graph-index's own NAME_INDEX readiness, distinct from the
+	// ingest phase. Omitted (not fatal) if the index status is unavailable.
+	if idxResp, idxErr := c.request(ctx, "graph.index.query.status", nil); idxErr == nil && len(idxResp) > 0 {
+		out["index"] = json.RawMessage(idxResp)
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal status: %w", err)
+	}
+	return textResult(data), nil, nil
 }
 
 // textResult wraps raw JSON bytes as the tool's text content.

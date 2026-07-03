@@ -69,3 +69,62 @@ func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 		t.Fatalf("reply missing the spawned component handle: %s", text)
 	}
 }
+
+// TestIntegration_SourceStatusMergesSignals proves source_status merges the two
+// readiness signals — the source-manifest ingest status (graph.query.status) and
+// the graph-index NAME_INDEX readiness (graph.index.query.status) — plus the note.
+func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
+	ctx := context.Background()
+	tc := natsclient.NewTestClient(t)
+
+	sub1, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status",
+		func(_ context.Context, _ []byte) ([]byte, error) {
+			return []byte(`{"namespace":"ss","phase":"ready","total_entities":42}`), nil
+		})
+	if err != nil {
+		t.Fatalf("subscribe status: %v", err)
+	}
+	t.Cleanup(func() { _ = sub1.Unsubscribe() })
+
+	sub2, err := tc.Client.SubscribeForRequests(ctx, "graph.index.query.status",
+		func(_ context.Context, _ []byte) ([]byte, error) {
+			return []byte(`{"ready":false,"state":"building"}`), nil
+		})
+	if err != nil {
+		t.Fatalf("subscribe index status: %v", err)
+	}
+	t.Cleanup(func() { _ = sub2.Unsubscribe() })
+
+	c := &Component{
+		name:   "mcp-gateway",
+		config: Config{Namespace: "ss", RequestTimeoutMs: 3000},
+		client: tc.Client,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	c.server = c.buildServer()
+	cs := connect(t, c)
+
+	res := callTool(t, cs, "source_status", map[string]any{})
+	if res.IsError {
+		t.Fatalf("source_status errored: %+v", res)
+	}
+	body := res.Content[0].(*mcp.TextContent).Text
+
+	var merged struct {
+		Status json.RawMessage `json:"status"`
+		Index  json.RawMessage `json:"index"`
+		Note   string          `json:"note"`
+	}
+	if err := json.Unmarshal([]byte(body), &merged); err != nil {
+		t.Fatalf("decode merged status: %v; body=%s", err, body)
+	}
+	if !strings.Contains(string(merged.Status), `"phase":"ready"`) {
+		t.Errorf("status signal missing: %s", merged.Status)
+	}
+	if !strings.Contains(string(merged.Index), `"state":"building"`) {
+		t.Errorf("index signal missing: %s", merged.Index)
+	}
+	if merged.Note == "" {
+		t.Error("readiness note missing")
+	}
+}
