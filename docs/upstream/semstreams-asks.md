@@ -240,3 +240,37 @@ because of it). **Surfaced by:** the same dogfood; byName coverage measured over
 Not a gap — a positive. semsource added a `--pprof-port` flag (blank-import `net/http/pprof` +
 `service.MaybeStartPProf`); the pprof HTTP server came up and produced the profile that found
 #10. This is believed to be the first hard use of that helper "as a service" — it works.
+
+## Semantic tiers (ADR-0002 / model registry)
+
+### 13. `graph-embedding` has no asymmetric query/document embedding — framework-shaped — filed [semstreams#438](https://github.com/C360Studio/semstreams/issues/438)
+The HTTP embedder (`graph/embedding/http_embedder.go`) exposes a single
+`Generate(ctx, texts)` and both ingest (documents) and `graph.query.semantic`
+(the query) go through it identically — there is no query-side instruction
+prefix / `EmbedQuery` path. The dominant open-weight retrieval embedders
+(Snowflake **arctic-embed**, **BGE**, **E5**) are trained *asymmetrically*: the
+query must be prefixed (arctic/E5: `"Represent this sentence for searching
+relevant passages: "`; BGE has its own) while documents are embedded raw.
+Omitting the query prefix is a well-known quality cliff, not a rounding error.
+
+**Measured** (semsource dogfood, tier-1 wired to semembed `arctic-embed-s`,
+21,648 entities, embeddings complete: `embeddings_generated_total=8096`,
+`content_resolved_total=7320`, `errors_total=0`): direct cosine of the query
+*"retry with backoff"* against a relevant `retry.Do` body vs a noise `const`:
+
+| query embedding | cos(relevant) | cos(noise) | margin |
+|-----------------|---------------|------------|--------|
+| **no prefix** (current) | 0.8162 | 0.7264 | **+0.090** |
+| **with arctic prefix** | 0.6527 | 0.4947 | **+0.158** |
+
+The prefix **~doubles the relevant-vs-noise margin (+0.090 → +0.158, +76%)**.
+Live `code_search` at tier 1 (no prefix) confirmed the symptom: short generic
+entities (`const`/`var`) crowd out the correct hit, and results *degrade* as
+more entities embed — so as-wired tier-1 semantic search underperforms tier-0
+BM25 on these queries. **Fix direction (semstreams):** let the embedder (or
+`graph-query`'s semantic path) apply a configurable per-model query instruction
+— e.g. `EndpointConfig.query_prefix`, or an `EmbedQuery` distinct from `Embed`
+that graph-query calls. Until then, tier-1 quality is capped regardless of
+model size. **Surfaced by:** wiring the http embedder (semsource task #35).
+Product-side note: even with the prefix, a 33M general model discriminates code
+weakly — a code-specialized or larger embedder is the complementary lever.

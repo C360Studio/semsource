@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/c360studio/semstreams/model"
 )
 
 // ModeStandalone is the sole supported operation mode: semsource runs the full
@@ -45,6 +47,20 @@ type GraphConfig struct {
 	// semstreams default (1), which is a throughput bottleneck for large one-shot
 	// ingests (indexing a whole dependency) — raise it to parallelize index build.
 	IndexWorkers int `json:"index_workers,omitempty"`
+
+	// EnableClustering wires the graph-clustering component (LPA community
+	// detection over ENTITY_STATES → COMMUNITY_INDEX), lighting up the
+	// already-declared local/global/summary query routes (tier 2). Off by
+	// default: without it those routes return empty. Pure-Go LPA needs no
+	// external service; LLM community summaries additionally require
+	// ClusteringLLM + a model_registry "community_summary" capability.
+	EnableClustering bool `json:"enable_clustering,omitempty"`
+
+	// ClusteringLLM turns on LLM-based community summarization in
+	// graph-clustering (GraphRAG summaries). Requires EnableClustering and a
+	// model_registry with a "community_summary" capability (→ seminstruct).
+	// Ignored when EnableClustering is false.
+	ClusteringLLM bool `json:"clustering_llm,omitempty"`
 }
 
 // MetricsConfig configures the Prometheus metrics endpoint.
@@ -121,6 +137,15 @@ type Config struct {
 	// Graph configures graph subsystem components.
 	Graph *GraphConfig `json:"graph,omitempty"`
 
+	// ModelRegistry is the semstreams unified model-endpoint registry, passed
+	// straight through to the ServiceManager (ssCfg.ModelRegistry) so
+	// graph-embedding's HTTP embedder (tier 1, semembed) and graph-clustering's
+	// LLM summarizer (tier 2, seminstruct) can resolve their endpoints by
+	// capability ("embedding" / "community_summary"). Reuses the semstreams
+	// model.Registry type directly — no bespoke shape. Nil = tier 0 (BM25), no
+	// external model services. See configs/tiers/ and docs.
+	ModelRegistry *model.Registry `json:"model_registry,omitempty"`
+
 	// Metrics configures the Prometheus metrics endpoint.
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
 
@@ -194,5 +219,66 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	return c.validateModelRegistry()
+}
+
+// validateModelRegistry checks the optional model registry and the tier wiring
+// that depends on it, failing fast at load time (before any component starts)
+// rather than letting graph-embedding/graph-clustering degrade silently at
+// runtime. The registry itself is validated by semstreams; here we additionally
+// enforce that a selected tier has the capability it needs to resolve.
+func (c *Config) validateModelRegistry() error {
+	if c.ModelRegistry != nil {
+		if err := c.ModelRegistry.Validate(); err != nil {
+			return fmt.Errorf("config: model_registry: %w", err)
+		}
+	}
+
+	var embedderType string
+	var clusteringLLM bool
+	if c.Graph != nil {
+		embedderType = c.Graph.EmbedderType
+		clusteringLLM = c.Graph.EnableClustering && c.Graph.ClusteringLLM
+	}
+
+	// Tier 1: the HTTP embedder resolves the "embedding" capability at startup;
+	// without a registry that provides it, graph-embedding cannot start.
+	if embedderType == "http" {
+		if err := requireCapability(c.ModelRegistry, model.CapabilityEmbedding,
+			`graph.embedder_type "http" (tier 1) needs a model_registry with an "embedding" capability (→ semembed)`); err != nil {
+			return err
+		}
+	}
+
+	// Tier 2: LLM community summaries resolve "community_summary" (→ seminstruct).
+	if clusteringLLM {
+		if err := requireCapability(c.ModelRegistry, model.CapabilityCommunitySummary,
+			`graph.clustering_llm (tier 2) needs a model_registry with a "community_summary" capability (→ seminstruct)`); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// requireCapability fails unless the registry EXPLICITLY declares capability.
+// We require an explicit capability rather than accepting reg.Resolve's
+// fallback to defaults.model: that fallback would silently route, say,
+// community_summary to the embedding endpoint (defaults.model is typically the
+// embedder), which starts cleanly and then produces garbage. Demanding the
+// operator declare the capability is the honest fail-fast. GetCapability!=nil
+// already implies a non-empty Preferred list with existing endpoints (semstreams
+// Registry.Validate ran first), so resolution is guaranteed to succeed.
+func requireCapability(reg *model.Registry, capability, hint string) error {
+	if reg == nil {
+		return fmt.Errorf("config: %s, but none is configured", hint)
+	}
+	if reg.GetCapability(capability) == nil {
+		return fmt.Errorf("config: %s — the registry declares no %q capability", hint, capability)
+	}
+	name := reg.Resolve(capability)
+	if name == "" || reg.GetEndpoint(name) == nil {
+		return fmt.Errorf("config: %s — %q resolves to no endpoint", hint, capability)
+	}
 	return nil
 }
