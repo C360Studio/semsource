@@ -106,30 +106,60 @@ semsource remove --index 2
 
 ## Docker Compose
 
-Run the local stack with bundled NATS, SemSource, Caddy, and the monitoring dashboard:
+The compose file ships two profiles. The default is the **MVP core** — everything you need for a
+working, semantically-searchable graph in one command, with no sibling repo required.
+
+### MVP core (default) — tier-1 semantic search out of the box
 
 ```bash
 docker compose up
 ```
 
-This starts:
+Brings up three services and indexes the current directory (`SEMSOURCE_TARGET`, default `.`):
+
+| Service | Port | Description |
+|---------|------|-------------|
+| SemSource | `localhost:8080` | Ingest + ServiceManager HTTP API **+ MCP gateway** (published to host) |
+| semembed | internal `:8081` | OpenAI-compatible embeddings (tier-1 semantic search) |
+| NATS | internal `:4222` | JetStream and KV substrate |
+
+SemSource runs on [`configs/mvp.json`](configs/mvp.json) — `embedder_type: http` wired to semembed, so
+`code_search` is true semantic (paraphrase-robust) from the first index, not just BM25. Point an agent at
+the MCP gateway:
+
+| URL | Description |
+|-----|-------------|
+| `http://localhost:8080/mcp-gateway/mcp` | MCP gateway — add this to Claude Code / your agent |
+| `http://localhost:8080/source-manifest/status` | Readiness/status (poll until `phase: ready`) |
+| `http://localhost:8080/source-manifest/sources` | Configured source manifest |
+
+> **First-index note:** semembed embedding is CPU-heavy on the initial pass (arctic-embed-s / ONNX). The
+> compose caps it at `SEMEMBED_CPUS` (default `2`) for local dev — raise it on a server. Structural
+> queries (`code_context`/`callers`/`impact`/`byName`) are ready before embeddings finish; poll
+> `source-manifest/status` for `index.ready` / `embedding.ready`. See
+> [`configs/tiers/README.md`](configs/tiers/README.md).
+
+### UI profile — add the monitoring dashboard
+
+```bash
+docker compose --profile ui up
+```
+
+Layers the SemStreams UI dashboard and a Caddy reverse proxy on top of the core. **Requires the
+`../semstreams-ui` repo checked out** (`UI_CONTEXT`).
 
 | Service | Port | Description |
 |---------|------|-------------|
 | Caddy | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and legacy `/graph` |
-| NATS | internal `:4222` | JetStream and KV substrate |
-| SemSource | internal `:7890`, `:8080`, `:8082`, `:9091` | Ingest, ServiceManager, GraphQL, metrics |
 | SemStreams UI | internal `:5173` | Monitoring dashboard |
 
-Useful local endpoints:
+Useful ui-profile endpoints (via Caddy on `:3000`):
 
 | URL | Description |
 |-----|-------------|
 | `http://localhost:3000` | SemStreams UI |
 | `http://localhost:3000/graphql` | GraphQL gateway |
 | `http://localhost:3000/source-manifest/status` | SemSource readiness/status |
-| `http://localhost:3000/source-manifest/sources` | Configured source manifest |
-| `http://localhost:3000/source-manifest/predicates` | Predicate schema by source type |
 | `ws://localhost:3000/graph` | Legacy raw GRAPH stream export |
 
 ### Configuration
@@ -137,31 +167,46 @@ Useful local endpoints:
 Set these in `.env` or pass as environment variables:
 
 ```bash
-SEMSOURCE_CONFIG=semsource.json   # Config file in configs/ (default: semsource.json)
+SEMSOURCE_CONFIG=mvp.json         # Config file in configs/ (default: mvp.json — tier-1)
 SEMSOURCE_TARGET=.                # Directory to mount as /workspace for ingestion
+SEMSOURCE_HTTP_PORT=8080          # Host port for the SemSource HTTP API + MCP gateway
+SEMEMBED_MODEL=Snowflake/snowflake-arctic-embed-s   # Embedding model
+SEMEMBED_CPUS=2                   # CPU cap for semembed (raise on a server)
 NATS_URL=nats://nats:4222         # NATS URL seen by the SemSource container
 LOG_LEVEL=info                    # Log level: debug, info, warn, error
-C360_PORT=3000                    # External port for Caddy
-UI_CONTEXT=../semstreams-ui       # Path to semstreams-ui repo
+C360_PORT=3000                    # External port for Caddy (ui profile)
+UI_CONTEXT=../semstreams-ui       # Path to semstreams-ui repo (ui profile)
 ```
 
-NATS is required because SemSource runs on the SemStreams ServiceManager and uses JetStream/KV for
-graph state, ownership, and query indices. Outside Docker, SemSource defaults to
-`nats://localhost:4222`; override it with `--nats-url` or `NATS_URL`.
+Set `SEMSOURCE_CONFIG=tier0-statistical.json` to run without semembed (BM25 keyword search only); the
+`semembed` container still starts but the embedder ignores it. NATS is required because SemSource runs on
+the SemStreams ServiceManager and uses JetStream/KV for graph state, ownership, and query indices.
+Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.
 
 ### Port Map
 
-Ports are chosen to avoid clashes when running alongside other SemStreams services:
-
 | Port | Service | Notes |
 |------|---------|-------|
-| 3000 | Caddy entry point | UI, GraphQL, source-manifest APIs, legacy `/graph` |
+| 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile |
+| 8081 | semembed embeddings | Internal Docker network |
 | 4222 | NATS | Internal Docker network by default |
+| 3000 | Caddy entry point | ui profile: UI, GraphQL, source-manifest APIs, legacy `/graph` |
 | 7890 | SemSource WebSocket | Internal legacy raw stream export |
-| 8080 | ServiceManager HTTP API | Internal, proxied under `/source-manifest/*` |
-| 8082 | GraphQL gateway | Internal, proxied at `/graphql` |
-| 9091 | Prometheus metrics | Internal, proxied at `/metrics` |
-| 5173 | SemStreams UI (Vite) | Internal, proxied via `/*` |
+| 8082 | GraphQL gateway | Internal, proxied at `/graphql` (ui profile) |
+| 9091 | Prometheus metrics | Internal, proxied at `/metrics` (ui profile) |
+| 5173 | SemStreams UI (Vite) | Internal, proxied via `/*` (ui profile) |
+
+### Connect an agent (MCP)
+
+Once the stack is up, point Claude Code (or any MCP client) at the gateway:
+
+```bash
+claude mcp add --transport http semsource http://localhost:8080/mcp-gateway/mcp
+```
+
+This is the product surface — the agent then queries the graph with `code_context`, `code_search`,
+`code_impact`, and `doc_context` instead of grepping. Full walkthrough (auth, readiness gating, tool
+cheat-sheet): [docs/integration/mcp-quickstart.md](docs/integration/mcp-quickstart.md).
 
 ## Config File
 
