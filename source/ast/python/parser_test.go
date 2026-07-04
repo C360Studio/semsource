@@ -206,22 +206,32 @@ class Dog(Animal):
 		t.Fatalf("ParseFile: %v", err)
 	}
 
-	var dogClass *ast.CodeEntity
+	var dogClass, animalClass *ast.CodeEntity
 	for _, e := range result.Entities {
-		if e.Type == ast.TypeClass && e.Name == "Dog" {
+		if e.Type != ast.TypeClass {
+			continue
+		}
+		switch e.Name {
+		case "Dog":
 			dogClass = e
-			break
+		case "Animal":
+			animalClass = e
 		}
 	}
-	if dogClass == nil {
-		t.Fatal("Dog class not found")
+	if dogClass == nil || animalClass == nil {
+		t.Fatalf("classes not found: dog=%v animal=%v", dogClass != nil, animalClass != nil)
 	}
 
 	if len(dogClass.Extends) != 1 {
-		t.Errorf("Extends count = %d, want 1", len(dogClass.Extends))
+		t.Fatalf("Extends count = %d, want 1", len(dogClass.Extends))
 	}
-	if len(dogClass.Extends) > 0 && !strings.Contains(dogClass.Extends[0], "Animal") {
-		t.Errorf("Extends[0] = %q, want to contain 'Animal'", dogClass.Extends[0])
+	// End-to-end parity (task #43): the extends edge target must EQUAL the base
+	// class's own entity id, not merely contain its name. The old ".type."-segment
+	// bug produced an id that still contained "Animal" — so a substring check
+	// passed against the dangling edge. Assert exact equality so the edge actually
+	// resolves in the graph.
+	if dogClass.Extends[0] != animalClass.ID {
+		t.Errorf("Extends[0] = %q, want %q (the Animal class id)", dogClass.Extends[0], animalClass.ID)
 	}
 }
 

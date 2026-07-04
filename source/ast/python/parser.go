@@ -606,6 +606,9 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// reference edge dangled and code_impact/relations saw nothing (task #43).
 	// Cross-file references still need import resolution — the referrer's filePath
 	// is used, so a base class defined in another module remains unresolved.
+	// Bare local names are resolved class-only (a class is the only resolvable
+	// same-file target); a non-class name — a local TypeVar/alias — yields an inert
+	// dangling id the engine simply drops.
 	return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, typeName, filePath).ID
 }
 

@@ -44,13 +44,22 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 }
 
 // Edges are the code relationships to expand: calls, containment, and the type
-// dependency edges (extends/implements/references). The incoming (reverse)
-// direction of the dependency edges is what makes code_impact a real
-// reverse-dependency closure for types — a class's blast radius is its subclasses
-// (extended_by), an interface's is its implementers (implemented_by), a type's is
-// its referrers (referenced_by). Without these, impact only saw call graphs and
-// returned just the seed for a class/interface (languages whose parser emits
-// inheritance/reference edges but no call edges — e.g. Python — got empty impact).
+// dependency edges (extends/implements/references). computeImpact BFSes the
+// incoming (reverse) direction of every predicate here, so adding the dependency
+// edges lets code_impact and the relations facet surface a type's dependents —
+// subclasses (extended_by), implementers (implemented_by), referrers
+// (referenced_by) — instead of only its structural container chain. Before this,
+// a class's impact held only its containers (file/folder/repo), never dependents.
+//
+// Two caveats:
+//   - Impact also walks incoming CodeContains, so the impact *count* still mixes
+//     containment ancestry with real dependents — it is not a pure dependency
+//     closure. Separating impact edges from relation edges needs a fusion-engine
+//     change (this one list drives impact, paths, AND relations) — semstreams ask.
+//   - Dependency edges only resolve where the parser builds matching target ids.
+//     That holds for Python (task #43); Java/TS/Go reference-id parity is a
+//     separate per-language follow-up, so their targets may still dangle (inert —
+//     the engine drops unresolved targets, so no wrong output, just no dependents).
 func (*Lens) Edges() []fusion.EdgeSpec {
 	return []fusion.EdgeSpec{
 		{Predicate: ast.CodeCalls, OutgoingRole: "callee", IncomingRole: "caller"},

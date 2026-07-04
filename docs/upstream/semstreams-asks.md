@@ -362,3 +362,20 @@ per-lens embedding namespace. **Product half is ours** (choosing/wiring the scop
 lens once the hook exists). **Not MVP-blocking:** `code_search` retrieves docs well and
 `doc_context` is accurate when docs aren't drowned; this bites only mixed code+doc
 corpora. **Surfaced by:** Tier A #3 / B #4 live validation (Python repo + docs).
+
+### 17. Per-facet edge selection for the fusion engine (impact ≠ relations) — framework-shaped — candidate
+`fusion.Lens.Edges()` returns ONE `[]EdgeSpec` list the engine uses for THREE facets:
+`computeImpact` (incoming BFS), `computePaths` (outgoing DFS), and the `relations` map
+on each node. A lens cannot say "walk this edge for relations but not for impact."
+Concretely: semsource's code lens must include `CodeContains` (file→symbol) so
+`code_context` shows a symbol's container/contents — but that same edge then pollutes
+`code_impact`, whose incoming-contains walk pulls every dependent's file→folder→repo
+into the blast radius. So the impact *count* mixes structural containment ancestry with
+real reverse-dependents (measured: httpx `BaseClient` impact = 5 = 2 subclasses + 3
+containers). **Fix directions:** (1) an optional per-`EdgeSpec` facet mask (e.g.
+`Facets: impact|paths|relations`) so a spec opts out of the impact/paths walk; (2)
+separate `ImpactEdges()`/`RelationEdges()` lens methods; (3) engine treats containment
+predicates specially. **Not MVP-blocking:** impact is directionally useful and bounded
+(`maxImpactNodes`); the count is just noisier than a pure dependency closure.
+**Surfaced by:** task #43 adversarial review (adding type-dependency edges made the
+containment compounding visible).

@@ -125,9 +125,8 @@ func TestCodeLensViaEngine(t *testing.T) {
 // on a type must surface its subclasses (extends), implementers (implements), and
 // referrers (references), and code_context must expose those reverse roles in
 // Relations. Before these edges were added to Edges(), impact walked only calls +
-// containment, so a class/interface returned just itself — and a language whose
-// parser emits inheritance/reference edges but no call edges (Python) got an empty
-// impact closure entirely.
+// containment, so a class's closure held only its structural containers (file/
+// folder/repo), never its semantic dependents.
 func TestCodeLens_ImpactWalksTypeDependencies(t *testing.T) {
 	g := fusiontest.NewMemGraph()
 
