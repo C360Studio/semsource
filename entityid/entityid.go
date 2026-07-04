@@ -113,6 +113,51 @@ func BranchScopedSlug(systemSlug, branchSlug string) string {
 	return systemSlug + "-" + branchSlug
 }
 
+// VersionScopedSlug appends a version qualifier to a system slug with a hyphen
+// separator so the combined string remains a single graph-ingest segment
+// (matching [a-zA-Z0-9_-]). Returns the unmodified slug when versionSlug is
+// empty (version-independent entities, backward compatible). The caller is
+// responsible for pre-slugging both arguments via SystemSlug — the same
+// contract as BranchScopedSlug.
+//
+// Example:
+//
+//	VersionScopedSlug("semstreams", "v1-9-0")
+//	  → "semstreams-v1-9-0"
+//	VersionScopedSlug("semstreams", "")
+//	  → "semstreams"
+func VersionScopedSlug(systemSlug, versionSlug string) string {
+	if versionSlug == "" {
+		return systemSlug
+	}
+	return systemSlug + "-" + versionSlug
+}
+
+// ScopedSystemSlug is the single canonical helper for computing the system
+// segment when a version qualifier is involved. It applies SystemSlug to both
+// inputs, joins them via VersionScopedSlug, and then applies SystemSlug a
+// final time. That final pass enforces the ≤80-char cap and makes the result
+// idempotent under SystemSlug.
+//
+// Idempotency is the critical safety property: code paths that call
+// SystemSlug(ScopedSystemSlug(p, v)) and paths that use the result raw both
+// produce the same string, eliminating the risk of dangling edges between a
+// defined symbol (system = SystemSlug applied) and a referenced symbol (system
+// = raw project arg).
+//
+// When version is empty the result equals SystemSlug(project), preserving
+// existing IDs byte-for-byte for clean projects.
+//
+// Example:
+//
+//	ScopedSystemSlug("semstreams", "v1.9.0")
+//	  → "semstreams-v1-9-0"
+//	ScopedSystemSlug("semstreams", "")
+//	  → "semstreams"
+func ScopedSystemSlug(project, version string) string {
+	return SystemSlug(VersionScopedSlug(SystemSlug(project), SystemSlug(version)))
+}
+
 // CanonicalizeURL normalizes a URL for use in deterministic entity ID construction.
 // Rules applied:
 //   - Lowercase scheme and host
