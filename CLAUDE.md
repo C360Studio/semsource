@@ -8,6 +8,34 @@ SemSource is a graph-first knowledge ingestion service for the SemStream platfor
 
 Part of the Complete 360 Studio ecosystem. MIT licensed.
 
+## Spec-driven development (OpenSpec)
+
+SemSource uses **OpenSpec** for non-trivial work. The CLI and Claude integration
+are installed — slash commands `/opsx:new`, `/opsx:continue`, `/opsx:apply`,
+`/opsx:verify`, `/opsx:archive` (and the backing `openspec-*` skills); plus
+`openspec list` / `openspec validate`. Three homes, three jobs — put a thing in
+the right one:
+
+| Home | Holds | Drifts? |
+|------|-------|---------|
+| `openspec/specs/<capability>/spec.md` | **Current truth** — what a capability does *today* (`Requirement` + `GIVEN/WHEN/THEN`) | No — every change edits it via a delta |
+| `openspec/changes/<id>/` | **Proposed target state** — `proposal.md` + `tasks.md` + spec deltas; archived on completion | Resolves on archive |
+| `docs/adr/` | **Genuine decisions only** — irreversible choices + cross-repo contracts (the *why*) | No — history |
+
+Rules of the road:
+
+- **Non-trivial or cross-cutting work starts with a change** (`/opsx:new`):
+  proposal + tasks + spec deltas *before* code. Small mechanical fixes don't need one.
+- **Specs are seeded lazily** — write a capability's spec when a change first
+  touches it, distilled from code + existing docs and **verified against code**.
+  Do NOT backfill; an unverified spec is just another drifting doc.
+- **ADRs are pure decision records** — record an irreversible/cross-repo decision
+  as a one-page ADR; the *mechanics* it implies live in the capability's spec.
+- **Read `openspec/project.md` first** when scoping anything — it carries the
+  Purpose and the **Product Boundary** (SemSource owns source ingestion, not the
+  SemStreams substrate). `openspec/config.yaml` carries the context + per-artifact
+  rules shown to the tool.
+
 ## Technology
 
 - **Language:** Go
