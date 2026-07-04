@@ -1,21 +1,31 @@
 # C360 SemSource Stack
 #
-# Runs semsource (governed graph ingestion), NATS, semstreams-ui
-# (monitoring dashboard), and Caddy (reverse proxy).
+# Two ways to run:
+#
+#   docker compose up                 # MVP CORE — NATS + semsource + semembed (tier-1
+#                                     #   semantic search out of the box). No sibling repo
+#                                     #   needed. semsource HTTP/MCP published on :8080.
+#   docker compose --profile ui up    # + semstreams-ui dashboard + Caddy reverse proxy
+#                                     #   (requires the ../semstreams-ui repo checked out).
+#
+# The core profile is the shippable MVP: point an agent at the MCP gateway and query.
+# The `ui` profile layers the monitoring dashboard on top for local operators.
 #
 # Port map:
-#   3000  — Caddy entry point (UI, GraphQL, status APIs, legacy graph WebSocket)
+#   8080  — semsource ServiceManager HTTP API + MCP gateway (PUBLISHED in core profile)
 #   4222  — NATS JetStream/KV (internal Docker network)
-#   7890  — semsource legacy graph WebSocket (internal, proxied via Caddy)
-#   8080  — semsource ServiceManager HTTP API (internal, proxied via Caddy)
-#   8082  — semsource GraphQL gateway (internal, proxied via Caddy)
-#   9091  — semsource Prometheus metrics (internal, proxied via Caddy)
-#   5173  — semstreams-ui Vite dev (internal, proxied via Caddy)
+#   8081  — semembed OpenAI-compatible embeddings (internal Docker network)
+#   7890  — semsource legacy graph WebSocket (internal; proxied via Caddy in ui profile)
+#   8082  — semsource GraphQL gateway (internal; proxied via Caddy in ui profile)
+#   9091  — semsource Prometheus metrics (internal; proxied via Caddy in ui profile)
+#   5173  — semstreams-ui Vite dev (ui profile; proxied via Caddy)
+#   3000  — Caddy entry point (ui profile: UI, GraphQL, status APIs, legacy graph WebSocket)
 #
-# Usage:
-#   docker compose up
+# Core-profile access:
+#   http://localhost:8080/mcp-gateway/mcp         — MCP gateway (point Claude Code / an agent here)
+#   http://localhost:8080/source-manifest/status  — SemSource readiness/status
 #
-# Access:
+# ui-profile access (adds Caddy on :3000):
 #   http://localhost:3000                         — SemStreams UI dashboard
 #   http://localhost:3000/graphql                 — GraphQL gateway
 #   http://localhost:3000/source-manifest/status  — SemSource readiness/status
@@ -28,6 +38,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: c360-semsource
+    # Publish the ServiceManager HTTP API + MCP gateway to the host so an agent can
+    # reach it directly in the core profile (no Caddy). In the ui profile Caddy also
+    # proxies it on :3000.
+    ports:
+      - "${SEMSOURCE_HTTP_PORT:-8080}:8080"
     volumes:
       - ./configs:/etc/semsource:ro
       # Mount source directories for ingestion (adjust to your project)
@@ -38,7 +53,7 @@ services:
     command:
       - run
       - --config
-      - /etc/semsource/${SEMSOURCE_CONFIG:-semsource.json}
+      - /etc/semsource/${SEMSOURCE_CONFIG:-mvp.json}
       - --log-level
       - ${LOG_LEVEL:-info}
     healthcheck:
@@ -49,12 +64,40 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      semembed:
+        condition: service_healthy
     networks:
       - c360
     restart: unless-stopped
 
-  # SemStreams UI — monitoring dashboard and flow builder
+  # semembed — OpenAI-compatible embeddings (tier-1 semantic search).
+  # Default config (configs/mvp.json) points graph.embedder_type=http at this service.
+  # First-index embedding is CPU-heavy (arctic-embed-s / ONNX fans out across cores);
+  # SEMEMBED_CPUS caps it for local dev — see configs/tiers/README.md.
+  semembed:
+    image: ghcr.io/c360studio/semembed:latest
+    container_name: c360-semembed
+    environment:
+      - SEMEMBED_PORT=8081
+      - SEMEMBED_MODEL=${SEMEMBED_MODEL:-Snowflake/snowflake-arctic-embed-s}
+    deploy:
+      resources:
+        limits:
+          cpus: "${SEMEMBED_CPUS:-2}"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    networks:
+      - c360
+    restart: unless-stopped
+
+  # SemStreams UI — monitoring dashboard and flow builder.
+  # Only runs under `--profile ui`; requires the ../semstreams-ui repo (UI_CONTEXT).
   ui:
+    profiles: ["ui"]
     build:
       context: ${UI_CONTEXT:-../semstreams-ui}
       dockerfile: Dockerfile.dev
@@ -76,8 +119,9 @@ services:
       - c360
     restart: unless-stopped
 
-  # Caddy — single entry point for the stack
+  # Caddy — single entry point for the ui-profile stack.
   caddy:
+    profiles: ["ui"]
     image: caddy:2-alpine
     container_name: c360-caddy
     depends_on:

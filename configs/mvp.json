@@ -1,0 +1,28 @@
+{
+  "namespace": "c360",
+  "sources": [
+    { "type": "ast", "path": "/workspace", "language": "go", "watch": false },
+    { "type": "docs", "paths": ["/workspace"], "watch": false },
+    { "type": "config", "paths": ["/workspace"], "watch": false }
+  ],
+  "source_roots": ["/workspace"],
+  "graph": {
+    "embedder_type": "http",
+    "index_workers": 4,
+    "coalesce_ms": 200
+  },
+  "model_registry": {
+    "endpoints": {
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "query_prefix": "Represent this sentence for searching relevant passages: "
+      }
+    },
+    "capabilities": {
+      "embedding": { "preferred": ["semembed"] }
+    },
+    "defaults": { "model": "semembed" }
+  }
+}
