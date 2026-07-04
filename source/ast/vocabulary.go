@@ -151,18 +151,28 @@ func registerRelationshipPredicates() {
 }
 
 func registerLineagePredicates() {
-	// Version lineage (ADR-0008 #2). Structural — no salience weight. supersedes /
-	// superseded_by are directional entity-ID relationships (inverse of each
-	// other); change carries the changed/unchanged classification of the pair.
+	// Version lineage (ADR-0008 #2). supersedes / superseded_by are directional
+	// entity-ID relationships (inverse of each other); change carries the
+	// changed/unchanged classification of the pair.
 	vocabulary.Register(CodeSupersedes,
 		vocabulary.WithDescription("Newer entity supersedes the older corresponding entity across versions"),
 		vocabulary.WithDataType("entity_id"),
 		vocabulary.WithIRI(CodeNamespace+"supersedes"))
 
+	// Historical demotion (ADR-0008 #3): SIGNED salience (gh#441 / beta.130).
+	// Presence of superseded_by means "a newer version of this exact symbol
+	// exists" → this entity is not the current one, so demote it below its
+	// un-superseded (current) sibling. "Current" is emergent — the version that
+	// carries NO superseded_by stays neutral and floats on top; no explicit
+	// current marker is needed. A negative weight is a bounded reorder, never an
+	// exclusion, so historical versions stay retained and queryable. -2.0 mirrors
+	// the task-#38 exported boost so a historical-but-exported symbol lands near
+	// neutral rather than below undocumented noise (tuning knob; see design D2).
 	vocabulary.Register(CodeSupersededBy,
 		vocabulary.WithDescription("Older entity is superseded by the newer corresponding entity across versions"),
 		vocabulary.WithDataType("entity_id"),
-		vocabulary.WithIRI(CodeNamespace+"supersededBy"))
+		vocabulary.WithIRI(CodeNamespace+"supersededBy"),
+		vocabulary.WithWeight(-2.0))
 
 	vocabulary.Register(CodeLineageChange,
 		vocabulary.WithDescription("Whether the symbol changed across the corresponding pair: changed or unchanged"),

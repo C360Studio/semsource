@@ -22,6 +22,9 @@ func TestPredicateSalienceWeights(t *testing.T) {
 		ast.CodeImplements:            2.0,
 		ast.CodeExported:              2.0,
 		ast.CodeSignature:             1.5,
+		// Signed salience (ADR-0008 #3): superseded_by DEMOTES historical versions
+		// below their current (un-superseded) sibling — negative on purpose.
+		ast.CodeSupersededBy: -2.0,
 	}
 	for pred, want := range weighted {
 		meta := vocabulary.GetPredicateMetadata(pred)
@@ -37,7 +40,12 @@ func TestPredicateSalienceWeights(t *testing.T) {
 	// Universal / housekeeping predicates must remain unweighted (0): weighting
 	// a predicate ~every entity carries adds a uniform boost that differentiates
 	// nothing and only dilutes the gradient.
-	for _, pred := range []string{ast.CodeType, ast.CodePath, ast.CodeHash, ast.CodeLines, ast.CodeCalls} {
+	// CodeSupersedes and CodeLineageChange are structural lineage facts, not
+	// ranking signals — only superseded_by carries a (negative) weight.
+	for _, pred := range []string{
+		ast.CodeType, ast.CodePath, ast.CodeHash, ast.CodeLines, ast.CodeCalls,
+		ast.CodeSupersedes, ast.CodeLineageChange,
+	} {
 		if meta := vocabulary.GetPredicateMetadata(pred); meta != nil && meta.Weight != 0 {
 			t.Errorf("%s: Weight = %v, want 0 (universal/housekeeping predicate)", pred, meta.Weight)
 		}
