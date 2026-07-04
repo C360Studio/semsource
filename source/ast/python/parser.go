@@ -11,7 +11,6 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/python"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -600,9 +599,17 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 		return fmt.Sprintf("external:%s", typeName)
 	}
 
-	// Local type - create entity ID within current project
-	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return entityid.Build(p.org, entityid.PlatformSemsource, "python", p.project, "type", instance)
+	// Local type — Python classes ARE the type entities, so resolve to the class
+	// entity ID built EXACTLY as the definition does (NewCodeEntity/TypeClass).
+	// The previous "type"-segment + raw-project construction matched no emitted
+	// entity (the parser never creates a TypeType entity), so every extends/
+	// reference edge dangled and code_impact/relations saw nothing (task #43).
+	// Cross-file references still need import resolution — the referrer's filePath
+	// is used, so a base class defined in another module remains unresolved.
+	// Bare local names are resolved class-only (a class is the only resolvable
+	// same-file target); a non-class name — a local TypeVar/alias — yields an inert
+	// dangling id the engine simply drops.
+	return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, typeName, filePath).ID
 }
 
 // isBuiltinType returns true if the type is a Python built-in type.
