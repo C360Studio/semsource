@@ -33,6 +33,7 @@ import (
 	imagesource "github.com/c360studio/semsource/processor/image-source"
 	mcpgateway "github.com/c360studio/semsource/processor/mcp-gateway"
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
+	"github.com/c360studio/semsource/processor/supersession"
 	urlsource "github.com/c360studio/semsource/processor/url-source"
 	videosource "github.com/c360studio/semsource/processor/video-source"
 	"github.com/c360studio/semsource/storage/filestore"
@@ -301,6 +302,7 @@ func registerSemsourceFactories(registry *component.Registry) error {
 		"source-manifest": func() error { return sourcemanifest.Register(registry) },
 		"code-context":    func() error { return codecontext.Register(registry) },
 		"mcp-gateway":     func() error { return mcpgateway.Register(registry) },
+		"supersession":    func() error { return supersession.Register(registry) },
 	} {
 		if err := fn(); err != nil {
 			return fmt.Errorf("register %s component: %w", name, err)

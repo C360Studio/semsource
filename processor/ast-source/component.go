@@ -232,7 +232,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.publishHierarchy(ctx, results, pw.config.Org, pw.scopedSystem)
 
 		for _, result := range results {
-			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
+			if err := c.publishParseResult(ctx, result, pw); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", result.Path,
 					"error", err)
@@ -360,7 +360,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 			// edges exist even for directories created between full reindexes.
 			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.scopedSystem)
 
-			if err := c.publishParseResult(ctx, event.Result, pw.root); err != nil {
+			if err := c.publishParseResult(ctx, event.Result, pw); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", event.Path,
 					"error", err)
@@ -438,7 +438,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 				c.setFileHash(result.Path, result.Hash)
 			}
 
-			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
+			if err := c.publishParseResult(ctx, result, pw); err != nil {
 				c.logger.Warn("Failed to publish parse result during reindex",
 					"path", result.Path,
 					"error", err)
@@ -514,9 +514,14 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 }
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
-func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, root string) error {
-	bodies := c.bodiesForResult(ctx, result, root)
+func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, pw *pathWatcher) error {
+	bodies := c.bodiesForResult(ctx, result, pw.root)
 	for _, entity := range result.Entities {
+		// Stamp raw source identity + version (ADR-0008 #2) so the entity's triple
+		// builder emits code.artifact.project / code.artifact.version. These come
+		// from the watch-path config; the parser only sees the folded system slug.
+		entity.Project = pw.config.Project
+		entity.Version = pw.config.Version
 		state := entity.EntityState()
 		// Zero value for a container / body-less entity: nil triples (append is a
 		// no-op) and a nil StorageRef.

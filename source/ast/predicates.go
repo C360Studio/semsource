@@ -11,6 +11,15 @@ const (
 	CodeFramework = "code.artifact.framework" // svelte, react, vue (optional)
 	CodePackage   = "code.artifact.package"   // package name
 
+	// Version scoping (ADR-0008 #2). Neither is recoverable from the entity ID:
+	// both the source identity and the version are folded into the length-capped
+	// `system` segment (entityid.ScopedSystemSlug), so correspondence across
+	// versions must key on these triples. Emitted together, only for versioned
+	// sources — a version-less source has no sibling to correspond to, so
+	// version-less entities carry neither and stay byte-identical to prior output.
+	CodeProject = "code.artifact.project" // version-independent source identity (raw project)
+	CodeVersion = "code.artifact.version" // registered version/ref qualifier (e.g. "v1.9.0")
+
 	// Classification predicates
 	CodeType       = "code.artifact.type"       // file|package|function|method|struct|interface|const|var|type
 	CodeVisibility = "code.artifact.visibility" // public|private (exported vs unexported in Go)
@@ -38,6 +47,15 @@ const (
 	CodeReturns    = "code.relationship.returns"    // function → return type
 	CodeReceiver   = "code.relationship.receiver"   // method → receiver type
 	CodeParameter  = "code.relationship.parameter"  // function → parameter type
+
+	// Version lineage (ADR-0008 #2). A distinct category from code.relationship.*
+	// (which is code-semantic) — lineage relates the SAME logical symbol across
+	// versions of one source. Supersession is directional (newer → older) and
+	// additive; the inverse is emitted for query convenience. code.lineage.change
+	// records whether the body changed across the corresponding pair.
+	CodeSupersedes    = "code.lineage.supersedes"    // newer entity → older entity it supersedes
+	CodeSupersededBy  = "code.lineage.superseded_by" // older entity → newer entity that supersedes it
+	CodeLineageChange = "code.lineage.change"        // "changed" | "unchanged" (body-hash comparison)
 
 	// Metrics
 	CodeLines      = "code.metric.lines"      // line count

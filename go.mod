@@ -3,6 +3,7 @@ module github.com/c360studio/semsource
 go 1.26.3
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/c360studio/semstreams v1.0.0-beta.132
 	github.com/fsnotify/fsnotify v1.9.0
@@ -21,7 +22,6 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/agntcy/dir/api v1.3.0 // indirect
 	github.com/agntcy/oasf-sdk/pkg v1.0.5 // indirect

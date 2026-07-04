@@ -31,6 +31,15 @@ type CodeEntity struct {
 	// Package is the Go package name (or module path for TypeScript)
 	Package string
 
+	// Project is the version-independent source identity (raw project name).
+	// Version is the registered version/ref qualifier (e.g. "v1.9.0"), empty for
+	// version-less sources. Both are folded into the entity ID's `system` segment
+	// and not recoverable from it, so they are surfaced as triples for
+	// cross-version correspondence (ADR-0008 #2). Set by the ast-source component
+	// from the raw watch-path config; emitted together only when Version != "".
+	Project string
+	Version string
+
 	// Language indicates the source language (go, typescript, javascript)
 	Language string
 
@@ -213,6 +222,15 @@ func (e *CodeEntity) identityTriples() []message.Triple {
 	}
 	if e.Package != "" {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodePackage, Object: e.Package})
+	}
+	// Version scoping (ADR-0008 #2): emit source identity + version together, only
+	// for versioned sources. A version-less source has no sibling to correspond to,
+	// so it carries neither — keeping its output byte-identical to prior behavior.
+	if e.Version != "" {
+		if e.Project != "" {
+			triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeProject, Object: e.Project})
+		}
+		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeVersion, Object: e.Version})
 	}
 	if e.Hash != "" {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeHash, Object: e.Hash})
