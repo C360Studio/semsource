@@ -91,8 +91,11 @@
 
 ## 6. Integration & gates
 
-- [ ] 6.1 Integration/e2e — index the same source at two versions, run the pass, assert supersession
-      edges + change classification end-to-end (guarded build tag, per the repo's e2e convention).
-- [ ] 6.2 `go build ./...`, `go test ./...` (+ `-race` on the new component), all green.
-- [ ] 6.3 `task lint` — zero warnings (revive v1.15.0), gofmt, go vet.
-- [ ] 6.4 `openspec validate versioned-source-supersession` green; `/opsx:verify` before archive.
+- [x] 6.1 Integration/e2e — ingest the same source at two versions, run the pass, assert supersession
+      edges + change classification end-to-end (`//go:build integration`, `internal/governance/
+      supersession_integration_test.go`). Real graph-ingest/index/query stack + NATS trigger; asserts
+      lineage edges, changed/unchanged, retention of the superseded version, and idempotency
+      (2nd pass `entities_updated=0`, exactly one supersedes edge). PASS (6.5s).
+- [x] 6.2 `go build ./...`, `go test ./...` (+ `-race` on the new component), all green.
+- [x] 6.3 `task lint` — zero warnings (revive v1.15.0), gofmt, go vet.
+- [x] 6.4 `openspec validate versioned-source-supersession` green; `/opsx:verify` before archive.
