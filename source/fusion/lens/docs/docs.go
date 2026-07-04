@@ -5,9 +5,16 @@
 //
 // Since ADR-062 increment 4, Hydrate returns a StorageReference HANDLE (read from
 // body triples), not inline content — the doc analogue of the code lens. The doc
-// body producer that offloads passages + stamps those triples is a tracked
-// follow-up; until it lands, Hydrate yields no body and doc_context returns
-// structure without verbatim text.
+// body producer HAS landed: handler/doc.offloadDocBody offloads each passage to the
+// shared CONTENT store (key "doc:<sha256>") and stamps the DocBodyStore/DocBodyKey
+// handle triples (doc-source wires it via WithBodyStore), so Hydrate returns the
+// verbatim passage. Verified live and unit-covered (handler/doc/handler_test.go).
+//
+// Remaining gap is retrieval SCOPE, not hydration: the fusion engine resolves NL
+// seeds over the whole shared embedding index with no per-lens domain filter, so
+// in a code-heavy corpus code entities can dilute doc_context's NL results. That
+// needs a fusion-engine scope hook (tracked as a semstreams ask); doc_context is
+// accurate when docs are not drowned by a large code index.
 package docs
 
 import (

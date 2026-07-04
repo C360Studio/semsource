@@ -338,3 +338,27 @@ path is actually built; until then the ADR guardrail (no eager delete) makes it 
 *(Write-path context, not an ask: semsource emits via publish → `graph-ingest` `MergeEntity`
 **append** — `component.go:1794` — so it never removes anything today; enumeration for a future
 scoped delete is free via `graph.query.prefix`.)*
+
+## Fusion retrieval scope (ADR-0004)
+
+### 16. Domain-scoped NL retrieval for a fusion lens — framework-shaped — candidate
+The `pkg/fusion` engine resolves NL seeds over the **whole shared embedding index**
+with no per-lens/per-request domain filter: `Engine.fuse` calls
+`graph.Resolve(query, mode, limit)` where `mode ∈ {symbol, prefix, nl}`, and the
+`Lens` interface exposes no scope hook (its methods are Name / ResolveMode / Edges /
+Label / Kind / Location / Hydrate). `fusion.Request` carries only `Query` + `Want`.
+Consequence for semsource: `code-context` and `doc-context` are two lens instances
+over **one** embedding index, so in a **code-heavy corpus a small doc set is diluted**
+— an NL `doc_context` query can rank code entities above the relevant document
+(measured live: httpx, 1304 Python code entities vs 30 docs → `doc_context "what
+exceptions can be raised"` returned Python test funcs above `docs/exceptions.md`; the
+same query with docs not drowned returns 100% documents, top-1 correct). Hydration is
+**not** the problem (the doc body producer works — verbatim passages hydrate; ADR-062).
+**Fix directions:** (1) an optional `Scope`/entity-type-prefix filter on `fusion.Request`,
+plumbed to the embedding search (`graph.embedding.query.search`) so a lens instance can
+constrain seeds to its domain (e.g. `*.web.*.doc.*`); (2) a `Lens.SeedFilter(entity) bool`
+hook the engine applies post-retrieval over an over-fetched candidate set; (3) a
+per-lens embedding namespace. **Product half is ours** (choosing/wiring the scope per
+lens once the hook exists). **Not MVP-blocking:** `code_search` retrieves docs well and
+`doc_context` is accurate when docs aren't drowned; this bites only mixed code+doc
+corpora. **Surfaced by:** Tier A #3 / B #4 live validation (Python repo + docs).
