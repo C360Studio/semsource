@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -410,6 +411,52 @@ func TestNewCodeEntity_BackwardCompat_CleanProject(t *testing.T) {
 	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 	if entity.ID != wantID {
 		t.Errorf("backward-compat golden ID mismatch:\ngot  %q\nwant %q", entity.ID, wantID)
+	}
+}
+
+// TestCodeEntity_VersionTriples_Present covers ADR-0008 #2 spec scenario
+// "Entity indexed at a version": when Project and Version are set, the entity
+// carries both the source-identity triple (code.artifact.project) and the
+// version triple (code.artifact.version).
+func TestCodeEntity_VersionTriples_Present(t *testing.T) {
+	e := NewCodeEntity("acme", "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
+	e.Project = "semstreams"
+	e.Version = "v1.9.0"
+
+	got := make(map[string]interface{})
+	for _, tr := range e.Triples() {
+		got[tr.Predicate] = tr.Object
+	}
+	if got[CodeProject] != "semstreams" {
+		t.Errorf("code.artifact.project = %v, want %q", got[CodeProject], "semstreams")
+	}
+	if got[CodeVersion] != "v1.9.0" {
+		t.Errorf("code.artifact.version = %v, want %q", got[CodeVersion], "v1.9.0")
+	}
+}
+
+// TestCodeEntity_VersionTriples_AbsentWhenVersionless covers ADR-0008 #2 spec
+// scenario "Entity indexed without a version (backward compatible)": a
+// version-less entity carries NEITHER triple — even when Project is set, the
+// gate on Version suppresses both — and its emitted triples are byte-identical
+// to an entity with no source-scoping set at all.
+func TestCodeEntity_VersionTriples_AbsentWhenVersionless(t *testing.T) {
+	withProject := NewCodeEntity("acme", "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
+	withProject.Project = "semstreams" // Project set, Version empty → gate must suppress both
+
+	for _, tr := range withProject.Triples() {
+		if tr.Predicate == CodeVersion || tr.Predicate == CodeProject {
+			t.Fatalf("version-less entity must not carry %q (object %v)", tr.Predicate, tr.Object)
+		}
+	}
+
+	// Golden: with Version empty, setting Project must not perturb the triple set.
+	// Pin IndexedAt so the DcCreated timestamp doesn't spuriously differ.
+	bare := NewCodeEntity("acme", "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
+	bare.IndexedAt = withProject.IndexedAt
+	if !reflect.DeepEqual(bare.Triples(), withProject.Triples()) {
+		t.Errorf("version-less triples not byte-identical when Project is set:\n bare=%v\n proj=%v",
+			bare.Triples(), withProject.Triples())
 	}
 }
 

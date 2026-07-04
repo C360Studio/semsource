@@ -13,6 +13,7 @@ func init() {
 	registerStructurePredicates()
 	registerDependencyPredicates()
 	registerRelationshipPredicates()
+	registerLineagePredicates()
 	registerMetricPredicates()
 	registerDocPredicates()
 	registerCapabilityPredicates()
@@ -54,6 +55,19 @@ func registerArtifactPredicates() {
 		vocabulary.WithDescription("Symbol visibility: public (exported) or private (unexported)"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(CodeNamespace+"visibility"))
+
+	// Version scoping (ADR-0008 #2): the version-independent source identity and
+	// the registered version. Plain string metadata — no salience weight (these
+	// key cross-version correspondence, they are not retrieval-relevance signals).
+	vocabulary.Register(CodeProject,
+		vocabulary.WithDescription("Version-independent source identity (raw project name)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(CodeNamespace+"project"))
+
+	vocabulary.Register(CodeVersion,
+		vocabulary.WithDescription("Registered version/ref qualifier of the source (e.g. v1.9.0)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(CodeNamespace+"version"))
 
 	// Salience 2.0: presence marks an exported/public symbol — the API surface
 	// a consumer usually wants first. Emitted only on public symbols (see
@@ -134,6 +148,26 @@ func registerRelationshipPredicates() {
 		vocabulary.WithDescription("Function parameter type"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(CodeNamespace+"parameter"))
+}
+
+func registerLineagePredicates() {
+	// Version lineage (ADR-0008 #2). Structural — no salience weight. supersedes /
+	// superseded_by are directional entity-ID relationships (inverse of each
+	// other); change carries the changed/unchanged classification of the pair.
+	vocabulary.Register(CodeSupersedes,
+		vocabulary.WithDescription("Newer entity supersedes the older corresponding entity across versions"),
+		vocabulary.WithDataType("entity_id"),
+		vocabulary.WithIRI(CodeNamespace+"supersedes"))
+
+	vocabulary.Register(CodeSupersededBy,
+		vocabulary.WithDescription("Older entity is superseded by the newer corresponding entity across versions"),
+		vocabulary.WithDataType("entity_id"),
+		vocabulary.WithIRI(CodeNamespace+"supersededBy"))
+
+	vocabulary.Register(CodeLineageChange,
+		vocabulary.WithDescription("Whether the symbol changed across the corresponding pair: changed or unchanged"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(CodeNamespace+"lineageChange"))
 }
 
 func registerMetricPredicates() {
