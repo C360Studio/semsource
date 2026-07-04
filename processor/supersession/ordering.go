@@ -24,19 +24,34 @@ func orderGroup(group []candidate) []candidate {
 	return ordered
 }
 
-// candidateLess is the deterministic total order used for sorting. It prefers
-// semver, then first-index timestamp, then version string, then ID — so the
-// sequence is stable and reproducible even for non-orderable versions (which
-// simply get an arbitrary-but-fixed position and no edge).
+// semverOf parses a candidate's version as a semantic version, returning
+// (version, true) when it is valid semver. Centralizing the parse keeps the
+// sort order and the edge-comparability decision agreeing on what counts as
+// semver (they diverged when each parsed independently).
+func semverOf(c candidate) (*semver.Version, bool) {
+	v, err := semver.NewVersion(c.version)
+	return v, err == nil
+}
+
+// candidateLess is a TOTAL, TRANSITIVE order: all semver-valid members sort
+// first (ascending by semver), then all non-semver members (ascending by
+// first-index timestamp), with stable tiebreaks. Partitioning by scheme is what
+// keeps the comparator transitive — deciding some pairs by semver and other
+// pairs by timestamp within one sort is not transitive and can corrupt the
+// order (and thus edge direction).
 func candidateLess(a, b candidate) bool {
-	av, aerr := semver.NewVersion(a.version)
-	bv, berr := semver.NewVersion(b.version)
-	if aerr == nil && berr == nil {
+	av, aok := semverOf(a)
+	bv, bok := semverOf(b)
+	if aok != bok {
+		return aok // semver-valid sorts before non-semver
+	}
+	if aok { // both semver
 		if !av.Equal(bv) {
 			return av.LessThan(bv)
 		}
 		return a.id < b.id
 	}
+	// both non-semver: order by first-index timestamp, then version, then ID
 	if !a.indexedAt.Equal(b.indexedAt) {
 		return a.indexedAt.Before(b.indexedAt)
 	}
@@ -47,14 +62,18 @@ func candidateLess(a, b candidate) bool {
 }
 
 // versionComparable reports whether a directional supersession edge may be
-// emitted between two adjacent (sorted) members. Distinct semver versions are
-// comparable; otherwise the pair is comparable only if their first-index
-// timestamps differ. Equal semver or equal timestamps → incomparable → no edge
-// (design D4: versions with no total order coexist without an edge).
+// emitted between two adjacent (sorted) members. Only SAME-SCHEME pairs are
+// comparable: two distinct semver versions, or two non-semver versions with
+// different first-index timestamps. A semver/non-semver pair is cross-scheme and
+// left incomparable — ordering it by ingest timing would assert a lineage
+// direction the versions don't actually carry (design D4: never guess).
 func versionComparable(a, b candidate) bool {
-	av, aerr := semver.NewVersion(a.version)
-	bv, berr := semver.NewVersion(b.version)
-	if aerr == nil && berr == nil {
+	av, aok := semverOf(a)
+	bv, bok := semverOf(b)
+	if aok != bok {
+		return false // cross-scheme (one semver, one not) — never relate
+	}
+	if aok {
 		return !av.Equal(bv)
 	}
 	return !a.indexedAt.Equal(b.indexedAt)

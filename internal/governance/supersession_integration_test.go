@@ -93,14 +93,14 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	t.Cleanup(func() { _ = scomp.Stop(5 * time.Second) })
 
 	summary := runPassAndSummary(t, ctx, tc.Client)
-	if summary["supersedes"] != 2 {
-		t.Errorf("summary supersedes = %d, want 2 (Run + Stable): %v", summary["supersedes"], summary)
+	if summary.Supersedes != 2 {
+		t.Errorf("summary supersedes = %d, want 2 (Run + Stable): %+v", summary.Supersedes, summary)
 	}
-	if summary["corresponding"] != 2 {
-		t.Errorf("summary corresponding = %d, want 2: %v", summary["corresponding"], summary)
+	if summary.Corresponding != 2 {
+		t.Errorf("summary corresponding = %d, want 2: %+v", summary.Corresponding, summary)
 	}
-	if summary["changed"] != 1 || summary["unchanged"] != 1 {
-		t.Errorf("summary changed/unchanged = %d/%d, want 1/1: %v", summary["changed"], summary["unchanged"], summary)
+	if summary.Changed != 1 || summary.Unchanged != 1 {
+		t.Errorf("summary changed/unchanged = %d/%d, want 1/1: %+v", summary.Changed, summary.Unchanged, summary)
 	}
 
 	// Newer Run supersedes older Run, classified changed; older carries the inverse.
@@ -164,15 +164,27 @@ func publishVersioned(t *testing.T, ctx context.Context, pub *entitypub.Publishe
 	return id
 }
 
+// runSummary mirrors the supersession pass's JSON run report.
+type runSummary struct {
+	Entities      int  `json:"entities"`
+	Groups        int  `json:"groups"`
+	Corresponding int  `json:"corresponding"`
+	Supersedes    int  `json:"supersedes"`
+	Incomparable  int  `json:"incomparable"`
+	Changed       int  `json:"changed"`
+	Unchanged     int  `json:"unchanged"`
+	Truncated     bool `json:"truncated"`
+}
+
 // runPassAndSummary triggers one supersession pass over NATS and returns its
 // decoded run summary.
-func runPassAndSummary(t *testing.T, ctx context.Context, client *natsclient.Client) map[string]int {
+func runPassAndSummary(t *testing.T, ctx context.Context, client *natsclient.Client) runSummary {
 	t.Helper()
 	resp, err := client.Request(ctx, supersession.DefaultTriggerSubject, nil, 20*time.Second)
 	if err != nil {
 		t.Fatalf("trigger supersession pass: %v", err)
 	}
-	var summary map[string]int
+	var summary runSummary
 	if err := json.Unmarshal(resp, &summary); err != nil {
 		t.Fatalf("decode run summary %q: %v", resp, err)
 	}

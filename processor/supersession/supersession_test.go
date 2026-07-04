@@ -33,12 +33,17 @@ func codeEntity(id, project, version, path, name, ctype, pkg, bodyHash, created 
 
 // cand builds a candidate that always corresponds with other cand()s (fixed
 // org/project/path/name/type/pkg), varying only id, version, body hash, and
-// first-index time.
+// first-index time. Body hashes here model the code.body.key predicate ("bodykey"
+// kind), matching the "code:<sha>" values the tests pass.
 func cand(id, version, bodyHash string, indexedAt time.Time) candidate {
+	kind := ""
+	if bodyHash != "" {
+		kind = "bodykey"
+	}
 	return candidate{
 		id: id, org: "acme", project: "semstreams", version: version,
 		path: "pkg/run.go", name: "Run", ctype: "function", pkg: "run",
-		bodyHash: bodyHash, indexedAt: indexedAt,
+		bodyHash: bodyHash, bodyHashKind: kind, indexedAt: indexedAt,
 	}
 }
 
@@ -266,6 +271,44 @@ func TestClassifyChange_UnknownWhenBodyHashMissing(t *testing.T) {
 	}
 	if stats.Changed != 0 || stats.Unchanged != 0 {
 		t.Fatalf("no classification expected, got changed=%d unchanged=%d", stats.Changed, stats.Unchanged)
+	}
+}
+
+func TestClassifyChange_CrossPredicateHashOmitsMarker(t *testing.T) {
+	// One entity's hash is code.body.key ("code:<sha>"), the other's is
+	// code.artifact.hash (bare digest). Even if the underlying body is identical
+	// the encodings differ, so the marker must be omitted, never guessed.
+	older := cand("id-older", "v1.9.0", "code:abc", time.Time{})
+	older.bodyHashKind = "bodykey"
+	newer := cand("id-newer", "v1.10.0", "abc", time.Time{})
+	newer.bodyHashKind = "hash"
+
+	desired, stats := desiredEdges(groupByCorrespondence([]candidate{older, newer}))
+	assertTriple(t, desired[newer.id], semsourceast.CodeSupersedes, older.id)
+	if hasTriple(desired[newer.id], semsourceast.CodeLineageChange, changeChanged) ||
+		hasTriple(desired[newer.id], semsourceast.CodeLineageChange, changeUnchanged) {
+		t.Error("change marker must be omitted when the two hashes come from different predicates")
+	}
+	if stats.Changed != 0 || stats.Unchanged != 0 {
+		t.Fatalf("no classification expected across predicates, got changed=%d unchanged=%d", stats.Changed, stats.Unchanged)
+	}
+}
+
+func TestSupersession_CrossSchemeSemverAndRefIncomparable(t *testing.T) {
+	// A semver release and a non-semver ref that share a correspondence key must
+	// NOT be related — ordering them by ingest timing would assert a direction
+	// the versions don't carry.
+	release := cand("id-release", "v1.0.0", "code:a", time.Unix(100, 0))
+	ref := cand("id-ref", "main", "code:b", time.Unix(200, 0)) // indexed later
+	desired, stats := desiredEdges(groupByCorrespondence([]candidate{release, ref}))
+	if stats.Supersedes != 0 {
+		t.Fatalf("cross-scheme pair must get no edge, got %d", stats.Supersedes)
+	}
+	if stats.Incomparable != 1 {
+		t.Fatalf("cross-scheme incomparable count = %d, want 1", stats.Incomparable)
+	}
+	if len(desired) != 0 {
+		t.Fatalf("no edges expected across schemes, got %d entities", len(desired))
 	}
 }
 

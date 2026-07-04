@@ -16,13 +16,14 @@ const (
 
 // passStats summarizes one correspondence/supersession pass for the run report.
 type passStats struct {
-	Entities      int `json:"entities"`      // versioned code entities enumerated
-	Groups        int `json:"groups"`        // correspondence groups (incl. singletons)
-	Corresponding int `json:"corresponding"` // groups with >1 member
-	Supersedes    int `json:"supersedes"`    // supersedes edges computed (adjacent pairs)
-	Incomparable  int `json:"incomparable"`  // adjacent pairs skipped as non-orderable
-	Changed       int `json:"changed"`       // pairs classified changed
-	Unchanged     int `json:"unchanged"`     // pairs classified unchanged
+	Entities      int  `json:"entities"`      // versioned code entities enumerated
+	Groups        int  `json:"groups"`        // correspondence groups (incl. singletons)
+	Corresponding int  `json:"corresponding"` // groups with >1 member
+	Supersedes    int  `json:"supersedes"`    // supersedes edges computed (adjacent pairs)
+	Incomparable  int  `json:"incomparable"`  // adjacent pairs skipped as non-orderable
+	Changed       int  `json:"changed"`       // pairs classified changed
+	Unchanged     int  `json:"unchanged"`     // pairs classified unchanged
+	Truncated     bool `json:"truncated"`     // enumeration hit max_entities — lineage may be incomplete
 }
 
 // desiredEdges computes the full lineage triple set each entity should carry,
@@ -33,6 +34,13 @@ type passStats struct {
 //
 // This is pure and deterministic: the same graph snapshot always yields the same
 // triples, so re-runs (after diffNew) converge to no-ops.
+//
+// Known limitation (retention-first, design D5 + Risks): edges are adjacent over
+// the CURRENTLY-known version set and are never retracted. Ingesting a version
+// BETWEEN two already-linked versions adds new adjacent edges but leaves the old
+// skip edge (and its change marker) in place, so that entity can then carry two
+// supersedes/change objects. Reconciling this needs a graph-aware delete, which
+// ADR-0008 keeps off the critical path; a future compaction pass is the fix.
 func desiredEdges(groups map[corrKey][]candidate) (map[string][]message.Triple, passStats) {
 	desired := make(map[string][]message.Triple)
 	var stats passStats
@@ -71,10 +79,15 @@ func desiredEdges(groups map[corrKey][]candidate) (map[string][]message.Triple, 
 }
 
 // classifyChange compares body hashes across a corresponding pair. It reports
-// ("changed"|"unchanged", true) when both hashes are known, or ("", false) when
-// either is absent — the marker is only recorded when it can be determined.
+// ("changed"|"unchanged", true) only when both hashes are known AND come from
+// the same predicate (their encodings differ across predicates, so a
+// cross-predicate compare would fabricate a bogus "changed"). Otherwise it
+// returns ("", false) and the marker is omitted rather than guessed.
 func classifyChange(older, newer candidate) (string, bool) {
 	if older.bodyHash == "" || newer.bodyHash == "" {
+		return "", false
+	}
+	if older.bodyHashKind != newer.bodyHashKind {
 		return "", false
 	}
 	if older.bodyHash != newer.bodyHash {

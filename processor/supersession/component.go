@@ -151,7 +151,8 @@ func (c *Component) runPass(ctx context.Context) (passStats, error) {
 		return passStats{}, fmt.Errorf("enumerate entities: %w", err)
 	}
 	if truncated {
-		c.logger.Warn("supersession enumeration hit max_entities cap; some entities not scanned",
+		c.logger.Warn("supersession enumeration hit max_entities cap; correspondence groups "+
+			"split across the cap will have incomplete lineage this pass",
 			"max_entities", c.config.maxEntities())
 	}
 
@@ -168,6 +169,7 @@ func (c *Component) runPass(ctx context.Context) (passStats, error) {
 
 	desired, stats := desiredEdges(groupByCorrespondence(cands))
 	stats.Entities = len(cands)
+	stats.Truncated = truncated
 
 	delta := diffNew(desired, existing)
 	updated := c.publishDelta(delta)

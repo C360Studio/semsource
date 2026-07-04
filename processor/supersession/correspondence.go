@@ -25,9 +25,13 @@ type candidate struct {
 	ctype string // code.artifact.type
 	pkg   string // code.artifact.package
 
-	// bodyHash is the verbatim-body content hash (code.body.key, "code:<sha>"),
-	// falling back to code.artifact.hash. Empty when the entity has no body.
-	bodyHash string
+	// bodyHash is the verbatim-body content hash and bodyHashKind names the
+	// predicate it came from ("bodykey" for code.body.key's "code:<sha>", "hash"
+	// for code.artifact.hash's bare digest, "" when absent). The kind is tracked
+	// so change classification never compares hashes from different predicates —
+	// their encodings differ, so a literal compare would fabricate a "changed".
+	bodyHash     string
+	bodyHashKind string
 
 	// indexedAt is the first-index timestamp (dc.terms.created), used as the
 	// version-ordering tiebreak for non-semver versions (design D4).
@@ -62,17 +66,19 @@ func candidateFromEntity(e gtypes.EntityState) (candidate, bool) {
 	if version == "" {
 		return candidate{}, false
 	}
+	hash, kind := bodyHashOf(e.Triples)
 	c := candidate{
-		id:        e.ID,
-		org:       entityid.OrgFromID(e.ID),
-		project:   tripleString(e.Triples, semsourceast.CodeProject),
-		version:   version,
-		path:      tripleString(e.Triples, semsourceast.CodePath),
-		name:      tripleString(e.Triples, semsourceast.DcTitle),
-		ctype:     tripleString(e.Triples, semsourceast.CodeType),
-		pkg:       tripleString(e.Triples, semsourceast.CodePackage),
-		bodyHash:  bodyHashOf(e.Triples),
-		indexedAt: indexedAtOf(e),
+		id:           e.ID,
+		org:          entityid.OrgFromID(e.ID),
+		project:      tripleString(e.Triples, semsourceast.CodeProject),
+		version:      version,
+		path:         tripleString(e.Triples, semsourceast.CodePath),
+		name:         tripleString(e.Triples, semsourceast.DcTitle),
+		ctype:        tripleString(e.Triples, semsourceast.CodeType),
+		pkg:          tripleString(e.Triples, semsourceast.CodePackage),
+		bodyHash:     hash,
+		bodyHashKind: kind,
+		indexedAt:    indexedAtOf(e),
 	}
 	return c, true
 }
@@ -89,14 +95,19 @@ func groupByCorrespondence(cands []candidate) map[corrKey][]candidate {
 	return groups
 }
 
-// bodyHashOf returns the verbatim-body content hash for change classification,
-// preferring code.body.key (the offloaded body's "code:<sha>") and falling back
-// to code.artifact.hash. Empty when the entity carries neither.
-func bodyHashOf(triples []message.Triple) string {
+// bodyHashOf returns the verbatim-body content hash and the predicate it came
+// from ("bodykey" or "hash"), preferring code.body.key (the offloaded body's
+// "code:<sha>") over code.artifact.hash (a bare digest). Returns ("", "") when
+// the entity carries neither. The kind lets change classification refuse to
+// compare hashes from different predicates, whose encodings are not comparable.
+func bodyHashOf(triples []message.Triple) (hash, kind string) {
 	if h := tripleString(triples, semsourceast.CodeBodyKey); h != "" {
-		return h
+		return h, "bodykey"
 	}
-	return tripleString(triples, semsourceast.CodeHash)
+	if h := tripleString(triples, semsourceast.CodeHash); h != "" {
+		return h, "hash"
+	}
+	return "", ""
 }
 
 // indexedAtOf reads the first-index timestamp from dc.terms.created, falling
