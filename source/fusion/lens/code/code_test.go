@@ -120,3 +120,57 @@ func TestCodeLensViaEngine(t *testing.T) {
 		t.Fatalf("expected Algorithm class, got %q", n.Class)
 	}
 }
+
+// TestCodeLens_ImpactWalksTypeDependencies is the task #43 regression: code_impact
+// on a type must surface its subclasses (extends), implementers (implements), and
+// referrers (references), and code_context must expose those reverse roles in
+// Relations. Before these edges were added to Edges(), impact walked only calls +
+// containment, so a class/interface returned just itself — and a language whose
+// parser emits inheritance/reference edges but no call edges (Python) got an empty
+// impact closure entirely.
+func TestCodeLens_ImpactWalksTypeDependencies(t *testing.T) {
+	g := fusiontest.NewMemGraph()
+
+	base := "o.semsource.python.s.class.baseclient"
+	sub := "o.semsource.python.s.class.asyncclient"
+	impl := "o.semsource.python.s.class.httptransport"
+	ref := "o.semsource.python.s.function.build_client"
+
+	for id, name := range map[string]string{
+		base: "BaseClient", sub: "AsyncClient", impl: "HTTPTransport", ref: "build_client",
+	} {
+		g.AddEntity(id, map[string]any{
+			ast.DcTitle: name, ast.CodeType: "class", ast.CodePath: "client.py",
+			ast.CodeStartLine: 1, ast.CodeEndLine: 5, ontology.ClassPredicate: cco.Algorithm,
+		})
+	}
+	// Everything depends on BaseClient via a distinct dependency edge.
+	g.AddEdge(sub, ast.CodeExtends, base)
+	g.AddEdge(impl, ast.CodeImplements, base)
+	g.AddEdge(ref, ast.CodeReferences, base)
+	g.SetResolve("BaseClient", base)
+
+	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	resp, err := engine.Fuse(context.Background(),
+		fusion.Request{Query: "BaseClient", Want: []fusion.Want{fusion.WantRelations, fusion.WantImpact}},
+		New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Impact = the reverse-dependency closure: all three dependents.
+	if resp.Impact == nil || resp.Impact.Nodes != 3 {
+		t.Fatalf("expected impact closure of 3 dependents, got %+v", resp.Impact)
+	}
+
+	// Relations must expose each reverse role with the right dependent.
+	n := resp.Nodes[0]
+	for role, want := range map[string]string{
+		"extended_by": "AsyncClient", "implemented_by": "HTTPTransport", "referenced_by": "build_client",
+	} {
+		got := n.Relations[role]
+		if len(got) != 1 || got[0].Name != want {
+			t.Fatalf("relation %q = %+v; want single %q", role, got, want)
+		}
+	}
+}

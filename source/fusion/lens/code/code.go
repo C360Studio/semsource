@@ -43,12 +43,21 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	return fusion.ResolveModeSymbol
 }
 
-// Edges are the code relationships to expand: calls (callee/caller) and
-// containment (contains/container).
+// Edges are the code relationships to expand: calls, containment, and the type
+// dependency edges (extends/implements/references). The incoming (reverse)
+// direction of the dependency edges is what makes code_impact a real
+// reverse-dependency closure for types — a class's blast radius is its subclasses
+// (extended_by), an interface's is its implementers (implemented_by), a type's is
+// its referrers (referenced_by). Without these, impact only saw call graphs and
+// returned just the seed for a class/interface (languages whose parser emits
+// inheritance/reference edges but no call edges — e.g. Python — got empty impact).
 func (*Lens) Edges() []fusion.EdgeSpec {
 	return []fusion.EdgeSpec{
 		{Predicate: ast.CodeCalls, OutgoingRole: "callee", IncomingRole: "caller"},
 		{Predicate: ast.CodeContains, OutgoingRole: "contains", IncomingRole: "container"},
+		{Predicate: ast.CodeExtends, OutgoingRole: "extends", IncomingRole: "extended_by"},
+		{Predicate: ast.CodeImplements, OutgoingRole: "implements", IncomingRole: "implemented_by"},
+		{Predicate: ast.CodeReferences, OutgoingRole: "references", IncomingRole: "referenced_by"},
 	}
 }
 

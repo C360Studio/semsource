@@ -606,12 +606,16 @@ func TestTypeNameToEntityID_Generic(t *testing.T) {
 func TestTypeNameToEntityID_LocalType(t *testing.T) {
 	p := NewParser("acme", "myproject", "/tmp")
 
+	// A local type reference (base class / annotation) must resolve to the SAME id
+	// the class DEFINITION gets, so extends/reference edges actually connect
+	// (task #43). Previously it built a ".type." segment that matched no entity.
 	result := p.typeNameToEntityID("User", "models/user.py")
-	if !strings.HasPrefix(result, "acme.semsource.python.myproject.type.") {
-		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semsource.python.myproject.type.'", result)
+	want := ast.NewCodeEntity("acme", "python", "myproject", ast.TypeClass, "User", "models/user.py").ID
+	if result != want {
+		t.Errorf("typeNameToEntityID(User) = %q, want %q (must match the class definition id)", result, want)
 	}
-	if !strings.Contains(result, "User") {
-		t.Errorf("typeNameToEntityID(User) = %q, want to contain 'User'", result)
+	if !strings.Contains(result, ".class.") {
+		t.Errorf("local type ref %q should resolve to a .class. entity", result)
 	}
 }
 
