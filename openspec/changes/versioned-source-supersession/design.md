@@ -79,18 +79,24 @@ treat the pair as **incomparable → coexist with no supersession edge** (never 
   older entity ID). Emit the inverse **`code.lineage.superseded_by`** for query convenience.
 - Emit **adjacent-version** edges over the currently-known version set (chain: v1.8→v1.9→v1.10), not
   transitive-to-latest — simpler and re-derivable.
-- Edges are **deterministic triples** (fixed subject/predicate/object) → re-running the pass **merges to
-  a no-op** (idempotent). The pass **never removes** anything (retention-first); a version inserted
-  between two existing ones adds new adjacent edges and leaves prior edges (acceptable staleness, never
-  data loss).
-- Every write carries a semantic envelope (semstreams ADR-055).
+- Edges are **deterministic triples** (fixed subject/predicate/object). *As-built correction:* the
+  graph-ingest merge does a bare `append` with **no de-duplication**, so re-emitting an existing edge
+  would duplicate it — the pass is made idempotent by **pre-diffing** desired edges against the triples
+  read during enumeration (`diffNew`), publishing only the delta. The pass **never removes** anything
+  (retention-first); a version inserted between two existing ones adds new adjacent edges and leaves
+  prior edges (acceptable staleness, never data loss).
+- Writes go through the entity-publish path; the BaseMessage envelope (semstreams ADR-055) is applied by
+  the publisher. Edge-only payloads are **not** re-`StampClass`ed — the target entity is already
+  classified, and re-stamping would append a duplicate class triple.
 
 ### D6. "Changed" is a property of the correspondence, from body-hash
 
-A corresponding pair is **changed** when `code.artifact.body` (`code:<sha>`) differs, **unchanged** when
-identical. Represent it on the supersession edge's provenance / a companion triple (e.g.
-`code.lineage.change = changed|unchanged`) so "what changed between v1.9 and v1.10" is a direct query
-over supersedes edges filtered to `changed`.
+A corresponding pair is **changed** when its verbatim-body content hash differs, **unchanged** when
+identical. *As-built correction:* the hash is carried by **`code.body.key`** (the offloaded body's
+`code:<sha>`), falling back to `code.artifact.hash` — the `code.artifact.body` predicate named in an
+earlier draft does not exist. Represented by a companion triple **`code.lineage.change =
+changed|unchanged`** on the newer entity (omitted, never guessed, when a body hash is unknown), so "what
+changed between v1.9 and v1.10" is a direct query over supersedes edges filtered to `changed`.
 
 ## Risks / Trade-offs
 
