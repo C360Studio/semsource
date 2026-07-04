@@ -285,7 +285,14 @@ weakly — a code-specialized or larger embedder is the complementary lever.
 
 ## Fusion ranking (RankSignals, ADR-062 increment 5)
 
-### 14. `fusion.RankSignals` is additive-only — no way to down-rank noise — framework-shaped — filed [semstreams#441](https://github.com/C360Studio/semstreams/issues/441)
+### 14. `fusion.RankSignals` is additive-only — no way to down-rank noise — framework-shaped — RESOLVED in beta.130 ([semstreams#441](https://github.com/C360Studio/semstreams/issues/441))
+**RESOLVED (beta.130):** `PredicateSalience` is now **signed** — a negative weight demotes
+("reorders behind … a bounded secondary reordering, never an exclusion"); the engine folds an
+entity's strongest boost and strongest demotion together (`entitySalience`). This landed fix
+direction (1). Unblocks the demote-complement of task #38 (down-rank tests/generated code).
+(An earlier ADR-0008 draft also proposed a soft-staleness demotion tier on top of this; that draft
+was withdrawn as over-engineered — see ADR-0008 — so this ask now stands solely on the task-#38
+demote-complement.) Original report below.
 `PredicateSalience` returns a weight ≥ 0, `entitySalience` takes the **max** over
 an entity's predicates, and the engine **adds** `salienceScale × maxWeight` — so a
 consumer can boost high-value entities but can never **demote** low-value ones. For
@@ -303,3 +310,31 @@ engine subtracts, preserving the "strictly additive" invariant on salience.
 `code.artifact.exported` + weight it — the boost side needs no framework change; the
 demote side is the framework gap here). **Surfaced by:** wiring semsource's fusion
 ranking (`.WithSignals(fusionvocab.New())` + predicate `WithWeight`, PR #36).
+
+## Graph mutation / retraction lifecycle (ADR-0008)
+
+### 15. Deletion is incomplete in the framework — two halves — framework-shaped
+**Both halves are OFF semsource's critical path** as of ADR-0008: the graph is now
+**retention-first** (versioned sources retained + related by supersession; "current" is a
+ranking marker), so we do **not** delete by default. Deletion survives only as a rare,
+graph-aware exception for **mistakes/churn** — and that exception needs *both* halves below
+before it is safe. Logged so they are ready if/when the mistake-cleanup path is built.
+
+**(a) Index cleanup on delete — filed [semstreams#433](https://github.com/C360Studio/semstreams/issues/433) (not by us, OPEN).**
+`Component.DeleteEntity` removes the entity row but leaves `PREDICATE_INDEX` / `NAME_INDEX` /
+`ALIAS_INDEX` / `CONTEXT_INDEX` populated — a deleted entity still answers
+`byName`/predicate/prefix queries.
+
+**(b) Referential integrity on delete — NEW candidate (not yet filed).** Deleting `A` cleans
+`A`'s own adjacency buckets but does **not** rewrite the *referrer*: a triple `B —calls→ A`
+lives on `B`, so `A`'s deletion leaves a **dangling edge** on `B`. Reference-blind eviction
+(NATS TTL/MaxBytes) has the same failure mode, which is why ADR-0008 **rejects** NATS-policy
+retention on the live graph outright. A complete delete is a **cascade** (find referrers via
+the incoming index, fix/remove the dangling assertions) or a **refuse-if-referenced**. Ask:
+make `DeleteEntity` referentially complete (cascade or refuse) — pairs with #433 as the two
+halves of "delete is a first-class, integrity-preserving operation." File when the exception
+path is actually built; until then the ADR guardrail (no eager delete) makes it moot.
+
+*(Write-path context, not an ask: semsource emits via publish → `graph-ingest` `MergeEntity`
+**append** — `component.go:1794` — so it never removes anything today; enumeration for a future
+scoped delete is free via `graph.query.prefix`.)*

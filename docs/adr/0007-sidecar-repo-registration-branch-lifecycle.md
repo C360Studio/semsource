@@ -195,7 +195,14 @@ blockers — the decisions above are settled; these are how-to detail._
 2. **Fact-provenance data model** — the concrete (source × ref/commit × generation) contribution
    store and divergent-fact reconciliation: whether it rides the existing triple `Source` provenance
    or a new contribution index; the staleness-GC policy/TTL. **Gates any retraction work** (sequencing
-   guardrail above).
+   guardrail above). **→ Superseded by [ADR-0008](0008-versioned-source-retention-supersession.md)**
+   (Proposed), which **replaces this whole A/B/C debate** with *retain + relate, don't delete*: the
+   graph is temporal — versioned sources are retained as distinct subgraphs and related by
+   **supersession edges**, "current" is a per-source ranking marker, and **deletion** is demoted to a
+   rare, graph-aware, framework-gated exception (mistakes/churn only), off the critical path. The
+   fact-layer ledger and every deletion-first model were rejected — a graph cannot safely delete by
+   policy (reference-blind eviction orphans edges), and for dependency upgrades the version
+   *relationship* is the payload, not something to throw away.
 3. **Registration-handle payload** — finalize the `GET /sources/{id}` / `AddReply` fields from §5
    (root-id, relative path, mode, ref/commit-or-generation, readiness/indexed timestamps) and the
    HTTP readiness endpoint (§6).
