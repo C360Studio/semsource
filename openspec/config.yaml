@@ -1,0 +1,54 @@
+schema: spec-driven
+
+# Project context shown to AI when creating OpenSpec artifacts. Fuller context
+# lives in openspec/project.md (Purpose + Product Boundary + Conventions),
+# CLAUDE.md, and docs/adr/.
+context: |
+  SemSource is the source-knowledge ingestion service for the C360 sem* family
+  (Go; NATS JetStream via github.com/c360studio/semstreams; Task runner; revive).
+  It turns repos, docs, URLs, config files, and media into typed SemStreams graph
+  facts and publishes governed entity-state payloads for downstream consumers
+  (SemSpec, SemDragon, SemOps).
+
+  Product Boundary — read openspec/project.md before scoping a change:
+  - SemSource owns source discovery/parsing, entity-ID construction, source
+    provenance, media-by-reference, and source-graph publishing.
+  - SemStreams owns the governed substrate (Graphable ingestion, ENTITY_STATES,
+    graph.mutation.* / graph.query.* APIs, indexing profiles, lifecycle
+    primitives). Do NOT reimplement substrate; log framework gaps in
+    docs/upstream/semstreams-asks.md, triaged framework-shaped vs product-shaped,
+    and communicate them via GitHub issues only (never a PR to semstreams).
+  - SemOps owns COP/product semantics; SemSource may support it, not absorb it.
+
+  Role split (three homes, three jobs):
+  - openspec/specs/<capability>/spec.md = CURRENT TRUTH (Requirement +
+    GIVEN/WHEN/THEN). Seed lazily when a change first touches a capability, distil
+    from code + existing docs, verify against code. Do NOT backfill.
+  - openspec/changes/<id>/ = proposal + tasks + spec deltas; archive on completion.
+  - docs/adr/ = genuine decisions only (irreversible choices / cross-repo
+    contracts). Mechanics live in the spec, not the ADR.
+
+  Non-negotiables to reflect in specs/tasks:
+  - Entity IDs are deterministic 6-part IDs
+    {org}.{platform}.{domain}.{system}.{type}.{instance}, valid NATS KV keys and
+    matching the per-segment regex; construct via entityid.* only.
+  - Raw binary bytes never enter triples — store by reference, project metadata,
+    hashes, offsets, provenance.
+  - Every graph write carries a semantic envelope (semstreams ADR-055); no source
+    relies on triple.add auto-vivifying an entity.
+  - The live graph is retention-first — never use NATS TTL/MaxBytes for graph
+    lifecycle (reference-blind eviction orphans edges; see ADR-0008).
+  - CI must be green before push: revive WARNINGS FAIL (pinned v1.15.0), plus
+    gofmt, go vet, and go test (-race for concurrency).
+
+rules:
+  proposal:
+    - Always include a "## Non-goals" section (boundary discipline).
+    - Name which sem* products consume the capability, if any.
+    - Check the Product Boundary first — if it is substrate, it is semstreams' job.
+  spec:
+    - Describe CURRENT behavior verified against code, not aspirations.
+    - Seed a capability spec lazily (the first change that touches it); do not backfill.
+  tasks:
+    - Each task is independently verifiable; name the test that proves it.
+    - Additive/backward-compatible steps first; breaking steps in a separate task.
