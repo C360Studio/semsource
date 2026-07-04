@@ -196,6 +196,18 @@ Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--
 | 9091 | Prometheus metrics | Internal, proxied at `/metrics` (ui profile) |
 | 5173 | SemStreams UI (Vite) | Internal, proxied via `/*` (ui profile) |
 
+### Connect an agent (MCP)
+
+Once the stack is up, point Claude Code (or any MCP client) at the gateway:
+
+```bash
+claude mcp add --transport http semsource http://localhost:8080/mcp-gateway/mcp
+```
+
+This is the product surface — the agent then queries the graph with `code_context`, `code_search`,
+`code_impact`, and `doc_context` instead of grepping. Full walkthrough (auth, readiness gating, tool
+cheat-sheet): [docs/integration/mcp-quickstart.md](docs/integration/mcp-quickstart.md).
+
 ## Config File
 
 SemSource uses a JSON config file (`semsource.json`). The wizard creates it for you, but it's fully hand-editable:
