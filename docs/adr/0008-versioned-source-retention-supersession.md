@@ -34,9 +34,13 @@ deletion is a rare, graph-aware exception for mistakes and churn, off the critic
 - **Versions are already distinct subgraphs.** `entityid.SystemSlug` maps a versioned path
   `…/semstreams@v1.2.3/…` → `semstreams-v1-2-3`; the version lives in the `system` ID segment
   (`entityid/entityid.go:49`). `v1.9` and `v1.10` share no entity IDs.
-- **Cross-version correspondence is deterministic for the common case.** Two versions of the same
-  symbol have identical IDs *except* the `system` segment. Strip `system`, match the rest → "same
-  logical symbol"; differing `code.artifact.body = code:<sha>` → "changed".
+- **Cross-version correspondence is deterministic for the common case — via triples, not ID parsing.**
+  Two versions of the same symbol have identical IDs *except* the `system` segment, but (per open item
+  #1, now implemented) the version is **folded into** `system` and `SystemSlug`-capped, so it is **not**
+  cleanly recoverable by string-parsing the ID. Correspondence instead matches on the **version-
+  independent triples** every entity already carries — `code.artifact.path`, name, `CodeType`,
+  `CodePackage` — with the version supplied by an explicit **version triple**. Differing
+  `code.artifact.body = code:<sha>` → "changed".
 - **Bodies dedup by content hash in ObjectStore** — unchanged symbols across versions share one blob;
   retention's marginal cost is entities + triples, not code bytes.
 - **Seeds already exist:** the git handler builds commit + branch entities; triples carry
@@ -61,7 +65,7 @@ Be honest about what each capability costs:
 
 | Capability | Tier | Mechanism | Model? |
 |---|---|---|---|
-| "Same symbol across versions" (stable name/path) | **0 — code** | strip-`system` ID match | No |
+| "Same symbol across versions" (stable name/path) | **0 — code** | match version-independent triples (path/name/type/pkg) + a version triple | No |
 | "What changed v1.9 → v1.10" | **0 — code** | body-hash set-diff over the two scopes | No |
 | Changeset → touched symbols (commit/PR entity) | **0 — code** | git-diff hunks → stored symbol line-ranges → edges | No |
 | Rename / move correspondence | **1 — embeddings** | body/signature similarity (semembed) | Yes (minority of changes) |
@@ -70,8 +74,11 @@ Be honest about what each capability costs:
 The valuable core is **tier-0 deterministic code — no model.** Models only buy rename-tracking and
 prose summaries, both additive and deferrable; they must not gate the core.
 
-**Load-bearing prerequisite:** make version scoping **intentional** — the version lives *only* in
-`system`, never leaking into `instance`/`domain` — or the strip-`system` match breaks. Do this first.
+**Load-bearing prerequisite (open item #1 — DONE):** intentional version scoping so each version gets a
+**distinct** `system` segment (`entityid.ScopedSystemSlug` = `SystemSlug ∘ VersionScopedSlug`). This is
+what makes "versions coexist as distinct subgraphs" true. It deliberately does *not* make the version
+recoverable from the ID (folded in and capped) — which is *why* correspondence is triple-based (above),
+not ID-parse-based. Emitting the **version triple** that correspondence keys on is part of open item #2.
 
 ### 3. "Current" is a per-source ranking marker — not storage, not global
 
@@ -156,10 +163,16 @@ retention core*, not a separate deletion mechanism.
 
 ## Open items
 
-1. **Intentional version/ref scoping** — version confined to `system` (load-bearing for tier-0
-   correspondence). *Do first.*
-2. **Supersession edge vocabulary + the tier-0 correspondence pass** (strip-`system` match, body-hash
-   diff).
+1. **Intentional version/ref scoping** — ✅ **DONE** (`entityid.ScopedSystemSlug` + optional `version`
+   config field; each version gets a distinct `system` segment). Also fixed a latent raw-passthrough bug
+   (code-entity IDs were unsanitized). See the `feat(entityid)` commit.
+2. **Version triple + supersession edges + the tier-0 correspondence pass.** Emit a **version triple** on
+   each entity (the raw registered version — the ID's `system` is folded/capped and *not* parseable back).
+   Correspondence groups entities by their **version-independent triples** (`code.artifact.path`, name,
+   `CodeType`, `CodePackage`) and reads the version from that triple; "changed" = `code.artifact.body`
+   hash diff across the two scopes. Then emit supersession edges between corresponding entities. **No ID
+   string-parsing** — that was an early-draft simplification the #1 implementation invalidated (version is
+   not recoverable from the folded/capped `system` slug).
 3. **"Current" marker predicate + demote weight** — per-source; tracking vs pinned.
 4. **Changeset → symbol modeling** — extend git commit entities with touched-symbol edges from diff
    line-ranges.
