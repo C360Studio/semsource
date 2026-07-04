@@ -341,7 +341,7 @@ scoped delete is free via `graph.query.prefix`.)*
 
 ## Fusion retrieval scope (ADR-0004)
 
-### 16. Domain-scoped NL retrieval for a fusion lens — framework-shaped — candidate
+### 16. Domain-scoped NL retrieval for a fusion lens — framework-shaped — filed [semstreams#463](https://github.com/C360Studio/semstreams/issues/463)
 The `pkg/fusion` engine resolves NL seeds over the **whole shared embedding index**
 with no per-lens/per-request domain filter: `Engine.fuse` calls
 `graph.Resolve(query, mode, limit)` where `mode ∈ {symbol, prefix, nl}`, and the
