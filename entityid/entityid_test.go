@@ -404,3 +404,131 @@ func TestBranchScopedSlug(t *testing.T) {
 		}
 	}
 }
+
+// TestScopedSystemSlug_FinalSlug is the regression test for the dangling-edge
+// bug that exists when VersionScopedSlug(SystemSlug(project), SystemSlug(version))
+// is used without a final SystemSlug cap:
+//
+//   - NewScopedCodeEntity applies SystemSlug to its project arg → the joined slug
+//     is capped to ≤80 chars with a hash suffix for the *defined* symbol's system
+//     segment.
+//   - The golang parser's direct entityid.Build calls at parser.go:503 and :551
+//     use p.project raw — no SystemSlug — for *referenced* symbol IDs.
+//
+// When the joined slug exceeds maxSystemSlugLen these two paths produce different
+// system segments, so the call/type edge points at an entity ID that does not
+// exist (dangling edge). ScopedSystemSlug applies a final SystemSlug pass so the
+// output is always ≤80 chars and idempotent, making both code paths agree.
+func TestScopedSystemSlug_FinalSlug(t *testing.T) {
+	// Project and version whose individual slugs are each under 80 but whose
+	// join exceeds 80: 50 + 1 + 40 = 91 > maxSystemSlugLen (80).
+	longProject := strings.Repeat("x", 50)
+	version1 := strings.Repeat("y", 40)
+	version2 := strings.Repeat("z", 40) // same length, different chars → different hash
+
+	// Confirm the bug precondition: the raw join is >80.
+	rawJoined := entityid.VersionScopedSlug(
+		entityid.SystemSlug(longProject),
+		entityid.SystemSlug(version1),
+	)
+	if len(rawJoined) <= 80 {
+		t.Fatalf("test precondition failed: raw joined slug is %d chars (≤80); "+
+			"adjust inputs to exceed maxSystemSlugLen", len(rawJoined))
+	}
+	// Without the outer cap, SystemSlug applied after produces a DIFFERENT string
+	// (truncation + hash kicks in), proving the defined-symbol path would disagree
+	// with the referenced-symbol path.
+	if entityid.SystemSlug(rawJoined) == rawJoined {
+		t.Fatalf("test precondition failed: SystemSlug(rawJoined) is already "+
+			"idempotent on the %d-char join — bug would not manifest", len(rawJoined))
+	}
+
+	slug1 := entityid.ScopedSystemSlug(longProject, version1)
+	slug2 := entityid.ScopedSystemSlug(longProject, version2)
+
+	// Property 1: result is ≤ maxSystemSlugLen (80) — length cap enforced.
+	if len(slug1) > 80 {
+		t.Errorf("ScopedSystemSlug result length = %d, want ≤ 80", len(slug1))
+	}
+
+	// Property 2: result is idempotent under SystemSlug — the NewScopedCodeEntity
+	// path and the raw parser.go:503/551 path now produce the same system segment.
+	if got := entityid.SystemSlug(slug1); got != slug1 {
+		t.Errorf("ScopedSystemSlug result is not idempotent under SystemSlug:\n"+
+			"  SystemSlug(%q)\n  = %q\n  (defined-symbol path disagrees with referenced-symbol path)",
+			slug1, got)
+	}
+
+	// Property 3: distinct long versions produce distinct final slugs — the
+	// content-hash suffix in SystemSlug's truncation preserves uniqueness.
+	if slug1 == slug2 {
+		t.Errorf("distinct long versions produced the same slug %q — "+
+			"cross-version distinctness lost after length cap", slug1)
+	}
+}
+
+func TestScopedSystemSlug_ShortValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		project string
+		version string
+		want    string
+	}{
+		// Empty version behaves like plain SystemSlug(project).
+		{"no version clean", "myproject", "", "myproject"},
+		{"no version url", "github.com/acme/repo", "", "github-com-acme-repo"},
+		// Short project + version — no cap needed; output matches VersionScopedSlug.
+		{"short both", "semstreams", "v1.9.0", "semstreams-v1-9-0"},
+		// Raw module-cache-style path with @ — slugified by inner SystemSlug.
+		{"module cache path", "semstreams@v1.9.0", "", "semstreams-v1-9-0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := entityid.ScopedSystemSlug(tt.project, tt.version)
+			if got != tt.want {
+				t.Errorf("ScopedSystemSlug(%q, %q) = %q, want %q",
+					tt.project, tt.version, got, tt.want)
+			}
+			if err := entityid.ValidateNATSKVKey(got); err != nil {
+				t.Errorf("ScopedSystemSlug result %q is not a valid NATS KV key: %v", got, err)
+			}
+			if !entityIDSegmentRegex.MatchString(got) {
+				t.Errorf("ScopedSystemSlug result %q is not a valid entity-ID segment", got)
+			}
+		})
+	}
+}
+
+func TestVersionScopedSlug(t *testing.T) {
+	tests := []struct {
+		systemSlug  string
+		versionSlug string
+		want        string
+	}{
+		// Empty qualifier returns the slug unchanged (version-independent / backward compat).
+		{"github-com-acme-repo", "", "github-com-acme-repo"},
+		// Non-empty qualifier is joined with a single hyphen.
+		{"semstreams", "v1-9-0", "semstreams-v1-9-0"},
+		// Different version → different combined slug (cross-version distinctness).
+		{"semstreams", "v1-10-0", "semstreams-v1-10-0"},
+		// Pre-slugged version with no illegal chars passes through unchanged.
+		{"my-lib", "beta-4", "my-lib-beta-4"},
+	}
+	for _, tt := range tests {
+		got := entityid.VersionScopedSlug(tt.systemSlug, tt.versionSlug)
+		if got != tt.want {
+			t.Errorf("VersionScopedSlug(%q, %q) = %q, want %q",
+				tt.systemSlug, tt.versionSlug, got, tt.want)
+		}
+		// Result must pass both NATS KV validation and the graph-ingest
+		// per-segment regex — it serves as a single entity ID segment.
+		if tt.want != "" {
+			if err := entityid.ValidateNATSKVKey(tt.want); err != nil {
+				t.Errorf("VersionScopedSlug result %q is not a valid NATS KV key: %v", tt.want, err)
+			}
+			if !entityIDSegmentRegex.MatchString(tt.want) {
+				t.Errorf("VersionScopedSlug result %q is not a valid entity-ID segment", tt.want)
+			}
+		}
+	}
+}

@@ -105,11 +105,18 @@ func NewCodeEntity(org, language, project string, entityType CodeEntityType, nam
 // or methods named "submit" in two classes in one Java file would otherwise
 // collide. Pass an empty scope (nil or []) for top-level entities; in that
 // case the resulting ID matches NewCodeEntity exactly.
+//
+// The project argument is run through entityid.SystemSlug before being used as
+// the system segment. This is idempotent on already-clean slugs (such as those
+// pre-computed by the ast-source component), so no double-transform harm occurs,
+// and it eliminates the raw-passthrough bug for callers that supply a canonical
+// module path or module-cache path (e.g. "semstreams@v1.9.0") directly.
 func NewScopedCodeEntity(org, language, project string, entityType CodeEntityType, scope []string, name, path string) *CodeEntity {
 	instance := BuildScopedInstanceID(path, scope, name, entityType)
+	systemSlug := entityid.SystemSlug(project)
 
 	return &CodeEntity{
-		ID:         entityid.Build(org, entityid.PlatformSemsource, language, project, string(entityType), instance),
+		ID:         entityid.Build(org, entityid.PlatformSemsource, language, systemSlug, string(entityType), instance),
 		Type:       entityType,
 		Name:       name,
 		Path:       path,

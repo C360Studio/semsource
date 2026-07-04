@@ -341,6 +341,78 @@ func TestBuildInstanceID(t *testing.T) {
 	}
 }
 
+// TestNewCodeEntity_VersionBearingProject_ValidID verifies that a project string
+// containing characters illegal in entity IDs (such as '@' from Go module-cache
+// paths or '.' from canonical module paths) is sanitized to a valid NATS KV key
+// with exactly 6 dot-separated parts and no stray dots in the system segment.
+func TestNewCodeEntity_VersionBearingProject_ValidID(t *testing.T) {
+	// "semstreams@v1.9.0" mimics a Go module-cache path component — the '@'
+	// and '.' were previously passed raw to Build, yielding an invalid NATS key.
+	entity := NewCodeEntity("acme", "golang", "semstreams@v1.9.0", TypeFunction, "Run", "pkg/run.go")
+
+	if err := entityid.ValidateNATSKVKey(entity.ID); err != nil {
+		t.Errorf("entity ID %q failed NATS KV validation: %v", entity.ID, err)
+	}
+	parts := strings.Split(entity.ID, ".")
+	if len(parts) != 6 {
+		t.Errorf("entity ID %q has %d dot-separated parts, want exactly 6 (stray dots in system segment?)",
+			entity.ID, len(parts))
+	}
+}
+
+// TestNewCodeEntity_CrossVersionDistinctness verifies that the same symbol at
+// two different versions produces IDs that are distinct and differ only in the
+// system segment. The component pre-computes the scoped system slug via
+// entityid.VersionScopedSlug before passing it to CreateParser/BuildHierarchy;
+// this test mirrors that boundary.
+func TestNewCodeEntity_CrossVersionDistinctness(t *testing.T) {
+	systemV19 := entityid.VersionScopedSlug(
+		entityid.SystemSlug("semstreams"),
+		entityid.SystemSlug("v1.9.0"),
+	)
+	systemV110 := entityid.VersionScopedSlug(
+		entityid.SystemSlug("semstreams"),
+		entityid.SystemSlug("v1.10.0"),
+	)
+
+	e1 := NewCodeEntity("acme", "golang", systemV19, TypeFunction, "Run", "pkg/run.go")
+	e2 := NewCodeEntity("acme", "golang", systemV110, TypeFunction, "Run", "pkg/run.go")
+
+	if e1.ID == e2.ID {
+		t.Fatalf("v1.9.0 and v1.10.0 entities must have distinct IDs, but both are %q", e1.ID)
+	}
+
+	p1 := strings.SplitN(e1.ID, ".", 6)
+	p2 := strings.SplitN(e2.ID, ".", 6)
+	if len(p1) != 6 || len(p2) != 6 {
+		t.Fatalf("expected 6-part IDs, got %d and %d parts", len(p1), len(p2))
+	}
+
+	// System segment (index 3) must differ between the two versions.
+	if p1[3] == p2[3] {
+		t.Errorf("system segments are identical (%q) — cross-version scoping did not take effect", p1[3])
+	}
+
+	// All other segments (org, platform, domain, type, instance) must be identical.
+	for _, idx := range []int{0, 1, 2, 4, 5} {
+		if p1[idx] != p2[idx] {
+			t.Errorf("segment[%d] differs unexpectedly: %q vs %q", idx, p1[idx], p2[idx])
+		}
+	}
+}
+
+// TestNewCodeEntity_BackwardCompat_CleanProject is a golden-string assertion:
+// a clean project (no illegal chars) with an empty version must produce a
+// byte-identical ID to the pre-change construction. A future refactor that
+// silently churns these IDs will break this test.
+func TestNewCodeEntity_BackwardCompat_CleanProject(t *testing.T) {
+	const wantID = "acme.semsource.golang.myproject.function.pkg-foo-go-Foo"
+	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	if entity.ID != wantID {
+		t.Errorf("backward-compat golden ID mismatch:\ngot  %q\nwant %q", entity.ID, wantID)
+	}
+}
+
 func TestEntityState_Fields(t *testing.T) {
 	now := time.Now()
 	state := &EntityState{

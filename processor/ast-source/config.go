@@ -29,6 +29,13 @@ type WatchPathConfig struct {
 	// Project is the project name for entity IDs
 	Project string `json:"project" schema:"type:string,description:Project name for entity IDs,required:true"`
 
+	// Version is an optional version/ref qualifier for entity-ID scoping (e.g. a
+	// dependency version such as "v1.9.0"). When empty the system segment is
+	// version-independent, preserving today's ID byte-for-byte. When set it is
+	// slugified and appended to the system segment so that code from different
+	// versions of the same project receives distinct, non-colliding entity IDs.
+	Version string `json:"version,omitempty" schema:"type:string,description:Version/ref qualifier for entity-ID scoping (e.g. a dependency version); empty = version-independent"`
+
 	// Languages to parse (registered parser names: go, typescript, javascript, java, python, svelte)
 	Languages []string `json:"languages" schema:"type:array,description:Languages to parse,default:[go]"`
 
@@ -92,6 +99,7 @@ type Config struct {
 	RepoPath        string   `json:"repo_path"        schema:"type:string,description:Repository path to index (deprecated: use watch_paths),category:basic,default:."`
 	Org             string   `json:"org"              schema:"type:string,description:Organization for entity IDs (deprecated: use watch_paths),category:basic"`
 	Project         string   `json:"project"          schema:"type:string,description:Project name for entity IDs (deprecated: use watch_paths),category:basic"`
+	Version         string   `json:"version,omitempty" schema:"type:string,description:Version/ref qualifier for entity-ID scoping (deprecated: use watch_paths),category:basic"`
 	Languages       []string `json:"languages"        schema:"type:array,description:Languages to index (deprecated: use watch_paths),category:basic,default:[go]"`
 	ExcludePatterns []string `json:"exclude_patterns" schema:"type:array,description:Directory patterns to exclude (deprecated: use watch_paths),category:advanced"`
 
@@ -149,6 +157,7 @@ func (c *Config) GetWatchPaths() []WatchPathConfig {
 			Path:      c.RepoPath,
 			Org:       c.Org,
 			Project:   c.Project,
+			Version:   c.Version,
 			Languages: languages,
 			Excludes:  c.ExcludePatterns,
 		},

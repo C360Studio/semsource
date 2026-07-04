@@ -32,11 +32,12 @@ var astSourceSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
 // pathWatcher manages watching and parsing for a single resolved path.
 type pathWatcher struct {
-	config   WatchPathConfig
-	root     string // Resolved absolute path
-	watcher  *semsourceast.Watcher
-	parsers  map[string]semsourceast.FileParser // language → parser instance
-	excludes map[string]bool                    // set of excluded directory names
+	config       WatchPathConfig
+	root         string // Resolved absolute path
+	scopedSystem string // Pre-computed version-scoped system slug (entityid.ScopedSystemSlug result)
+	watcher      *semsourceast.Watcher
+	parsers      map[string]semsourceast.FileParser // language → parser instance
+	excludes     map[string]bool                    // set of excluded directory names
 }
 
 // Component implements the ast-source processor.
@@ -128,11 +129,21 @@ func (c *Component) initializeWatchers() error {
 			return fmt.Errorf("resolve path %q: %w", rp.AbsPath, err)
 		}
 
+		// Compute the scoped system slug once per watch path. ScopedSystemSlug
+		// applies a final SystemSlug pass after the join, ensuring the result is
+		// ≤80 chars and idempotent under SystemSlug. This means NewScopedCodeEntity's
+		// inner SystemSlug call and the golang parser's raw entityid.Build calls
+		// (parser.go:503/551) both produce the same system segment — no dangling
+		// edges. An empty Version produces the bare SystemSlug of project,
+		// preserving existing IDs byte-for-byte for clean projects.
+		scopedSystem := entityid.ScopedSystemSlug(rp.Config.Project, rp.Config.Version)
+
 		pw := &pathWatcher{
-			config:   rp.Config,
-			root:     rp.AbsPath,
-			parsers:  make(map[string]semsourceast.FileParser),
-			excludes: make(map[string]bool),
+			config:       rp.Config,
+			root:         rp.AbsPath,
+			scopedSystem: scopedSystem,
+			parsers:      make(map[string]semsourceast.FileParser),
+			excludes:     make(map[string]bool),
 		}
 
 		for _, exc := range rp.Config.Excludes {
@@ -145,7 +156,9 @@ func (c *Component) initializeWatchers() error {
 		}
 
 		for _, lang := range languages {
-			parser, err := semsourceast.DefaultRegistry.CreateParser(lang, rp.Config.Org, rp.Config.Project, rp.AbsPath)
+			// Pass scopedSystem as the project so all entity IDs produced by the
+			// parser use the consistent, version-scoped system segment.
+			parser, err := semsourceast.DefaultRegistry.CreateParser(lang, rp.Config.Org, scopedSystem, rp.AbsPath)
 			if err != nil {
 				return fmt.Errorf("create parser for %s: %w", lang, err)
 			}
@@ -215,7 +228,8 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 
 		// Publish repo and folder hierarchy entities before file/symbol entities.
-		c.publishHierarchy(ctx, results, pw.config.Org, pw.config.Project)
+		// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
+		c.publishHierarchy(ctx, results, pw.config.Org, pw.scopedSystem)
 
 		for _, result := range results {
 			if err := c.publishParseResult(ctx, result, pw.root); err != nil {
@@ -344,7 +358,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 		if event.Result != nil {
 			// Publish folder chain for new/modified files so containment
 			// edges exist even for directories created between full reindexes.
-			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.config.Project)
+			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.scopedSystem)
 
 			if err := c.publishParseResult(ctx, event.Result, pw.root); err != nil {
 				c.logger.Warn("Failed to publish parse result",
@@ -412,7 +426,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 		}
 
 		// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
-		c.publishHierarchy(ctx, results, pw.config.Org, pw.config.Project)
+		c.publishHierarchy(ctx, results, pw.config.Org, pw.scopedSystem)
 
 		for _, result := range results {
 			totalFiles++
