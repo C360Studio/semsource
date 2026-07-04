@@ -62,6 +62,23 @@ docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:latest   # OpenAI-compati
 semsource run --config configs/tiers/tier1-semantic.json
 ```
 
+> **Resource footprint — semembed is CPU-heavy on the first index (local-dev caveat).** semembed runs
+> real embedding inference (fastembed-rs / ONNX, arctic-embed-s). Embedding a full initial index is a
+> burst of inference and, by default, ONNX fans out across every core: **measured ~561% CPU (≈5.6 cores)
+> embedding a 21.5k-entity graph on a laptop** — fine on a server, rough on a dev machine. It's a
+> **one-time first-index cost** (results land in `EMBEDDINGS_CACHE`; steady-state watch is cheap), not
+> continuous. Levers if it's hammering your machine:
+> - **Cap the container CPU** — `docker run --cpus=2 ...` up front, or **live with no restart / no lost
+>   progress**: `docker update --cpus=2 semembed` (drops ~561%→~200%; the initial index just takes
+>   longer). In compose, `deploy.resources.limits.cpus: "2"`.
+> - **Index a smaller scope** first (fewer sources / a subdir) — structural queries
+>   (`code_context`/`callers`/`impact`/`byName`) work at tier 0 with no embedder, so you only pay this
+>   for `code_search` NL quality.
+>
+> semembed exposes no thread-cap env today (only `SEMEMBED_PORT`/`SEMEMBED_MODEL`/`RUST_LOG`); the
+> container `--cpus` limit fully covers the local-dev need, so this is a documented lever, **not** an
+> upstream ask. (A default intra-op thread cap would be a marginal semembed DX nicety if it ever comes up.)
+
 > **Query prefix — REQUIRED for arctic/BGE/E5 (resolved semstreams#438, beta.129).** These retrieval
 > models are *asymmetric*: the query must carry an instruction prefix (arctic:
 > `"Represent this sentence for searching relevant passages: "`) while documents are embedded raw.
