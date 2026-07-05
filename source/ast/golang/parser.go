@@ -36,11 +36,12 @@ type Parser struct {
 	// importMap holds the current file's imports, keyed by local name (alias or last path segment)
 	importMap map[string]string
 
-	// pkgTypes memoizes the same-package type declarations (name -> defining file +
-	// kind) for the file being parsed. Reset at each ParseFile and built lazily on
-	// first local-type reference (see imports.go); serialized per source path by
-	// ast-source's parseFileWithWatcher lock (task #44 design D6).
-	pkgTypes map[string]goLocalType
+	// pkgTypesCache memoizes each package directory's type declarations
+	// (name -> defining file + kind), keyed by directory and validated by a
+	// name+size+mtime signature (see imports.go), so a bulk index parses each
+	// directory once and a watch edit rebuilds it. Persisted across ParseFile calls;
+	// serialized per source path by ast-source's parseFileWithWatcher lock (#44 D6).
+	pkgTypesCache map[string]pkgTypesEntry
 }
 
 // NewParser creates a new Go AST parser
@@ -90,9 +91,6 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		Imports:  make([]string, 0),
 		Entities: make([]*ast.CodeEntity, 0),
 	}
-
-	// Reset per-file resolver state (same-package type map is rebuilt lazily).
-	p.pkgTypes = nil
 
 	// Build import map for type resolution
 	p.importMap = make(map[string]string)
@@ -507,7 +505,11 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 	}
 
 	// Local function: build via the definition's own path so the system segment is
-	// SystemSlug(project), not the raw project (matches same-file function IDs).
+	// SystemSlug(project), not the raw project. This resolves a same-file call; a
+	// call to a package-level function in a sibling file still targets the caller's
+	// path and stays inert. Cross-file *call* resolution (a packageTypes-style scan
+	// for funcs) is deferred with the multi-language call graph — this task (#46)
+	// scopes type-dependency edges, not calls.
 	return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, callName, filePath).ID
 }
 

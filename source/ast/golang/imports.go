@@ -1,6 +1,7 @@
 package golang
 
 import (
+	"fmt"
 	goast "go/ast"
 	"go/parser"
 	"go/token"
@@ -20,36 +21,61 @@ type goLocalType struct {
 	kind    ast.CodeEntityType
 }
 
+// pkgTypesEntry caches one package directory's type map behind a content signature
+// so the directory is re-parsed only when a source file is added, removed, or
+// edited — not once per file in the package.
+type pkgTypesEntry struct {
+	sig   string
+	types map[string]goLocalType
+}
+
 // packageTypes returns the top-level type declarations of the package (= the
 // directory) containing fromRelPath, mapping name -> (defining relPath, kind).
 // A bare Go type name refers to a type in the SAME package, which may live in a
-// different file, so resolution needs a sibling scan. Built lazily once per
-// ParseFile (p.pkgTypes is reset at parse start) so it stays fresh across watch
-// re-parses; scans the directory with go/parser (declarations only, no bodies).
+// different file, so resolution needs a sibling scan (go/parser, declarations
+// only). The scan is cached per directory on the Parser behind a name+size+mtime
+// signature: a bulk index of an N-file package re-parses each directory once (not
+// N times), and a watch edit to any sibling changes the signature and rebuilds, so
+// the map also stays fresh. `_test.go` files are excluded — production code cannot
+// reference a test-only type, and an external `p_test` type must never shadow the
+// production definition it doubles.
 func (p *Parser) packageTypes(fromRelPath string) map[string]goLocalType {
-	if p.pkgTypes != nil {
-		return p.pkgTypes
-	}
-	types := make(map[string]goLocalType)
-	p.pkgTypes = types
-
-	absDir := filepath.Join(p.repoRoot, filepath.Dir(fromRelPath))
+	dir := filepath.Dir(fromRelPath)
+	absDir := filepath.Join(p.repoRoot, dir)
 	entries, err := os.ReadDir(absDir)
 	if err != nil {
-		return types
+		return nil
 	}
-	fset := token.NewFileSet()
+
+	var goFiles []os.DirEntry
+	var sig strings.Builder
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
 			continue
 		}
+		goFiles = append(goFiles, e)
+		if info, ierr := e.Info(); ierr == nil {
+			fmt.Fprintf(&sig, "%s:%d:%d;", e.Name(), info.Size(), info.ModTime().UnixNano())
+		}
+	}
+
+	if p.pkgTypesCache == nil {
+		p.pkgTypesCache = make(map[string]pkgTypesEntry)
+	}
+	if cached, ok := p.pkgTypesCache[dir]; ok && cached.sig == sig.String() {
+		return cached.types
+	}
+
+	types := make(map[string]goLocalType)
+	fset := token.NewFileSet()
+	for _, e := range goFiles {
 		abs := filepath.Join(absDir, e.Name())
-		f, err := parser.ParseFile(fset, abs, nil, parser.SkipObjectResolution)
-		if err != nil {
+		f, perr := parser.ParseFile(fset, abs, nil, parser.SkipObjectResolution)
+		if perr != nil {
 			continue
 		}
-		rel, err := filepath.Rel(p.repoRoot, abs)
-		if err != nil {
+		rel, rerr := filepath.Rel(p.repoRoot, abs)
+		if rerr != nil {
 			rel = abs
 		}
 		for _, decl := range f.Decls {
@@ -68,6 +94,7 @@ func (p *Parser) packageTypes(fromRelPath string) map[string]goLocalType {
 			}
 		}
 	}
+	p.pkgTypesCache[dir] = pkgTypesEntry{sig: sig.String(), types: types}
 	return types
 }
 

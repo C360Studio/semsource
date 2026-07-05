@@ -1,7 +1,6 @@
 package ts
 
 import (
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -63,6 +62,11 @@ func addImportStatement(node *sitter.Node, source []byte, bindings map[string]ts
 		child := clause.NamedChild(i)
 		switch child.Type() {
 		case "identifier": // default import: `import Def from '...'`
+			// A default import's origin is taken as the local name: the module's
+			// real default-export symbol name is not knowable without parsing the
+			// target. The common `import Base from './base'` (matching the exported
+			// name) resolves; a *renamed* default import binds a name the definition
+			// does not use, so it stays inert (dropped) — never a wrong edge.
 			bindings[nodeText(child, source)] = tsBinding{spec: spec, origin: nodeText(child, source)}
 		case "named_imports":
 			for j := 0; j < int(child.NamedChildCount()); j++ {
@@ -198,12 +202,12 @@ func (p *Parser) resolveTSImport(name, fromRelPath string) (relPath, origin stri
 	dir := path.Dir(filepath.ToSlash(fromRelPath))
 	joined := path.Join(dir, b.spec)
 	for _, ext := range tsExtensions {
-		if cand := joined + ext; fileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
+		if cand := joined + ext; ast.FileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
 			return filepath.FromSlash(cand), b.origin, true
 		}
 	}
 	for _, ext := range tsExtensions {
-		if cand := path.Join(joined, "index"+ext); fileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
+		if cand := path.Join(joined, "index"+ext); ast.FileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
 			return filepath.FromSlash(cand), b.origin, true
 		}
 	}
@@ -230,10 +234,4 @@ func findChild(node *sitter.Node, typ string) *sitter.Node {
 		}
 	}
 	return nil
-}
-
-// fileExists reports whether path names an existing regular file.
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
 }

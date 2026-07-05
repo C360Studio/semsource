@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/source/ast"
@@ -98,6 +99,30 @@ func TestGoPackageQualifiedStaysExternal(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("References = %v, want to contain external:context.Context", server.References)
+	}
+}
+
+// TestGoEmbedPrefersProductionOverTestType — a production embed must resolve to
+// the production sibling's definition, never a same-named type in a _test.go file
+// (which production code cannot legally reference). Guards the packageTypes
+// _test.go exclusion.
+func TestGoEmbedPrefersProductionOverTestType(t *testing.T) {
+	ents := parseAllGo(t, "proj", map[string]string{
+		// _test.go sorts before server.go in ReadDir order — without the exclusion
+		// its Server would shadow the production one.
+		"aaa_test.go": "package p\ntype Server struct{}\n",
+		"server.go":   "package p\ntype Server struct{}\n",
+		"app.go":      "package p\ntype App struct{ Server }\n",
+	})
+	app := ents["App"]
+	if app == nil || len(app.Embeds) != 1 {
+		t.Fatalf("App.Embeds = %v", app)
+	}
+	if !strings.Contains(app.Embeds[0], "server-go-Server") {
+		t.Errorf("embed target %q, want it built against production server.go, not a _test.go file", app.Embeds[0])
+	}
+	if strings.Contains(app.Embeds[0], "test") {
+		t.Errorf("embed target %q resolved to a _test.go type", app.Embeds[0])
 	}
 }
 

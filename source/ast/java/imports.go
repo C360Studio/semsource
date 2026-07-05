@@ -1,7 +1,6 @@
 package java
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -137,13 +136,18 @@ func (p *Parser) resolveJavaType(name, fromRelPath string) (relPath, external st
 		}
 		return "", fqn, false // imported from another (out-of-tree) package
 	}
-	// Same package: a top-level type lives in a sibling file named after it.
+	// Same package: assume the standard one-public-type-per-eponymous-file layout,
+	// so `Base` lives in a sibling `Base.java`. A package-private type sharing
+	// another file (e.g. `Base` declared inside `Types.java`) is not found here and
+	// the caller falls back to an inert same-file target — a missing edge, never a
+	// wrong one. Resolving that would need a sibling-file scan (as Go does); out of
+	// scope for the common Java case.
 	dir := filepath.ToSlash(filepath.Dir(fromRelPath))
 	cand := name + ".java"
 	if dir != "." && dir != "" {
 		cand = dir + "/" + cand
 	}
-	if fileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
+	if ast.FileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
 		return filepath.FromSlash(cand), "", true
 	}
 	return "", "", false
@@ -160,7 +164,7 @@ func (p *Parser) fqnToRelPath(fqn, fromRelPath string) (string, bool) {
 		filepath.Join(p.sourceRootPrefix(fromRelPath), fqnPath),
 		fqnPath,
 	} {
-		if fileExists(filepath.Join(p.repoRoot, cand)) {
+		if ast.FileExists(filepath.Join(p.repoRoot, cand)) {
 			return cand, true
 		}
 	}
@@ -183,10 +187,4 @@ func (p *Parser) sourceRootPrefix(fromRelPath string) string {
 		return trimmed
 	}
 	return ""
-}
-
-// fileExists reports whether path names an existing regular file.
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
 }

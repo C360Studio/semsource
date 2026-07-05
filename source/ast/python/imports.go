@@ -1,12 +1,13 @@
 package python
 
 import (
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
+
+	"github.com/c360studio/semsource/source/ast"
 )
 
 // importBinding records where a locally-bound name came from, so a later type
@@ -137,7 +138,7 @@ func (p *Parser) moduleToRelPath(module, fromRelPath string, level int) (string,
 
 	joined := filepath.Join(baseParts...)
 	for _, cand := range []string{joined + ".py", filepath.Join(joined, "__init__.py")} {
-		if fileExists(filepath.Join(p.repoRoot, cand)) {
+		if ast.FileExists(filepath.Join(p.repoRoot, cand)) {
 			return cand, true
 		}
 	}
@@ -169,10 +170,4 @@ func lookupBinding(typeName string, imports map[string]importBinding) (module, o
 // nodeText returns the source text spanned by a node.
 func nodeText(n *sitter.Node, content []byte) string {
 	return string(content[n.StartByte():n.EndByte()])
-}
-
-// fileExists reports whether path names an existing regular file.
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
 }
