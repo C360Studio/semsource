@@ -3,6 +3,7 @@ package python
 import (
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -118,6 +119,22 @@ func parseModuleName(node *sitter.Node, content []byte) (module string, level in
 // Returns ok=false for out-of-tree modules (stdlib / third-party) — the caller
 // then leaves the reference inert rather than resolving it to a wrong entity.
 func (p *Parser) moduleToRelPath(module, fromRelPath string, level int) (string, bool) {
+	// Memoize per file: a call-heavy file resolves the same import repeatedly, and
+	// #44's type resolution calls this per reference too. Keyed by the inputs that
+	// affect the result (relative imports depend on the referrer's package dir).
+	memoKey := strconv.Itoa(level) + "\x00" + module + "\x00" + path.Dir(filepath.ToSlash(fromRelPath))
+	if m, ok := p.moduleRelPathMemo[memoKey]; ok {
+		return m.relPath, m.ok
+	}
+	relPath, ok := p.resolveModuleToRelPath(module, fromRelPath, level)
+	if p.moduleRelPathMemo != nil {
+		p.moduleRelPathMemo[memoKey] = moduleRelPath{relPath: relPath, ok: ok}
+	}
+	return relPath, ok
+}
+
+// resolveModuleToRelPath is the uncached body of moduleToRelPath.
+func (p *Parser) resolveModuleToRelPath(module, fromRelPath string, level int) (string, bool) {
 	var baseParts []string
 	if level > 0 {
 		// Package dir of the referrer, then up (level-1) parents.
