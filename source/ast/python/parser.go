@@ -32,11 +32,12 @@ func init() {
 // typeNameToEntityID can resolve a cross-file reference to its defining module
 // (task #44) without threading state through the extraction call chain.
 type Parser struct {
-	org      string
-	project  string
-	repoRoot string
-	parser   *sitter.Parser
-	imports  map[string]importBinding
+	org        string
+	project    string
+	repoRoot   string
+	parser     *sitter.Parser
+	imports    map[string]importBinding
+	localFuncs map[string]bool // module-level function names, for bare-call resolution (task #45)
 }
 
 // NewParser creates a new Python AST parser.
@@ -81,6 +82,11 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	// below resolve to the entity IDs of their definitions in other modules
 	// (task #44). Refreshed per file; the caller serializes ParseFile per instance.
 	p.imports = extractImportBindings(rootNode, content)
+
+	// Also collect module-level function names so a bare `foo()` call is resolved
+	// only when it names a real local function (else builtin/instantiation → inert,
+	// task #45). Refreshed per file alongside the import bindings.
+	p.localFuncs = extractLocalFunctions(rootNode, content)
 
 	// Determine module/package name from file path
 	moduleName := p.extractModuleName(relPath)
@@ -383,9 +389,12 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 		entity.Returns = append(entity.Returns, p.typeNameToEntityID(typeStr, filePath))
 	}
 
-	// Extract docstring
+	// Extract docstring and call sites (task #45). The call walk covers the whole
+	// body — nested blocks, comprehensions, and nested defs (which are not separate
+	// entities) — attributing their calls to this function.
 	if body := node.ChildByFieldName("body"); body != nil {
 		entity.DocComment = p.extractBodyDocstring(body, content)
+		entity.Calls = p.extractCalls(body, content, filePath, scope)
 	}
 
 	// Check if async
