@@ -363,7 +363,15 @@ lens once the hook exists). **Not MVP-blocking:** `code_search` retrieves docs w
 `doc_context` is accurate when docs aren't drowned; this bites only mixed code+doc
 corpora. **Surfaced by:** Tier A #3 / B #4 live validation (Python repo + docs).
 
-### 17. Per-facet edge selection for the fusion engine (impact ≠ relations) — framework-shaped — filed [semstreams#475](https://github.com/C360Studio/semstreams/issues/475)
+### 17. Per-facet edge selection for the fusion engine (impact ≠ relations) — framework-shaped — RESOLVED in beta.140 ([semstreams#475](https://github.com/C360Studio/semstreams/issues/475), PR #481) — ADOPTED
+**RESOLVED (beta.140):** `EdgeSpec` gained `Facets []Facet` (`nil` = all facets; fix
+direction (1) — the per-spec facet mask). **ADOPTED (semsource):** the code lens now
+tags `CodeContains` with `Facets: {FacetRelations, FacetPaths}`, so containment still
+populates the container/contents relations but is excluded from the impact walk —
+`code_impact` is now a pure reverse-dependency closure (the httpx `BaseClient` impact=5
+= 2 subclasses + 3 containers case). Regression: `TestCodeLens_ImpactExcludesContainment`.
+
+Original ask below (for history):
 `fusion.Lens.Edges()` returns ONE `[]EdgeSpec` list the engine uses for THREE facets:
 `computeImpact` (incoming BFS), `computePaths` (outgoing DFS), and the `relations` map
 on each node. A lens cannot say "walk this edge for relations but not for impact."
