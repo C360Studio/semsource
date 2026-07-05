@@ -69,9 +69,10 @@ func (m *MemGraph) AddEdge(from, predicate, to string) {
 // Status implements fusion.RetrievalClient.
 func (m *MemGraph) Status(context.Context) (fusion.IndexStatus, error) { return m.status, nil }
 
-// Resolve implements fusion.RetrievalClient.
-func (m *MemGraph) Resolve(_ context.Context, query string, _ fusion.ResolveMode, _ int) ([]string, error) {
-	return m.resolve[query], nil
+// Resolve implements fusion.RetrievalClient. Keys on the query text only (Mode,
+// Scope, and Limit are ignored — the fake returns the pre-seeded IDs verbatim).
+func (m *MemGraph) Resolve(_ context.Context, q fusion.ResolveQuery) ([]string, error) {
+	return m.resolve[q.Query], nil
 }
 
 // Entity implements fusion.RetrievalClient.
