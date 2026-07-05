@@ -753,10 +753,10 @@ func TestTypeNameToEntityID_Builtin(t *testing.T) {
 
 	builtins := []string{"int", "String", "boolean", "Integer", "Double", "Object"}
 	for _, b := range builtins {
-		result := p.typeNameToEntityID(b, "Test.java")
+		result := p.typeRefID(b, "Test.java")
 		expected := "builtin:" + b
 		if result != expected {
-			t.Errorf("typeNameToEntityID(%q) = %q, want %q", b, result, expected)
+			t.Errorf("typeRefID(%q) = %q, want %q", b, result, expected)
 		}
 	}
 }
@@ -764,28 +764,28 @@ func TestTypeNameToEntityID_Builtin(t *testing.T) {
 func TestTypeNameToEntityID_FullyQualified(t *testing.T) {
 	p := NewParser("acme", "test", "/tmp")
 
-	result := p.typeNameToEntityID("java.util.List", "Test.java")
+	result := p.typeRefID("java.util.List", "Test.java")
 	expected := "external:java.util.List"
 	if result != expected {
-		t.Errorf("typeNameToEntityID(java.util.List) = %q, want %q", result, expected)
+		t.Errorf("typeRefID(java.util.List) = %q, want %q", result, expected)
 	}
 
-	result = p.typeNameToEntityID("com.example.MyClass", "Test.java")
+	result = p.typeRefID("com.example.MyClass", "Test.java")
 	expected = "external:com.example.MyClass"
 	if result != expected {
-		t.Errorf("typeNameToEntityID(com.example.MyClass) = %q, want %q", result, expected)
+		t.Errorf("typeRefID(com.example.MyClass) = %q, want %q", result, expected)
 	}
 }
 
 func TestTypeNameToEntityID_LocalType(t *testing.T) {
 	p := NewParser("acme", "myproject", "/tmp")
 
-	result := p.typeNameToEntityID("User", "models/User.java")
+	result := p.typeRefID("User", "models/User.java")
 	if !strings.HasPrefix(result, "acme.semsource.java.myproject.type.") {
-		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semsource.java.myproject.type.'", result)
+		t.Errorf("typeRefID(User) = %q, want prefix 'acme.semsource.java.myproject.type.'", result)
 	}
 	if !strings.Contains(result, "User") {
-		t.Errorf("typeNameToEntityID(User) = %q, want to contain 'User'", result)
+		t.Errorf("typeRefID(User) = %q, want to contain 'User'", result)
 	}
 }
 

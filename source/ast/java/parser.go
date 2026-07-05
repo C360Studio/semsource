@@ -11,7 +11,6 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/java"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -28,6 +27,12 @@ type Parser struct {
 	project  string
 	repoRoot string
 	parser   *sitter.Parser
+
+	// Per-file resolver state, refreshed each ParseFile (see imports.go). Serialized
+	// per source path by ast-source's parseFileWithWatcher lock (task #44 design D6).
+	pkg        string                        // current file's package (dotted)
+	importMap  map[string]string             // simpleName -> fully-qualified import
+	localKinds map[string]ast.CodeEntityType // same-file type name -> kind (D5)
 }
 
 // NewParser creates a new Java AST parser.
@@ -70,6 +75,12 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 
 	// Extract package name
 	packageName := p.extractPackageName(rootNode, content)
+
+	// Refresh per-file resolver state used to point type references at the entity
+	// ID of their DEFINITION (same-file, same-package, or imported) — see imports.go.
+	p.pkg = packageName
+	p.importMap = extractImportMap(rootNode, content)
+	p.localKinds = extractLocalKinds(rootNode, content)
 
 	result := &ast.ParseResult{
 		Path:     relPath,
@@ -278,23 +289,17 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	entity.DocComment = p.docCommentWithMetadata(node, content,
 		strings.Join(p.extractAnnotations(node, content), "\n"))
 
-	// Extract superclass (extends)
+	// Extract superclass (extends) — a class extends a class.
 	if superclass := node.ChildByFieldName("superclass"); superclass != nil {
 		superName := p.extractTypeReference(superclass, content)
 		if superName != "" {
-			entity.Extends = append(entity.Extends, p.typeNameToEntityID(superName, filePath))
+			entity.Extends = append(entity.Extends, p.hierarchyRefID(superName, ast.TypeClass, filePath))
 		}
 	}
 
-	// Extract interfaces (implements)
-	if interfaces := node.ChildByFieldName("interfaces"); interfaces != nil {
-		for i := 0; i < int(interfaces.NamedChildCount()); i++ {
-			ifaceNode := interfaces.NamedChild(i)
-			ifaceName := p.extractTypeReference(ifaceNode, content)
-			if ifaceName != "" {
-				entity.Implements = append(entity.Implements, p.typeNameToEntityID(ifaceName, filePath))
-			}
-		}
+	// Extract interfaces (implements) — each names an interface.
+	for _, ifaceName := range p.extractInterfaceNames(node, content) {
+		entity.Implements = append(entity.Implements, p.hierarchyRefID(ifaceName, ast.TypeInterface, filePath))
 	}
 
 	// Extract body members (methods, fields, inner classes)
@@ -337,13 +342,20 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 	entity.DocComment = p.docCommentWithMetadata(node, content,
 		strings.Join(p.extractAnnotations(node, content), "\n"))
 
-	// Extract extended interfaces
+	// Extract extended interfaces — an interface extends interfaces.
 	if extends := node.ChildByFieldName("extends"); extends != nil {
 		for i := 0; i < int(extends.NamedChildCount()); i++ {
 			extNode := extends.NamedChild(i)
-			extName := p.extractTypeReference(extNode, content)
-			if extName != "" {
-				entity.Extends = append(entity.Extends, p.typeNameToEntityID(extName, filePath))
+			if extNode.Type() == "type_list" {
+				for j := 0; j < int(extNode.NamedChildCount()); j++ {
+					if extName := p.extractTypeReference(extNode.NamedChild(j), content); extName != "" {
+						entity.Extends = append(entity.Extends, p.hierarchyRefID(extName, ast.TypeInterface, filePath))
+					}
+				}
+				continue
+			}
+			if extName := p.extractTypeReference(extNode, content); extName != "" {
+				entity.Extends = append(entity.Extends, p.hierarchyRefID(extName, ast.TypeInterface, filePath))
 			}
 		}
 	}
@@ -388,14 +400,8 @@ func (p *Parser) extractEnum(node *sitter.Node, content []byte, filePath string,
 		strings.Join(p.extractAnnotations(node, content), "\n"))
 
 	// Extract implemented interfaces
-	if interfaces := node.ChildByFieldName("interfaces"); interfaces != nil {
-		for i := 0; i < int(interfaces.NamedChildCount()); i++ {
-			ifaceNode := interfaces.NamedChild(i)
-			ifaceName := p.extractTypeReference(ifaceNode, content)
-			if ifaceName != "" {
-				entity.Implements = append(entity.Implements, p.typeNameToEntityID(ifaceName, filePath))
-			}
-		}
+	for _, ifaceName := range p.extractInterfaceNames(node, content) {
+		entity.Implements = append(entity.Implements, p.hierarchyRefID(ifaceName, ast.TypeInterface, filePath))
 	}
 
 	return entity
@@ -419,14 +425,8 @@ func (p *Parser) extractRecord(node *sitter.Node, content []byte, filePath strin
 		strings.Join(p.extractAnnotations(node, content), "\n"))
 
 	// Extract implemented interfaces
-	if interfaces := node.ChildByFieldName("interfaces"); interfaces != nil {
-		for i := 0; i < int(interfaces.NamedChildCount()); i++ {
-			ifaceNode := interfaces.NamedChild(i)
-			ifaceName := p.extractTypeReference(ifaceNode, content)
-			if ifaceName != "" {
-				entity.Implements = append(entity.Implements, p.typeNameToEntityID(ifaceName, filePath))
-			}
-		}
+	for _, ifaceName := range p.extractInterfaceNames(node, content) {
+		entity.Implements = append(entity.Implements, p.hierarchyRefID(ifaceName, ast.TypeInterface, filePath))
 	}
 
 	return entity
@@ -465,7 +465,7 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 	if returnType := node.ChildByFieldName("type"); returnType != nil {
 		typeName := p.extractTypeReference(returnType, content)
 		if typeName != "" && typeName != "void" {
-			entity.Returns = append(entity.Returns, p.typeNameToEntityID(typeName, filePath))
+			entity.Returns = append(entity.Returns, p.typeRefID(typeName, filePath))
 		}
 	}
 
@@ -505,7 +505,7 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 			entity.Visibility = visibility
 
 			if typeName != "" {
-				entity.References = append(entity.References, p.typeNameToEntityID(typeName, filePath))
+				entity.References = append(entity.References, p.typeRefID(typeName, filePath))
 			}
 
 			entity.DocComment = ast.CombineDocComment(javadoc, metadata)
@@ -624,7 +624,7 @@ func (p *Parser) extractParameters(params *sitter.Node, content []byte, filePath
 			if typeNode := child.ChildByFieldName("type"); typeNode != nil {
 				typeName := p.extractTypeReference(typeNode, content)
 				if typeName != "" {
-					paramTypes = append(paramTypes, p.typeNameToEntityID(typeName, filePath))
+					paramTypes = append(paramTypes, p.typeRefID(typeName, filePath))
 				}
 			}
 		}
@@ -767,6 +767,14 @@ func (p *Parser) extractTypeReference(typeNode *sitter.Node, content []byte) str
 	case "scoped_type_identifier":
 		return string(content[typeNode.StartByte():typeNode.EndByte()])
 
+	case "superclass":
+		// `extends Foo` — the type is the (only) named child; the `extends`
+		// keyword is anonymous. Without this, the raw clause text ("extends Foo")
+		// leaks into the entity ID and the edge dangles.
+		if typeNode.NamedChildCount() > 0 {
+			return p.extractTypeReference(typeNode.NamedChild(0), content)
+		}
+
 	case "generic_type":
 		// Extract base type, ignoring type parameters
 		// Try both "type" and the first named child
@@ -795,29 +803,34 @@ func (p *Parser) extractTypeReference(typeNode *sitter.Node, content []byte) str
 	return ""
 }
 
-// typeNameToEntityID converts a Java type name to an entity ID reference.
-func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
-	if typeName == "" {
-		return ""
+// extractInterfaceNames returns the simple names in a type's `implements` clause
+// (or an enum/record's interfaces). The `interfaces` field is a `super_interfaces`
+// node wrapping a `type_list`; the individual type names are the list's children,
+// so a naive walk of the field's direct children yields the whole clause text and
+// mis-reads multi-interface declarations.
+func (p *Parser) extractInterfaceNames(node *sitter.Node, content []byte) []string {
+	interfaces := node.ChildByFieldName("interfaces")
+	if interfaces == nil {
+		return nil
 	}
-
-	// Clean up the type name
-	typeName = strings.TrimSpace(typeName)
-
-	// Check for built-in types
-	if isBuiltinType(typeName) {
-		return fmt.Sprintf("builtin:%s", typeName)
+	var names []string
+	collect := func(list *sitter.Node) {
+		for i := 0; i < int(list.NamedChildCount()); i++ {
+			if name := p.extractTypeReference(list.NamedChild(i), content); name != "" {
+				names = append(names, name)
+			}
+		}
 	}
-
-	// Check for fully qualified type (e.g., "java.util.List")
-	if strings.Contains(typeName, ".") {
-		// External type reference
-		return fmt.Sprintf("external:%s", typeName)
+	for i := 0; i < int(interfaces.NamedChildCount()); i++ {
+		child := interfaces.NamedChild(i)
+		if child.Type() == "type_list" {
+			collect(child)
+			return names
+		}
 	}
-
-	// Local type - create entity ID within current project
-	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return entityid.Build(p.org, entityid.PlatformSemsource, "java", p.project, "type", instance)
+	// No wrapping type_list — treat the field's own children as the type list.
+	collect(interfaces)
+	return names
 }
 
 // isBuiltinType returns true if the type is a Java built-in type.

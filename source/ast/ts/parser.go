@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/javascript"
@@ -34,6 +33,11 @@ type Parser struct {
 	org      string
 	project  string
 	repoRoot string
+
+	// Per-file resolver state, refreshed each ParseFile (see imports.go). Serialized
+	// per source path by ast-source's parseFileWithWatcher lock (task #44 design D6).
+	importBindings map[string]tsBinding          // local name -> imported module + origin
+	localKinds     map[string]ast.CodeEntityType // same-file type name -> kind (D5)
 }
 
 // NewParser creates a new TypeScript/JavaScript parser
@@ -112,6 +116,12 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 
 	// Extract entities from the AST
 	rootNode := tree.RootNode()
+
+	// Refresh per-file resolver state used to point type references at the entity
+	// ID of their DEFINITION (same-file or imported module) — see imports.go.
+	p.importBindings = extractImportBindings(rootNode, content)
+	p.localKinds = extractLocalKinds(rootNode, content)
+
 	entities := p.extractEntities(rootNode, content, relPath, lang, fileEntity.ID)
 	for _, entity := range entities {
 		parseResult.Entities = append(parseResult.Entities, entity)
@@ -329,21 +339,21 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 				heritageType := heritage.Type()
 
 				if heritageType == "extends_clause" {
-					// Extract the type after 'extends' keyword
+					// A class extends a class.
 					for k := 0; k < int(heritage.ChildCount()); k++ {
 						typeNode := heritage.Child(k)
 						if typeNode.Type() == "identifier" || typeNode.Type() == "type_identifier" {
 							superClass := nodeText(typeNode, source)
-							entity.Extends = append(entity.Extends, p.typeNameToEntityID(superClass, filePath))
+							entity.Extends = append(entity.Extends, p.hierarchyRefID(superClass, ast.TypeClass, filePath))
 						}
 					}
 				} else if heritageType == "implements_clause" {
-					// Extract types after 'implements' keyword
+					// A class implements interfaces.
 					for k := 0; k < int(heritage.ChildCount()); k++ {
 						typeNode := heritage.Child(k)
 						if typeNode.Type() == "identifier" || typeNode.Type() == "type_identifier" {
 							iface := nodeText(typeNode, source)
-							entity.Implements = append(entity.Implements, p.typeNameToEntityID(iface, filePath))
+							entity.Implements = append(entity.Implements, p.hierarchyRefID(iface, ast.TypeInterface, filePath))
 						}
 					}
 				}
@@ -444,13 +454,13 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 		if child.Type() == "extends_clause" || child.Type() == "extends_type_clause" {
-			// Extract all types in the extends clause
+			// An interface extends interfaces.
 			for j := 0; j < int(child.ChildCount()); j++ {
 				typeNode := child.Child(j)
 				nodeType := typeNode.Type()
 				if nodeType == "identifier" || nodeType == "type_identifier" {
 					extType := nodeText(typeNode, source)
-					entity.Extends = append(entity.Extends, p.typeNameToEntityID(extType, filePath))
+					entity.Extends = append(entity.Extends, p.hierarchyRefID(extType, ast.TypeInterface, filePath))
 				}
 			}
 		}
@@ -693,7 +703,7 @@ func (p *Parser) extractFunctionSignature(node *sitter.Node, source []byte, enti
 				typeNode := child.ChildByFieldName("type")
 				if typeNode != nil {
 					paramType := nodeText(typeNode, source)
-					entity.Parameters = append(entity.Parameters, p.typeNameToEntityID(paramType, entity.Path))
+					entity.Parameters = append(entity.Parameters, p.typeRefID(paramType, entity.Path))
 				}
 			}
 		}
@@ -705,7 +715,7 @@ func (p *Parser) extractFunctionSignature(node *sitter.Node, source []byte, enti
 		returnType := nodeText(returnTypeNode, source)
 		// Remove leading colon if present
 		returnType = strings.TrimPrefix(strings.TrimSpace(returnType), ":")
-		entity.Returns = append(entity.Returns, p.typeNameToEntityID(returnType, entity.Path))
+		entity.Returns = append(entity.Returns, p.typeRefID(returnType, entity.Path))
 	}
 }
 
@@ -803,31 +813,6 @@ func (p *Parser) hasModifier(node *sitter.Node, modifier string) bool {
 		}
 	}
 	return false
-}
-
-// typeNameToEntityID converts a type name to an entity ID reference
-func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
-	if typeName == "" {
-		return ""
-	}
-
-	// Clean up type name (remove generics, etc.)
-	typeName = strings.TrimSpace(typeName)
-
-	// Strip generic type parameters
-	if idx := strings.Index(typeName, "<"); idx > 0 {
-		typeName = typeName[:idx]
-	}
-
-	// Check for built-in types
-	if isTSBuiltinType(typeName) {
-		return fmt.Sprintf("builtin:%s", typeName)
-	}
-
-	// Local type: create entity ID within current project
-	// Use typescript as the language domain for type references (JS files may also reference TS-style types)
-	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return entityid.Build(p.org, entityid.PlatformSemsource, "typescript", p.project, "type", instance)
 }
 
 // isTSBuiltinType returns true if the type is a TypeScript/JavaScript built-in type

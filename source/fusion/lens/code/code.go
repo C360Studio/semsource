@@ -44,12 +44,13 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 }
 
 // Edges are the code relationships to expand: calls, containment, and the type
-// dependency edges (extends/implements/references). computeImpact BFSes the
+// dependency edges (extends/implements/references/embeds). computeImpact BFSes the
 // incoming (reverse) direction of every predicate here, so adding the dependency
 // edges lets code_impact and the relations facet surface a type's dependents —
 // subclasses (extended_by), implementers (implemented_by), referrers
-// (referenced_by) — instead of only its structural container chain. Before this,
-// a class's impact held only its containers (file/folder/repo), never dependents.
+// (referenced_by), embedders (embedded_by) — instead of only its structural
+// container chain. Before this, a class's impact held only its containers
+// (file/folder/repo), never dependents.
 //
 // Two caveats:
 //   - Impact also walks incoming CodeContains, so the impact *count* still mixes
@@ -57,9 +58,11 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 //     closure. Separating impact edges from relation edges needs a fusion-engine
 //     change (this one list drives impact, paths, AND relations) — semstreams ask.
 //   - Dependency edges only resolve where the parser builds matching target ids.
-//     That holds for Python (task #43); Java/TS/Go reference-id parity is a
-//     separate per-language follow-up, so their targets may still dangle (inert —
-//     the engine drops unresolved targets, so no wrong output, just no dependents).
+//     That holds for Python (task #43/#44) and now Java, TypeScript/JavaScript,
+//     and Go (task #46 — reference-id parity + per-language cross-file resolution).
+//     A still-unresolved target (a star-import, a bare `node_modules` type, an
+//     unknown-kind cross-file reference) stays inert — the engine drops it, so no
+//     wrong output, just no dependent.
 func (*Lens) Edges() []fusion.EdgeSpec {
 	return []fusion.EdgeSpec{
 		{Predicate: ast.CodeCalls, OutgoingRole: "callee", IncomingRole: "caller"},
@@ -67,6 +70,7 @@ func (*Lens) Edges() []fusion.EdgeSpec {
 		{Predicate: ast.CodeExtends, OutgoingRole: "extends", IncomingRole: "extended_by"},
 		{Predicate: ast.CodeImplements, OutgoingRole: "implements", IncomingRole: "implemented_by"},
 		{Predicate: ast.CodeReferences, OutgoingRole: "references", IncomingRole: "referenced_by"},
+		{Predicate: ast.CodeEmbeds, OutgoingRole: "embeds", IncomingRole: "embedded_by"},
 	}
 }
 
