@@ -44,29 +44,35 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 }
 
 // Edges are the code relationships to expand: calls, containment, and the type
-// dependency edges (extends/implements/references/embeds). computeImpact BFSes the
-// incoming (reverse) direction of every predicate here, so adding the dependency
-// edges lets code_impact and the relations facet surface a type's dependents —
-// subclasses (extended_by), implementers (implemented_by), referrers
+// dependency edges (extends/implements/references/embeds). The impact facet BFSes
+// the incoming (reverse) direction of every impact-participating predicate, so the
+// dependency edges let code_impact and the relations facet surface a type's
+// dependents — subclasses (extended_by), implementers (implemented_by), referrers
 // (referenced_by), embedders (embedded_by) — instead of only its structural
-// container chain. Before this, a class's impact held only its containers
-// (file/folder/repo), never dependents.
+// container chain.
 //
-// Two caveats:
-//   - Impact also walks incoming CodeContains, so the impact *count* still mixes
-//     containment ancestry with real dependents — it is not a pure dependency
-//     closure. Separating impact edges from relation edges needs a fusion-engine
-//     change (this one list drives impact, paths, AND relations) — semstreams ask.
-//   - Dependency edges only resolve where the parser builds matching target ids.
-//     That holds for Python (task #43/#44) and now Java, TypeScript/JavaScript,
-//     and Go (task #46 — reference-id parity + per-language cross-file resolution).
-//     A still-unresolved target (a star-import, a bare `node_modules` type, an
-//     unknown-kind cross-file reference) stays inert — the engine drops it, so no
-//     wrong output, just no dependent.
+// Containment is scoped to relations + paths only (Facets), NOT impact: a file/
+// folder/repo that *contains* an entity is structural ancestry, not a dependent,
+// so counting it in the reverse-dependency closure inflated code_impact (the
+// httpx BaseClient impact=5 = 2 real subclasses + 3 containers). Per-facet edge
+// selection (semstreams gh#475, beta.140) lets containment still populate the
+// container/contains relations while staying out of the impact walk, making
+// code_impact a clean dependency closure. A nil Facets means "all facets" — the
+// dependency edges keep participating in impact, relations, and paths.
+//
+// Dependency edges only resolve where the parser builds matching target ids. That
+// holds for Python (task #43/#44) and now Java, TypeScript/JavaScript, and Go
+// (task #46 — reference-id parity + per-language cross-file resolution). A
+// still-unresolved target (a star-import, a bare `node_modules` type, an
+// unknown-kind cross-file reference) stays inert — the engine drops it, so no
+// wrong output, just no dependent.
 func (*Lens) Edges() []fusion.EdgeSpec {
 	return []fusion.EdgeSpec{
 		{Predicate: ast.CodeCalls, OutgoingRole: "callee", IncomingRole: "caller"},
-		{Predicate: ast.CodeContains, OutgoingRole: "contains", IncomingRole: "container"},
+		{
+			Predicate: ast.CodeContains, OutgoingRole: "contains", IncomingRole: "container",
+			Facets: []fusion.Facet{fusion.FacetRelations, fusion.FacetPaths},
+		},
 		{Predicate: ast.CodeExtends, OutgoingRole: "extends", IncomingRole: "extended_by"},
 		{Predicate: ast.CodeImplements, OutgoingRole: "implements", IncomingRole: "implemented_by"},
 		{Predicate: ast.CodeReferences, OutgoingRole: "references", IncomingRole: "referenced_by"},

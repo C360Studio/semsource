@@ -173,3 +173,50 @@ func TestCodeLens_ImpactWalksTypeDependencies(t *testing.T) {
 		}
 	}
 }
+
+// TestCodeLens_ImpactExcludesContainment is the gh#475 (ask #17) regression: a
+// structural container (file/folder that CONTAINS the seed) must NOT count as a
+// dependent in code_impact, yet must still appear in the relations facet. Per-facet
+// edge selection scopes CodeContains to relations+paths only, so the impact closure
+// is a pure reverse-dependency set.
+func TestCodeLens_ImpactExcludesContainment(t *testing.T) {
+	g := fusiontest.NewMemGraph()
+
+	base := "o.semsource.python.s.class.baseclient"
+	sub := "o.semsource.python.s.class.asyncclient"
+	file := "o.semsource.python.s.file.client-py"
+
+	for id, name := range map[string]string{base: "BaseClient", sub: "AsyncClient", file: "client.py"} {
+		g.AddEntity(id, map[string]any{
+			ast.DcTitle: name, ast.CodeType: "class", ast.CodePath: "client.py",
+			ast.CodeStartLine: 1, ast.CodeEndLine: 5, ontology.ClassPredicate: cco.Algorithm,
+		})
+	}
+	// A real dependent (subclass) AND a structural container of the seed.
+	g.AddEdge(sub, ast.CodeExtends, base)
+	g.AddEdge(file, ast.CodeContains, base)
+	g.SetResolve("BaseClient", base)
+
+	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	resp, err := engine.Fuse(context.Background(),
+		fusion.Request{Query: "BaseClient", Want: []fusion.Want{fusion.WantRelations, fusion.WantImpact}},
+		New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Impact = ONLY the subclass; the containing file is excluded.
+	if resp.Impact == nil || resp.Impact.Nodes != 1 {
+		t.Fatalf("expected impact closure of 1 (the subclass, not the container), got %+v", resp.Impact)
+	}
+
+	// Relations still expose the container role — containment is scoped out of
+	// impact, not dropped entirely.
+	n := resp.Nodes[0]
+	if got := n.Relations["container"]; len(got) != 1 || got[0].Name != "client.py" {
+		t.Fatalf("container relation = %+v; want single client.py", got)
+	}
+	if got := n.Relations["extended_by"]; len(got) != 1 || got[0].Name != "AsyncClient" {
+		t.Fatalf("extended_by relation = %+v; want single AsyncClient", got)
+	}
+}
