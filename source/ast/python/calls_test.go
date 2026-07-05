@@ -107,6 +107,39 @@ func TestSelfMethodCall(t *testing.T) {
 	}
 }
 
+// TestImportedClassInstantiationIsInert — `from pkg.base import Base; Base()` must
+// NOT emit a call edge: Base is a class, not a function, so a `.function.` target
+// would be a phantom. Confirms the fail-inert guard (moduleFuncs confirmation).
+func TestImportedClassInstantiationIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"pkg/__init__.py": "",
+		"pkg/base.py":     "class Base:\n    pass\n",
+		"pkg/app.py":      "from pkg.base import Base\n\ndef run():\n    return Base()\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatalf("missing run: %v", ents)
+	}
+	if len(run.Calls) != 0 {
+		t.Errorf("run.Calls = %v, want empty (imported class instantiation is inert)", run.Calls)
+	}
+}
+
+// TestSelfInheritedMethodIsInert — `self.missing()` where the method is not defined
+// on this class (inherited/mixin/typo) must not fabricate a scoped-method edge.
+func TestSelfInheritedMethodIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "class Svc:\n    def a(self):\n        self.missing()\n",
+	})
+	a := ents["a"]
+	if a == nil {
+		t.Fatalf("missing method a: %v", ents)
+	}
+	if len(a.Calls) != 0 {
+		t.Errorf("a.Calls = %v, want empty (method not defined on this class is inert)", a.Calls)
+	}
+}
+
 // TestExternalAndInertCalls — an out-of-tree module call stays external; a builtin
 // and a bare undefined name emit no call edge.
 func TestExternalAndInertCalls(t *testing.T) {

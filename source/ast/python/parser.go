@@ -38,6 +38,19 @@ type Parser struct {
 	parser     *sitter.Parser
 	imports    map[string]importBinding
 	localFuncs map[string]bool // module-level function names, for bare-call resolution (task #45)
+
+	// Per-file resolution memos, reset each ParseFile. moduleRelPathMemo caches
+	// module→file lookups (a call-heavy file resolves the same import many times);
+	// moduleFuncsMemo caches a resolved module's parsed top-level function names,
+	// used to confirm an imported callee is a function before emitting a call edge.
+	moduleRelPathMemo map[string]moduleRelPath
+	moduleFuncsMemo   map[string]map[string]bool
+}
+
+// moduleRelPath is a memoized module→file resolution result.
+type moduleRelPath struct {
+	relPath string
+	ok      bool
 }
 
 // NewParser creates a new Python AST parser.
@@ -87,6 +100,8 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	// only when it names a real local function (else builtin/instantiation → inert,
 	// task #45). Refreshed per file alongside the import bindings.
 	p.localFuncs = extractLocalFunctions(rootNode, content)
+	p.moduleRelPathMemo = make(map[string]moduleRelPath)
+	p.moduleFuncsMemo = make(map[string]map[string]bool)
 
 	// Determine module/package name from file path
 	moduleName := p.extractModuleName(relPath)
@@ -236,7 +251,7 @@ func (p *Parser) extractNode(node *sitter.Node, content []byte, _ /* parentID */
 		entities = append(entities, classEntities...)
 
 	case "function_definition":
-		entity := p.extractFunction(node, content, filePath, false, nil)
+		entity := p.extractFunction(node, content, filePath, false, nil, nil)
 		if entity != nil {
 			entities = append(entities, entity)
 		}
@@ -263,7 +278,7 @@ func (p *Parser) extractNode(node *sitter.Node, content []byte, _ /* parentID */
 					entities = append(entities, classEntities...)
 				}
 			case "function_definition":
-				entity := p.extractFunction(definition, content, filePath, false, nil)
+				entity := p.extractFunction(definition, content, filePath, false, nil, nil)
 				if entity != nil {
 					if len(decorators) > 0 {
 						entity.DocComment = p.prependDecorators(entity.DocComment, decorators)
@@ -319,14 +334,16 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	// Collect all entities (class + methods)
 	allEntities := []*ast.CodeEntity{entity}
 
-	// Extract methods and class variables
+	// Extract methods and class variables. methodNames gates self/cls call
+	// resolution to methods actually defined on this class (task #45).
 	if body := node.ChildByFieldName("body"); body != nil {
+		methodNames := classMethodNames(node, content)
 		methodIDs := make([]string, 0)
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
 			switch child.Type() {
 			case "function_definition":
-				method := p.extractFunction(child, content, filePath, true, classScope)
+				method := p.extractFunction(child, content, filePath, true, classScope, methodNames)
 				if method != nil {
 					method.ContainedBy = entity.ID
 					method.Receiver = entity.ID
@@ -337,7 +354,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 				if def := p.findDefinitionInDecorated(child); def != nil {
 					if def.Type() == "function_definition" {
 						decorators := p.extractDecorators(child, content)
-						method := p.extractFunction(def, content, filePath, true, classScope)
+						method := p.extractFunction(def, content, filePath, true, classScope, methodNames)
 						if method != nil {
 							method.ContainedBy = entity.ID
 							method.Receiver = entity.ID
@@ -358,8 +375,10 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 }
 
 // extractFunction extracts a function or method entity. scope is the chain
-// of containing class names; pass nil for module-level functions.
-func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath string, isMethod bool, scope []string) *ast.CodeEntity {
+// of containing class names; pass nil for module-level functions. classMethods is
+// the enclosing class's method set (nil for module-level), used to resolve
+// self/cls call sites in the body.
+func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath string, isMethod bool, scope []string, classMethods map[string]bool) *ast.CodeEntity {
 	// Get function name
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
@@ -394,7 +413,7 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 	// entities) — attributing their calls to this function.
 	if body := node.ChildByFieldName("body"); body != nil {
 		entity.DocComment = p.extractBodyDocstring(body, content)
-		entity.Calls = p.extractCalls(body, content, filePath, scope)
+		entity.Calls = p.extractCalls(body, content, filePath, scope, classMethods)
 	}
 
 	// Check if async
