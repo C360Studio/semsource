@@ -163,6 +163,47 @@ func TestParseFile_CrossFileInheritance_OrderIndependent(t *testing.T) {
 	}
 }
 
+// TestParseFile_CrossFileInheritance_RelativeAndAliased proves end-to-end parity
+// for the relative-import and aliased-import forms (not just absolute from-import):
+// each subclass's extends edge must equal the base class's real entity id.
+func TestParseFile_CrossFileInheritance_RelativeAndAliased(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, root, "pkg/__init__.py", "")
+	basePath := mustWrite(t, root, "pkg/base.py", "class Base:\n    pass\n")
+	relPath := mustWrite(t, root, "pkg/rel.py",
+		"from .base import Base\n\nclass RelSub(Base):\n    pass\n")
+	aliasPath := mustWrite(t, root, "pkg/alias.py",
+		"import pkg.base as pb\n\nclass AliasSub(pb.Base):\n    pass\n")
+
+	p := NewParser("acme", "proj", root)
+	baseRes, err := p.ParseFile(context.Background(), basePath)
+	if err != nil {
+		t.Fatalf("parse base: %v", err)
+	}
+	baseID := classID(t, baseRes, "Base")
+
+	for _, tc := range []struct {
+		name, path, sub string
+	}{
+		{"relative import", relPath, "RelSub"},
+		{"aliased import", aliasPath, "AliasSub"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := p.ParseFile(context.Background(), tc.path)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			sub := findClass(res, tc.sub)
+			if sub == nil || len(sub.Extends) != 1 {
+				t.Fatalf("%s/Extends unexpected: %+v", tc.sub, sub)
+			}
+			if sub.Extends[0] != baseID {
+				t.Errorf("extends = %q, want %q (Base id)", sub.Extends[0], baseID)
+			}
+		})
+	}
+}
+
 // TestParseFile_UnresolvedReferencesStayInert confirms references that cannot be
 // resolved in-tree are never mapped to a wrong entity.
 func TestParseFile_UnresolvedReferencesStayInert(t *testing.T) {

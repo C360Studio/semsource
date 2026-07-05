@@ -108,6 +108,14 @@ references would need the target's parse result (a step toward the rejected inde
 - **[Filesystem stat per reference cost]** → Mitigation: probes are cheap and
   bounded by references-per-file; a per-parser `module→relPath` memo can be added if
   profiling shows it matters (not up front).
+- **[Per-file parser state under concurrent callers]** → The bindings live on a
+  `Parser` field, refreshed each `ParseFile`. A `Parser` instance is reused across
+  files, and ast-source drives it from TWO default-on goroutines (fsnotify watcher +
+  periodic reindex) — so this field (and the pre-existing shared tree-sitter parser)
+  would race. Mitigation: ast-source's `parseFileWithWatcher` holds a per-`pathWatcher`
+  mutex across `ParseFile`, serializing parses per source path. Guarded by a `-race`
+  regression test that hard-crashes without the lock. (This also closes the identical
+  pre-existing hazard in the Go parser's `importMap` + shared parser.)
 
 ## Migration Plan
 

@@ -23,12 +23,14 @@ func init() {
 
 // Parser extracts code entities from Python source files using tree-sitter.
 //
-// Like the embedded tree-sitter parser, a Parser instance is single-file-serial:
-// ParseFile is never called concurrently on the same instance (parseDirectory
-// walks files sequentially). imports holds the file currently being parsed's
-// import bindings, refreshed at the top of every ParseFile, so typeNameToEntityID
-// can resolve a cross-file reference to its defining module (task #44) without
-// threading state through the extraction call chain.
+// A Parser instance is NOT safe for concurrent ParseFile calls: both the embedded
+// tree-sitter parser and the imports field below are per-file mutable state. The
+// sole caller (ast-source's parseFileWithWatcher) serializes ParseFile per source
+// path with a mutex, so the watcher and periodic-reindex goroutines never
+// interleave two files on one instance. imports holds the file currently being
+// parsed's import bindings, refreshed at the top of every ParseFile, so
+// typeNameToEntityID can resolve a cross-file reference to its defining module
+// (task #44) without threading state through the extraction call chain.
 type Parser struct {
 	org      string
 	project  string
@@ -77,7 +79,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 
 	// Pass 1: collect this file's import bindings so type references extracted
 	// below resolve to the entity IDs of their definitions in other modules
-	// (task #44). Refreshed per file; parsing is single-file-serial per instance.
+	// (task #44). Refreshed per file; the caller serializes ParseFile per instance.
 	p.imports = extractImportBindings(rootNode, content)
 
 	// Determine module/package name from file path
@@ -613,10 +615,14 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// module is NOT in-tree (stdlib / third-party) is left external — never a
 	// fabricated same-file id that no entity owns (spec: unresolved stays inert,
 	// never a wrong entity).
-	if module, origin, level, imported := lookupBinding(typeName, p.imports); imported && origin != "" {
-		if defRel, ok := p.moduleToRelPath(module, filePath, level); ok {
-			return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, origin, defRel).ID
+	if module, origin, level, imported := lookupBinding(typeName, p.imports); imported {
+		if origin != "" {
+			if defRel, ok := p.moduleToRelPath(module, filePath, level); ok {
+				return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, origin, defRel).ID
+			}
 		}
+		// Imported but not resolvable to an in-tree definition (out-of-tree module,
+		// or a plain `import m` used bare): external, never a fabricated same-file id.
 		return fmt.Sprintf("external:%s", typeName)
 	}
 
