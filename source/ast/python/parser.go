@@ -22,11 +22,19 @@ func init() {
 }
 
 // Parser extracts code entities from Python source files using tree-sitter.
+//
+// Like the embedded tree-sitter parser, a Parser instance is single-file-serial:
+// ParseFile is never called concurrently on the same instance (parseDirectory
+// walks files sequentially). imports holds the file currently being parsed's
+// import bindings, refreshed at the top of every ParseFile, so typeNameToEntityID
+// can resolve a cross-file reference to its defining module (task #44) without
+// threading state through the extraction call chain.
 type Parser struct {
 	org      string
 	project  string
 	repoRoot string
 	parser   *sitter.Parser
+	imports  map[string]importBinding
 }
 
 // NewParser creates a new Python AST parser.
@@ -66,6 +74,11 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	defer tree.Close()
 
 	rootNode := tree.RootNode()
+
+	// Pass 1: collect this file's import bindings so type references extracted
+	// below resolve to the entity IDs of their definitions in other modules
+	// (task #44). Refreshed per file; parsing is single-file-serial per instance.
+	p.imports = extractImportBindings(rootNode, content)
 
 	// Determine module/package name from file path
 	moduleName := p.extractModuleName(relPath)
@@ -593,9 +606,23 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 		return fmt.Sprintf("builtin:%s", typeName)
 	}
 
-	// Check for module-qualified type (e.g., "module.ClassName")
+	// Cross-file: if the name (bare, or dotted via a bound module/alias) was
+	// imported, resolve it against the DEFINING module. An in-tree module yields
+	// the definition's entity ID, built through the same NewCodeEntity/TypeClass
+	// path as the definition so ref-id == def-id (task #44). An imported name whose
+	// module is NOT in-tree (stdlib / third-party) is left external — never a
+	// fabricated same-file id that no entity owns (spec: unresolved stays inert,
+	// never a wrong entity).
+	if module, origin, level, imported := lookupBinding(typeName, p.imports); imported && origin != "" {
+		if defRel, ok := p.moduleToRelPath(module, filePath, level); ok {
+			return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, origin, defRel).ID
+		}
+		return fmt.Sprintf("external:%s", typeName)
+	}
+
+	// Module-qualified but not import-bound (e.g. fully-qualified third-party):
+	// leave it as an external marker rather than guess an in-tree entity.
 	if idx := strings.LastIndex(typeName, "."); idx > 0 {
-		// External type reference
 		return fmt.Sprintf("external:%s", typeName)
 	}
 
@@ -604,8 +631,6 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// The previous "type"-segment + raw-project construction matched no emitted
 	// entity (the parser never creates a TypeType entity), so every extends/
 	// reference edge dangled and code_impact/relations saw nothing (task #43).
-	// Cross-file references still need import resolution — the referrer's filePath
-	// is used, so a base class defined in another module remains unresolved.
 	// Bare local names are resolved class-only (a class is the only resolvable
 	// same-file target); a non-class name — a local TypeVar/alias — yields an inert
 	// dangling id the engine simply drops.
