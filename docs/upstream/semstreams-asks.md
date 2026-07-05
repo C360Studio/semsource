@@ -363,7 +363,7 @@ lens once the hook exists). **Not MVP-blocking:** `code_search` retrieves docs w
 `doc_context` is accurate when docs aren't drowned; this bites only mixed code+doc
 corpora. **Surfaced by:** Tier A #3 / B #4 live validation (Python repo + docs).
 
-### 17. Per-facet edge selection for the fusion engine (impact ≠ relations) — framework-shaped — candidate
+### 17. Per-facet edge selection for the fusion engine (impact ≠ relations) — framework-shaped — filed [semstreams#475](https://github.com/C360Studio/semstreams/issues/475)
 `fusion.Lens.Edges()` returns ONE `[]EdgeSpec` list the engine uses for THREE facets:
 `computeImpact` (incoming BFS), `computePaths` (outgoing DFS), and the `relations` map
 on each node. A lens cannot say "walk this edge for relations but not for impact."
