@@ -38,6 +38,13 @@ type pathWatcher struct {
 	watcher      *semsourceast.Watcher
 	parsers      map[string]semsourceast.FileParser // language → parser instance
 	excludes     map[string]bool                    // set of excluded directory names
+
+	// parseMu serializes ParseFile across this path's parsers. Parser instances
+	// carry per-file state (the tree-sitter parser, and the language import-binding
+	// map used for cross-file reference resolution) that is unsafe to interleave.
+	// The fsnotify watcher and the periodic-reindex goroutine — both on by default —
+	// otherwise drive the same parser instance concurrently.
+	parseMu sync.Mutex
 }
 
 // Component implements the ast-source processor.
@@ -505,7 +512,14 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 	for lang, parser := range pw.parsers {
 		for _, langExt := range semsourceast.DefaultRegistry.GetExtensionsForParser(lang) {
 			if langExt == ext {
-				return parser.ParseFile(ctx, filePath)
+				// Serialize: parser instances hold per-file state (tree-sitter +
+				// import bindings) that the watcher and reindex goroutines must not
+				// interleave. Held only across one file, so reindex releases between
+				// files and watch events still make progress.
+				pw.parseMu.Lock()
+				res, err := parser.ParseFile(ctx, filePath)
+				pw.parseMu.Unlock()
+				return res, err
 			}
 		}
 	}
