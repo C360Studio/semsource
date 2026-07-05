@@ -119,7 +119,7 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	})
 
 	t.Run("Resolve prefix returns the ingested IDs", func(t *testing.T) {
-		ids, err := gc.Resolve(ctx, "acme.semsource.golang.gw", fusion.ResolveModePrefix, 10)
+		ids, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.semsource.golang.gw", Mode: fusion.ResolveModePrefix, Limit: 10})
 		if err != nil {
 			t.Fatalf("Resolve prefix: %v", err)
 		}
