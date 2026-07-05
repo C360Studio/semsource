@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -36,6 +35,12 @@ type Parser struct {
 
 	// importMap holds the current file's imports, keyed by local name (alias or last path segment)
 	importMap map[string]string
+
+	// pkgTypes memoizes the same-package type declarations (name -> defining file +
+	// kind) for the file being parsed. Reset at each ParseFile and built lazily on
+	// first local-type reference (see imports.go); serialized per source path by
+	// ast-source's parseFileWithWatcher lock (task #44 design D6).
+	pkgTypes map[string]goLocalType
 }
 
 // NewParser creates a new Go AST parser
@@ -85,6 +90,9 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		Imports:  make([]string, 0),
 		Entities: make([]*ast.CodeEntity, 0),
 	}
+
+	// Reset per-file resolver state (same-package type map is rebuilt lazily).
+	p.pkgTypes = nil
 
 	// Build import map for type resolution
 	p.importMap = make(map[string]string)
@@ -498,9 +506,9 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 		return fmt.Sprintf("builtin:%s", callName)
 	}
 
-	// Local function: create entity ID within current project
-	instance := ast.BuildInstanceID(filePath, callName, ast.TypeFunction)
-	return entityid.Build(p.org, entityid.PlatformSemsource, "golang", p.project, "function", instance)
+	// Local function: build via the definition's own path so the system segment is
+	// SystemSlug(project), not the raw project (matches same-file function IDs).
+	return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, callName, filePath).ID
 }
 
 // isBuiltinFunc returns true if the function is a Go built-in function
@@ -545,10 +553,14 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 		return fmt.Sprintf("builtin:%s", typeName)
 	}
 
-	// Local type: create entity ID within current project
-	// Build instance ID from file path and type name
-	instance := ast.BuildInstanceID(filePath, typeName, ast.TypeType)
-	return entityid.Build(p.org, entityid.PlatformSemsource, "golang", p.project, "type", instance)
+	// Resolve within the package (same directory, possibly a sibling file) so the
+	// kind segment (struct/interface/type) and the defining file match the
+	// definition's own ID (D1/D4). Unresolved names fall back to the current file
+	// with a generic `type` kind — inert (dropped) if no such entity exists.
+	if lt, ok := p.packageTypes(filePath)[typeName]; ok {
+		return ast.NewCodeEntity(p.org, "golang", p.project, lt.kind, typeName, lt.relPath).ID
+	}
+	return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeType, typeName, filePath).ID
 }
 
 // renderGoSignature formats a Go function or method declaration without its
