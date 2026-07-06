@@ -1,8 +1,8 @@
 schema: spec-driven
 
-# Project context shown to AI when creating OpenSpec artifacts. Fuller context
-# lives in openspec/project.md (Purpose + Product Boundary + Conventions),
-# CLAUDE.md, and docs/adr/.
+# Project context shown to AI when creating OpenSpec artifacts. This is the
+# canonical planning context (OpenSpec 1.5 folds the former openspec/project.md
+# in here); fuller detail lives in CLAUDE.md and docs/adr/.
 context: |
   SemSource is the source-knowledge ingestion service for the C360 sem* family
   (Go; NATS JetStream via github.com/c360studio/semstreams; Task runner; revive).
@@ -10,15 +10,17 @@ context: |
   facts and publishes governed entity-state payloads for downstream consumers
   (SemSpec, SemDragon, SemOps).
 
-  Product Boundary — read openspec/project.md before scoping a change:
+  Product Boundary — check this before scoping a change:
   - SemSource owns source discovery/parsing, entity-ID construction, source
-    provenance, media-by-reference, and source-graph publishing.
+    provenance, media/binary-by-reference, and source-graph publishing.
   - SemStreams owns the governed substrate (Graphable ingestion, ENTITY_STATES,
     graph.mutation.* / graph.query.* APIs, indexing profiles, lifecycle
     primitives). Do NOT reimplement substrate; log framework gaps in
     docs/upstream/semstreams-asks.md, triaged framework-shaped vs product-shaped,
     and communicate them via GitHub issues only (never a PR to semstreams).
   - SemOps owns COP/product semantics; SemSource may support it, not absorb it.
+  - SemConnect owns the OGC Connected Systems API bridge unless a change
+    explicitly assigns a source-ingest responsibility to SemSource.
 
   Role split (three homes, three jobs):
   - openspec/specs/<capability>/spec.md = CURRENT TRUTH (Requirement +
