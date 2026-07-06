@@ -341,7 +341,22 @@ scoped delete is free via `graph.query.prefix`.)*
 
 ## Fusion retrieval scope (ADR-0004)
 
-### 16. Domain-scoped NL retrieval for a fusion lens — framework-shaped — filed [semstreams#463](https://github.com/C360Studio/semstreams/issues/463)
+### 16. Domain-scoped NL retrieval for a fusion lens — framework-shaped — RESOLVED in beta.141 ([semstreams#463](https://github.com/C360Studio/semstreams/issues/463), ADR-071) — ADOPTED
+**RESOLVED (beta.141):** `fusion.Request.Scope []string` — OR-matched dot-delimited
+entity-ID prefixes (fix direction (1), NL-only), applied at the candidate source in
+`graph-embedding.findSimilarEntities` via `graph.MatchesAnyIDPrefix` (empty = no
+filter = prior behavior). **ADOPTED (semsource):** the fusion gateway
+(`processor/code-context/component.go` `serve`) now defaults `req.Scope` per lens
+when the caller sends none — `docs` → `{org}.semsource.web`, `code` → the
+code-language domain prefixes (`golang`/`python`/`typescript`/`javascript`/`java`/
+`svelte`). The `{org}` segment is the deployment's single global org, sourced free
+from `deps.Platform.Org` (= the required top-level `namespace`, forced onto every
+source), so no new config surface. A caller-provided `Scope` is respected verbatim;
+no org (standalone/tests) → no default = prior behavior. OpenSpec change
+`domain-scoped-fusion-retrieval` (capability `fusion-gateway`). The filter
+application is framework-tested + live-validated (the httpx mixed code+doc dogfood
+below); semsource's seam — correct per-lens scope selection reaching the wire — is
+covered by unit + a real-NATS integration test.
 The `pkg/fusion` engine resolves NL seeds over the **whole shared embedding index**
 with no per-lens/per-request domain filter: `Engine.fuse` calls
 `graph.Resolve(query, mode, limit)` where `mode ∈ {symbol, prefix, nl}`, and the
