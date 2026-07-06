@@ -10,11 +10,11 @@
 // handle triples (doc-source wires it via WithBodyStore), so Hydrate returns the
 // verbatim passage. Verified live and unit-covered (handler/doc/handler_test.go).
 //
-// Remaining gap is retrieval SCOPE, not hydration: the fusion engine resolves NL
-// seeds over the whole shared embedding index with no per-lens domain filter, so
-// in a code-heavy corpus code entities can dilute doc_context's NL results. That
-// needs a fusion-engine scope hook (tracked as a semstreams ask); doc_context is
-// accurate when docs are not drowned by a large code index.
+// Retrieval SCOPE is handled too (ask #16 / ADR-071, semstreams beta.141): the
+// code-context gateway defaults each lens's NL seed resolution to its own domain
+// prefixes (docs → the web domain), so a code-heavy corpus no longer dilutes
+// doc_context's NL results. See processor/code-context defaultScope; the only
+// unscoped fallback is when no org is known (standalone/tests).
 package docs
 
 import (

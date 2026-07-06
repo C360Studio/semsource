@@ -1,6 +1,6 @@
 # ADR-0008: Versioned-Source Retention & Supersession — A Temporal Knowledge Graph
 
-> **Status:** Proposed | **Date:** 2026-07-04
+> **Status:** Accepted — retention core implemented: version scoping (#1), version-triple + correspondence + supersession edges (#2), signed historical-demotion salience (#3), and the version-diff query (`graph.query.versionDiff` / `code_changes`). Changeset→symbol edges (#4), per-source retention-depth config (#5), and the referential cascade-delete exception (#6) remain follow-on. | **Date:** 2026-07-04 (impl. 2026-07-06)
 > **Supersedes two withdrawn drafts of this ADR:** (1) a *fact-contribution provenance ledger* — over-engineered; solved a cross-branch-unification problem we do not have; (2) a leaner *versioned-source lifecycle / scoped retraction* — still deletion-centric, and a graph cannot safely delete by policy. Both were killed by adversarial review + use-case analysis; see "Rejected alternatives".
 > **Revises:** ADR-0007's branch-deletion debate (Options A/B/C) — replaced by **retain + relate, don't delete**.
 > **Absorbs:** task #36 (dependency-version lifecycle) — "refresh-on-bump" becomes *index the new version + add supersession edges*, additive, no deletion.

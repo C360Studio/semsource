@@ -1,6 +1,6 @@
 # ADR-0002: Tier Support and Model Registry Passthrough
 
-> **Status:** Accepted (Statistical Tier Implemented) | **Date:** 2026-03-12
+> **Status:** Accepted — Statistical (tier 0) is the default; Semantic tier 1 (HTTP embedder → semembed) and tier 2 (graph-clustering + LLM summaries → seminstruct) are implemented and config-exposed (`model_registry`, `graph.embedder_type`, `graph.enable_clustering`/`clustering_llm`). | **Date:** 2026-03-12 (semantic tiers 2026-07)
 >
 > **Current integration note (2026-06):** The tiering decision still applies, but downstream
 > consumers should access SemSource through governed graph query surfaces rather than treating the

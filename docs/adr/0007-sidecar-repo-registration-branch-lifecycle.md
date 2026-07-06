@@ -19,7 +19,8 @@ The driving consumer shape:
   branches**, generate code, submit it for review, and — if approved — merge to `main`.
 - semspec must **dynamically point SemSource at whatever repo root it is working on** at runtime.
 - **Firm constraint:** external consumers **never touch our NATS** — preferably ever. All external
-  interaction is over **HTTP or MCP**. (MCP is not yet started; HTTP is the first target.)
+  interaction is over **HTTP or MCP**. (Both landed: the HTTP `/sources` façade and the MCP
+  control tools `add_source`/`remove_source`/`source_status`.)
 
 Two facts about the current implementation shape the decision and the open problem:
 
@@ -226,6 +227,7 @@ blockers — the decisions above are settled; these are how-to detail._
 ### Out of scope (v1)
 - SemSource-materialized ephemeral worktrees with TTL/GC (ADR-0006 §2) — semspec brings its own
   worktree, so SemSource indexes in place and **never deletes the caller's worktree disk**.
-- MCP surface (tracked as the follow-on after HTTP).
+- ~~MCP surface (tracked as the follow-on after HTTP).~~ **Landed** — the MCP control tools
+  (`add_source`/`remove_source`/`source_status`) ship alongside the HTTP façade.
 - Enforced quotas (seams only, per ADR-0006 §6) — **except filesystem-root allowlisting, promoted to
   a v1 requirement** for the sidecar path (§3, SemTeams).

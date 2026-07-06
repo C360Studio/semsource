@@ -1,6 +1,6 @@
 # ADR-0006: External-Service Source Registration
 
-> **Status:** Proposed — partially landed (2026-07-01) | **Date:** 2026-06-29
+> **Status:** Accepted — NATS + HTTP (`POST/DELETE/GET /sources`) + MCP (`add_source`/`remove_source`/`source_status`) registration surfaces landed, with the bearer-token auth seam and filesystem-root allowlist. Folder/ephemeral-worktree targets (§2), worktree TTL/GC (§4), and the remaining resource guards (§6) are follow-on. | **Date:** 2026-06-29 (surfaces landed 2026-07)
 > **Supersedes premises of:** ADR-0003 (programmatic source-add API)
 > **Pairs with:** ADR-0004 (fusion query side), [semstreams#376](https://github.com/C360Studio/semstreams/issues/376)
 >
@@ -9,9 +9,13 @@
 > precondition in §5 is done — code/doc bodies are offloaded to ObjectStore (the `CONTENT`
 > bucket) at ingest and dereferenced by handle, so §5's "currently code-on-disk" framing is
 > superseded. **Media binaries deliberately stay on the local filestore, not ObjectStore.**
-> **Still Proposed:** the HTTP (`POST/DELETE/GET /sources`) and MCP (`add_source`/`remove_source`/
-> `source_status`/`code_context`) surfaces in §1, the folder/ephemeral-worktree targets (§2), and
-> the trust model (§6) are not yet implemented — only the NATS transport.
+> **Landed since (§1 surfaces):** the HTTP (`POST/DELETE/GET /sources`) and MCP
+> (`add_source`/`remove_source`/`source_status`, plus the read-side `code_context`/`code_search`/
+> `code_impact`/`doc_context`/`code_changes`) surfaces are implemented; the §6 trust model has its
+> bearer-token auth seam (`SEMSOURCE_API_TOKEN`, permissive when unset) and filesystem-root
+> allowlist (`source_roots`).
+> **Still follow-on:** the folder/ephemeral-worktree targets (§2), worktree TTL/GC (§4), and the
+> remaining §6 guards (URL/git-remote allowlists, quotas, per-tenant isolation).
 
 ## Context
 

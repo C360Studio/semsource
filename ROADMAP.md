@@ -19,6 +19,9 @@ are, not by release date. The "why" behind most of these lives in
   An agent queries the graph instead of grepping the filesystem.
 - **Domain-scoped retrieval** so a small doc set isn't drowned by a large code
   corpus (and vice versa).
+- **Ontology-aware ranking** — results are ranked by BFO/CCO class specificity and
+  predicate salience (public API boosted, superseded versions demoted), not by
+  lexical match alone (ADR-0005).
 - **Versioned source, retained and related** — every version of a symbol is kept
   and linked by supersession lineage; the current version ranks above historical
   ones; `code_changes` tells you what changed between two versions (added / removed
@@ -32,8 +35,10 @@ are, not by release date. The "why" behind most of these lives in
 
 - **Same-LAN deployment focus.** No built-in TLS / reverse-proxy hardening yet;
   run it behind your own gateway for anything exposed.
-- **Media is metadata-only.** Image/video/audio are projected by reference
-  (hashes, dimensions, keyframes) — raw payloads aren't stored yet.
+- **Media payloads are on the local filestore, not object storage.** Image
+  originals + thumbnails, video keyframes, and audio are stored to a local
+  filestore when a store root is configured; there's no shared ObjectStore backing
+  for media bytes yet (code/doc bodies already use ObjectStore).
 - **Version diffs don't detect renames.** A renamed or moved symbol shows up as a
   removal plus an addition, not a single "renamed" entry.
 - **The graph is retention-first — nothing is deleted by policy.** Safe,
@@ -60,7 +65,6 @@ are, not by release date. The "why" behind most of these lives in
 - **Tier-2 semantic + instruct** — community/GraphRAG summaries and
   `local`/`global`/`summary` search (wired today via `graph.enable_clustering`;
   being validated and made first-class).
-- **Ontology-aware ranking** refinements (BFO/CCO class specificity — ADR-0005).
 
 ### Later — operations & scale
 
@@ -70,8 +74,9 @@ are, not by release date. The "why" behind most of these lives in
   identical `public.*` IDs that merge cleanly across deployments.
 - **Sidecar branch lifecycle** — dynamic repo registration and branch-aware
   cleanup for tools that index many short-lived branches (ADR-0007).
-- **Media payload storage** — optional ObjectStore for image/video/audio bytes,
-  not just metadata.
+- **ObjectStore backing for media** — move image/video/audio payloads from the
+  local filestore to a shared ObjectStore (as code/doc bodies already are), so
+  media is servable location-independently.
 
 ### Exploring — lifecycle & deployment
 

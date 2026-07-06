@@ -172,9 +172,10 @@ comes from `ast-source`'s existing watch→graph pipeline; readiness from
   before building a per-worktree index — do not assume.
 - **Upstreaming the engine to semstreams.** Follow-on ADR after the
   SemSource prototype validates the shape with two lenses.
-- **MCP surface.** A thin wrapper over the same fusion contract for external
-  clients (Cursor / Claude / Codex); deferred, not the way in for our own loop
-  (which drives Go-registered tools, not an MCP client).
+- **MCP surface.** ~~Deferred~~ **Landed** (ADR-0006/0007): a thin wrapper over the
+  same fusion contract for external clients (Cursor / Claude / Codex) — `code_context`,
+  `code_search`, `code_impact`, `doc_context`, `code_changes` on the mcp-gateway. It is
+  the way in for external agents, not our own Go-registered-tool loop.
 
 ## References
 
