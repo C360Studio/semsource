@@ -9,24 +9,44 @@ deterministic 6-part entity IDs and exact predicate ownership claims so SemStrea
 and query the graph consistently. SemSource runs as a standalone external service and bootstraps its
 own ownership contract.
 
+## Prerequisites
+
+SemSource runs on the SemStreams ServiceManager and uses NATS JetStream/KV for graph
+state, ownership, and query indices — so **a NATS server is always required**.
+
+- **Docker** — the recommended path; `docker compose up` bundles NATS + embeddings and
+  needs nothing else installed.
+- To run the CLI **natively** instead: **Go 1.26.3+** (to build/install) and a reachable
+  **NATS server** (JetStream enabled).
+- `ffmpeg` / `ffprobe` on your `PATH` — only if you ingest `video` / `audio` sources.
+
 ## Quick Start
 
+### Fastest — Docker Compose (bundles NATS + tier-1 semantic search)
+
 ```bash
-# Install
+git clone https://github.com/C360Studio/semsource.git && cd semsource
+docker compose up            # indexes the current directory; MCP gateway on :8080
+```
+
+One command, no NATS to run yourself. See [Docker Compose](#docker-compose) for profiles,
+ports, config, and connecting an agent.
+
+### Native CLI
+
+```bash
+# Install (requires Go 1.26.3+)
 go install github.com/c360studio/semsource/cmd/semsource@latest
 
-# Auto-detect your project and create semsource.json
-semsource init --quick
+# SemSource needs NATS (JetStream + KV) — start one if you don't have it:
+docker run --rm -p 4222:4222 nats:2-alpine -js
 
-# Start ingesting
+# Auto-detect your project, write semsource.json, and start ingesting
+semsource init --quick
 semsource run
 ```
 
-Or run the interactive wizard for full control:
-
-```bash
-semsource init
-```
+Or run the interactive wizard for full control: `semsource init`.
 
 ## What It Does
 
@@ -230,11 +250,15 @@ Optional top-level fields:
 | `http_port` | `8080` | ServiceManager HTTP API port |
 | `mode` | `"standalone"` | Only `standalone` is supported (retained for back-compat); `headless` was removed in ADR-0006 and now fails validation |
 | `entity_store.nats_url` | — | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set |
-| `graph.gateway_bind` | `"0.0.0.0:8082"` | GraphQL gateway bind address in standalone mode |
+| `graph.gateway_bind` | `"0.0.0.0:8082"` | GraphQL gateway bind address (internal; host access is via the `ui` profile's Caddy on `:3000`, not `:8082` directly) |
+| `graph.embedder_type` | `"bm25"` | Embedding backend: `bm25` (keyword, no dependencies) or `http` (semantic — **requires `model_registry` with an `embedding` capability**) |
+| `graph.enable_clustering` | `false` | Enable graph-clustering (tier-2 community routes); LLM summaries also need `graph.clustering_llm` + a `model_registry` `community_summary` capability |
+| `model_registry` | — | SemStreams model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"` or clustering LLM is on. See [`configs/tiers/README.md`](configs/tiers/README.md) |
+| `source_roots` | — | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007) |
 | `metrics.port` | `9091` | Prometheus metrics port |
 | `websocket_bind` | `"0.0.0.0:7890"` | Legacy raw GRAPH stream WebSocket bind address |
 | `websocket_path` | `"/graph"` | Legacy raw GRAPH stream WebSocket path |
-| `workspace_dir` | — | Root directory for relative source paths |
+| `workspace_dir` | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths) |
 | `git_token` | — | Token for authenticated remote repo cloning |
 | `media_store_dir` | — | Local directory for media binary storage |
 | `streams` | — | Optional JetStream stream overrides for standalone mode |
@@ -284,7 +308,11 @@ subject until the upstream responder contract is restored.
 | `GET /source-manifest/status` | Ingestion status with per-instance phases |
 | `GET /source-manifest/predicates` | Predicate schema grouped by source type |
 
-### GraphQL Gateway (default :8082)
+### GraphQL Gateway (internal :8082)
+
+Port `8082` is **internal to the Docker network** and is not published to the host by the
+core profile. Reach GraphQL from the host via the `ui` profile, where Caddy proxies it at
+`http://localhost:3000/graphql` (see [UI profile](#ui-profile--add-the-monitoring-dashboard)).
 
 | Endpoint | Description |
 |----------|-------------|
@@ -343,6 +371,10 @@ handle, so a standalone or remote gateway serves source without access to the in
 host's worktree.
 
 ## Building from Source
+
+Requires **Go 1.26.3+** (see `go.mod`). The binary still needs a running NATS server at
+runtime (see [Prerequisites](#prerequisites)); `video`/`audio` sources additionally need
+`ffmpeg`/`ffprobe` on `PATH`.
 
 ```bash
 git clone https://github.com/C360Studio/semsource.git

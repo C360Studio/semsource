@@ -8,7 +8,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 go build -ldflags="-s -w -linkmode external -extldflags '-static'" -o /bin/semsource ./cmd/semsource
+# VERSION is injected into `semsource version` and the startup log. CI passes the
+# release tag (see .github/workflows/ci.yml); defaults to "dev" for a plain build.
+ARG VERSION=dev
+RUN CGO_ENABLED=1 go build \
+    -ldflags="-s -w -linkmode external -extldflags '-static' -X main.version=${VERSION}" \
+    -o /bin/semsource ./cmd/semsource
 
 # --- Runtime ---
 FROM alpine:3.21

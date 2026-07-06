@@ -110,7 +110,7 @@ func runCmd(args []string) error {
 	}
 
 	logger.Info("semsource starting",
-		"version", version,
+		"version", resolveVersion(),
 		"mode", semsourceCfg.Mode,
 		"namespace", semsourceCfg.Namespace,
 		"sources", len(semsourceCfg.Sources),
@@ -460,7 +460,12 @@ func wrapNATSConnError(err error, url string) error {
 	if strings.Contains(msg, "connection refused") ||
 		strings.Contains(msg, "no servers available") ||
 		strings.Contains(msg, "timeout") {
-		return fmt.Errorf("NATS connection failed at %s: %w\n\nStart NATS with: docker compose up -d nats\nOr set NATS_URL to your server address", url, err)
+		return fmt.Errorf("NATS connection failed at %s: %w\n\n"+
+			"SemSource needs a NATS server (JetStream + KV). Start one with:\n"+
+			"  docker run --rm -p 4222:4222 nats:2-alpine -js\n"+
+			"or, from the semsource repo:\n"+
+			"  docker compose up -d nats\n"+
+			"Then re-run, or set --nats-url / NATS_URL to an existing server.", url, err)
 	}
 	return fmt.Errorf("NATS connection failed: %w", err)
 }

@@ -14,6 +14,11 @@ The other query verbs — `code_context`, `code_impact`, `doc_context`, and byNa
 are **structural** and work at every tier (they don't depend on the embedder). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
 
+> **Paths in these files are Docker-container paths** (`/workspace`, `/mnt/workspace/myrepo`) — they
+> match what `docker compose` mounts, not your host. To run a tier config natively, edit the `sources`
+> paths (and `source_roots`) to real host directories; under compose, point `SEMSOURCE_TARGET` at the
+> directory to index instead of editing the file.
+
 ## Tier 0 — Statistical (BM25) — works today
 
 `tier0-statistical.json` is a complete, runnable config. BM25 is a pure-Go statistical embedder: it

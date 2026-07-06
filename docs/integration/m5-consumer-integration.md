@@ -31,7 +31,7 @@ Source Processors → graph.ingest.entity → graph-ingest → ENTITY_STATES KV
                     → graph.query.summary          (graph counts)
                     → graph.query.relationships    (traverse the graph)
                     → graph.query.pathSearch       (path queries)
-                    → /graphql                     (rich queries, port 8082)
+                    → /graphql                     (rich queries; host access via ui profile :3000)
 ```
 
 ## Gating on Readiness
@@ -155,14 +155,17 @@ Use HTTP as a fallback when NATS is not directly accessible:
 
 ## GraphQL Gateway
 
-A GraphQL interface is available at port 8082 via the `graph-gateway` component:
+A GraphQL interface is served by the `graph-gateway` component on internal port `8082`.
+That port is **not published to the host** by the default (core) compose profile — reach
+GraphQL from the host via the `ui` profile, where Caddy proxies it on `:3000`:
 
 ```
-GET/POST http://localhost:8082/graphql
+GET/POST http://localhost:3000/graphql      # docker compose --profile ui up
 ```
 
-This is the recommended interface for complex or exploratory queries involving multiple
-entity types, relationship traversal, and filtering.
+(Inside the Docker network, or if you publish `8082` yourself, it is at
+`http://semsource:8082/graphql`.) This is the recommended interface for complex or
+exploratory queries involving multiple entity types, relationship traversal, and filtering.
 
 ## Multi-Instance SemSource
 
@@ -207,7 +210,7 @@ subject-taxonomy concern behind it is tracked upstream — see `docs/upstream/se
 3. Use `graph.query.entity` to resolve entities by 6-part ID.
 4. Use `graph.query.batch`, `graph.query.prefix`, and `graph.query.summary` for bulk context loading.
 5. Use `graph.query.relationships` to traverse edges between entities.
-6. Use `/graphql` (port 8082) for complex multi-hop queries.
+6. Use `/graphql` (host access via the `ui` profile on `:3000`) for complex multi-hop queries.
 
 SemSpec's own processors (`source-ingester`, `ast-indexer`, `repo-ingester`, `web-ingester`)
 continue publishing to their own `graph.ingest.entity` subject independently. SemSource graph
