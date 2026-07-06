@@ -5,7 +5,30 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semstreams/types"
 )
+
+// TestBuildSemstreamsConfig_IncludesSupersession guards that the supersession
+// component is spawned in the default set. It serves graph.query.versionDiff
+// (behind the code_changes MCP tool); if it drops out of the component map the
+// query is unserved and code_changes times out — with no compile error to catch
+// it (the factory is registered either way).
+func TestBuildSemstreamsConfig_IncludesSupersession(t *testing.T) {
+	ssCfg, err := buildSemstreamsConfig(&config.Config{Namespace: "acme"}, "acme")
+	if err != nil {
+		t.Fatalf("buildSemstreamsConfig() error = %v", err)
+	}
+	comp, ok := ssCfg.Components["supersession"]
+	if !ok {
+		t.Fatal("supersession missing from the default component set — graph.query.versionDiff would be unserved (code_changes times out)")
+	}
+	if comp.Type != types.ComponentTypeProcessor {
+		t.Errorf("supersession type = %q, want processor", comp.Type)
+	}
+	if !comp.Enabled {
+		t.Error("supersession component should be enabled")
+	}
+}
 
 func TestGraphSubsystemComponents_ObserveOnlyOwnerLease(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
