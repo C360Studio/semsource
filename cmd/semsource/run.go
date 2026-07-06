@@ -520,6 +520,17 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}
 	components["mcp-gateway"] = mcpCfg
 
+	// supersession (ADR-0008): serves the version-diff query (graph.query.versionDiff,
+	// behind the code_changes MCP tool) and the correspondence/lineage pass. It must
+	// be in the default set — otherwise the query is unserved and code_changes times
+	// out. The lineage/demotion pass itself stays trigger-driven (graph.supersession.run
+	// or an operator-set interval), so spawning it adds no periodic background load.
+	supersessionCfg, err := supersessionComponentConfig()
+	if err != nil {
+		return nil, err
+	}
+	components["supersession"] = supersessionCfg
+
 	svcs, err := serviceConfigs(cfg)
 	if err != nil {
 		return nil, err
@@ -588,6 +599,24 @@ func codeContextComponentConfig(lens string) (types.ComponentConfig, error) {
 	}
 	return types.ComponentConfig{
 		Name:    "code-context",
+		Type:    types.ComponentTypeProcessor,
+		Enabled: true,
+		Config:  raw,
+	}, nil
+}
+
+// supersessionComponentConfig builds the supersession component config with its
+// defaults (on-demand trigger, no periodic pass). The empty JSON object unmarshals
+// onto DefaultConfig, so the component serves graph.query.versionDiff and the
+// graph.supersession.run trigger; an operator can enable a periodic lineage pass
+// via the component's `interval` config.
+func supersessionComponentConfig() (types.ComponentConfig, error) {
+	raw, err := json.Marshal(map[string]any{})
+	if err != nil {
+		return types.ComponentConfig{}, fmt.Errorf("marshal supersession config: %w", err)
+	}
+	return types.ComponentConfig{
+		Name:    "supersession",
 		Type:    types.ComponentTypeProcessor,
 		Enabled: true,
 		Config:  raw,
