@@ -17,12 +17,12 @@ facts and publishes governed entity-state payloads for downstream consumers
 - **`CLAUDE.md`** — working guidance: architecture, build/test commands,
   component patterns, entity-identity and predicate conventions, milestones.
   Read this first for how to work in the repo.
-- **`openspec/project.md`** — Purpose and the **Product Boundary** (SemSource owns
-  source ingestion; SemStreams owns the graph substrate). Read before scoping any
-  change.
-- **`openspec/config.yaml`** — OpenSpec context + per-artifact rules + the
-  non-negotiables (deterministic 6-part IDs, semantic envelope, retention-first
-  graph, revive-warnings-fail CI).
+- **`openspec/config.yaml`** — the canonical planning context: Purpose, the
+  **Product Boundary** (SemSource owns source ingestion; SemStreams owns the graph
+  substrate), per-artifact rules, and the non-negotiables (deterministic 6-part
+  IDs, semantic envelope, retention-first graph, revive-warnings-fail CI). Read the
+  `context:` section before scoping any change (OpenSpec 1.5 folded the former
+  `openspec/project.md` in here).
 - **`docs/adr/`** — genuine decision records (irreversible / cross-repo). Mechanics
   live in the capability spec, not the ADR.
 

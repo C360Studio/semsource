@@ -31,10 +31,11 @@ Rules of the road:
   Do NOT backfill; an unverified spec is just another drifting doc.
 - **ADRs are pure decision records** — record an irreversible/cross-repo decision
   as a one-page ADR; the *mechanics* it implies live in the capability's spec.
-- **Read `openspec/project.md` first** when scoping anything — it carries the
-  Purpose and the **Product Boundary** (SemSource owns source ingestion, not the
-  SemStreams substrate). `openspec/config.yaml` carries the context + per-artifact
-  rules shown to the tool.
+- **Read `openspec/config.yaml`'s `context:` first** when scoping anything — it
+  carries the Purpose and the **Product Boundary** (SemSource owns source
+  ingestion, not the SemStreams substrate) plus the per-artifact rules and
+  non-negotiables shown to the tool. (OpenSpec 1.5 folded the former
+  `openspec/project.md` into this context.)
 
 ## Technology
 

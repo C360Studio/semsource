@@ -1,7 +1,16 @@
 # versioned-source-supersession Specification
 
 ## Purpose
-TBD - created by archiving change versioned-source-supersession. Update Purpose after archive.
+Versioned source is **retained and related, never deleted** (ADR-0008). Each
+version of a code symbol coexists as a distinct subgraph, carrying version + source
+identity triples; the `supersession` component deterministically corresponds "the
+same logical symbol across versions" (version-independent identity, tier-0, no
+model) and emits directional supersession lineage edges with a changed/unchanged
+body-hash marker. Historical (superseded) versions are demoted in ranking so the
+current one surfaces first, while everything stays retained and queryable. All of it
+is additive and retention-safe — reads via graph.query.prefix, appends lineage via
+the entity-publish path, and never retracts or overwrites.
+
 ## Requirements
 ### Requirement: Version and source identity on code entities
 Code entities SHALL carry a version-independent source identity, and — when a version is configured —
