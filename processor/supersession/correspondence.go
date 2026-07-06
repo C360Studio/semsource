@@ -33,6 +33,12 @@ type candidate struct {
 	bodyHash     string
 	bodyHashKind string
 
+	// bodyStore / bodyKey address the offloaded verbatim body (code.body.store /
+	// code.body.key) for hydration by the version-diff query. Both empty when the
+	// entity has no offloaded body (its body is unavailable, not an error).
+	bodyStore string
+	bodyKey   string
+
 	// indexedAt is the first-index timestamp (dc.terms.created), used as the
 	// version-ordering tiebreak for non-semver versions (design D4).
 	indexedAt time.Time
@@ -78,6 +84,8 @@ func candidateFromEntity(e gtypes.EntityState) (candidate, bool) {
 		pkg:          tripleString(e.Triples, semsourceast.CodePackage),
 		bodyHash:     hash,
 		bodyHashKind: kind,
+		bodyStore:    tripleString(e.Triples, semsourceast.CodeBodyStore),
+		bodyKey:      tripleString(e.Triples, semsourceast.CodeBodyKey),
 		indexedAt:    indexedAtOf(e),
 	}
 	return c, true

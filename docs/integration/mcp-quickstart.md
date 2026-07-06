@@ -66,7 +66,7 @@ The token compare is constant-time; an unset/empty token disables the check enti
 
 ## 4. Tool cheat-sheet
 
-Seven tools. The four **query** tools are why an agent beats grep; the two **registration** tools let
+Eight tools. The five **query** tools are why an agent beats grep; the two **registration** tools let
 an agent point SemSource at new sources at runtime; `source_status` is the readiness gate.
 
 | Tool | Use it to… | Notes |
@@ -74,6 +74,7 @@ an agent point SemSource at new sources at runtime; `source_status` is the readi
 | `code_context` | Understand a symbol — resolved definition, verbatim body, callers **and** callees. | Structural. Gate on `index.ready`. |
 | `code_impact` | See the reverse-dependency closure — what breaks if you change this symbol. | Structural. Answers what grep can't. |
 | `code_search` | Semantic / natural-language search over code (*"where is the retry-with-backoff logic"*). | Semantic. Reliable once `embedding.ready`. |
+| `code_changes` | See what changed between two versions of a source — added/removed/changed symbols with before/after bodies. Args: `project`, `from`, `to`. | Structural. A rename shows as remove + add. |
 | `doc_context` | Get the intended design from prose — READMEs, ADRs, docs — not just the code. | Structural over the doc graph. |
 | `source_status` | Check readiness: ingest phase, per-source counts, `index` (structural) + `embedding` (semantic). | Poll this before trusting a miss. |
 | `add_source` | Register a new source (repo/git/docs/config/url) to index at runtime. | Path sources must be under an allowlisted root. |

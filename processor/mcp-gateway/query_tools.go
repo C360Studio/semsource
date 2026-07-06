@@ -15,6 +15,32 @@ type QueryInput struct {
 	Query string `json:"query" jsonschema:"the query — a symbol name (e.g. registerProvidedStores) for context/impact, or a natural-language phrase for search"`
 }
 
+// ChangesInput is the argument for the code_changes tool: a project (source
+// identity) and two version identifiers to compare.
+type ChangesInput struct {
+	Project string `json:"project" jsonschema:"the project / source identity (code.artifact.project, e.g. a module path or repo slug)"`
+	From    string `json:"from" jsonschema:"the older version to compare from (code.artifact.version, e.g. 1.9.0)"`
+	To      string `json:"to" jsonschema:"the newer version to compare to (code.artifact.version, e.g. 1.10.0)"`
+}
+
+// codeChanges returns the symbol-level changeset between two versions of a
+// project: added / removed / changed / unchanged (counted) symbols, with verbatim
+// before/after bodies for changed ones. Forwards to graph.query.versionDiff.
+func (c *Component) codeChanges(ctx context.Context, _ *mcp.CallToolRequest, in ChangesInput) (*mcp.CallToolResult, any, error) {
+	if in.Project == "" || in.From == "" || in.To == "" {
+		return nil, nil, fmt.Errorf("project, from, and to are required")
+	}
+	data, err := json.Marshal(map[string]string{"project": in.Project, "from": in.From, "to": in.To})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal request: %w", err)
+	}
+	resp, err := c.request(ctx, "graph.query.versionDiff", data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("version diff failed: %w", err)
+	}
+	return textResult(resp), nil, nil
+}
+
 // codeContext returns the fused code answer: the resolved symbol, its verbatim
 // body, and its callers/callees — the primary "show me this code and how it
 // connects" query.

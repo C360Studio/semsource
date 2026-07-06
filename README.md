@@ -225,7 +225,8 @@ claude mcp add --transport http semsource http://localhost:8080/mcp-gateway/mcp
 ```
 
 This is the product surface — the agent then queries the graph with `code_context`, `code_search`,
-`code_impact`, and `doc_context` instead of grepping. Full walkthrough (auth, readiness gating, tool
+`code_impact`, `doc_context`, and `code_changes` (what changed between two versions) instead of
+grepping. Full walkthrough (auth, readiness gating, tool
 cheat-sheet): [docs/integration/mcp-quickstart.md](docs/integration/mcp-quickstart.md).
 
 ## Config File
@@ -295,6 +296,7 @@ SemSource exposes graph query and status endpoints via NATS request/reply, Graph
 | `graph.query.status` | Current SemSource ingestion status |
 | `graph.query.sources` | Configured source manifest |
 | `graph.query.predicates` | Predicate schema by source type |
+| `graph.query.versionDiff` | Changeset between two versions of a source (added/removed/changed symbols + before/after bodies) |
 
 Compatibility note: SemStreams beta.114 routes `graph.query.capabilities` from the GraphQL gateway,
 but graph-query does not currently register a responder for it. SemSource does not advertise that
@@ -307,6 +309,7 @@ subject until the upstream responder contract is restored.
 | `GET /source-manifest/sources` | Configured sources |
 | `GET /source-manifest/status` | Ingestion status with per-instance phases |
 | `GET /source-manifest/predicates` | Predicate schema grouped by source type |
+| `POST /supersession/versionDiff` | Changeset between two versions of a source (JSON `{project, from, to}`) |
 
 ### GraphQL Gateway (internal :8082)
 

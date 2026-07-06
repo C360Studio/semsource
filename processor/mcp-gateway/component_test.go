@@ -55,7 +55,7 @@ func TestListTools(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
-		"add_source", "code_context", "code_impact", "code_search",
+		"add_source", "code_changes", "code_context", "code_impact", "code_search",
 		"doc_context", "remove_source", "source_status",
 	}
 	if len(got) != len(want) {
