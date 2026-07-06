@@ -9,6 +9,9 @@ deterministic 6-part entity IDs and exact predicate ownership claims so SemStrea
 and query the graph consistently. SemSource runs as a standalone external service and bootstraps its
 own ownership contract.
 
+> **Public beta (`v1.0.0-beta.1`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
+> limitations, and what's coming next.
+
 ## Prerequisites
 
 SemSource runs on the SemStreams ServiceManager and uses NATS JetStream/KV for graph
