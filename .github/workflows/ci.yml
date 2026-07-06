@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
@@ -56,7 +57,10 @@ jobs:
   build-and-push:
     needs: [test, lint]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Runs on main pushes and on release tags (v*). Tag pushes produce the
+    # versioned image; `latest` only moves on the default branch (not on a
+    # pre-release beta tag).
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     steps:
       - uses: actions/checkout@v6
 
@@ -71,8 +75,10 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=
+            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
 
       - uses: docker/setup-qemu-action@v4
 
@@ -83,5 +89,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # Inject the resolved version into the binary. On a tag build this is
+          # the semver (e.g. 1.0.0-beta.1); on main it's the branch/sha fallback.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

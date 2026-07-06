@@ -312,6 +312,9 @@ func printSummary(term *Term, cfg *config.Config) {
 	// P6: Post-init guidance.
 	fmt.Fprintln(term.out)
 	term.Header("Next steps")
+	term.Info("  semsource needs a NATS server (JetStream + KV). Start one first:")
+	term.Info("    docker run --rm -p 4222:4222 nats:2-alpine -js")
+	fmt.Fprintln(term.out)
 	term.Info("  semsource run        Start ingesting and streaming your knowledge graph")
 	term.Info("  semsource add        Add another source (interactive or with flags)")
 	term.Info("  semsource sources    View configured sources")

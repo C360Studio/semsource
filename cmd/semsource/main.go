@@ -20,11 +20,31 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime/debug"
 
 	"github.com/c360studio/semsource/cli"
 )
 
-const version = "0.1.0"
+// version is the semsource release version. Release builds inject the exact tag
+// via -ldflags "-X main.version=<tag>" (see Dockerfile / CI). When unset — e.g.
+// a plain `go build` or `go install ...@<tag>` — resolveVersion falls back to
+// the module version from the build info, then to "dev".
+var version = ""
+
+// resolveVersion returns the release version, preferring an ldflags-injected
+// value, then the build-info module version (populated by `go install @<tag>`),
+// then "dev" for an untagged local build.
+func resolveVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return "dev"
+}
 
 func main() {
 	if err := dispatch(); err != nil {
@@ -65,7 +85,7 @@ func dispatch() error {
 	case "validate":
 		return validateCmd(os.Args[2:])
 	case "version":
-		fmt.Printf("semsource %s\n", version)
+		fmt.Printf("semsource %s\n", resolveVersion())
 		return nil
 	case "help", "-h", "--help":
 		usage()
