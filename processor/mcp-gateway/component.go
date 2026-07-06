@@ -99,6 +99,10 @@ func (c *Component) buildServer() *mcp.Server {
 		Name:        "doc_context",
 		Description: "Fused documentation context (READMEs/ADRs/prose) for a query — the intended design, not just the code.",
 	}, c.docContext)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "code_changes",
+		Description: "What changed between two versions of a source: added / removed / changed / unchanged symbols (counts), with verbatim before/after bodies for changed symbols. Args: project, from, to (versions). A renamed symbol shows as a removed + an added, not a single change.",
+	}, c.codeChanges)
 	return s
 }
 

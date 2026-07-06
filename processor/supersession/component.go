@@ -15,6 +15,8 @@ import (
 	graphquery "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semstreams/storage/storeregistry"
 )
 
 // Component runs the versioned-source correspondence and supersession pass.
@@ -24,15 +26,22 @@ type Component struct {
 	client *natsclient.Client
 	logger *slog.Logger
 
-	mu          sync.RWMutex
-	running     bool
-	startTime   time.Time
-	publisher   *entitypub.Publisher
-	queryClient graphquery.Client
-	triggerSub  *natsclient.Subscription
-	cancel      context.CancelFunc
-	lastRun     time.Time
-	lastStats   passStats
+	// storeRegistry is the shared {StorageInstance → store} resolver (ADR-063),
+	// injected via deps; nil in standalone/tests, where the body resolver falls
+	// back to attaching its own objectstore over the CONTENT bucket.
+	storeRegistry *storeregistry.Registry
+
+	mu           sync.RWMutex
+	running      bool
+	startTime    time.Time
+	publisher    *entitypub.Publisher
+	queryClient  graphquery.Client
+	triggerSub   *natsclient.Subscription
+	diffSub      *natsclient.Subscription
+	bodyResolver *fusion.BodyResolver
+	cancel       context.CancelFunc
+	lastRun      time.Time
+	lastStats    passStats
 
 	// runMu serializes passes so a periodic tick never overlaps an on-demand run.
 	runMu sync.Mutex
@@ -48,10 +57,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	return &Component{
-		name:   "supersession",
-		config: config,
-		client: deps.NATSClient,
-		logger: deps.GetLogger(),
+		name:          "supersession",
+		config:        config,
+		client:        deps.NATSClient,
+		logger:        deps.GetLogger(),
+		storeRegistry: deps.StoreRegistry,
 	}, nil
 }
 
@@ -94,18 +104,40 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe %s: %w", subject, err)
 	}
 
+	resolver, err := c.buildBodyResolver(ctx)
+	if err != nil {
+		pub.Stop()
+		_ = q.Close()
+		_ = sub.Unsubscribe()
+		return fmt.Errorf("build body resolver: %w", err)
+	}
+
+	diffSub, err := c.client.SubscribeForRequests(ctx, versionDiffSubject,
+		func(reqCtx context.Context, body []byte) ([]byte, error) {
+			return c.serveDiff(reqCtx, body)
+		})
+	if err != nil {
+		pub.Stop()
+		_ = q.Close()
+		_ = sub.Unsubscribe()
+		return fmt.Errorf("subscribe %s: %w", versionDiffSubject, err)
+	}
+
 	runCtx, cancel := context.WithCancel(ctx)
 
 	c.mu.Lock()
 	c.publisher = pub
 	c.queryClient = q
 	c.triggerSub = sub
+	c.diffSub = diffSub
+	c.bodyResolver = resolver
 	c.cancel = cancel
 	c.running = true
 	c.startTime = time.Now()
 	c.mu.Unlock()
 
 	c.logger.Info("supersession listening for run requests", "subject", subject)
+	c.logger.Info("supersession listening for version-diff queries", "subject", versionDiffSubject)
 
 	if d := c.config.intervalDuration(); d > 0 {
 		go c.periodic(runCtx, d)
@@ -231,6 +263,12 @@ func (c *Component) Stop(_ time.Duration) error {
 	if c.cancel != nil {
 		c.cancel()
 		c.cancel = nil
+	}
+	if c.diffSub != nil {
+		if err := c.diffSub.Unsubscribe(); err != nil {
+			c.logger.Warn("failed to unsubscribe version-diff", "error", err)
+		}
+		c.diffSub = nil
 	}
 	if c.triggerSub != nil {
 		if err := c.triggerSub.Unsubscribe(); err != nil {

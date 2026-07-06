@@ -66,13 +66,19 @@ Be honest about what each capability costs:
 | Capability | Tier | Mechanism | Model? |
 |---|---|---|---|
 | "Same symbol across versions" (stable name/path) | **0 — code** | match version-independent triples (path/name/type/pkg) + a version triple | No |
-| "What changed v1.9 → v1.10" | **0 — code** | body-hash set-diff over the two scopes | No |
+| "What changed v1.9 → v1.10" ✅ | **0 — code** | body-hash set-diff over the two scopes | No |
 | Changeset → touched symbols (commit/PR entity) | **0 — code** | git-diff hunks → stored symbol line-ranges → edges | No |
 | Rename / move correspondence | **1 — embeddings** | body/signature similarity (semembed) | Yes (minority of changes) |
 | Semantic change summary | **2 — LLM** | seminstruct over the diff | Yes (far later) |
 
 The valuable core is **tier-0 deterministic code — no model.** Models only buy rename-tracking and
 prose summaries, both additive and deferrable; they must not gate the core.
+
+> ✅ **"What changed v1.9 → v1.10" is realized** by the `version-change-detection` change: the
+> `graph.query.versionDiff` query (+ `code_changes` MCP tool) corresponds symbols across the two
+> version scopes and classifies added / removed / changed / unchanged / indeterminate with verbatim
+> before/after bodies. Rename correspondence (row 4) and the commit→touched-symbols changeset (§ below)
+> remain deferred; a rename currently reports as a removal + an addition.
 
 **Load-bearing prerequisite (open item #1 — DONE):** intentional version scoping so each version gets a
 **distinct** `system` segment (`entityid.ScopedSystemSlug` = `SystemSlug ∘ VersionScopedSlug`). This is
