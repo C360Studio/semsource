@@ -25,10 +25,24 @@ import (
 	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/storage/storeregistry"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
 )
+
+// codeScopeDomains are the entity-ID domain segments the "code" lens covers —
+// the languages the AST parsers stamp on code entity IDs. KEEP IN SYNC with the
+// registered AST parsers (source/ast/*/): a language present there but missing
+// here is silently excluded from code_context NL retrieval scope. Note the ID
+// domain is NOT the parser registration name (Go registers as "go" but stamps
+// "golang"), so this list is maintained by hand, not derived from the registry.
+var codeScopeDomains = []string{"golang", "python", "typescript", "javascript", "java", "svelte"}
+
+// docScopeDomains are the entity-ID domain segments the "docs" lens covers.
+// Doc/prose entities (handler/doc type "doc", handler/url type "page") all live
+// under the "web" domain.
+var docScopeDomains = []string{"web"}
 
 // maxBodyBytes bounds an HTTP request body (queries are small JSON).
 const maxBodyBytes = 1 << 20
@@ -53,7 +67,12 @@ type Component struct {
 	name        string
 	lensKind    string // "code" | "docs"
 	subjectRoot string // NATS subject root, e.g. "code.v1."
-	graph       fusion.RetrievalClient
+	// org is the deployment's single global org (= the required top-level
+	// namespace), sourced from platform identity. It forms the first segment of
+	// the per-lens default retrieval scope; empty means no default scope (ask
+	// #16 / ADR-071).
+	org   string
+	graph fusion.RetrievalClient
 	// engine is written once in Start (buildEngine) BEFORE running is set, and
 	// read lock-free thereafter — the running-gate ordering (running is set under
 	// mu after buildEngine returns; serve only runs once running/subscribed)
@@ -98,6 +117,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		name:          name,
 		lensKind:      config.Lens,
 		subjectRoot:   config.Lens + ".v1.",
+		org:           deps.Platform.Org,
 		graph:         graph,
 		client:        deps.NATSClient,
 		storeRegistry: deps.StoreRegistry,
@@ -218,6 +238,13 @@ func (c *Component) serve(ctx context.Context, verb string, body []byte) ([]byte
 	if len(req.Want) == 0 {
 		req.Want = defaultWants(verb)
 	}
+	// Domain-scope NL seed resolution to this lens's own domain so a smaller
+	// domain (e.g. docs) is not diluted by a larger co-resident one (e.g. code)
+	// over the shared embedding index (ask #16 / ADR-071). Respect a
+	// caller-provided scope; default only when none was set.
+	if len(req.Scope) == 0 {
+		req.Scope = c.defaultScope()
+	}
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	resp, err := c.engine.Fuse(ctx, req, lens)
@@ -235,6 +262,27 @@ func (c *Component) lensFor() fusion.Lens {
 		return docs.New()
 	}
 	return code.New()
+}
+
+// defaultScope returns the per-lens NL retrieval scope: the entity-ID prefixes
+// {org}.{platform}.{domain} for each domain this lens covers. It returns nil
+// when the org is unknown (standalone/test contexts with no platform identity),
+// which leaves NL resolution unfiltered — the pre-ask-#16 behavior — rather than
+// emitting a malformed prefix. The platform segment is entityid.PlatformSemsource
+// (the literal every entity ID is built with), not deps.Platform.Platform.
+func (c *Component) defaultScope() []string {
+	if c.org == "" {
+		return nil
+	}
+	domains := codeScopeDomains
+	if c.lensKind == "docs" {
+		domains = docScopeDomains
+	}
+	scope := make([]string, len(domains))
+	for i, domain := range domains {
+		scope[i] = c.org + "." + entityid.PlatformSemsource + "." + domain
+	}
+	return scope
 }
 
 // defaultWants returns the facet set for a verb when the caller did not specify
