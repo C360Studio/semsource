@@ -181,6 +181,27 @@ deadlocks — so remove-teardown stays broken pending the fix. **Blocks:** gatin
 on e2e (`TestE2E_RuntimeSourceAdd` remove-teardown assertion) — deferred until #388.
 **Surfaced by:** wiring e2e into CI (curator runtime add/remove, ADR-040 / ADR-0006).
 
+### 8b. WebSocket output metric registration is not restart-safe — framework-shaped — filed [semstreams#490](https://github.com/C360Studio/semstreams/issues/490)
+`output/websocket.newMetrics` creates fresh Prometheus collectors and unconditionally
+calls `PrometheusRegistry().MustRegister(...)`. When a runtime config update restarts
+`websocket-output`, the same collector names are registered again in the same registry,
+panicking with `duplicate metrics collector registration attempted`.
+
+**Blocks:** treating SemSource's black-box runtime-add e2e gate as green. The failing
+gate is `go test -tags=e2e -timeout 300s ./test/e2e/`, specifically
+`TestE2E_RuntimeSourceAdd`; the eventual request timeout is downstream of the SemSource
+process panic. SemSource is already pinned to the current latest observed tag,
+`github.com/c360studio/semstreams v1.0.0-beta.141`, so there is no newer released tag to
+adopt for this fix yet.
+
+**Expected framework fix:** make websocket metric registration idempotent across
+component restarts, unregister collectors on stop, or handle `AlreadyRegisteredError`
+instead of using `MustRegister` in restartable component construction.
+
+**Surfaced by:** validating the SemTeams UI profile OpenSpec slice; all UI-profile
+checks passed, but the existing full black-box e2e gate exposed this runtime restart
+panic.
+
 ---
 
 ## Gateways

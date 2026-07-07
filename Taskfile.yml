@@ -33,6 +33,27 @@ tasks:
     cmds:
       - go test -tags=e2e -timeout 300s ./test/e2e/
 
+  ui:e2e:
+    desc: Run Playwright smoke against the running UI profile
+    vars:
+      UI_CONTEXT: '{{.UI_CONTEXT | default "../semteams/ui"}}'
+      C360_PORT: '{{.C360_PORT | default "3000"}}'
+    env:
+      NODE_PATH: '{{.UI_CONTEXT}}/node_modules'
+      UI_PROFILE_BASE_URL: 'http://127.0.0.1:{{.C360_PORT}}'
+    cmds:
+      - >-
+        test -x "{{.UI_CONTEXT}}/node_modules/.bin/playwright" ||
+        (echo "Playwright not found in {{.UI_CONTEXT}}." &&
+        echo "Run npm install there or set UI_CONTEXT to a prepared SemTeams UI checkout." &&
+        exit 1)
+      - "{{.UI_CONTEXT}}/node_modules/.bin/playwright test --config test/ui/playwright.config.cjs"
+
+  ui:smoke:
+    desc: Start the UI profile, run Playwright smoke, then tear it down
+    cmds:
+      - ./scripts/ui-profile-smoke.sh
+
   check:
     desc: Run all checks (lint + test)
     cmds:

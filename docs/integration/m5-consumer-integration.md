@@ -18,7 +18,7 @@ Source Processors → graph.ingest.entity → graph-ingest → ENTITY_STATES KV
                                                                |
                                                           graph-query ← graph.query.*
                                                                |
-                                                          graph-gateway ← /graphql
+                                                          graph-gateway ← /graph-gateway/graphql
 ```
 
 ### Consumer integration
@@ -155,17 +155,17 @@ Use HTTP as a fallback when NATS is not directly accessible:
 
 ## GraphQL Gateway
 
-A GraphQL interface is served by the `graph-gateway` component on internal port `8082`.
-That port is **not published to the host** by the default (core) compose profile — reach
-GraphQL from the host via the `ui` profile, where Caddy proxies it on `:3000`:
+A GraphQL interface is served by the `graph-gateway` component through the SemStreams
+ServiceManager route `/graph-gateway/graphql`. Reach GraphQL from the host via the `ui`
+profile, where Caddy exposes the same-origin operator route on `:3000`:
 
 ```
 GET/POST http://localhost:3000/graphql      # docker compose --profile ui up
 ```
 
-(Inside the Docker network, or if you publish `8082` yourself, it is at
-`http://semsource:8082/graphql`.) This is the recommended interface for complex or
-exploratory queries involving multiple entity types, relationship traversal, and filtering.
+Inside the Docker network, use `http://semsource:8080/graph-gateway/graphql`. This is the
+recommended interface for complex or exploratory queries involving multiple entity types,
+relationship traversal, and filtering.
 
 ## Multi-Instance SemSource
 

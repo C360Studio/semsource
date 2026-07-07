@@ -7,7 +7,8 @@ SemStreams or SemOps follow-ups should trace back to explicit requirements.
 
 ## Layout
 
-- `project.md`: standing project context and conventions.
+- `config.yaml`: standing project context and conventions (`context:`; OpenSpec
+  1.5 folded the former `project.md` content here).
 - `changes/<change-id>/proposal.md`: why the change exists, what changes, and
   expected impact.
 - `changes/<change-id>/design.md`: design decisions, rollout, and open

@@ -247,6 +247,97 @@ func TestHandleSources_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestHandleHealth_Ready(t *testing.T) {
+	c := &Component{
+		config:  Config{Namespace: "acme"},
+		running: true,
+		statusData: mustMarshal(t, &StatusPayload{
+			Namespace:     "acme",
+			Phase:         PhaseReady,
+			TotalEntities: 42,
+			Sources: []SourceStatus{
+				{InstanceName: "ast-source-repo", SourceType: "ast", Phase: SourcePhaseWatching, EntityCount: 42},
+			},
+			Timestamp: time.Now(),
+		}),
+		logger: newTestLogger(),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/source-manifest/health", nil)
+	rec := httptest.NewRecorder()
+	c.handleHealth(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload HealthPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health: %v", err)
+	}
+	if !payload.Healthy {
+		t.Fatalf("healthy = false, want true; payload=%+v", payload)
+	}
+	if payload.Status != "healthy" || payload.Phase != PhaseReady || payload.TotalEntities != 42 {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if len(payload.SubStatuses) != 2 {
+		t.Fatalf("sub_statuses len = %d, want 2", len(payload.SubStatuses))
+	}
+}
+
+func TestHandleHealth_SourceErrorDegrades(t *testing.T) {
+	c := &Component{
+		config:  Config{Namespace: "acme"},
+		running: true,
+		statusData: mustMarshal(t, &StatusPayload{
+			Namespace: "acme",
+			Phase:     PhaseReady,
+			Sources: []SourceStatus{
+				{InstanceName: "doc-source-docs", SourceType: "docs", Phase: SourcePhaseErrored, ErrorCount: 1},
+			},
+			Timestamp: time.Now(),
+		}),
+		logger: newTestLogger(),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/source-manifest/health", nil)
+	rec := httptest.NewRecorder()
+	c.handleHealth(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload HealthPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health: %v", err)
+	}
+	if payload.Healthy {
+		t.Fatalf("healthy = true, want false; payload=%+v", payload)
+	}
+	if payload.Status != "degraded" {
+		t.Fatalf("status = %q, want degraded", payload.Status)
+	}
+}
+
+func TestHandleHealth_NotStarted(t *testing.T) {
+	c := &Component{}
+
+	req := httptest.NewRequest(http.MethodGet, "/source-manifest/health", nil)
+	rec := httptest.NewRecorder()
+	c.handleHealth(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	var payload HealthPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health: %v", err)
+	}
+	if payload.Healthy || payload.Status != "error" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
 func TestHTTPHandlers_NotStarted(t *testing.T) {
 	c := &Component{}
 
@@ -282,18 +373,27 @@ func TestRegisterHTTPHandlers(t *testing.T) {
 		config:       Config{Namespace: "acme"},
 		running:      true,
 		responseData: []byte(`{"namespace":"acme","sources":[]}`),
-		logger:       newTestLogger(),
+		statusData: mustMarshal(t, &StatusPayload{
+			Namespace: "acme",
+			Phase:     PhaseReady,
+			Timestamp: time.Now(),
+		}),
+		logger: newTestLogger(),
 	}
 
 	mux := http.NewServeMux()
 	c.RegisterHTTPHandlers("/source-manifest", mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/source-manifest/sources", nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	for _, path := range []string{"/source-manifest/sources", "/source-manifest/health"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+		})
 	}
 }
 

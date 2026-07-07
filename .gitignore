@@ -16,6 +16,9 @@
 coverage.*
 *.coverprofile
 profile.cov
+test-results/
+playwright-report/
+blob-report/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
