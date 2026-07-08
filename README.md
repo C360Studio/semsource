@@ -1,13 +1,18 @@
 # SemSource
 
-SemSource gives agents and operator UIs a source graph they can trust instead of a pile of files to
-scrape. Point it at code, docs, configs, URLs, or media; it keeps source knowledge indexed in
-[SemStreams](https://github.com/C360Studio/semstreams) so consumers can ask what exists, what
-changed, where something is used, and whether the graph is ready.
+Your project already knows a lot: which symbols exist, what imports what, which docs describe a
+feature, what changed between versions, and whether the latest index is ready. Most of that knowledge
+is stranded in files. SemSource will not beat `find` for a filename or `grep` for a known string; it
+earns its keep when the answer depends on relationships, history, provenance, or live state.
+
+SemSource scrapes the pile of code, docs, configs, URLs, and media on purpose, then keeps the result
+as a live semantic knowledge graph (SKG) in [SemStreams](https://github.com/C360Studio/semstreams).
+Humans, agents, and operator UIs can ask what exists, what changed, where something is used, and
+whether the graph is ready without each tool inventing its own parser, cache, and graph-write rules.
 
 Run it beside one project or many. Each instance emits stable IDs, provenance, indexing intent, and
-predicate ownership claims, so downstream tools can search, inspect impact, build UI views, or
-federate raw updates without re-parsing every source or fighting over graph writes.
+predicate ownership claims, so downstream tools can inspect impact, compare versions, build UI views,
+or federate raw updates without fighting over graph ownership.
 
 > **Public beta (`v1.0.0-beta.4`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
 > limitations, and what's coming next.
