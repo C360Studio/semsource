@@ -82,7 +82,8 @@ published `:8080` SemSource HTTP/MCP surface and tear the stack down by default.
 
 #### Scenario: Core profile serves status and MCP
 
-- **GIVEN** the fixed SemStreams tag required by the core runtime has been adopted
+- **GIVEN** SemSource targets a SemStreams release with restart-safe runtime
+  components
 - **WHEN** the core smoke starts the default compose profile
 - **THEN** `/source-manifest/status`, `/source-manifest/sources`, and the MCP
   gateway are reachable on the configured SemSource HTTP port

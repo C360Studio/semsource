@@ -25,9 +25,9 @@ routes a new user is most likely to copy from the README:
 - Several HTTP/GraphQL/product-owned NATS surfaces are wiring-checked but not
   behavior-checked as advertised product routes or integration-guide contracts.
 
-We are also waiting for a SemStreams P0 critical bug fix to land in a released tag.
-This change lets us track the coverage work now and close the runtime smoke gaps
-once that upstream tag is available.
+The previously blocking SemStreams runtime restart fix is now adopted in
+SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`. This change
+tracks the remaining SemSource-owned coverage gaps.
 
 ## What Changes
 
@@ -38,7 +38,8 @@ once that upstream tag is available.
 - Add focused test tasks for the native CLI source-management examples.
 - Add a black-box native quick-start e2e that proves `init --quick -> validate ->
   run` using a compiled binary.
-- Add a default Docker Compose/core smoke after the SemStreams P0 fix is adopted.
+- Add a default Docker Compose/core smoke for the primary `docker compose up`
+  path.
 - Add MCP happy-path coverage for the agent tools listed in the README.
 - Add behavior checks for the advertised source-manifest, GraphQL, and
   product-owned NATS query surfaces that are currently only partially covered.
@@ -48,8 +49,8 @@ once that upstream tag is available.
 ## Non-goals
 
 - No SemStreams substrate fix in this repo. If a route or query fails because of
-  the pending SemStreams P0 issue, SemSource waits for the released tag and tracks
-  the dependency explicitly.
+  a future SemStreams issue, SemSource tracks the dependency explicitly and files
+  it upstream.
 - No attempt to e2e every possible graph query combination. The requirement is a
   representative happy path for every advertised surface, with deeper behavior
   covered in component-specific tests.
@@ -81,4 +82,4 @@ once that upstream tag is available.
 - README wording may be tightened if a surface is not ready to test yet.
 - Taskfile may gain a `core:smoke` or similar default-profile smoke target.
 - OpenSpec and CI evidence should clearly show which advertised surfaces are
-  covered and which are blocked on the upstream SemStreams tag.
+  covered, which are SemSource gaps, and which are blocked upstream.

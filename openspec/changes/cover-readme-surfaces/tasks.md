@@ -2,19 +2,19 @@
 
 ## 1. Establish the coverage matrix
 
-- [ ] 1.1 Create a small README surface coverage matrix that lists every advertised
+- [x] 1.1 Create a small README surface coverage matrix that lists every advertised
       command, task, endpoint, and MCP tool with its owning test.
       - Test: `rg "semsource add|docker compose up|mcp-gateway|source-manifest" README.md`
         entries have named evidence in the matrix
-- [ ] 1.2 Keep low-level `graph.query.*` subjects and predicate/schema routes out
+- [x] 1.2 Keep low-level `graph.query.*` subjects and predicate/schema routes out
       of the README unless they are required for first-run usage; document them in
       the M5 consumer integration guide instead.
       - Test: `rg "graph\\.query|source-manifest/predicates" README.md` has no
         matches
-- [ ] 1.3 Mark any surface blocked by the pending SemStreams P0 fix with the issue,
+- [x] 1.3 Mark any surface blocked by an upstream SemStreams issue with the issue,
       expected fixed tag, and follow-up validation command.
-      - Test: matrix names the upstream blocker instead of silently omitting the
-        surface
+      - Test: `docs/testing/readme-surface-coverage.md` names the current
+        blocker state
 
 ## 2. Cover native CLI commands from README
 
@@ -42,8 +42,7 @@
       `http://localhost:8080/source-manifest/sources` and the MCP gateway endpoint
       are reachable.
       - Test: `task core:smoke`
-- [ ] 3.3 After the fixed SemStreams tag lands, include one real MCP happy path
-      against the core stack.
+- [ ] 3.3 Include one real MCP happy path against the core stack.
       - Test: `task core:smoke`
 
 ## 4. Cover MCP tools advertised to agents
@@ -69,7 +68,7 @@
 - [ ] 5.3 Add a representative GraphQL route smoke for the ServiceManager route and
       keep the UI-profile `/graphql` Playwright assertion.
       - Test: `task core:smoke` and `task ui:e2e`
-- [ ] 5.4 Add the M5 consumer integration guide to the coverage matrix as the owner
+- [x] 5.4 Add the M5 consumer integration guide to the coverage matrix as the owner
       of the exhaustive `graph.query.*` subject catalog.
       - Test: README, integration guide, and coverage matrix agree on ownership
 
@@ -80,5 +79,5 @@
       ./processor/mcp-gateway ./processor/code-context`
 - [ ] 6.3 `go test -tags=integration ./...`
 - [ ] 6.4 `go test -tags=e2e -timeout 300s ./test/e2e/`
-- [ ] 6.5 `task core:smoke` after the SemStreams P0 fixed tag is adopted
+- [ ] 6.5 `task core:smoke`
 - [ ] 6.6 `task ui:smoke`

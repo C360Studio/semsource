@@ -100,12 +100,12 @@ Minimum CLI additions:
 - add direct tests for `sources`, `remove`, and `remove --index`;
 - add black-box quick-start test for `init --quick`, `validate`, and `run`.
 
-### D3 - Core compose smoke waits for the SemStreams P0 tag
+### D3 - Core compose smoke is now SemSource-owned
 
 The default Docker path should be proved by a one-command smoke similar to the UI
-profile smoke. Because the user has identified a pending SemStreams P0 fix, this
-task is tracked now but should only be gated after SemSource adopts the fixed
-SemStreams tag.
+profile smoke. The former SemStreams runtime restart blocker has been adopted in
+SemSource via `github.com/c360studio/semstreams v1.0.0-beta.144`, so the remaining
+work is a SemSource smoke-test gap.
 
 The smoke should start only the core profile, poll concrete HTTP state, connect
 to MCP, and tear down cleanly. It should not rely on log silence.
@@ -127,14 +127,14 @@ listed in the integration guide, the SemSource tests should at least prove:
   `graph.query.predicates`, `graph.query.versionDiff`) return the advertised
   shape;
 - framework-owned graph-query subjects are configured and a representative subset
-  responds in a running stack after the fixed SemStreams tag is adopted.
+  responds in a running stack.
 
 ## Risks & Mitigations
 
 - **Core smoke becomes slow or flaky.** Keep it small, use bounded polling, and
   assert concrete HTTP/MCP state instead of broad graph quality.
-- **SemStreams P0 blocks runtime smoke.** Mark those tasks blocked until a fixed
-  tag is adopted; keep CLI/package coverage moving.
+- **A future SemStreams issue blocks runtime smoke.** Mark that task blocked with
+  the upstream issue and tag, but keep CLI/package coverage moving.
 - **README grows faster than tests.** Add a lightweight coverage matrix in the
   OpenSpec task checklist or docs and update it in the same PR as README changes.
   Keep exhaustive subject catalogs in integration docs unless they are essential
