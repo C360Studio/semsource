@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SemSource is a graph-first knowledge ingestion service for the SemStream platform. It ingests heterogeneous sources (code repos, docs, URLs, config files) and emits a normalized, continuously updated knowledge graph stream via WebSocket broadcast to downstream consumers (SemSpec, SemDragon).
+SemSource is the source-knowledge ingestion service for the C360 sem* family. It
+ingests repos, docs, URLs, config files, and media into governed SemStreams graph
+facts, then exposes source/query/status surfaces for agents and operator UIs. The
+raw WebSocket export still exists for stream-oriented consumers, but the primary
+read contracts are graph query, MCP, HTTP status, and GraphQL through the UI
+profile.
 
 Part of the Complete 360 Studio ecosystem. MIT licensed.
 
@@ -41,7 +46,9 @@ Rules of the road:
 
 - **Language:** Go
 - **Platform dependency:** semstreams (NATS JetStream infrastructure, `github.com/c360studio/semstreams`). Uses `semstreams/federation` types directly for entities, events, edges, provenance, and the in-memory store.
-- **Transport:** WebSocket server (output/websocket from semstreams) on port 7890
+- **Transport:** SemStreams ServiceManager over NATS JetStream/KV, HTTP/MCP status
+  and tool routes, GraphQL via the UI profile, plus the raw WebSocket graph stream
+  (`output/websocket`) on port 7890 in standalone mode.
 - **Config format:** JSON (`semsource.json`)
 
 ## CLI Commands
@@ -78,7 +85,8 @@ go test -race -tags=integration ./...      # race detection
 ### Component Flow
 
 ```
-[semsource.json] → [Source Intake] → [Handler Dispatch] → [Graph Normalizer] → [output/websocket]
+[semsource.json] -> [Source Intake] -> [Handler Dispatch] -> [Entity Publisher]
+    -> [SemStreams graph-ingest / ENTITY_STATES] -> [graph query / MCP / GraphQL]
 ```
 
 Follows the semstreams pattern: **Listen → Process → Persist → Publish**.
@@ -146,7 +154,7 @@ New message types must follow the payload registry pattern: define type → impl
 ## Key Design Decisions
 
 - No separate batch mode — initial seeding is the first pass of the continuous event loop
-- Fan-out via WebSocket output's built-in multi-client broadcast
+- Raw-stream fan-out via WebSocket output remains available in standalone mode
 - `at-least-once` delivery using WebSocket ack/nack protocol
 - MVP targets same-LAN deployment only (no TLS/reverse proxy)
 - AST parsers, doc parsers, weburl, and vocabulary packages are self-contained in `source/` (copied from semspec, no cross-repo dependency)
@@ -155,16 +163,21 @@ New message types must follow the payload registry pattern: define type → impl
 - Graph types use `semstreams/federation` directly (`federation.Entity`, `federation.Event`, `federation.Store`). The `graph/` package contains only `EntityPayload` (domain-specific payload registration for `"semsource"`)
 - Status gating: consumers wait for `graph.query.status` → `phase: "ready"` before querying
 
-## Development Milestones
+## Current Roadmap
 
-Current roadmap (see spec Section 10 for full details):
+The public roadmap lives in `ROADMAP.md`; use that instead of the historical
+milestone list in `docs/spec/semsource-spec-v3.md`.
 
-1. **M1 — Repo & Scaffold** ✅: semstreams dependency, core types (using `federation.*`), `SourceHandler` interface, JSON config loader, output/websocket wiring
-2. **M2 — Core Handlers** ✅: GitHandler, ASTHandler, DocHandler, ConfigHandler, URLHandler
-3. **M3 — Graph Normalization & Events** ✅: Deterministic entity IDs, namespace routing, SEED/DELTA/RETRACT/HEARTBEAT emission
-4. **M4 — FederationProcessor** ✅: Lives in `semstreams/processor/federation`. Semsource verified alignment and deleted local copy.
-5. **M5 — Consumer Query Integration** ✅: Status gating API (`graph.query.status`), per-instance tracking, NATS query endpoints, GraphQL gateway. Integration guide at `docs/integration/m5-consumer-integration.md`
-6. **M6 — Federation Validation**: Multiple SemSource instances producing identical `public.*` IDs
+Current beta shape:
+
+1. `v1.0.0-beta.4` targets SemStreams `v1.0.0-beta.144`.
+2. Core ingestion, governed entity publishing, source manifest/status, fusion
+   tools, version diffs, and consumer query integration are present.
+3. The `ui` compose profile targets the SemTeams UI checkout by default and has
+   a SemSource-owned Playwright smoke (`task ui:smoke` / `task ui:e2e`).
+4. Active follow-ups are UI-profile confidence, query-index readiness/scale,
+   GraphQL capabilities alignment, code/version intelligence, and federation
+   validation.
 
 ## Custom Agents & Skills
 
