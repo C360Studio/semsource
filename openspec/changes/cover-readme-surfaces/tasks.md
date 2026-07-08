@@ -24,7 +24,7 @@
       - Test: `go test ./cli -run 'TestAddNonInteractive(Repo|Docs|URL)'`
 - [x] 2.2 Add config/output tests for `semsource sources`.
       - Test: `go test ./cli -run TestSources`
-- [ ] 2.3 Add config mutation tests for `semsource remove --index N` and
+- [x] 2.3 Add config mutation tests for `semsource remove --index N` and
       interactive `semsource remove`.
       - Test: `go test ./cli -run TestRemove`
 - [ ] 2.4 Add a black-box dispatch or e2e test that runs the compiled binary through
