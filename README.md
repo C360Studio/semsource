@@ -336,7 +336,7 @@ contract is aligned.
 SemSource runs the graph gateway through the SemStreams ServiceManager. The live internal route is
 `/graph-gateway/graphql` on the ServiceManager HTTP API (`:8080`). Reach GraphQL from the host via the
 `ui` profile, where Caddy exposes the operator-facing route at `http://localhost:3000/graphql` (see
-[UI profile](#ui-profile--add-the-monitoring-dashboard)).
+[UI profile](#ui-profile--add-the-semteams-dashboard)).
 
 | Endpoint | Description |
 |----------|-------------|
