@@ -27,7 +27,7 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `docker compose up` | None yet for the default profile | gap | OpenSpec task 3.1-3.3 |
+| `docker compose up` | `task core:smoke` starts the default profile and polls status | partial | OpenSpec task 3.2-3.3 |
 | `docker compose --profile ui up` | `task ui:smoke` | covered | Keep synced with UI profile |
 | `task ui:smoke` | `scripts/ui-profile-smoke.sh` | covered | Runs profile + Playwright |
 | `task ui:e2e` | `test/ui/ui-profile.spec.cjs` | covered | Requires running UI profile |

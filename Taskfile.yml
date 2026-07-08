@@ -54,6 +54,11 @@ tasks:
     cmds:
       - ./scripts/ui-profile-smoke.sh
 
+  core:smoke:
+    desc: Start the core profile, poll source-manifest status, then tear it down
+    cmds:
+      - ./scripts/core-profile-smoke.sh
+
   check:
     desc: Run all checks (lint + test)
     cmds:

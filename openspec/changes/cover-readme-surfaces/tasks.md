@@ -34,7 +34,7 @@
 
 ## 3. Cover default Docker Compose/core profile
 
-- [ ] 3.1 Add a core-profile smoke script/task that starts `docker compose up` for
+- [x] 3.1 Add a core-profile smoke script/task that starts `docker compose up` for
       the default profile, polls `http://localhost:8080/source-manifest/status`,
       and tears the stack down.
       - Test: `task core:smoke`
