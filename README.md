@@ -76,8 +76,9 @@ SemSource ingests heterogeneous sources and maintains a continuously updated gov
 
 Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`), semantic
 triples, provenance, and an indexing profile (`content`, `control`, `signal`, or `trace`). Query
-consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. A legacy raw
-WebSocket export still exists in standalone mode, but it is not the primary consumer contract.
+consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. The raw WebSocket
+export remains available in standalone mode for stream-oriented consumers such as federation, fan-out,
+or live UI updates; it is not the primary governed query contract.
 
 ## Source Types
 
@@ -173,7 +174,7 @@ Layers the SemTeams UI dashboard and a Caddy reverse proxy on top of the core. *
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Caddy | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and legacy `/graph` |
+| Caddy | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and raw `/graph` |
 | SemTeams UI | internal `:5173` | Operator dashboard and graph shell |
 
 Useful ui-profile endpoints (via Caddy on `:3000`):
@@ -184,7 +185,7 @@ Useful ui-profile endpoints (via Caddy on `:3000`):
 | `http://localhost:3000/health` | UI-compatible SemSource health JSON |
 | `http://localhost:3000/graphql` | GraphQL gateway |
 | `http://localhost:3000/source-manifest/status` | SemSource readiness/status |
-| `ws://localhost:3000/graph` | Legacy raw GRAPH stream export |
+| `ws://localhost:3000/graph` | Raw GRAPH stream export |
 
 Light UI-profile smoke:
 
@@ -227,8 +228,8 @@ Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--
 | 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile |
 | 8081 | semembed embeddings | Internal Docker network |
 | 4222 | NATS | Internal Docker network by default |
-| 3000 | Caddy entry point | ui profile: UI, GraphQL, source-manifest APIs, legacy `/graph` |
-| 7890 | SemSource WebSocket | Internal legacy raw stream export |
+| 3000 | Caddy entry point | ui profile: UI, GraphQL, source-manifest APIs, raw `/graph` stream |
+| 7890 | SemSource WebSocket | Internal raw GRAPH stream export |
 | 8082 | GraphQL gateway bind subject | Component registration setting; UI profile proxies ServiceManager `/graph-gateway/graphql` at `/graphql` |
 | 9091 | Prometheus metrics | Internal, proxied at `/metrics` (ui profile) |
 | 5173 | SemTeams UI (Vite) | Internal, proxied via `/*` (ui profile) |
@@ -274,8 +275,8 @@ Optional top-level fields:
 | `model_registry` | — | SemStreams model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"` or clustering LLM is on. See [`configs/tiers/README.md`](configs/tiers/README.md) |
 | `source_roots` | — | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007) |
 | `metrics.port` | `9091` | Prometheus metrics port |
-| `websocket_bind` | `"0.0.0.0:7890"` | Legacy raw GRAPH stream WebSocket bind address |
-| `websocket_path` | `"/graph"` | Legacy raw GRAPH stream WebSocket path |
+| `websocket_bind` | `"0.0.0.0:7890"` | Raw GRAPH stream WebSocket bind address |
+| `websocket_path` | `"/graph"` | Raw GRAPH stream WebSocket path |
 | `workspace_dir` | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths) |
 | `git_token` | — | Token for authenticated remote repo cloning |
 | `media_store_dir` | — | Local directory for media binary storage |

@@ -39,7 +39,7 @@ SemSource HTTP/MCP API on the configured SemSource HTTP port.
 The UI profile SHALL expose a Caddy entry point on the configured C360 port that
 serves the UI shell and routes SemSource backend APIs on the same origin. The route
 map SHALL include `/health`, `/graphql`, `/source-manifest/*`, `/code-context/*`,
-`/doc-context/*`, `/mcp-gateway/*`, `/metrics`, and the legacy `/graph` WebSocket.
+`/doc-context/*`, `/mcp-gateway/*`, `/metrics`, and the raw `/graph` WebSocket.
 
 The `/health` route SHALL proxy a SemSource-owned health envelope and return HTTP
 200 JSON compatible with SemTeams UI's system status reader, including at least

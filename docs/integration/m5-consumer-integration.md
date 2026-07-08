@@ -4,10 +4,11 @@ Instructions for connecting SemSpec and SemDragon to SemSource's graph.
 
 ## Overview
 
-Consumers query SemSource's graph directly via NATS request/reply endpoints or GraphQL. No WebSocket
-client setup, no FederationProcessor registration, and no bridge processor are required on the consumer
-side. SemSource owns the full graph pipeline and binds its governed ownership contract as a
-standalone external service.
+Query consumers use SemSource's graph directly via NATS request/reply endpoints or GraphQL. No
+WebSocket client setup, FederationProcessor registration, or bridge processor is required for that
+query path. The raw WebSocket stream remains available for stream-oriented consumers such as
+federation, fan-out, or live UI updates, but SemSource's governed query contract is the graph
+read surface.
 
 ### Internal pipeline (SemSource)
 

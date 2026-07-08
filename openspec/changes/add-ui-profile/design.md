@@ -54,7 +54,7 @@ the Playwright smoke verifies:
 | `/doc-context/*` | SemSource docs fusion gateway |
 | `/mcp-gateway/*` | SemSource MCP gateway |
 | `/metrics` | SemSource metrics |
-| `/graph` | legacy graph WebSocket |
+| `/graph` | raw graph WebSocket |
 
 The `/health` response must be JSON with at least `healthy`, `status`, and
 `message`, matching the shape SemTeams UI reads. Caddy proxies this to

@@ -16,10 +16,10 @@
 #           (PUBLISHED in core profile; proxied by Caddy in ui profile)
 #   4222  — NATS JetStream/KV (internal Docker network)
 #   8081  — semembed OpenAI-compatible embeddings (internal Docker network)
-#   7890  — semsource legacy graph WebSocket (internal; proxied via Caddy in ui profile)
+#   7890  — semsource raw graph WebSocket (internal; proxied via Caddy in ui profile)
 #   9091  — semsource Prometheus metrics (internal; proxied via Caddy in ui profile)
 #   5173  — SemTeams UI Vite dev (ui profile; proxied via Caddy)
-#   3000  — Caddy entry point (ui profile: UI, GraphQL, status APIs, legacy graph WebSocket)
+#   3000  — Caddy entry point (ui profile: UI, GraphQL, status APIs, raw graph WebSocket)
 #
 # Core-profile access:
 #   http://localhost:8080/mcp-gateway/mcp         — MCP gateway (point Claude Code / an agent here)
@@ -30,7 +30,7 @@
 #   http://localhost:3000/health                  — UI-compatible SemSource proxy health
 #   http://localhost:3000/graphql                 — GraphQL gateway
 #   http://localhost:3000/source-manifest/status  — SemSource readiness/status
-#   ws://localhost:3000/graph                     — Legacy raw GRAPH stream
+#   ws://localhost:3000/graph                     — Raw GRAPH stream
 
 services:
   # SemSource — graph ingestion engine
