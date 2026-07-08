@@ -49,7 +49,7 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 | `semsource add docs --paths ...` | `TestAddNonInteractiveDocs` | covered | None |
 | `semsource add url --urls ... --poll-interval 10m` | `TestAddNonInteractiveURL` | covered | None |
 | interactive `semsource add` | None at CLI boundary | gap | Add when interactive flow is product-critical |
-| `semsource sources` | None at CLI boundary | gap | OpenSpec task 2.2 |
+| `semsource sources` | `go test ./cli -run TestSources` | covered | None |
 | interactive `semsource remove` | None at CLI boundary | gap | OpenSpec task 2.3 |
 | `semsource remove --index N` | None at CLI boundary | gap | OpenSpec task 2.3 |
 

@@ -22,7 +22,7 @@
       `add repo --url ... --branch main`, `add docs --paths ...`, and
       `add url --urls ... --poll-interval 10m`.
       - Test: `go test ./cli -run 'TestAddNonInteractive(Repo|Docs|URL)'`
-- [ ] 2.2 Add config/output tests for `semsource sources`.
+- [x] 2.2 Add config/output tests for `semsource sources`.
       - Test: `go test ./cli -run TestSources`
 - [ ] 2.3 Add config mutation tests for `semsource remove --index N` and
       interactive `semsource remove`.
