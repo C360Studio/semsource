@@ -1,9 +1,13 @@
 ## Why
 
 The README now presents SemSource as a beta product with a broad executable
-surface: native CLI setup, Docker Compose bringup, MCP tools, source-manifest HTTP
-routes, GraphQL, NATS request/reply subjects, fused code/doc context routes, UI
-profile smoke, and local test commands.
+surface: native CLI setup, Docker Compose bringup, MCP tools, operator-facing
+source-manifest HTTP routes, GraphQL, fused code/doc context routes, UI profile
+smoke, and local test commands.
+
+The low-level NATS subject catalog and predicate/schema routes are consumer
+integration details, not README lead material. The README should point to the M5
+consumer integration guide for those contracts instead of enumerating them.
 
 That is the right product story, but the coverage is uneven. The current audit
 found strong handler/source coverage, good e2e coverage for `version`, `validate`,
@@ -18,8 +22,8 @@ routes a new user is most likely to copy from the README:
   proving the `:8080` status/MCP surface.
 - MCP query tools are listed and schema-checked, but most do not have happy-path
   tests through the agent-facing tool surface.
-- Several HTTP/NATS/GraphQL surfaces are wiring-checked but not behavior-checked
-  as advertised product routes.
+- Several HTTP/GraphQL/product-owned NATS surfaces are wiring-checked but not
+  behavior-checked as advertised product routes or integration-guide contracts.
 
 We are also waiting for a SemStreams P0 critical bug fix to land in a released tag.
 This change lets us track the coverage work now and close the runtime smoke gaps
@@ -28,14 +32,16 @@ once that upstream tag is available.
 ## What Changes
 
 - Define an advertised-surface coverage rule for README commands, tasks, tools,
-  endpoints, and subjects.
+  and operator-facing endpoints.
+- Keep low-level NATS subjects and predicate/schema routes in integration docs,
+  with explicit owner/test/blocker tracking there.
 - Add focused test tasks for the native CLI source-management examples.
 - Add a black-box native quick-start e2e that proves `init --quick -> validate ->
   run` using a compiled binary.
 - Add a default Docker Compose/core smoke after the SemStreams P0 fix is adopted.
 - Add MCP happy-path coverage for the agent tools listed in the README.
-- Add behavior checks for the advertised source-manifest, GraphQL, and NATS query
-  surfaces that are currently only partially covered.
+- Add behavior checks for the advertised source-manifest, GraphQL, and
+  product-owned NATS query surfaces that are currently only partially covered.
 - Keep the UI-profile smoke as already-covered evidence, while preserving it in
   the coverage matrix.
 

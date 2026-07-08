@@ -3,10 +3,15 @@
 ## 1. Establish the coverage matrix
 
 - [ ] 1.1 Create a small README surface coverage matrix that lists every advertised
-      command, task, endpoint, subject, and MCP tool with its owning test.
-      - Test: `rg "semsource add|docker compose up|mcp-gateway|graph.query" README.md`
+      command, task, endpoint, and MCP tool with its owning test.
+      - Test: `rg "semsource add|docker compose up|mcp-gateway|source-manifest" README.md`
         entries have named evidence in the matrix
-- [ ] 1.2 Mark any surface blocked by the pending SemStreams P0 fix with the issue,
+- [ ] 1.2 Keep low-level `graph.query.*` subjects and predicate/schema routes out
+      of the README unless they are required for first-run usage; document them in
+      the M5 consumer integration guide instead.
+      - Test: `rg "graph\\.query|source-manifest/predicates" README.md` has no
+        matches
+- [ ] 1.3 Mark any surface blocked by the pending SemStreams P0 fix with the issue,
       expected fixed tag, and follow-up validation command.
       - Test: matrix names the upstream blocker instead of silently omitting the
         surface
@@ -51,10 +56,11 @@
       README tool list changes.
       - Test: `go test ./processor/mcp-gateway`
 
-## 5. Cover HTTP, GraphQL, and NATS surfaces listed in README
+## 5. Cover HTTP, GraphQL, and integration-guide NATS surfaces
 
 - [ ] 5.1 Add happy-path HTTP handler tests for `/source-manifest/status`,
-      `/source-manifest/summary`, and `/source-manifest/predicates`.
+      plus integration-guide-only tests for `/source-manifest/summary` and
+      `/source-manifest/predicates` if those routes remain documented there.
       - Test: `go test ./processor/source-manifest`
 - [ ] 5.2 Add product-owned NATS request/reply tests for `graph.query.sources`,
       `graph.query.status`, `graph.query.predicates`, and
@@ -63,10 +69,9 @@
 - [ ] 5.3 Add a representative GraphQL route smoke for the ServiceManager route and
       keep the UI-profile `/graphql` Playwright assertion.
       - Test: `task core:smoke` and `task ui:e2e`
-- [ ] 5.4 Decide whether every framework-owned graph-query subject listed in README
-      should be tested here or whether README should link to SemStreams for the
-      exhaustive subject contract.
-      - Test: README and coverage matrix agree on ownership
+- [ ] 5.4 Add the M5 consumer integration guide to the coverage matrix as the owner
+      of the exhaustive `graph.query.*` subject catalog.
+      - Test: README, integration guide, and coverage matrix agree on ownership
 
 ## 6. Gates
 

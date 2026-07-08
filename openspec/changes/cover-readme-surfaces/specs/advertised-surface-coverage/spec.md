@@ -5,9 +5,11 @@
 ### Requirement: README advertised surfaces have explicit test evidence
 
 SemSource SHALL maintain explicit test evidence for every executable command,
-task, MCP tool, HTTP route, GraphQL route, and NATS subject advertised in
-`README.md`. Evidence MAY be a unit test, integration test, e2e test, smoke task,
-or a temporary upstream blocker entry with an issue/tag reference.
+task, MCP tool, HTTP route, and GraphQL route advertised in `README.md`.
+Low-level NATS subjects and predicate/schema routes SHALL be documented in the
+consumer integration guide unless they are required for first-run usage. Evidence
+MAY be a unit test, integration test, e2e test, smoke task, or a temporary
+upstream blocker entry with an issue/tag reference.
 
 #### Scenario: README adds an executable command
 
@@ -24,6 +26,14 @@ or a temporary upstream blocker entry with an issue/tag reference.
 - **WHEN** the surface remains in the README
 - **THEN** the matrix names the upstream issue or fixed tag and the SemSource
   validation command that will close the blocker
+
+#### Scenario: Low-level query contracts stay out of the README
+
+- **GIVEN** a route or subject is only needed by direct integration consumers,
+  such as `graph.query.*` or predicate/schema inspection
+- **WHEN** the README is updated
+- **THEN** the README links to the M5 consumer integration guide instead of
+  enumerating the low-level contract inline
 
 ### Requirement: README CLI examples are command-tested
 
@@ -90,10 +100,10 @@ README: `code_context`, `code_search`, `code_impact`, `doc_context`, and
 - **WHEN** an MCP client calls each advertised query tool with valid input
 - **THEN** the tool returns a non-error response with the expected envelope shape
 
-### Requirement: Advertised status and query routes have behavior tests
+### Requirement: Documented status and query routes have behavior tests
 
 SemSource SHALL test the product-owned HTTP and NATS status/query routes listed in
-the README, including `/source-manifest/predicates`,
+the README or consumer integration guide, including `/source-manifest/predicates`,
 `graph.query.predicates`, and `graph.query.versionDiff`.
 
 #### Scenario: Source-manifest predicates are queryable
