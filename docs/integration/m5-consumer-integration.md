@@ -4,10 +4,11 @@ Instructions for connecting SemSpec and SemDragon to SemSource's graph.
 
 ## Overview
 
-Consumers query SemSource's graph directly via NATS request/reply endpoints or GraphQL. No WebSocket
-client setup, no FederationProcessor registration, and no bridge processor are required on the consumer
-side. SemSource owns the full graph pipeline and binds its governed ownership contract as a
-standalone external service.
+Query consumers use SemSource's graph directly via NATS request/reply endpoints or GraphQL. No
+WebSocket client setup, FederationProcessor registration, or bridge processor is required for that
+query path. The raw WebSocket stream remains available for stream-oriented consumers such as
+federation, fan-out, or live UI updates, but SemSource's governed query contract is the graph
+read surface.
 
 ### Internal pipeline (SemSource)
 
@@ -18,7 +19,7 @@ Source Processors → graph.ingest.entity → graph-ingest → ENTITY_STATES KV
                                                                |
                                                           graph-query ← graph.query.*
                                                                |
-                                                          graph-gateway ← /graphql
+                                                          graph-gateway ← /graph-gateway/graphql
 ```
 
 ### Consumer integration
@@ -130,9 +131,10 @@ All endpoints use NATS request/reply. Send a JSON request body; receive a JSON r
 The structural graph subjects are served by `graph-query`. The SemSource-specific status, source,
 and predicate subjects are served by `source-manifest`.
 
-Compatibility note: SemStreams beta.114 routes `graph.query.capabilities` from the GraphQL gateway,
-but graph-query does not currently register a responder for it. SemSource should not be treated as
-advertising that subject until the upstream responder contract is restored.
+Compatibility note: SemStreams beta.144 still routes GraphQL `capabilities` queries to
+`graph.query.capabilities`, but the beta.144 graph-query handler table does not register that
+responder. SemSource should not be treated as advertising that subject until the upstream
+route/responder contract is aligned.
 
 ### Fused code_context / doc_context (agent consumers)
 
@@ -155,17 +157,17 @@ Use HTTP as a fallback when NATS is not directly accessible:
 
 ## GraphQL Gateway
 
-A GraphQL interface is served by the `graph-gateway` component on internal port `8082`.
-That port is **not published to the host** by the default (core) compose profile — reach
-GraphQL from the host via the `ui` profile, where Caddy proxies it on `:3000`:
+A GraphQL interface is served by the `graph-gateway` component through the SemStreams
+ServiceManager route `/graph-gateway/graphql`. Reach GraphQL from the host via the `ui`
+profile, where Caddy exposes the same-origin operator route on `:3000`:
 
 ```
 GET/POST http://localhost:3000/graphql      # docker compose --profile ui up
 ```
 
-(Inside the Docker network, or if you publish `8082` yourself, it is at
-`http://semsource:8082/graphql`.) This is the recommended interface for complex or
-exploratory queries involving multiple entity types, relationship traversal, and filtering.
+Inside the Docker network, use `http://semsource:8080/graph-gateway/graphql`. This is the
+recommended interface for complex or exploratory queries involving multiple entity types,
+relationship traversal, and filtering.
 
 ## Multi-Instance SemSource
 

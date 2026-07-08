@@ -181,6 +181,25 @@ deadlocks — so remove-teardown stays broken pending the fix. **Blocks:** gatin
 on e2e (`TestE2E_RuntimeSourceAdd` remove-teardown assertion) — deferred until #388.
 **Surfaced by:** wiring e2e into CI (curator runtime add/remove, ADR-040 / ADR-0006).
 
+### 8b. WebSocket output metric registration is not restart-safe — framework-shaped — RESOLVED in beta.144 ([semstreams#490](https://github.com/C360Studio/semstreams/issues/490)) — ADOPTED
+`output/websocket.newMetrics` creates fresh Prometheus collectors and unconditionally
+calls `PrometheusRegistry().MustRegister(...)`. When a runtime config update restarts
+`websocket-output`, the same collector names are registered again in the same registry,
+panicking with `duplicate metrics collector registration attempted`.
+
+**Resolution evidence:** SemSource adopted `github.com/c360studio/semstreams
+v1.0.0-beta.144` after [semstreams#490](https://github.com/C360Studio/semstreams/issues/490)
+closed. The previously blocked gate, `go test -tags=e2e -timeout 300s ./test/e2e/`,
+passed on 2026-07-08.
+
+**Framework fix shape:** websocket metric registration is now restart-safe instead
+of panicking on duplicate collector registration during restartable component
+construction.
+
+**Surfaced by:** validating the SemTeams UI profile OpenSpec slice; all UI-profile
+checks passed, but the existing full black-box e2e gate exposed this runtime restart
+panic.
+
 ---
 
 ## Gateways
@@ -198,6 +217,18 @@ official `github.com/modelcontextprotocol/go-sdk` (Streamable HTTP) exposing sem
 source-registration tools, translating tool calls → NATS. If the shape generalizes,
 propose lifting the MCP-server machinery upstream so it isn't re-rolled per service.
 **Surfaced by:** adding MCP to semsource (ADR-0007 §1; first MCP across sem\*).
+
+### 9b. GraphQL capabilities route points at an unregistered graph-query subject — framework-shaped — candidate
+SemStreams beta.144 `gateway/graph-gateway` still routes GraphQL `capabilities`
+queries to `graph.query.capabilities`, but `processor/graph-query`'s handler table
+does not register a responder for that subject. The SemStreams docs describe
+`graph.query.capabilities` as an aggregation surface, so the route/responder
+contract is inconsistent.
+
+**Stopgap (semsource):** do not advertise `graph.query.capabilities` in SemSource
+consumer docs until SemStreams aligns the GraphQL route and graph-query responder.
+**Surfaced by:** re-auditing SemSource docs after the beta.144 adoption for
+[semstreams#490](https://github.com/C360Studio/semstreams/issues/490).
 
 ---
 

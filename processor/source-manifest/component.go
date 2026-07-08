@@ -629,6 +629,10 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	mux.HandleFunc(statusPath, c.handleStatus)
 	c.logger.Info("registered HTTP handler", "path", statusPath)
 
+	healthPath := prefix + "health"
+	mux.HandleFunc(healthPath, c.handleHealth)
+	c.logger.Info("registered HTTP handler", "path", healthPath)
+
 	predicatesPath := prefix + "predicates"
 	mux.HandleFunc(predicatesPath, c.handlePredicates)
 	c.logger.Info("registered HTTP handler", "path", predicatesPath)
@@ -682,6 +686,119 @@ func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
+}
+
+// HealthPayload is the UI-compatible health envelope served over HTTP.
+type HealthPayload struct {
+	Component     string            `json:"component"`
+	Healthy       bool              `json:"healthy"`
+	Status        string            `json:"status"`
+	Message       string            `json:"message"`
+	Namespace     string            `json:"namespace,omitempty"`
+	Phase         string            `json:"phase,omitempty"`
+	TotalEntities int64             `json:"total_entities,omitempty"`
+	SubStatuses   []HealthSubStatus `json:"sub_statuses,omitempty"`
+	Timestamp     time.Time         `json:"timestamp"`
+}
+
+// HealthSubStatus is an optional detail row consumed by SemTeams UI.
+type HealthSubStatus struct {
+	Component string `json:"component"`
+	Healthy   bool   `json:"healthy"`
+	Message   string `json:"message"`
+}
+
+// handleHealth serves a SemTeams UI-compatible health envelope derived from the
+// source-manifest component's live aggregate status.
+func (c *Component) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	c.mu.RLock()
+	running := c.running
+	c.mu.RUnlock()
+
+	payload := c.buildHealthPayload(running)
+	w.Header().Set("Content-Type", "application/json")
+	if !payload.Healthy && !running {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (c *Component) buildHealthPayload(running bool) HealthPayload {
+	payload := HealthPayload{
+		Component: "semsource",
+		Healthy:   running,
+		Status:    "healthy",
+		Message:   "SemSource source manifest is reachable",
+		Timestamp: time.Now(),
+	}
+	if !running {
+		payload.Status = "error"
+		payload.Message = "SemSource source manifest is not started"
+		return payload
+	}
+
+	status, ok := c.currentStatusPayload()
+	if !ok {
+		payload.Status = "starting"
+		payload.Message = "SemSource source manifest is starting"
+		return payload
+	}
+
+	payload.Namespace = status.Namespace
+	payload.Phase = status.Phase
+	payload.TotalEntities = status.TotalEntities
+	payload.Message = fmt.Sprintf("SemSource ingestion phase: %s", status.Phase)
+	payload.SubStatuses = []HealthSubStatus{
+		{
+			Component: "Ingestion",
+			Healthy:   status.Phase != PhaseDegraded,
+			Message:   fmt.Sprintf("phase=%s total_entities=%d", status.Phase, status.TotalEntities),
+		},
+		{
+			Component: "Sources",
+			Healthy:   true,
+			Message:   fmt.Sprintf("%d sources reporting", len(status.Sources)),
+		},
+	}
+
+	if status.Phase == PhaseDegraded {
+		payload.Healthy = false
+		payload.Status = "degraded"
+		payload.Message = "SemSource ingestion is degraded"
+	}
+	for _, source := range status.Sources {
+		if source.Phase == SourcePhaseErrored || source.ErrorCount > 0 || source.LastError != nil {
+			payload.Healthy = false
+			payload.Status = "degraded"
+			payload.Message = "SemSource source errors are present"
+			payload.SubStatuses[1].Healthy = false
+			payload.SubStatuses[1].Message = "one or more sources reported errors"
+			break
+		}
+	}
+
+	return payload
+}
+
+func (c *Component) currentStatusPayload() (*StatusPayload, bool) {
+	c.statusMu.RLock()
+	data := append([]byte(nil), c.statusData...)
+	c.statusMu.RUnlock()
+	if len(data) == 0 {
+		return nil, false
+	}
+
+	var status StatusPayload
+	if err := json.Unmarshal(data, &status); err != nil {
+		c.logger.Warn("failed to decode status payload for health", "error", err)
+		return nil, false
+	}
+	return &status, true
 }
 
 // handlePredicates serves the predicate schema.

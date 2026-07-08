@@ -1,13 +1,12 @@
 # Caddyfile for C360 Stack
-# Reverse proxy: Routes semsource query/status APIs, legacy graph WebSocket,
-# semstreams-ui, and future backends.
+# Reverse proxy: Routes semsource query/status APIs, raw graph WebSocket,
+# SemTeams UI, and future backends.
 #
 # Port map (internal Docker network):
-#   semsource:7890  — Legacy raw graph WebSocket output
-#   semsource:8080  — ServiceManager HTTP API
-#   semsource:8082  — GraphQL gateway
+#   semsource:7890  — Raw graph WebSocket output
+#   semsource:8080  — ServiceManager HTTP API, including /graph-gateway/graphql
 #   semsource:9091  — Prometheus metrics
-#   ui:5173         — SemStreams UI (Vite dev)
+#   ui:5173         — SemTeams UI (Vite dev)
 #   backend:8080    — Reserved for semspec/semdragon backend
 #
 # All traffic enters via :3000 on the host.
@@ -18,14 +17,15 @@
 }
 
 :3000 {
-	# SemSource legacy graph WebSocket — proxied so clients connect via Caddy
+	# SemSource raw graph WebSocket — proxied so clients connect via Caddy
 	handle /graph {
 		reverse_proxy semsource:7890
 	}
 
 	# SemSource graph query and source-manifest APIs
 	handle /graphql* {
-		reverse_proxy semsource:8082
+		rewrite * /graph-gateway{uri}
+		reverse_proxy semsource:8080
 	}
 	handle /source-manifest/* {
 		reverse_proxy semsource:8080
@@ -47,9 +47,16 @@
 		reverse_proxy semsource:9091
 	}
 
-	# Health endpoint — checks the proxy is alive
+	# Health endpoint expected by SemTeams UI's system-status store.
+	handle /health {
+		rewrite * /source-manifest/health
+		reverse_proxy semsource:8080
+	}
+
+	# Legacy profile-health endpoint retained for older bookmarks.
 	handle /semsource/health {
-		respond "OK" 200
+		rewrite * /source-manifest/health
+		reverse_proxy semsource:8080
 	}
 
 	# Reserved: backend API routes (semspec, semdragon)
@@ -67,7 +74,7 @@
 	# 	reverse_proxy backend:8080
 	# }
 
-	# SemStreams UI handles everything else
+	# SemTeams UI handles everything else
 	handle {
 		reverse_proxy {$UI_HOST:ui:5173}
 	}
