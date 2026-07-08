@@ -1,15 +1,15 @@
 # SemSource
 
-Graph-first knowledge ingestion for the [SemStreams](https://github.com/C360Studio/semstreams)
-ecosystem. Point it at code, docs, configs, URLs, or media; it builds governed graph state in
-SemStreams and exposes it through `graph.query.*`, GraphQL, and source status APIs.
+SemSource gives agents and operator UIs a source graph they can trust instead of a pile of files to
+scrape. Point it at code, docs, configs, URLs, or media; it keeps source knowledge indexed in
+[SemStreams](https://github.com/C360Studio/semstreams) so consumers can ask what exists, what
+changed, where something is used, and whether the graph is ready.
 
-Drop a SemSource instance next to any project you want to index. Run one or many; each produces
-deterministic 6-part entity IDs and exact predicate ownership claims so SemStreams can store, index,
-and query the graph consistently. SemSource runs as a standalone external service and bootstraps its
-own ownership contract.
+Run it beside one project or many. Each instance emits stable IDs, provenance, indexing intent, and
+predicate ownership claims, so downstream tools can search, inspect impact, build UI views, or
+federate raw updates without re-parsing every source or fighting over graph writes.
 
-> **Public beta (`v1.0.0-beta.1`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
+> **Public beta (`v1.0.0-beta.4`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
 > limitations, and what's coming next.
 
 ## Prerequisites
