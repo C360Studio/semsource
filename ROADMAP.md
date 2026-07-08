@@ -3,10 +3,11 @@
 SemSource is in **public beta**. The current public tag is `v1.0.0-beta.4`,
 running on SemStreams `v1.0.0-beta.144`.
 
-The promise is simple: point SemSource at a project and it maintains a governed
-source graph that agents and operator UIs can trust. Consumers can ask what
-exists, what changed, where something is used, and whether the graph is ready
-without scraping a workspace or re-parsing the same files.
+The promise is simple: SemSource deliberately scrapes the pile of source files
+and turns it into a live, governed semantic knowledge graph (SKG). Humans,
+agents, and operator UIs can ask what exists, what changed, where something is
+used, and whether the graph is ready without each workflow rebuilding its own
+parser, cache, and graph-write rules.
 
 This page is an honest snapshot, not a dated commitment. Items are grouped by
 confidence and dependency shape. The "why" behind durable choices lives in
