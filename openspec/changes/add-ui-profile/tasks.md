@@ -78,7 +78,10 @@
 
 - [x] 5.1 `openspec validate add-ui-profile --strict`
 - [x] 5.2 `go test ./...`
-- [ ] 5.3 `go test -tags=e2e -timeout 300s ./test/e2e/`
+- [x] 5.3 `go test -tags=e2e -timeout 300s ./test/e2e/`
+      - Result 2026-07-08: passed after bumping
+        `github.com/c360studio/semstreams` to `v1.0.0-beta.144`, which includes the
+        [semstreams#490](https://github.com/C360Studio/semstreams/issues/490) fix.
       - Result 2026-07-06: failed in existing `TestE2E_RuntimeSourceAdd` with
         `panic: duplicate metrics collector registration attempted` from
         `github.com/c360studio/semstreams/output/websocket.newMetrics` during a
