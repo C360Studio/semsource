@@ -32,7 +32,7 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 | `task ui:smoke` | `scripts/ui-profile-smoke.sh` | covered | Runs profile + Playwright |
 | `task ui:e2e` | `test/ui/ui-profile.spec.cjs` | covered | Requires running UI profile |
 | `go install ...@latest` | e2e `buildBinary` compiles `./cmd/semsource` | partial | Consider install smoke |
-| `docker run ... nats:2-alpine -js` | e2e `startNATS` | partial | Native quick-start e2e |
+| `docker run ... nats:2-alpine -js` | `TestE2E_NativeQuickStart` | covered | None |
 | `git clone ...` / `cd semsource` | External Git behavior | external | None |
 
 ## Native CLI
@@ -40,7 +40,7 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
 | `semsource init` | `go test ./cli -run TestInitWritesValidConfig` | covered | Keep CLI tests current |
-| `semsource init --quick` | `go test ./cli -run TestInitQuick` | partial | OpenSpec task 2.4 |
+| `semsource init --quick` | `TestE2E_NativeQuickStart` | covered | None |
 | `semsource run` | `go test -tags=e2e ./test/e2e/ -run TestE2E_RunStartsAndPublishesEntities` | covered | None |
 | `semsource validate` | `go test -tags=e2e ./test/e2e/ -run TestE2E_Validate` | covered | None |
 | `semsource version` | `go test -tags=e2e ./test/e2e/ -run TestE2E_Version` | covered | None |

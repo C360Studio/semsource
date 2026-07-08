@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -166,6 +167,31 @@ func waitForReady(t *testing.T, httpPort int, timeout time.Duration) statusPaylo
 			return last
 		}
 		time.Sleep(2 * time.Second)
+	}
+	return last
+}
+
+func waitForNonEmptyStatus(t *testing.T, httpPort int, timeout time.Duration) statusPayload {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
+	deadline := time.Now().Add(timeout)
+	var last statusPayload
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&last); err != nil {
+			resp.Body.Close()
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		resp.Body.Close()
+		if last.Namespace != "" && last.Phase != "" && last.TotalEntities > 0 && len(last.Sources) > 0 {
+			return last
+		}
+		time.Sleep(1 * time.Second)
 	}
 	return last
 }
@@ -328,6 +354,63 @@ func writeConfig(t *testing.T, dir string, httpPort int) string {
 	return configPath
 }
 
+func writeQuickStartFixture(t *testing.T, parent string) string {
+	t.Helper()
+	dir := filepath.Join(parent, "quickstart")
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatalf("create quickstart fixture: %v", err)
+	}
+	files := map[string]string{
+		"go.mod":        "module example.com/quickstart\n\ngo 1.23\n",
+		"main.go":       "package main\n\nfunc main() {}\n",
+		"README.md":     "# Quickstart\n\nFixture docs.\n",
+		"docs/guide.md": "# Guide\n\nMore fixture docs.\n",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write fixture file %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+func assertQuickStartConfig(t *testing.T, configPath string) {
+	t.Helper()
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read generated config: %v", err)
+	}
+	var cfg struct {
+		Namespace string           `json:"namespace"`
+		Sources   []manifestSource `json:"sources"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode generated config: %v\n%s", err, data)
+	}
+	if cfg.Namespace != "quickstart" {
+		t.Fatalf("generated namespace = %q, want quickstart", cfg.Namespace)
+	}
+	sourceTypes := map[string]bool{}
+	for _, source := range cfg.Sources {
+		sourceTypes[source.Type] = true
+	}
+	for _, want := range []string{"ast", "docs", "config"} {
+		if !sourceTypes[want] {
+			t.Fatalf("generated config missing source type %q: %+v", want, cfg.Sources)
+		}
+	}
+}
+
+func logPipe(t *testing.T, label string, r io.Reader) {
+	t.Helper()
+	go func() {
+		scanner := bufio.NewScanner(r)
+		for scanner.Scan() {
+			t.Logf("[%s] %s", label, scanner.Text())
+		}
+	}()
+}
+
 // --- Tests ---
 
 func TestE2E_Version(t *testing.T) {
@@ -357,6 +440,108 @@ func TestE2E_Validate(t *testing.T) {
 		t.Fatalf("validate failed: %v\n%s", err, out)
 	}
 	t.Logf("validate output: %s", strings.TrimSpace(string(out)))
+}
+
+func TestE2E_NativeQuickStart(t *testing.T) {
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	fixtureDir := writeQuickStartFixture(t, workDir)
+	configPath := filepath.Join(fixtureDir, "semsource.json")
+
+	initCmd := exec.Command(binPath, "init", "--quick", "--config", configPath)
+	initCmd.Dir = fixtureDir
+	if out, err := initCmd.CombinedOutput(); err != nil {
+		t.Fatalf("init --quick failed: %v\n%s", err, out)
+	} else if !strings.Contains(string(out), "Config written") {
+		t.Fatalf("init --quick output missing success message:\n%s", out)
+	}
+	assertQuickStartConfig(t, configPath)
+
+	validateCmd := exec.Command(binPath, "validate", "--config", configPath)
+	validateCmd.Dir = fixtureDir
+	if out, err := validateCmd.CombinedOutput(); err != nil {
+		t.Fatalf("validate failed: %v\n%s", err, out)
+	}
+
+	httpPort := freePort(t)
+	wsPort := freePort(t)
+	runCtx, runCancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer runCancel()
+
+	runCmd := exec.CommandContext(runCtx, binPath, "run",
+		"--config", configPath,
+		"--log-level", "info",
+		"--nats-url", natsURL,
+	)
+	runCmd.Dir = fixtureDir
+	runCmd.Env = append(os.Environ(),
+		fmt.Sprintf("SEMSOURCE_HTTP_PORT=%d", httpPort),
+		fmt.Sprintf("SEMSOURCE_WS_BIND=127.0.0.1:%d", wsPort),
+	)
+	stdout, err := runCmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr, err := runCmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	if err := runCmd.Start(); err != nil {
+		t.Fatalf("start semsource run: %v", err)
+	}
+
+	logPipe(t, "quickstart stdout", stdout)
+	logPipe(t, "quickstart stderr", stderr)
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- runCmd.Wait() }()
+
+	stopRun := func() {
+		if runCmd.ProcessState != nil {
+			return
+		}
+		_ = runCmd.Process.Signal(os.Interrupt)
+		select {
+		case <-waitDone:
+		case <-time.After(10 * time.Second):
+			runCancel()
+			<-waitDone
+		}
+	}
+	defer stopRun()
+
+	manifest := queryManifestHTTP(t, httpPort)
+	if manifest.Namespace != "quickstart" {
+		t.Fatalf("manifest namespace = %q, want quickstart", manifest.Namespace)
+	}
+	if len(manifest.Sources) < 3 {
+		t.Fatalf("manifest sources count = %d, want at least 3", len(manifest.Sources))
+	}
+	manifestTypes := map[string]bool{}
+	for _, source := range manifest.Sources {
+		manifestTypes[source.Type] = true
+	}
+	for _, want := range []string{"ast", "docs", "config"} {
+		if !manifestTypes[want] {
+			t.Fatalf("manifest missing source type %q: %+v", want, manifest.Sources)
+		}
+	}
+
+	status := waitForNonEmptyStatus(t, httpPort, 90*time.Second)
+	if status.Namespace != "quickstart" {
+		t.Fatalf("status namespace = %q, want quickstart", status.Namespace)
+	}
+	if status.Phase == "" {
+		t.Fatalf("status phase is empty; status=%+v", status)
+	}
+	if len(status.Sources) == 0 {
+		t.Fatalf("status sources are empty; status=%+v", status)
+	}
+	if status.TotalEntities == 0 {
+		t.Fatalf("status total_entities = 0; status=%+v", status)
+	}
 }
 
 func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {

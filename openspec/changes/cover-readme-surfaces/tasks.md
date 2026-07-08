@@ -27,7 +27,7 @@
 - [x] 2.3 Add config mutation tests for `semsource remove --index N` and
       interactive `semsource remove`.
       - Test: `go test ./cli -run TestRemove`
-- [ ] 2.4 Add a black-box dispatch or e2e test that runs the compiled binary through
+- [x] 2.4 Add a black-box dispatch or e2e test that runs the compiled binary through
       `semsource init --quick --config <tmp>`, `semsource validate --config <tmp>`,
       and `semsource run --config <tmp>` with a disposable NATS server.
       - Test: `go test -tags=e2e -timeout 300s ./test/e2e/ -run TestE2E_NativeQuickStart`
