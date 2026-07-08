@@ -45,9 +45,9 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 | `semsource validate` | `go test -tags=e2e ./test/e2e/ -run TestE2E_Validate` | covered | None |
 | `semsource version` | `go test -tags=e2e ./test/e2e/ -run TestE2E_Version` | covered | None |
 | `semsource add ast --path ./src --language go` | `go test ./cli -run TestAddNonInteractiveAST` | covered | None |
-| `semsource add repo --url ... --branch main` | `internal/sourcespawn` expansion | partial | OpenSpec task 2.1 |
-| `semsource add docs --paths ...` | None at CLI boundary | gap | OpenSpec task 2.1 |
-| `semsource add url --urls ... --poll-interval 10m` | HTTP add-source tests | partial | OpenSpec task 2.1 |
+| `semsource add repo --url ... --branch main` | `TestAddNonInteractiveRepo` | covered | None |
+| `semsource add docs --paths ...` | `TestAddNonInteractiveDocs` | covered | None |
+| `semsource add url --urls ... --poll-interval 10m` | `TestAddNonInteractiveURL` | covered | None |
 | interactive `semsource add` | None at CLI boundary | gap | Add when interactive flow is product-critical |
 | `semsource sources` | None at CLI boundary | gap | OpenSpec task 2.2 |
 | interactive `semsource remove` | None at CLI boundary | gap | OpenSpec task 2.3 |

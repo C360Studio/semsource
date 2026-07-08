@@ -188,6 +188,57 @@ func TestAddNonInteractiveAST(t *testing.T) {
 	}
 }
 
+func TestAddNonInteractiveRepo(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "semsource.json")
+	writeMinimalConfig(t, cfgPath, "myorg")
+
+	term, _ := newTestTerm("")
+	args := []string{"repo", "--url", "github.com/org/repo", "--branch", "main"}
+	if err := Add(term, cfgPath, args); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	source := requireSource(t, loadConfig(t, cfgPath), "repo")
+	if source.URL != "github.com/org/repo" || source.Branch != "main" || !source.Watch {
+		t.Fatalf("repo source mismatch: %+v", source)
+	}
+}
+
+func TestAddNonInteractiveDocs(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "semsource.json")
+	writeMinimalConfig(t, cfgPath, "myorg")
+
+	term, _ := newTestTerm("")
+	args := []string{"docs", "--paths", "docs/,README.md"}
+	if err := Add(term, cfgPath, args); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	source := requireSource(t, loadConfig(t, cfgPath), "docs")
+	if !equalStrings(source.Paths, []string{"docs/", "README.md"}) || !source.Watch {
+		t.Fatalf("docs source mismatch: %+v", source)
+	}
+}
+
+func TestAddNonInteractiveURL(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "semsource.json")
+	writeMinimalConfig(t, cfgPath, "myorg")
+
+	term, _ := newTestTerm("")
+	args := []string{"url", "--urls", "https://api.example.com/docs", "--poll-interval", "10m"}
+	if err := Add(term, cfgPath, args); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	source := requireSource(t, loadConfig(t, cfgPath), "url")
+	if !equalStrings(source.URLs, []string{"https://api.example.com/docs"}) || source.PollInterval != "10m" {
+		t.Fatalf("url source mismatch: %+v", source)
+	}
+}
+
 func TestAddNonInteractiveGitMissingURL(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "semsource.json")
@@ -325,4 +376,27 @@ func loadConfig(t *testing.T, path string) *config.Config {
 		t.Fatalf("load config: %v", err)
 	}
 	return cfg
+}
+
+func requireSource(t *testing.T, cfg *config.Config, sourceType string) config.SourceEntry {
+	t.Helper()
+	for _, source := range cfg.Sources {
+		if source.Type == sourceType {
+			return source
+		}
+	}
+	t.Fatalf("source type %q not found in %+v", sourceType, cfg.Sources)
+	return config.SourceEntry{}
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

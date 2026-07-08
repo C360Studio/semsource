@@ -18,7 +18,7 @@
 
 ## 2. Cover native CLI commands from README
 
-- [ ] 2.1 Add direct non-interactive `cli.Add` tests for the README examples:
+- [x] 2.1 Add direct non-interactive `cli.Add` tests for the README examples:
       `add repo --url ... --branch main`, `add docs --paths ...`, and
       `add url --urls ... --poll-interval 10m`.
       - Test: `go test ./cli -run 'TestAddNonInteractive(Repo|Docs|URL)'`
