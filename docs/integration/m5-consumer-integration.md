@@ -130,9 +130,10 @@ All endpoints use NATS request/reply. Send a JSON request body; receive a JSON r
 The structural graph subjects are served by `graph-query`. The SemSource-specific status, source,
 and predicate subjects are served by `source-manifest`.
 
-Compatibility note: SemStreams beta.114 routes `graph.query.capabilities` from the GraphQL gateway,
-but graph-query does not currently register a responder for it. SemSource should not be treated as
-advertising that subject until the upstream responder contract is restored.
+Compatibility note: SemStreams beta.144 still routes GraphQL `capabilities` queries to
+`graph.query.capabilities`, but the beta.144 graph-query handler table does not register that
+responder. SemSource should not be treated as advertising that subject until the upstream
+route/responder contract is aligned.
 
 ### Fused code_context / doc_context (agent consumers)
 

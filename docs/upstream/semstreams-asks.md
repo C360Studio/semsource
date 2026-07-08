@@ -218,6 +218,18 @@ source-registration tools, translating tool calls → NATS. If the shape general
 propose lifting the MCP-server machinery upstream so it isn't re-rolled per service.
 **Surfaced by:** adding MCP to semsource (ADR-0007 §1; first MCP across sem\*).
 
+### 9b. GraphQL capabilities route points at an unregistered graph-query subject — framework-shaped — candidate
+SemStreams beta.144 `gateway/graph-gateway` still routes GraphQL `capabilities`
+queries to `graph.query.capabilities`, but `processor/graph-query`'s handler table
+does not register a responder for that subject. The SemStreams docs describe
+`graph.query.capabilities` as an aggregation surface, so the route/responder
+contract is inconsistent.
+
+**Stopgap (semsource):** do not advertise `graph.query.capabilities` in SemSource
+consumer docs until SemStreams aligns the GraphQL route and graph-query responder.
+**Surfaced by:** re-auditing SemSource docs after the beta.144 adoption for
+[semstreams#490](https://github.com/C360Studio/semstreams/issues/490).
+
 ---
 
 ## Graph indexing at scale (found dogfooding — first real, non-synthetic corpus)

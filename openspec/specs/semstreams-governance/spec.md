@@ -6,10 +6,7 @@ projection authority. Every graph write carries a semantic envelope (no reliance
 `triple.add` auto-vivify, post-ADR-055), source entities declare an indexing
 profile, and in standalone mode SemSource bootstraps ownership (OWNER_CLAIMS /
 OWNER_PRESENCE) before graph-ingest starts. It pins an explicit SemStreams target
-with a toolchain gate, and keeps the current query surfaces available. (The pinned
-target version in the archived requirements was the adoption baseline; SemSource has
-since advanced past it — the governance behavior these requirements describe still
-holds.)
+with a toolchain gate, and keeps the current query surfaces available.
 
 ## Requirements
 ### Requirement: Current SemStreams target is explicit
@@ -19,9 +16,9 @@ migration, not an unreleased local `main` commit.
 
 #### Scenario: Migration target is pinned to a release
 
-**GIVEN** SemStreams remote tags include `v1.0.0-beta.114`
+**GIVEN** SemStreams remote tags include `v1.0.0-beta.144`
 **WHEN** SemSource performs the governed graph migration
-**THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.114`
+**THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.144`
 
 ### Requirement: Toolchain gate precedes compatibility work
 
@@ -31,7 +28,7 @@ SemSource MUST run with a Go toolchain that satisfies the SemStreams module
 #### Scenario: Old Go toolchain fails fast
 
 **GIVEN** the local Go toolchain is `go1.25.3`
-**WHEN** SemSource tries to compile against SemStreams beta.114
+**WHEN** SemSource tries to compile against the current SemStreams beta
 **THEN** the migration is blocked until Go `1.26.3` is available
 
 ### Requirement: Entity birth carries a semantic envelope
@@ -97,7 +94,7 @@ SemSource MUST NOT rely on `graph.mutation.triple.add` or
 
 **GIVEN** a SemSource source emits a derived triple
 **WHEN** the triple subject has not already been born with an envelope
-**THEN** the test fails before the source can claim beta.114 compatibility
+**THEN** the test fails before the source can claim current SemStreams compatibility
 
 ### Requirement: Current query surfaces remain available
 
@@ -115,4 +112,3 @@ surfaces needed by SemOps and other consumers.
 **GIVEN** SemSource has ingested source entities
 **WHEN** a consumer requests `graph.query.summary`
 **THEN** the response includes entity type examples and predicate summary data
-
