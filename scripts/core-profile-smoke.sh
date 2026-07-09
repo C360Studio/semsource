@@ -53,9 +53,12 @@ export NATS_HOST_PORT="${NATS_HOST_PORT:-14222}"
 export NATS_MONITOR_HOST_PORT="${NATS_MONITOR_HOST_PORT:-18222}"
 
 status_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/status"
+sources_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/sources"
+mcp_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/mcp-gateway/mcp"
 timeout_seconds=${CORE_PROFILE_TIMEOUT_SECONDS:-300}
 poll_seconds=${CORE_PROFILE_POLL_SECONDS:-2}
 last_body="no response yet"
+mcp_probe_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-probe.XXXXXX")
 
 print_diagnostics() {
 	echo "Recent Docker Compose state:" >&2
@@ -69,6 +72,8 @@ cleanup() {
 	if [ "$status" -ne 0 ]; then
 		print_diagnostics
 	fi
+
+	rm -f "$mcp_probe_body"
 
 	if [ "${KEEP_CORE_PROFILE:-0}" = "1" ]; then
 		echo "KEEP_CORE_PROFILE=1 set; leaving SemSource core profile running"
@@ -98,6 +103,7 @@ echo "Using host ports: SEMSOURCE_HTTP_PORT=$SEMSOURCE_HTTP_PORT NATS_HOST_PORT=
 docker compose up -d --build --wait
 
 deadline=$(( $(date +%s) + timeout_seconds ))
+ready=0
 echo "Polling $status_url for ready source-manifest status"
 while [ "$(date +%s)" -le "$deadline" ]; do
 	if body=$(curl -fsS --max-time 5 "$status_url" 2>/dev/null); then
@@ -112,12 +118,50 @@ while [ "$(date +%s)" -le "$deadline" ]; do
 			[ -n "$total_entities" ] &&
 			[ "$total_entities" -gt 0 ]; then
 			echo "Core profile ready with total_entities=$total_entities"
-			exit 0
+			ready=1
+			break
 		fi
 	fi
 	sleep "$poll_seconds"
 done
 
-echo "Timed out waiting for source-manifest/status to become ready" >&2
-echo "Last response: $last_body" >&2
-exit 1
+if [ "$ready" -ne 1 ]; then
+	echo "Timed out waiting for source-manifest/status to become ready" >&2
+	echo "Last response: $last_body" >&2
+	exit 1
+fi
+
+echo "Checking $sources_url"
+sources_body=$(curl -fsS --max-time 5 "$sources_url") || fail "source-manifest/sources is not reachable"
+if ! printf '%s' "$sources_body" | grep -Eq '"namespace":"[^"]+"' ||
+	! printf '%s' "$sources_body" | grep -q '"sources":\['; then
+	echo "Unexpected source-manifest/sources response: $sources_body" >&2
+	exit 1
+fi
+for source_type in ast docs config; do
+	if ! printf '%s' "$sources_body" | grep -q "\"type\":\"$source_type\""; then
+		echo "source-manifest/sources missing $source_type source: $sources_body" >&2
+		exit 1
+	fi
+done
+echo "Source manifest reachable with ast/docs/config sources"
+
+echo "Checking $mcp_url"
+mcp_code=$(curl -sS --max-time 5 \
+	-o "$mcp_probe_body" \
+	-w '%{http_code}' \
+	-X POST \
+	-H 'Content-Type: application/json' \
+	-H 'Accept: application/json, text/event-stream' \
+	"$mcp_url") || fail "mcp-gateway/mcp is not reachable"
+if [ "$mcp_code" != "400" ]; then
+	echo "Unexpected mcp-gateway/mcp probe status: $mcp_code" >&2
+	echo "Body: $(cat "$mcp_probe_body")" >&2
+	exit 1
+fi
+if ! grep -q "POST requires a non-empty body" "$mcp_probe_body"; then
+	echo "Unexpected mcp-gateway/mcp probe body: $(cat "$mcp_probe_body")" >&2
+	exit 1
+fi
+echo "MCP gateway endpoint reachable"
+exit 0

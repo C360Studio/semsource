@@ -38,7 +38,7 @@
       the default profile, polls `http://localhost:8080/source-manifest/status`,
       and tears the stack down.
       - Test: `task core:smoke`
-- [ ] 3.2 Extend the smoke to assert
+- [x] 3.2 Extend the smoke to assert
       `http://localhost:8080/source-manifest/sources` and the MCP gateway endpoint
       are reachable.
       - Test: `task core:smoke`

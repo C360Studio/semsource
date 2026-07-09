@@ -21,13 +21,13 @@ No active README-surface blocker is currently recorded. The former runtime
 WebSocket restart blocker, `semstreams#490`, is adopted in SemSource through
 `github.com/c360studio/semstreams v1.0.0-beta.144`.
 
-Core compose smoke work remains a SemSource test gap, not an upstream block.
+Remaining core compose smoke work is SemSource-owned coverage, not an upstream block.
 
 ## Bootstrap And Compose
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `docker compose up` | `task core:smoke` starts the default profile and polls status | partial | OpenSpec task 3.2-3.3 |
+| `docker compose up` | `task core:smoke` starts the default profile and probes status/sources/MCP | partial | OpenSpec task 3.3 |
 | `docker compose --profile ui up` | `task ui:smoke` | covered | Keep synced with UI profile |
 | `task ui:smoke` | `scripts/ui-profile-smoke.sh` | covered | Runs profile + Playwright |
 | `task ui:e2e` | `test/ui/ui-profile.spec.cjs` | covered | Requires running UI profile |
@@ -57,7 +57,7 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `GET /source-manifest/sources` | `TestHandleSources_GET`; e2e manifest poll | covered | None |
+| `GET /source-manifest/sources` | `TestHandleSources_GET`; e2e manifest poll; `task core:smoke` | covered | None |
 | `GET /source-manifest/status` | e2e poll; UI Playwright assertion | covered | Add direct handler test |
 | `GET /source-manifest/health` | `TestHandleHealth_Ready`; UI Playwright health assertion | covered | None |
 | `POST /supersession/versionDiff` | NATS diff integration exists; no HTTP route test | partial | OpenSpec task 5.1 |
@@ -70,8 +70,8 @@ Core compose smoke work remains a SemSource test gap, not an upstream block.
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `/mcp-gateway/mcp` HTTP endpoint | MCP in-memory and NATS translation tests | partial | OpenSpec task 3.2 |
-| `claude mcp add --transport http ...` | No command-level smoke | gap | OpenSpec task 3.2 |
+| `/mcp-gateway/mcp` HTTP endpoint | MCP in-memory and NATS translation tests; `task core:smoke` reachability probe | partial | OpenSpec task 3.3 |
+| `claude mcp add --transport http ...` | `task core:smoke` probes the endpoint but not the Claude CLI | partial | OpenSpec task 3.3 |
 | `add_source` | `TestIntegration_AddSourceTranslatesToNATS` | covered | None |
 | `source_status` | `TestIntegration_SourceStatusMergesSignals` | covered | None |
 | `code_context` | tool list and guardrail tests; fusion NATS integration below MCP | partial | OpenSpec task 4.1 |
