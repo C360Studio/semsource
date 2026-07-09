@@ -183,7 +183,7 @@ beta.145's engine-owned notification contract instead of SemSource's old full
 
 **Surfaced by:** wiring e2e into CI (curator runtime add/remove, ADR-040 / ADR-0006).
 
-### 8a. Runtime config PushToKV restarts unchanged components — framework-shaped — candidate
+### 8a. Runtime config PushToKV restarts unchanged components — framework-shaped — filed [semstreams#520](https://github.com/C360Studio/semstreams/issues/520)
 beta.145 fixed the #388 notification drop, but SemSource stress testing found a
 follow-on lifecycle hazard: full `PushToKV` rewrites every component key, and
 `ComponentManager.handleComponentConfigUpdate` restarts any existing enabled
@@ -205,7 +205,7 @@ component config.
 **Surfaced by:** SemSource beta.145 pin validation (`TestE2E_RuntimeSourceAdd
 -count=5`, July 9, 2026).
 
-### 8b. Heartbeat Stop is not idempotent after context cancellation — framework-shaped — candidate
+### 8b. Heartbeat Stop is not idempotent after context cancellation — framework-shaped — filed [semstreams#520](https://github.com/C360Studio/semstreams/issues/520)
 `HeartbeatService.Stop` still returns `heartbeat service not running (status:
 stopped)` when the lifecycle context has already stopped the heartbeat before
 `Manager.StopAll` reaches it. `StopAll` aggregates that as a hard shutdown error,
