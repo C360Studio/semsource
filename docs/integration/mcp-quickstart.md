@@ -113,7 +113,7 @@ curl -s -X POST "$URL" \
   | sed -n 's/^data: //p' | jq '.result.tools[].name'
 ```
 
-Expect the seven tool names above.
+Expect the eight tool names above.
 
 ## Related
 

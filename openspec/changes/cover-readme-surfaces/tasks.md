@@ -42,7 +42,7 @@
       `http://localhost:8080/source-manifest/sources` and the MCP gateway endpoint
       are reachable.
       - Test: `task core:smoke`
-- [ ] 3.3 Include one real MCP happy path against the core stack.
+- [x] 3.3 Include one real MCP happy path against the core stack.
       - Test: `task core:smoke`
 
 ## 4. Cover MCP tools advertised to agents

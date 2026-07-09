@@ -59,6 +59,10 @@ timeout_seconds=${CORE_PROFILE_TIMEOUT_SECONDS:-300}
 poll_seconds=${CORE_PROFILE_POLL_SECONDS:-2}
 last_body="no response yet"
 mcp_probe_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-probe.XXXXXX")
+mcp_init_headers=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-init-headers.XXXXXX")
+mcp_init_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-init-body.XXXXXX")
+mcp_initialized_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-initialized-body.XXXXXX")
+mcp_tools_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-tools-body.XXXXXX")
 
 print_diagnostics() {
 	echo "Recent Docker Compose state:" >&2
@@ -73,7 +77,7 @@ cleanup() {
 		print_diagnostics
 	fi
 
-	rm -f "$mcp_probe_body"
+	rm -f "$mcp_probe_body" "$mcp_init_headers" "$mcp_init_body" "$mcp_initialized_body" "$mcp_tools_body"
 
 	if [ "${KEEP_CORE_PROFILE:-0}" = "1" ]; then
 		echo "KEEP_CORE_PROFILE=1 set; leaving SemSource core profile running"
@@ -164,4 +168,69 @@ if ! grep -q "POST requires a non-empty body" "$mcp_probe_body"; then
 	exit 1
 fi
 echo "MCP gateway endpoint reachable"
+
+echo "Checking MCP initialize + tools/list happy path"
+mcp_init_code=$(curl -sS --max-time 10 \
+	-D "$mcp_init_headers" \
+	-o "$mcp_init_body" \
+	-w '%{http_code}' \
+	-X POST \
+	-H 'Content-Type: application/json' \
+	-H 'Accept: application/json, text/event-stream' \
+	-d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"semsource-core-smoke","version":"0.0.1"}}}' \
+	"$mcp_url") || fail "MCP initialize request failed"
+if [ "$mcp_init_code" != "200" ]; then
+	echo "Unexpected MCP initialize status: $mcp_init_code" >&2
+	echo "Body: $(cat "$mcp_init_body")" >&2
+	exit 1
+fi
+if ! grep -q '"serverInfo":{"name":"semsource"' "$mcp_init_body"; then
+	echo "Unexpected MCP initialize body: $(cat "$mcp_init_body")" >&2
+	exit 1
+fi
+mcp_session_id=$(grep -i '^Mcp-Session-Id:' "$mcp_init_headers" | sed -n 's/^[^:]*:[[:space:]]*//p' | tr -d '\r' | sed -n '1p')
+if [ -z "$mcp_session_id" ]; then
+	echo "MCP initialize response did not include Mcp-Session-Id" >&2
+	echo "Headers: $(cat "$mcp_init_headers")" >&2
+	exit 1
+fi
+
+mcp_initialized_code=$(curl -sS --max-time 5 \
+	-o "$mcp_initialized_body" \
+	-w '%{http_code}' \
+	-X POST \
+	-H 'Content-Type: application/json' \
+	-H 'Accept: application/json, text/event-stream' \
+	-H 'MCP-Protocol-Version: 2025-06-18' \
+	-H "Mcp-Session-Id: $mcp_session_id" \
+	-d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' \
+	"$mcp_url") || fail "MCP initialized notification failed"
+if [ "$mcp_initialized_code" != "202" ]; then
+	echo "Unexpected MCP initialized notification status: $mcp_initialized_code" >&2
+	echo "Body: $(cat "$mcp_initialized_body")" >&2
+	exit 1
+fi
+
+mcp_tools_code=$(curl -sS --max-time 10 \
+	-o "$mcp_tools_body" \
+	-w '%{http_code}' \
+	-X POST \
+	-H 'Content-Type: application/json' \
+	-H 'Accept: application/json, text/event-stream' \
+	-H 'MCP-Protocol-Version: 2025-06-18' \
+	-H "Mcp-Session-Id: $mcp_session_id" \
+	-d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+	"$mcp_url") || fail "MCP tools/list request failed"
+if [ "$mcp_tools_code" != "200" ]; then
+	echo "Unexpected MCP tools/list status: $mcp_tools_code" >&2
+	echo "Body: $(cat "$mcp_tools_body")" >&2
+	exit 1
+fi
+for tool_name in add_source code_changes code_context code_impact code_search doc_context remove_source source_status; do
+	if ! grep -q "\"name\":\"$tool_name\"" "$mcp_tools_body"; then
+		echo "MCP tools/list missing $tool_name: $(cat "$mcp_tools_body")" >&2
+		exit 1
+	fi
+done
+echo "MCP tools/list returned the expected SemSource tools"
 exit 0

@@ -27,7 +27,7 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `docker compose up` | `task core:smoke` starts the default profile and probes status/sources/MCP | partial | OpenSpec task 3.3 |
+| `docker compose up` | `task core:smoke` starts the default profile and probes status/sources/MCP tools | covered | None |
 | `docker compose --profile ui up` | `task ui:smoke` | covered | Keep synced with UI profile |
 | `task ui:smoke` | `scripts/ui-profile-smoke.sh` | covered | Runs profile + Playwright |
 | `task ui:e2e` | `test/ui/ui-profile.spec.cjs` | covered | Requires running UI profile |
@@ -70,8 +70,8 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `/mcp-gateway/mcp` HTTP endpoint | MCP in-memory and NATS translation tests; `task core:smoke` reachability probe | partial | OpenSpec task 3.3 |
-| `claude mcp add --transport http ...` | `task core:smoke` probes the endpoint but not the Claude CLI | partial | OpenSpec task 3.3 |
+| `/mcp-gateway/mcp` HTTP endpoint | MCP in-memory and NATS translation tests; `task core:smoke` initialize + tools/list | covered | None |
+| `claude mcp add --transport http ...` | `task core:smoke` proves the SemSource endpoint speaks MCP; Claude CLI config is external | external | None |
 | `add_source` | `TestIntegration_AddSourceTranslatesToNATS` | covered | None |
 | `source_status` | `TestIntegration_SourceStatusMergesSignals` | covered | None |
 | `code_context` | tool list and guardrail tests; fusion NATS integration below MCP | partial | OpenSpec task 4.1 |
