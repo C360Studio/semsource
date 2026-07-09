@@ -47,7 +47,7 @@
 
 ## 4. Cover MCP tools advertised to agents
 
-- [ ] 4.1 Add NATS-backed MCP happy-path tests for `code_context`, `code_search`,
+- [x] 4.1 Add NATS-backed MCP happy-path tests for `code_context`, `code_search`,
       `code_impact`, `doc_context`, and `code_changes` using stub responders where
       appropriate.
       - Test: `go test -tags=integration ./processor/mcp-gateway`

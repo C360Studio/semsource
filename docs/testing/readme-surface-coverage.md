@@ -74,11 +74,11 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 | `claude mcp add --transport http ...` | `task core:smoke` proves the SemSource endpoint speaks MCP; Claude CLI config is external | external | None |
 | `add_source` | `TestIntegration_AddSourceTranslatesToNATS` | covered | None |
 | `source_status` | `TestIntegration_SourceStatusMergesSignals` | covered | None |
-| `code_context` | tool list and guardrail tests; fusion NATS integration below MCP | partial | OpenSpec task 4.1 |
-| `code_search` | tool list and guardrail tests; fusion lens tests below MCP | partial | OpenSpec task 4.1 |
-| `code_impact` | tool list and guardrail tests; code lens impact tests below MCP | partial | OpenSpec task 4.1 |
-| `doc_context` | tool list and guardrail tests only | partial | OpenSpec task 4.1 |
-| `code_changes` | version-diff NATS integration below MCP | partial | OpenSpec task 4.1 |
+| `code_context` | `TestIntegration_QueryToolsTranslateToNATS`; fusion NATS integration below MCP | covered | None |
+| `code_search` | `TestIntegration_QueryToolsTranslateToNATS`; fusion lens tests below MCP | covered | None |
+| `code_impact` | `TestIntegration_QueryToolsTranslateToNATS`; code lens impact tests below MCP | covered | None |
+| `doc_context` | `TestIntegration_QueryToolsTranslateToNATS` | covered | None |
+| `code_changes` | `TestIntegration_QueryToolsTranslateToNATS`; `TestIntegration_VersionDiff` below MCP | covered | None |
 
 ## Fused Context Routes
 
