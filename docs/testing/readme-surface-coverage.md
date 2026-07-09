@@ -60,7 +60,7 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 | `GET /source-manifest/sources` | `TestHandleSources_GET`; e2e manifest poll; `task core:smoke` | covered | None |
 | `GET /source-manifest/status` | `TestHandleStatus_GET`; e2e poll; UI Playwright assertion | covered | None |
 | `GET /source-manifest/health` | `TestHandleHealth_Ready`; UI Playwright health assertion | covered | None |
-| `POST /supersession/versionDiff` | NATS diff integration exists; no HTTP route test | partial | OpenSpec task 5.1 |
+| `POST /supersession/versionDiff` | `TestIntegration_VersionDiff` NATS and HTTP route assertions | covered | None |
 | `GET /graph-gateway/graphql` | `task core:smoke` ServiceManager route probe | covered | None |
 | `POST /graph-gateway/graphql` | `task core:smoke` GraphQL-shaped POST assertion | covered | None |
 | `GET/POST /graphql` through UI profile | `test/ui/ui-profile.spec.cjs` | covered | None |

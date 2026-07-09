@@ -3,8 +3,11 @@
 package governance
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -119,6 +122,11 @@ func TestIntegration_VersionDiff(t *testing.T) {
 	if resp.Counts.Added != 1 || resp.Counts.Removed != 1 || resp.Counts.Changed != 1 || resp.Counts.Unchanged != 1 {
 		t.Fatalf("counts = %+v; want added1 removed1 changed1 unchanged1", resp.Counts)
 	}
+	httpResp := requestHTTPDiff(t, scomp, proj, "v1.9.0", "v1.10.0")
+	if httpResp.Project != resp.Project || httpResp.From != resp.From || httpResp.To != resp.To ||
+		httpResp.Counts != resp.Counts || len(httpResp.Changes) != len(resp.Changes) {
+		t.Fatalf("HTTP versionDiff response = %+v; want NATS-equivalent %+v", httpResp, resp)
+	}
 	byName := map[string]supersession.Change{}
 	for _, ch := range resp.Changes {
 		byName[ch.Name] = ch
@@ -192,6 +200,27 @@ func requestDiff(t *testing.T, ctx context.Context, client *natsclient.Client, p
 	var resp supersession.VersionDiffResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		t.Fatalf("decode versionDiff %q: %v", raw, err)
+	}
+	return resp
+}
+
+func requestHTTPDiff(t *testing.T, comp *supersession.Component, project, from, to string) supersession.VersionDiffResponse {
+	t.Helper()
+	mux := http.NewServeMux()
+	comp.RegisterHTTPHandlers("/supersession", mux)
+	body, _ := json.Marshal(map[string]string{"project": project, "from": from, "to": to})
+	req := httptest.NewRequest(http.MethodPost, "/supersession/versionDiff", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("HTTP versionDiff status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("HTTP versionDiff Content-Type = %q, want application/json", ct)
+	}
+	var resp supersession.VersionDiffResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode HTTP versionDiff response %q: %v", rec.Body.String(), err)
 	}
 	return resp
 }
