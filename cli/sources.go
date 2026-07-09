@@ -47,9 +47,12 @@ func sourceLocation(s config.SourceEntry) string {
 	switch s.Type {
 	case "ast":
 		return s.Path
-	case "git":
-		return s.URL
-	case "docs", "config":
+	case "git", "repo":
+		if s.URL != "" {
+			return s.URL
+		}
+		return s.Path
+	case "docs", "config", "image", "video", "audio":
 		return strings.Join(s.Paths, ", ")
 	case "url":
 		if len(s.URLs) > 0 {
@@ -68,6 +71,13 @@ func sourceExtra(s config.SourceEntry) string {
 	case "git":
 		if s.Branch != "" {
 			return "branch=" + s.Branch
+		}
+	case "repo":
+		if s.Branch != "" {
+			return "branch=" + s.Branch
+		}
+		if s.Language != "" {
+			return "lang=" + s.Language
 		}
 	case "url":
 		if s.PollInterval != "" {

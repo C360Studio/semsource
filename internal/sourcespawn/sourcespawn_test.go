@@ -13,14 +13,14 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// fakeStore wraps an in-memory SafeConfig (the real Add/Remove path) and mirrors
-// the components into `puts` on PushToKV so assertions can inspect what was
-// committed. `deletes` records DeleteComponentFromKV calls.
+// fakeStore wraps an in-memory SafeConfig and mirrors targeted component writes
+// into `puts` so assertions can inspect what was committed. `deletes` records
+// DeleteComponentFromKV calls.
 type fakeStore struct {
 	cfg     *semconfig.SafeConfig
 	puts    map[string]types.ComponentConfig
 	deletes []string
-	failPut bool // fails PushToKV
+	failPut bool // fails PutComponentToKV
 	failDel bool
 }
 
@@ -36,13 +36,19 @@ func newFakeStore() *fakeStore {
 
 func (f *fakeStore) GetConfig() *semconfig.SafeConfig { return f.cfg }
 
-func (f *fakeStore) PushToKV(_ context.Context) error {
+func (f *fakeStore) PutComponentToKV(_ context.Context, name string, compConfig types.ComponentConfig) error {
 	if f.failPut {
 		return errors.New("kv unavailable")
 	}
-	for name, c := range f.cfg.Get().Components {
-		f.puts[name] = c
+	cfg := f.cfg.Get()
+	if cfg.Components == nil {
+		cfg.Components = map[string]types.ComponentConfig{}
 	}
+	cfg.Components[name] = compConfig
+	if err := f.cfg.Update(cfg); err != nil {
+		return err
+	}
+	f.puts[name] = compConfig
 	return nil
 }
 
@@ -420,11 +426,10 @@ func TestAdd_KVFailure_ReportsKVCode(t *testing.T) {
 	}
 }
 
-// TestAdd_PushFailure_IsAtomic verifies that a PushToKV failure surfaces as a
-// KV-write error and commits nothing. Add now applies the whole batch via one
-// versioned PushToKV (which notifies subscribers → reconcile/spawn), so there
-// are no per-component partial writes — the operation is atomic.
-func TestAdd_PushFailure_IsAtomic(t *testing.T) {
+// TestAdd_PutFailure_ReportsNoSingleWrite verifies that a targeted component
+// write failure surfaces as a KV-write error before reporting the failed
+// component as committed.
+func TestAdd_PutFailure_ReportsNoSingleWrite(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	store.failPut = true
@@ -437,7 +442,7 @@ func TestAdd_PushFailure_IsAtomic(t *testing.T) {
 		t.Errorf("CodeOf = %q, want %q", CodeOf(err), CodeKVWriteFailed)
 	}
 	if len(results) != 0 {
-		t.Errorf("len(results) = %d, want 0 (atomic: nothing committed on push failure)", len(results))
+		t.Errorf("len(results) = %d, want 0", len(results))
 	}
 	if len(store.puts) != 0 {
 		t.Errorf("len(store.puts) = %d, want 0", len(store.puts))

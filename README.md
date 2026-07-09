@@ -1,25 +1,22 @@
 # SemSource
 
-Your project already knows a lot: which symbols exist, what imports what, which docs describe a
-feature, what changed between versions, and whether the latest index is ready. Most of that knowledge
-is stranded in files. SemSource will not beat `find` for a filename or `grep` for a known string; it
-earns its keep when the answer depends on relationships, history, provenance, or live state.
+SemSource scrapes the pile of code, docs, configs, URLs, and media in your projects and turns them
+into a live semantic knowledge graph (SKG) in [SemStreams](https://github.com/C360Studio/semstreams).
+Humans and agents can ask what exists, what changed, where something is used, and
+whether the graph is ready without each tool inventing its own parser, cache, and rules.
+SemSource will not beat `find` for a filename or `grep` for a known string.
+It earns its keep when the answer depends on relationships, history, provenance, or live state.
 
-SemSource scrapes the pile of code, docs, configs, URLs, and media on purpose, then keeps the result
-as a live semantic knowledge graph (SKG) in [SemStreams](https://github.com/C360Studio/semstreams).
-Humans, agents, and operator UIs can ask what exists, what changed, where something is used, and
-whether the graph is ready without each tool inventing its own parser, cache, and graph-write rules.
-
-Run it beside one project or many. Each instance emits stable IDs, provenance, indexing intent, and
-predicate ownership claims, so downstream tools can inspect impact, compare versions, build UI views,
-or federate raw updates without fighting over graph ownership.
+Run it beside one project or many. Each instance emits stable IDs, provenance, and indexing intent, so
+downstream tools can inspect impact, compare versions, or build UI views without reverse-engineering
+the source files.
 
 > **Public beta (`v1.0.0-beta.4`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
 > limitations, and what's coming next.
 
 ## Prerequisites
 
-SemSource runs on the SemStreams ServiceManager and uses NATS JetStream/KV for graph
+SemSource runs on SemStreams and uses NATS JetStream/KV for graph
 state, ownership, and query indices — so **a NATS server is always required**.
 
 - **Docker** — the recommended path; `docker compose up` bundles NATS + embeddings and
@@ -76,13 +73,13 @@ SemSource ingests heterogeneous sources and maintains a continuously updated gov
                              │
         ┌────────────────────┼────────────┐
         ▼                    ▼            ▼
-     [SemSpec]          [SemDragon]  [Your App]
+     [Sem*]                [MCP]      [Your App]
 ```
 
 Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`), semantic
 triples, provenance, and an indexing profile (`content`, `control`, `signal`, or `trace`). Query
 consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. The raw WebSocket
-export remains available in standalone mode for stream-oriented consumers such as federation, fan-out,
+export is available for stream-oriented consumers such as federation, fan-out,
 or live UI updates; it is not the primary governed query contract.
 
 ## Source Types
@@ -295,36 +292,10 @@ semsource validate
 
 ## Graph Query & Status API
 
-SemSource exposes graph query and status endpoints via NATS request/reply, GraphQL, and HTTP.
-
-### NATS Subjects
-
-| Subject | Description |
-|---------|-------------|
-| `graph.query.entity` | Query a single entity by ID |
-| `graph.query.entityByAlias` | Resolve an entity by alias |
-| `graph.query.byName` | Resolve a name/title to ranked entity IDs (deterministic symbol lookup) |
-| `graph.query.batch` | Fetch multiple entities |
-| `graph.query.relationships` | Query entity relationships |
-| `graph.query.pathSearch` | Traverse paths between entities |
-| `graph.query.hierarchyStats` | Summarize hierarchy shape |
-| `graph.query.prefix` | Page entities by ID prefix |
-| `graph.query.spatial` | Spatial query surface |
-| `graph.query.temporal` | Temporal query surface |
-| `graph.query.semantic` | Semantic query surface |
-| `graph.query.similar` | Similarity query surface |
-| `graph.query.globalSearch` | Global graph search |
-| `graph.query.summary` | Graph summary counts |
-| `graph.query.searchGraph` | Search graph result expansion |
-| `graph.query.status` | Current SemSource ingestion status |
-| `graph.query.sources` | Configured source manifest |
-| `graph.query.predicates` | Predicate schema by source type |
-| `graph.query.versionDiff` | Changeset between two versions of a source (added/removed/changed symbols + before/after bodies) |
-
-Compatibility note: SemStreams beta.144 still routes GraphQL `capabilities` queries to
-`graph.query.capabilities`, but the beta.144 graph-query handler table does not register
-that responder. SemSource does not advertise that subject until the upstream route/responder
-contract is aligned.
+SemSource exposes status and query surfaces through MCP, HTTP, GraphQL, and NATS request/reply. Most
+users should start with MCP, HTTP status, or GraphQL. The full NATS subject catalog, low-level schema
+routes, and compatibility notes live in the
+[M5 consumer integration guide](docs/integration/m5-consumer-integration.md).
 
 ### HTTP Endpoints (ServiceManager, default :8080)
 
@@ -333,7 +304,6 @@ contract is aligned.
 | `GET /source-manifest/sources` | Configured sources |
 | `GET /source-manifest/status` | Ingestion status with per-instance phases |
 | `GET /source-manifest/health` | UI-compatible health envelope derived from source-manifest status |
-| `GET /source-manifest/predicates` | Predicate schema grouped by source type |
 | `POST /supersession/versionDiff` | Changeset between two versions of a source (JSON `{project, from, to}`) |
 
 ### GraphQL Gateway

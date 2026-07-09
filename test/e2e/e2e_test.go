@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -97,26 +98,33 @@ type typeCount struct {
 // Retries for up to 15 seconds to allow the HTTP server and component to start.
 func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
 	t.Helper()
+	return queryManifestHTTPWithin(t, httpPort, 15*time.Second)
+}
+
+func queryManifestHTTPWithin(t *testing.T, httpPort int, timeout time.Duration) manifestPayload {
+	t.Helper()
 	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/sources", httpPort)
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err != nil {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		var m manifestPayload
 		if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+			resp.Body.Close()
 			t.Fatalf("decode manifest response: %v", err)
 		}
+		resp.Body.Close()
 		return m
 	}
-	t.Fatalf("GET %s did not return 200 within 15s", url)
+	t.Fatalf("GET %s did not return 200 within %s", url, timeout)
 	return manifestPayload{}
 }
 
@@ -124,26 +132,41 @@ func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
 // Retries for up to 15 seconds to allow startup.
 func queryStatusHTTP(t *testing.T, httpPort int) statusPayload {
 	t.Helper()
+	return queryStatusHTTPWithin(t, httpPort, 15*time.Second)
+}
+
+func queryStatusHTTPWithin(t *testing.T, httpPort int, timeout time.Duration) statusPayload {
+	t.Helper()
 	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(timeout)
+	var lastErr string
+	var lastStatus int
+	var lastBody string
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err != nil {
+			lastErr = err.Error()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			lastStatus = resp.StatusCode
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			lastBody = strings.TrimSpace(string(body))
+			resp.Body.Close()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		var s statusPayload
 		if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+			resp.Body.Close()
 			t.Fatalf("decode status response: %v", err)
 		}
+		resp.Body.Close()
 		return s
 	}
-	t.Fatalf("GET %s did not return 200 within 15s", url)
+	t.Fatalf("GET %s did not return 200 within %s; last_error=%q last_status=%d last_body=%q",
+		url, timeout, lastErr, lastStatus, lastBody)
 	return statusPayload{}
 }
 
@@ -166,6 +189,31 @@ func waitForReady(t *testing.T, httpPort int, timeout time.Duration) statusPaylo
 			return last
 		}
 		time.Sleep(2 * time.Second)
+	}
+	return last
+}
+
+func waitForNonEmptyStatus(t *testing.T, httpPort int, timeout time.Duration) statusPayload {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
+	deadline := time.Now().Add(timeout)
+	var last statusPayload
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&last); err != nil {
+			resp.Body.Close()
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		resp.Body.Close()
+		if last.Namespace != "" && last.Phase != "" && last.TotalEntities > 0 && len(last.Sources) > 0 {
+			return last
+		}
+		time.Sleep(1 * time.Second)
 	}
 	return last
 }
@@ -328,6 +376,63 @@ func writeConfig(t *testing.T, dir string, httpPort int) string {
 	return configPath
 }
 
+func writeQuickStartFixture(t *testing.T, parent string) string {
+	t.Helper()
+	dir := filepath.Join(parent, "quickstart")
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatalf("create quickstart fixture: %v", err)
+	}
+	files := map[string]string{
+		"go.mod":        "module example.com/quickstart\n\ngo 1.23\n",
+		"main.go":       "package main\n\nfunc main() {}\n",
+		"README.md":     "# Quickstart\n\nFixture docs.\n",
+		"docs/guide.md": "# Guide\n\nMore fixture docs.\n",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write fixture file %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+func assertQuickStartConfig(t *testing.T, configPath string) {
+	t.Helper()
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read generated config: %v", err)
+	}
+	var cfg struct {
+		Namespace string           `json:"namespace"`
+		Sources   []manifestSource `json:"sources"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode generated config: %v\n%s", err, data)
+	}
+	if cfg.Namespace != "quickstart" {
+		t.Fatalf("generated namespace = %q, want quickstart", cfg.Namespace)
+	}
+	sourceTypes := map[string]bool{}
+	for _, source := range cfg.Sources {
+		sourceTypes[source.Type] = true
+	}
+	for _, want := range []string{"ast", "docs", "config"} {
+		if !sourceTypes[want] {
+			t.Fatalf("generated config missing source type %q: %+v", want, cfg.Sources)
+		}
+	}
+}
+
+func logPipe(t *testing.T, label string, r io.Reader) {
+	t.Helper()
+	go func() {
+		scanner := bufio.NewScanner(r)
+		for scanner.Scan() {
+			t.Logf("[%s] %s", label, scanner.Text())
+		}
+	}()
+}
+
 // --- Tests ---
 
 func TestE2E_Version(t *testing.T) {
@@ -357,6 +462,108 @@ func TestE2E_Validate(t *testing.T) {
 		t.Fatalf("validate failed: %v\n%s", err, out)
 	}
 	t.Logf("validate output: %s", strings.TrimSpace(string(out)))
+}
+
+func TestE2E_NativeQuickStart(t *testing.T) {
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	fixtureDir := writeQuickStartFixture(t, workDir)
+	configPath := filepath.Join(fixtureDir, "semsource.json")
+
+	initCmd := exec.Command(binPath, "init", "--quick", "--config", configPath)
+	initCmd.Dir = fixtureDir
+	if out, err := initCmd.CombinedOutput(); err != nil {
+		t.Fatalf("init --quick failed: %v\n%s", err, out)
+	} else if !strings.Contains(string(out), "Config written") {
+		t.Fatalf("init --quick output missing success message:\n%s", out)
+	}
+	assertQuickStartConfig(t, configPath)
+
+	validateCmd := exec.Command(binPath, "validate", "--config", configPath)
+	validateCmd.Dir = fixtureDir
+	if out, err := validateCmd.CombinedOutput(); err != nil {
+		t.Fatalf("validate failed: %v\n%s", err, out)
+	}
+
+	httpPort := freePort(t)
+	wsPort := freePort(t)
+	runCtx, runCancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer runCancel()
+
+	runCmd := exec.CommandContext(runCtx, binPath, "run",
+		"--config", configPath,
+		"--log-level", "info",
+		"--nats-url", natsURL,
+	)
+	runCmd.Dir = fixtureDir
+	runCmd.Env = append(os.Environ(),
+		fmt.Sprintf("SEMSOURCE_HTTP_PORT=%d", httpPort),
+		fmt.Sprintf("SEMSOURCE_WS_BIND=127.0.0.1:%d", wsPort),
+	)
+	stdout, err := runCmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr, err := runCmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	if err := runCmd.Start(); err != nil {
+		t.Fatalf("start semsource run: %v", err)
+	}
+
+	logPipe(t, "quickstart stdout", stdout)
+	logPipe(t, "quickstart stderr", stderr)
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- runCmd.Wait() }()
+
+	stopRun := func() {
+		if runCmd.ProcessState != nil {
+			return
+		}
+		_ = runCmd.Process.Signal(os.Interrupt)
+		select {
+		case <-waitDone:
+		case <-time.After(10 * time.Second):
+			runCancel()
+			<-waitDone
+		}
+	}
+	defer stopRun()
+
+	manifest := queryManifestHTTP(t, httpPort)
+	if manifest.Namespace != "quickstart" {
+		t.Fatalf("manifest namespace = %q, want quickstart", manifest.Namespace)
+	}
+	if len(manifest.Sources) < 3 {
+		t.Fatalf("manifest sources count = %d, want at least 3", len(manifest.Sources))
+	}
+	manifestTypes := map[string]bool{}
+	for _, source := range manifest.Sources {
+		manifestTypes[source.Type] = true
+	}
+	for _, want := range []string{"ast", "docs", "config"} {
+		if !manifestTypes[want] {
+			t.Fatalf("manifest missing source type %q: %+v", want, manifest.Sources)
+		}
+	}
+
+	status := waitForNonEmptyStatus(t, httpPort, 90*time.Second)
+	if status.Namespace != "quickstart" {
+		t.Fatalf("status namespace = %q, want quickstart", status.Namespace)
+	}
+	if status.Phase == "" {
+		t.Fatalf("status phase is empty; status=%+v", status)
+	}
+	if len(status.Sources) == 0 {
+		t.Fatalf("status sources are empty; status=%+v", status)
+	}
+	if status.TotalEntities == 0 {
+		t.Fatalf("status total_entities = 0; status=%+v", status)
+	}
 }
 
 func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
@@ -1540,7 +1747,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	var sawAdded bool
 	var lastStatus statusPayload
 	for time.Now().Before(deadline) {
-		lastStatus = queryStatusHTTP(t, httpPort)
+		lastStatus = queryStatusHTTPWithin(t, httpPort, 60*time.Second)
 		for _, s := range lastStatus.Sources {
 			if s.InstanceName == added.InstanceName {
 				sawAdded = true
@@ -1563,7 +1770,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	t.Logf("status now reports %d sources including %s", len(lastStatus.Sources), added.InstanceName)
 
 	// Manifest should also reflect the new source.
-	manifest := queryManifestHTTP(t, httpPort)
+	manifest := queryManifestHTTPWithin(t, httpPort, 60*time.Second)
 	if len(manifest.Sources) != 2 {
 		t.Errorf("manifest sources = %d, want 2 (baseline + runtime)", len(manifest.Sources))
 	}
@@ -1578,8 +1785,9 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	if err != nil {
 		t.Fatalf("marshal RemoveRequest: %v", err)
 	}
-	// Remove (like Add) now reconciles via a versioned PushToKV, so give the
-	// handler the same headroom as the add request on a slow CI runner.
+	// Remove, like Add, reconciles through the ConfigManager's targeted KV
+	// write notifications, so give the handler the same headroom as the add
+	// request on a slow CI runner.
 	rmCtx, rmCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer rmCancel()
 	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove."+namespace, removeBytes)
@@ -1611,7 +1819,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	deadline = time.Now().Add(60 * time.Second)
 	var manifestStillHas bool
 	for time.Now().Before(deadline) {
-		m := queryManifestHTTP(t, httpPort)
+		m := queryManifestHTTPWithin(t, httpPort, 60*time.Second)
 		manifestStillHas = false
 		for _, src := range m.Sources {
 			// Manifest entries don't carry instance names, so the best
@@ -1642,21 +1850,25 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	// instance, proving the reactive path went all the way through
 	// component-manager (not just the source-manifest republish).
 	//
-	// KNOWN FAILURE — blocked on semstreams#388: runtime remove does not tear
-	// the component down (the engine-owned-revision watcher skip drops the
-	// delete event, and driving the reconcile-stop in-handler via PushToKV
-	// deadlocks). The add path is fixed; teardown waits on the upstream fix.
-	// This assertion is the regression check that will go green once #388 lands;
-	// e2e is not gated in CI until then.
-	logMu.Lock()
+	// Manifest removal and ComponentManager teardown are asynchronous; wait for
+	// the lifecycle log so the assertion proves the reactive remove path reached
+	// component-manager, not just source-manifest.
+	deadline = time.Now().Add(60 * time.Second)
 	var sawStopRemove bool
-	for _, line := range stoppedRemovedLines {
-		if strings.Contains(line, added.InstanceName) {
-			sawStopRemove = true
+	for time.Now().Before(deadline) {
+		logMu.Lock()
+		for _, line := range stoppedRemovedLines {
+			if strings.Contains(line, added.InstanceName) {
+				sawStopRemove = true
+				break
+			}
+		}
+		logMu.Unlock()
+		if sawStopRemove {
 			break
 		}
+		time.Sleep(250 * time.Millisecond)
 	}
-	logMu.Unlock()
 	if !sawStopRemove {
 		t.Errorf("no 'Component successfully stopped and removed' log for %q — KV-reactive remove path may not have fired",
 			added.InstanceName)
