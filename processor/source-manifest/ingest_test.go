@@ -14,8 +14,7 @@ import (
 )
 
 // stubStore satisfies sourcespawn.ConfigStore for tests that exercise the
-// ingest handler's pre-flight checks without committing to KV (PushToKV is a
-// no-op).
+// ingest handler's pre-flight checks without committing to KV.
 type stubStore struct{}
 
 func (stubStore) GetConfig() *semconfig.SafeConfig {
@@ -24,7 +23,9 @@ func (stubStore) GetConfig() *semconfig.SafeConfig {
 		Components: map[string]types.ComponentConfig{},
 	})
 }
-func (stubStore) PushToKV(_ context.Context) error                        { return nil }
+func (stubStore) PutComponentToKV(_ context.Context, _ string, _ types.ComponentConfig) error {
+	return nil
+}
 func (stubStore) DeleteComponentFromKV(_ context.Context, _ string) error { return nil }
 
 func TestMapSpawnError_AllCodes(t *testing.T) {

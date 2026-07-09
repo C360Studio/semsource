@@ -167,21 +167,60 @@ isn't re-rolled.
 
 ## Runtime config / ComponentManager
 
-### 8. Runtime config writes skipped by engine-owned-revision watcher — framework-shaped — filed [semstreams#388](https://github.com/C360Studio/semstreams/issues/388)
-`ConfigManager.handleUpdate` skips events whose revision `<= engineHighWaterRev`
-and `return`s **before notifying subscribers** — contradicting its own doc comment
+### 8. Runtime config writes skipped by engine-owned-revision watcher — framework-shaped — RESOLVED in beta.145 ([semstreams#388](https://github.com/C360Studio/semstreams/issues/388)) — ADOPTED
+`ConfigManager.handleUpdate` skipped events whose revision `<= engineHighWaterRev`
+and returned **before notifying subscribers**, contradicting its own doc comment
 ("the skip only affects the in-memory cache update, not subscriber notification").
-`PutComponentToKV`/`DeleteComponentFromKV` bump the high-water without applying
-in-memory, so a runtime add is written to KV but **never spawned**, and a remove is
-**never torn down** (the `ComponentManager` is never notified to reconcile).
-**Stopgap (semsource):** runtime *add* mutates the in-memory config + bumps the
-config version + `PushToKV` (which DOES notify) → spawns correctly. Runtime *remove*
-can't use the same trick — driving the reconcile-stop from the request handler
-deadlocks — so remove-teardown stays broken pending the fix. **Blocks:** gating CI
-on e2e (`TestE2E_RuntimeSourceAdd` remove-teardown assertion) — deferred until #388.
+`PutComponentToKV`/`DeleteComponentFromKV` bumped the high-water without notifying,
+so runtime add/remove writes landed in KV but did not reconcile the running
+`ComponentManager`.
+
+**Resolution evidence:** SemSource adopted `github.com/c360studio/semstreams
+v1.0.0-beta.145`, switched runtime add back to targeted `PutComponentToKV`, and
+keeps runtime remove on targeted `DeleteComponentFromKV`. Both paths now rely on
+beta.145's engine-owned notification contract instead of SemSource's old full
+`PushToKV` workaround.
+
 **Surfaced by:** wiring e2e into CI (curator runtime add/remove, ADR-040 / ADR-0006).
 
-### 8b. WebSocket output metric registration is not restart-safe — framework-shaped — RESOLVED in beta.144 ([semstreams#490](https://github.com/C360Studio/semstreams/issues/490)) — ADOPTED
+### 8a. Runtime config PushToKV restarts unchanged components — framework-shaped — candidate
+beta.145 fixed the #388 notification drop, but SemSource stress testing found a
+follow-on lifecycle hazard: full `PushToKV` rewrites every component key, and
+`ComponentManager.handleComponentConfigUpdate` restarts any existing enabled
+component that receives an individual `components.<name>` notification, even if
+the effective config is unchanged. In a verbose `TestE2E_RuntimeSourceAdd` run,
+one source add restarted unchanged components such as `supersession`,
+`websocket-output`, `code-context`, `doc-source-docs`, `graph-ingest`, and
+`graph-query`; a separate run saw `/source-manifest/status` return `503
+component not started` for a minute after a successful add.
+
+This is especially risky for components with one-shot HTTP or externally-wired
+subscription lifecycle: ServiceManager registers component HTTP handlers once
+during `completeHTTPSetup`, so a component restart can leave the mux serving a
+stopped old instance. SemSource now avoids the trigger by using targeted
+`PutComponentToKV` for runtime add, but the framework should still skip restarts
+when an individual config update is semantically identical to the running
+component config.
+
+**Surfaced by:** SemSource beta.145 pin validation (`TestE2E_RuntimeSourceAdd
+-count=5`, July 9, 2026).
+
+### 8b. Heartbeat Stop is not idempotent after context cancellation — framework-shaped — candidate
+`HeartbeatService.Stop` still returns `heartbeat service not running (status:
+stopped)` when the lifecycle context has already stopped the heartbeat before
+`Manager.StopAll` reaches it. `StopAll` aggregates that as a hard shutdown error,
+which makes SemSource print `semsource: stop services: stop errors: [failed to
+stop service heartbeat: heartbeat service not running (status: stopped)]` on an
+otherwise orderly interrupt path.
+
+`BaseService.Stop` already treats stopped/stopping as idempotent. Heartbeat
+should follow that contract, or `StopAll` should treat already-stopped service
+states as clean during coordinated shutdown.
+
+**Surfaced by:** SemSource beta.145 e2e shutdown logs during
+`TestE2E_RuntimeSourceAdd`.
+
+### 8c. WebSocket output metric registration is not restart-safe — framework-shaped — RESOLVED in beta.144 ([semstreams#490](https://github.com/C360Studio/semstreams/issues/490)) — ADOPTED
 `output/websocket.newMetrics` creates fresh Prometheus collectors and unconditionally
 calls `PrometheusRegistry().MustRegister(...)`. When a runtime config update restarts
 `websocket-output`, the same collector names are registered again in the same registry,

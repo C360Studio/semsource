@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/c360studio/semsource/config"
 	semconfig "github.com/c360studio/semstreams/config"
@@ -114,35 +112,16 @@ type Result struct {
 // ConfigStore is the minimal subset of *semconfig.Manager that sourcespawn
 // needs. Tests can use a fake by implementing this interface.
 //
-// Add/Remove mutate the in-memory config (GetConfig().Update), bump the config
-// version, and PushToKV — they do NOT use the lower-level PutComponentToKV.
-// PutComponentToKV marks its own KV revision as engine-owned, so the config
-// watcher skips the resulting event and the ComponentManager never reconciles
-// (the component is written to KV but never spawned). PushToKV instead writes
-// the versioned config AND notifies subscribers, which is what drives the
-// reconcile/spawn. Bumping the version ensures the change is not discarded by
-// the boot-time file-vs-KV sync ("equal versions ⇒ KV is resynced from file").
+// Add writes component configs with PutComponentToKV so a runtime source add
+// touches only the components it creates or refreshes. beta.145's ConfigManager
+// applies those writes in memory and still notifies ComponentManager subscribers
+// for engine-owned revisions; using the targeted write avoids the older
+// PushToKV workaround that rewrote every component and restarted unchanged
+// instances.
 type ConfigStore interface {
 	GetConfig() *semconfig.SafeConfig
-	PushToKV(ctx context.Context) error
+	PutComponentToKV(ctx context.Context, name string, compConfig types.ComponentConfig) error
 	DeleteComponentFromKV(ctx context.Context, name string) error
-}
-
-// bumpConfigVersion increments the trailing numeric component of a semver-ish
-// version (1.0.0 → 1.0.1) so a runtime config change is recognized as newer
-// than the on-disk version. A non-numeric or empty version falls back to a
-// safe monotonic-ish bump.
-func bumpConfigVersion(v string) string {
-	if v == "" {
-		return "0.0.1"
-	}
-	parts := strings.Split(v, ".")
-	last := len(parts) - 1
-	if n, err := strconv.Atoi(parts[last]); err == nil {
-		parts[last] = strconv.Itoa(n + 1)
-		return strings.Join(parts, ".")
-	}
-	return v + ".1"
 }
 
 // ExistsChecker is an optional capability used to detect Result.Created.
@@ -194,15 +173,15 @@ func AddWithChecker(
 		return nil, err
 	}
 
-	// Mutate the in-memory config: add each component, then bump the version and
-	// PushToKV (which notifies subscribers → ComponentManager reconcile/spawn).
-	safeCfg := store.GetConfig()
-	cfg := safeCfg.Get()
-	if cfg.Components == nil {
-		cfg.Components = map[string]types.ComponentConfig{}
-	}
+	cfg := store.GetConfig().Get()
+	existing := cfg.Components
 
-	results := make([]Result, 0, len(specs))
+	type pendingWrite struct {
+		name   string
+		config types.ComponentConfig
+		result Result
+	}
+	pending := make([]pendingWrite, 0, len(specs))
 	for _, spec := range specs {
 		raw, err := json.Marshal(spec.compCfg)
 		if err != nil {
@@ -219,31 +198,39 @@ func AddWithChecker(
 		created := true
 		if checker != nil {
 			created = !checker.HasComponent(spec.instanceName)
-		} else if _, exists := cfg.Components[spec.instanceName]; exists {
+		} else if _, exists := existing[spec.instanceName]; exists {
 			created = false
 		}
 
-		cfg.Components[spec.instanceName] = types.ComponentConfig{
+		compConfig := types.ComponentConfig{
 			Name:    spec.factoryName,
 			Type:    types.ComponentTypeProcessor,
 			Enabled: true,
 			Config:  raw,
 		}
 
-		results = append(results, Result{
-			InstanceName: spec.instanceName,
-			FactoryName:  spec.factoryName,
-			Created:      created,
-			SourceType:   spec.sourceType,
+		pending = append(pending, pendingWrite{
+			name:   spec.instanceName,
+			config: compConfig,
+			result: Result{
+				InstanceName: spec.instanceName,
+				FactoryName:  spec.factoryName,
+				Created:      created,
+				SourceType:   spec.sourceType,
+			},
 		})
 	}
 
-	cfg.Version = bumpConfigVersion(cfg.Version)
-	if err := safeCfg.Update(cfg); err != nil {
-		return nil, &Error{Code: CodeKVWriteFailed, Message: "apply config in memory", Cause: err}
-	}
-	if err := store.PushToKV(ctx); err != nil {
-		return nil, &Error{Code: CodeKVWriteFailed, Message: "push config to KV", Cause: err}
+	results := make([]Result, 0, len(pending))
+	for _, write := range pending {
+		if err := store.PutComponentToKV(ctx, write.name, write.config); err != nil {
+			return results, &Error{
+				Code:    CodeKVWriteFailed,
+				Message: fmt.Sprintf("put component %q to KV", write.name),
+				Cause:   err,
+			}
+		}
+		results = append(results, write.result)
 	}
 
 	return results, nil
@@ -298,13 +285,9 @@ func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 	if instanceName == "" {
 		return &Error{Code: CodeValidationFailed, Message: "instance_name is required"}
 	}
-	// NOTE: this deletes the KV key but does NOT trigger a reconcile, so the
-	// running component is not torn down until the next reconcile (the same
-	// engine-owned-revision watcher skip that Add works around via PushToKV).
-	// We deliberately do NOT PushToKV here: driving a reconcile *stop* from
-	// within the remove request handler deadlocks (unlike Add's reconcile
-	// spawn). The manifest is updated by the handler directly, so callers see
-	// the removal immediately; full teardown-on-remove is tracked separately.
+	// beta.145's ConfigManager applies targeted deletes in memory and still
+	// notifies ComponentManager subscribers for engine-owned revisions, so the
+	// component tears down without the old full-config PushToKV workaround.
 	if err := store.DeleteComponentFromKV(ctx, instanceName); err != nil {
 		return &Error{
 			Code:    CodeKVWriteFailed,

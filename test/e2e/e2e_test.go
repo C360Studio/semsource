@@ -139,13 +139,20 @@ func queryStatusHTTPWithin(t *testing.T, httpPort int, timeout time.Duration) st
 	t.Helper()
 	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
 	deadline := time.Now().Add(timeout)
+	var lastErr string
+	var lastStatus int
+	var lastBody string
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err != nil {
+			lastErr = err.Error()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
+			lastStatus = resp.StatusCode
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			lastBody = strings.TrimSpace(string(body))
 			resp.Body.Close()
 			time.Sleep(500 * time.Millisecond)
 			continue
@@ -158,7 +165,8 @@ func queryStatusHTTPWithin(t *testing.T, httpPort int, timeout time.Duration) st
 		resp.Body.Close()
 		return s
 	}
-	t.Fatalf("GET %s did not return 200 within %s", url, timeout)
+	t.Fatalf("GET %s did not return 200 within %s; last_error=%q last_status=%d last_body=%q",
+		url, timeout, lastErr, lastStatus, lastBody)
 	return statusPayload{}
 }
 
@@ -1777,8 +1785,9 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	if err != nil {
 		t.Fatalf("marshal RemoveRequest: %v", err)
 	}
-	// Remove (like Add) now reconciles via a versioned PushToKV, so give the
-	// handler the same headroom as the add request on a slow CI runner.
+	// Remove, like Add, reconciles through the ConfigManager's targeted KV
+	// write notifications, so give the handler the same headroom as the add
+	// request on a slow CI runner.
 	rmCtx, rmCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer rmCancel()
 	rmMsg, err := nc.RequestWithContext(rmCtx, "graph.ingest.remove."+namespace, removeBytes)
