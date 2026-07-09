@@ -58,11 +58,11 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
 | `GET /source-manifest/sources` | `TestHandleSources_GET`; e2e manifest poll; `task core:smoke` | covered | None |
-| `GET /source-manifest/status` | e2e poll; UI Playwright assertion | covered | Add direct handler test |
+| `GET /source-manifest/status` | `TestHandleStatus_GET`; e2e poll; UI Playwright assertion | covered | None |
 | `GET /source-manifest/health` | `TestHandleHealth_Ready`; UI Playwright health assertion | covered | None |
 | `POST /supersession/versionDiff` | NATS diff integration exists; no HTTP route test | partial | OpenSpec task 5.1 |
-| `GET /graph-gateway/graphql` | UI profile GraphQL-shaped Playwright assertion | partial | OpenSpec task 5.3 |
-| `POST /graph-gateway/graphql` | UI profile `/graphql` POST assertion | partial | OpenSpec task 5.3 |
+| `GET /graph-gateway/graphql` | `task core:smoke` ServiceManager route probe | covered | None |
+| `POST /graph-gateway/graphql` | `task core:smoke` GraphQL-shaped POST assertion | covered | None |
 | `GET/POST /graphql` through UI profile | `test/ui/ui-profile.spec.cjs` | covered | None |
 | `ws://localhost:3000/graph` raw stream | WebSocket output wired | partial | Track if README keeps endpoint |
 
@@ -97,9 +97,9 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 | Surface | Owner | Evidence | Status |
 | --- | --- | --- | --- |
 | exhaustive `graph.query.*` catalog | M5 guide | representative SemSource integration tests | partial |
-| product-owned `graph.query.status` | SemSource source-manifest | MCP source-status integration | covered |
-| product-owned `graph.query.sources` | SemSource source-manifest | source-manifest HTTP tests only | gap |
-| product-owned `graph.query.predicates` | SemSource source-manifest | predicate vocabulary tests only | gap |
+| product-owned `graph.query.status` | SemSource source-manifest | `TestIntegration_QuerySubjects`; MCP source-status integration | covered |
+| product-owned `graph.query.sources` | SemSource source-manifest | `TestIntegration_QuerySubjects` | covered |
+| product-owned `graph.query.predicates` | SemSource source-manifest | `TestIntegration_QuerySubjects`; predicate vocabulary tests | covered |
 | product-owned `graph.query.versionDiff` | SemSource supersession | `TestIntegration_VersionDiff` | covered |
-| `/source-manifest/predicates` | M5 consumer integration guide | predicate vocabulary tests only | gap |
-| `/source-manifest/summary` | M5 consumer integration guide | e2e summary poll | covered |
+| `/source-manifest/predicates` | M5 consumer integration guide | `TestHandlePredicates_GET` | covered |
+| `/source-manifest/summary` | M5 consumer integration guide | `TestHandleSummary_GET`; e2e summary poll | covered |

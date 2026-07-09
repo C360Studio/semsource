@@ -55,9 +55,12 @@ export NATS_MONITOR_HOST_PORT="${NATS_MONITOR_HOST_PORT:-18222}"
 status_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/status"
 sources_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/sources"
 mcp_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/mcp-gateway/mcp"
+graphql_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/graph-gateway/graphql"
 timeout_seconds=${CORE_PROFILE_TIMEOUT_SECONDS:-300}
 poll_seconds=${CORE_PROFILE_POLL_SECONDS:-2}
 last_body="no response yet"
+graphql_get_body=$(mktemp "${TMPDIR:-/tmp}/semsource-graphql-get.XXXXXX")
+graphql_post_body=$(mktemp "${TMPDIR:-/tmp}/semsource-graphql-post.XXXXXX")
 mcp_probe_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-probe.XXXXXX")
 mcp_init_headers=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-init-headers.XXXXXX")
 mcp_init_body=$(mktemp "${TMPDIR:-/tmp}/semsource-mcp-init-body.XXXXXX")
@@ -77,7 +80,7 @@ cleanup() {
 		print_diagnostics
 	fi
 
-	rm -f "$mcp_probe_body" "$mcp_init_headers" "$mcp_init_body" "$mcp_initialized_body" "$mcp_tools_body"
+	rm -f "$graphql_get_body" "$graphql_post_body" "$mcp_probe_body" "$mcp_init_headers" "$mcp_init_body" "$mcp_initialized_body" "$mcp_tools_body"
 
 	if [ "${KEEP_CORE_PROFILE:-0}" = "1" ]; then
 		echo "KEEP_CORE_PROFILE=1 set; leaving SemSource core profile running"
@@ -149,6 +152,35 @@ for source_type in ast docs config; do
 	fi
 done
 echo "Source manifest reachable with ast/docs/config sources"
+
+echo "Checking $graphql_url"
+graphql_get_code=$(curl -sS --max-time 10 \
+	-o "$graphql_get_body" \
+	-w '%{http_code}' \
+	"$graphql_url") || fail "graph-gateway/graphql GET route is not reachable"
+if [ "$graphql_get_code" = "404" ] || [ "$graphql_get_code" -ge 500 ]; then
+	echo "Unexpected graph-gateway/graphql GET status: $graphql_get_code" >&2
+	echo "Body: $(cat "$graphql_get_body")" >&2
+	exit 1
+fi
+
+graphql_post_code=$(curl -sS --max-time 10 \
+	-o "$graphql_post_body" \
+	-w '%{http_code}' \
+	-X POST \
+	-H 'Content-Type: application/json' \
+	-d '{"query":"query CoreProfileSmoke { __typename }"}' \
+	"$graphql_url") || fail "graph-gateway/graphql POST route is not reachable"
+if [ "$graphql_post_code" -lt 200 ] || [ "$graphql_post_code" -ge 500 ]; then
+	echo "Unexpected graph-gateway/graphql POST status: $graphql_post_code" >&2
+	echo "Body: $(cat "$graphql_post_body")" >&2
+	exit 1
+fi
+if ! grep -q '"data"' "$graphql_post_body" && ! grep -q '"errors"' "$graphql_post_body"; then
+	echo "Unexpected graph-gateway/graphql POST body: $(cat "$graphql_post_body")" >&2
+	exit 1
+fi
+echo "GraphQL gateway route reachable"
 
 echo "Checking $mcp_url"
 mcp_code=$(curl -sS --max-time 5 \

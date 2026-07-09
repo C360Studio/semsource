@@ -98,26 +98,33 @@ type typeCount struct {
 // Retries for up to 15 seconds to allow the HTTP server and component to start.
 func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
 	t.Helper()
+	return queryManifestHTTPWithin(t, httpPort, 15*time.Second)
+}
+
+func queryManifestHTTPWithin(t *testing.T, httpPort int, timeout time.Duration) manifestPayload {
+	t.Helper()
 	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/sources", httpPort)
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err != nil {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		var m manifestPayload
 		if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+			resp.Body.Close()
 			t.Fatalf("decode manifest response: %v", err)
 		}
+		resp.Body.Close()
 		return m
 	}
-	t.Fatalf("GET %s did not return 200 within 15s", url)
+	t.Fatalf("GET %s did not return 200 within %s", url, timeout)
 	return manifestPayload{}
 }
 
@@ -125,26 +132,33 @@ func queryManifestHTTP(t *testing.T, httpPort int) manifestPayload {
 // Retries for up to 15 seconds to allow startup.
 func queryStatusHTTP(t *testing.T, httpPort int) statusPayload {
 	t.Helper()
+	return queryStatusHTTPWithin(t, httpPort, 15*time.Second)
+}
+
+func queryStatusHTTPWithin(t *testing.T, httpPort int, timeout time.Duration) statusPayload {
+	t.Helper()
 	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err != nil {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		var s statusPayload
 		if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+			resp.Body.Close()
 			t.Fatalf("decode status response: %v", err)
 		}
+		resp.Body.Close()
 		return s
 	}
-	t.Fatalf("GET %s did not return 200 within 15s", url)
+	t.Fatalf("GET %s did not return 200 within %s", url, timeout)
 	return statusPayload{}
 }
 
@@ -1725,7 +1739,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	var sawAdded bool
 	var lastStatus statusPayload
 	for time.Now().Before(deadline) {
-		lastStatus = queryStatusHTTP(t, httpPort)
+		lastStatus = queryStatusHTTPWithin(t, httpPort, 60*time.Second)
 		for _, s := range lastStatus.Sources {
 			if s.InstanceName == added.InstanceName {
 				sawAdded = true
@@ -1748,7 +1762,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	t.Logf("status now reports %d sources including %s", len(lastStatus.Sources), added.InstanceName)
 
 	// Manifest should also reflect the new source.
-	manifest := queryManifestHTTP(t, httpPort)
+	manifest := queryManifestHTTPWithin(t, httpPort, 60*time.Second)
 	if len(manifest.Sources) != 2 {
 		t.Errorf("manifest sources = %d, want 2 (baseline + runtime)", len(manifest.Sources))
 	}
@@ -1796,7 +1810,7 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	deadline = time.Now().Add(60 * time.Second)
 	var manifestStillHas bool
 	for time.Now().Before(deadline) {
-		m := queryManifestHTTP(t, httpPort)
+		m := queryManifestHTTPWithin(t, httpPort, 60*time.Second)
 		manifestStillHas = false
 		for _, src := range m.Sources {
 			// Manifest entries don't carry instance names, so the best
@@ -1827,21 +1841,25 @@ func runRuntimeSourceAddTest(t *testing.T, namespace string) {
 	// instance, proving the reactive path went all the way through
 	// component-manager (not just the source-manifest republish).
 	//
-	// KNOWN FAILURE — blocked on semstreams#388: runtime remove does not tear
-	// the component down (the engine-owned-revision watcher skip drops the
-	// delete event, and driving the reconcile-stop in-handler via PushToKV
-	// deadlocks). The add path is fixed; teardown waits on the upstream fix.
-	// This assertion is the regression check that will go green once #388 lands;
-	// e2e is not gated in CI until then.
-	logMu.Lock()
+	// Manifest removal and ComponentManager teardown are asynchronous; wait for
+	// the lifecycle log so the assertion proves the reactive remove path reached
+	// component-manager, not just source-manifest.
+	deadline = time.Now().Add(60 * time.Second)
 	var sawStopRemove bool
-	for _, line := range stoppedRemovedLines {
-		if strings.Contains(line, added.InstanceName) {
-			sawStopRemove = true
+	for time.Now().Before(deadline) {
+		logMu.Lock()
+		for _, line := range stoppedRemovedLines {
+			if strings.Contains(line, added.InstanceName) {
+				sawStopRemove = true
+				break
+			}
+		}
+		logMu.Unlock()
+		if sawStopRemove {
 			break
 		}
+		time.Sleep(250 * time.Millisecond)
 	}
-	logMu.Unlock()
 	if !sawStopRemove {
 		t.Errorf("no 'Component successfully stopped and removed' log for %q — KV-reactive remove path may not have fired",
 			added.InstanceName)

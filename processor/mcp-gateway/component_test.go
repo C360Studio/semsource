@@ -4,11 +4,19 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+var wantToolNames = []string{
+	"add_source", "code_changes", "code_context", "code_impact", "code_search",
+	"doc_context", "remove_source", "source_status",
+}
 
 func newTestComponent(roots []string) *Component {
 	c := &Component{
@@ -39,6 +47,43 @@ func connect(t *testing.T, c *Component) *mcp.ClientSession {
 
 func TestListTools(t *testing.T) {
 	cs := connect(t, newTestComponent(nil))
+	got := listToolNames(t, cs)
+	if !sameStrings(got, wantToolNames) {
+		t.Fatalf("tools = %v, want %v", got, wantToolNames)
+	}
+}
+
+func TestREADMEAdvertisedMCPToolsAreRegistered(t *testing.T) {
+	cs := connect(t, newTestComponent(nil))
+	registered := make(map[string]bool)
+	for _, name := range listToolNames(t, cs) {
+		registered[name] = true
+	}
+
+	readme := readRepoFile(t, "README.md")
+	section := between(t, readme, "### Connect an agent (MCP)", "## Config File")
+	advertised := backtickIdentifiers(section)
+	if len(advertised) == 0 {
+		t.Fatal("README Connect an agent section did not advertise any MCP tools")
+	}
+	for _, name := range advertised {
+		if !registered[name] {
+			t.Fatalf("README advertises MCP tool %q, but registered tools are %v", name, listToolNames(t, cs))
+		}
+	}
+}
+
+func TestMCPQuickstartToolTableMatchesRegisteredTools(t *testing.T) {
+	cs := connect(t, newTestComponent(nil))
+	quickstart := readRepoFile(t, "docs/integration/mcp-quickstart.md")
+	got := mcpQuickstartToolNames(quickstart)
+	if !sameStrings(got, listToolNames(t, cs)) {
+		t.Fatalf("quickstart tools = %v, registered tools = %v", got, listToolNames(t, cs))
+	}
+}
+
+func listToolNames(t *testing.T, cs *mcp.ClientSession) []string {
+	t.Helper()
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -54,18 +99,66 @@ func TestListTools(t *testing.T) {
 		}
 	}
 	sort.Strings(got)
-	want := []string{
-		"add_source", "code_changes", "code_context", "code_impact", "code_search",
-		"doc_context", "remove_source", "source_status",
+	return got
+}
+
+func readRepoFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile("../../" + path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
 	}
-	if len(got) != len(want) {
-		t.Fatalf("tools = %v, want %v", got, want)
+	return string(data)
+}
+
+func between(t *testing.T, body, start, end string) string {
+	t.Helper()
+	startIdx := strings.Index(body, start)
+	if startIdx < 0 {
+		t.Fatalf("missing section start %q", start)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("tools = %v, want %v", got, want)
+	body = body[startIdx+len(start):]
+	endIdx := strings.Index(body, end)
+	if endIdx < 0 {
+		t.Fatalf("missing section end %q", end)
+	}
+	return body[:endIdx]
+}
+
+func backtickIdentifiers(body string) []string {
+	matches := regexp.MustCompile("`([a-z]+_[a-z]+)`").FindAllStringSubmatch(body, -1)
+	seen := make(map[string]bool, len(matches))
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if !seen[match[1]] {
+			seen[match[1]] = true
+			out = append(out, match[1])
 		}
 	}
+	sort.Strings(out)
+	return out
+}
+
+func mcpQuickstartToolNames(body string) []string {
+	matches := regexp.MustCompile(`(?m)^\| `+"`"+`([a-z]+_[a-z]+)`+"`").FindAllStringSubmatch(body, -1)
+	tools := make([]string, 0, len(matches))
+	for _, match := range matches {
+		tools = append(tools, match[1])
+	}
+	sort.Strings(tools)
+	return tools
+}
+
+func sameStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestQueryToolRequiresQuery(t *testing.T) {

@@ -51,21 +51,21 @@
       `code_impact`, `doc_context`, and `code_changes` using stub responders where
       appropriate.
       - Test: `go test -tags=integration ./processor/mcp-gateway`
-- [ ] 4.2 Keep the existing tool-list and guardrail tests, and update them when the
+- [x] 4.2 Keep the existing tool-list and guardrail tests, and update them when the
       README tool list changes.
       - Test: `go test ./processor/mcp-gateway`
 
 ## 5. Cover HTTP, GraphQL, and integration-guide NATS surfaces
 
-- [ ] 5.1 Add happy-path HTTP handler tests for `/source-manifest/status`,
+- [x] 5.1 Add happy-path HTTP handler tests for `/source-manifest/status`,
       plus integration-guide-only tests for `/source-manifest/summary` and
       `/source-manifest/predicates` if those routes remain documented there.
       - Test: `go test ./processor/source-manifest`
-- [ ] 5.2 Add product-owned NATS request/reply tests for `graph.query.sources`,
+- [x] 5.2 Add product-owned NATS request/reply tests for `graph.query.sources`,
       `graph.query.status`, `graph.query.predicates`, and
       `graph.query.versionDiff`.
       - Test: `go test -tags=integration ./processor/source-manifest ./internal/governance`
-- [ ] 5.3 Add a representative GraphQL route smoke for the ServiceManager route and
+- [x] 5.3 Add a representative GraphQL route smoke for the ServiceManager route and
       keep the UI-profile `/graphql` Playwright assertion.
       - Test: `task core:smoke` and `task ui:e2e`
 - [x] 5.4 Add the M5 consumer integration guide to the coverage matrix as the owner
@@ -74,10 +74,10 @@
 
 ## 6. Gates
 
-- [ ] 6.1 `openspec validate cover-readme-surfaces --strict`
-- [ ] 6.2 `go test ./cli ./cmd/semsource ./config ./processor/source-manifest
+- [x] 6.1 `openspec validate cover-readme-surfaces --strict`
+- [x] 6.2 `go test ./cli ./cmd/semsource ./config ./processor/source-manifest
       ./processor/mcp-gateway ./processor/code-context`
-- [ ] 6.3 `go test -tags=integration ./...`
-- [ ] 6.4 `go test -tags=e2e -timeout 300s ./test/e2e/`
-- [ ] 6.5 `task core:smoke`
-- [ ] 6.6 `task ui:smoke`
+- [x] 6.3 `go test -tags=integration ./...`
+- [x] 6.4 `go test -tags=e2e -timeout 300s ./test/e2e/`
+- [x] 6.5 `task core:smoke`
+- [x] 6.6 `task ui:smoke`

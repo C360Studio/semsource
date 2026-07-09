@@ -247,6 +247,117 @@ func TestHandleSources_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestHandleStatus_GET(t *testing.T) {
+	c := &Component{
+		config:  Config{Namespace: "acme"},
+		running: true,
+		statusData: mustMarshal(t, &StatusPayload{
+			Namespace:     "acme",
+			Phase:         PhaseReady,
+			TotalEntities: 42,
+			Sources: []SourceStatus{
+				{InstanceName: "ast-source-repo", SourceType: "ast", Phase: SourcePhaseWatching, EntityCount: 42},
+			},
+			Timestamp: time.Now(),
+		}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/source-manifest/status", nil)
+	rec := httptest.NewRecorder()
+	c.handleStatus(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+	var payload StatusPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if payload.Namespace != "acme" || payload.Phase != PhaseReady || payload.TotalEntities != 42 {
+		t.Fatalf("unexpected status payload: %+v", payload)
+	}
+}
+
+func TestHandlePredicates_GET(t *testing.T) {
+	c := &Component{
+		config:  Config{Namespace: "acme"},
+		running: true,
+		predicatesData: mustMarshal(t, buildPredicateSchema([]string{
+			"ast",
+		})),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/source-manifest/predicates", nil)
+	rec := httptest.NewRecorder()
+	c.handlePredicates(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+	var payload PredicateSchemaPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode predicates: %v", err)
+	}
+	if len(payload.Sources) != 1 || payload.Sources[0].SourceType != "ast" {
+		t.Fatalf("unexpected predicate sources: %+v", payload.Sources)
+	}
+	if len(payload.Sources[0].Predicates) == 0 {
+		t.Fatal("expected ast predicate descriptors")
+	}
+}
+
+func TestHandleSummary_GET(t *testing.T) {
+	agg := newStatusAggregator(1)
+	agg.update(&SourceStatusReport{
+		InstanceName: "ast-source-repo",
+		SourceType:   "ast",
+		Phase:        SourcePhaseWatching,
+		EntityCount:  42,
+		TypeCounts: map[string]int64{
+			"code.symbol": 40,
+			"code.file":   2,
+		},
+	})
+	c := &Component{
+		config: Config{
+			Namespace: "acme",
+			Sources:   []ManifestSource{{Type: "ast", Path: "./src", Language: "go"}},
+		},
+		running:    true,
+		aggregator: agg,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/source-manifest/summary", nil)
+	rec := httptest.NewRecorder()
+	c.handleSummary(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+	var payload SummaryPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if payload.Namespace != "acme" || payload.Phase != PhaseReady || payload.TotalEntities != 42 {
+		t.Fatalf("unexpected summary payload: %+v", payload)
+	}
+	if len(payload.Domains) != 1 || payload.Domains[0].Domain != "code" {
+		t.Fatalf("unexpected domains: %+v", payload.Domains)
+	}
+	if len(payload.Predicates) != 1 || payload.Predicates[0].SourceType != "ast" {
+		t.Fatalf("unexpected predicates: %+v", payload.Predicates)
+	}
+}
+
 func TestHandleHealth_Ready(t *testing.T) {
 	c := &Component{
 		config:  Config{Namespace: "acme"},
