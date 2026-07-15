@@ -2,10 +2,16 @@
 
 - [ ] 1.1 Open and obtain both-owner acceptance of a coordinated `semstreams-ui` OpenSpec change for
       the best-of inventory, canonical graph surface, SemSource product profile, and released artifact.
+      - Progress (2026-07-15): the contract request is filed as
+        [semstreams-ui#2](https://github.com/C360Studio/semstreams-ui/issues/2), and SemSource architect
+        review approves the issue scope. Shared UI owner acceptance and a linked coordinated OpenSpec
+        change remain pending.
       - Test: the linked change names the audited source implementations, repository owners, behavioral
         gates, and release handoff with architect sign-off from SemSource and shared UI ownership.
 - [ ] 1.2 Record the accepted headless-default/workbench ownership split in ADR-0009, including the
       archived `add-ui-profile` D1 and D2 decisions it supersedes and the breaking `ui` flag takeover.
+      - Progress (2026-07-15): ADR-0009 is Proposed and records the SemSource decision. It remains
+        unaccepted until task 1.1 obtains shared-owner sign-off.
       - Test: ADR review confirms the decision, alternatives, consequences, and cross-repo owners match
         both accepted OpenSpec changes.
 
