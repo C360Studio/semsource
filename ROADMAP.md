@@ -75,14 +75,15 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Next
 
-### Operator UI Confidence
+### SemTeams UI Profile Transition
 
-- Broaden UI-profile smoke only where SemSource owns the contract: source status,
-  graph gateway reachability, search/readiness signals, and raw stream plumbing.
-- Keep SemTeams UI feedback in `docs/integration/semteams-ui-profile-feedback.md`
-  and upstream issues, without absorbing product routes into SemSource.
-- Make readiness and source-manifest signals easier for UIs to display without
-  knowing SemStreams internals.
+- The beta's current SemTeams-targeted `ui` profile is scheduled to become the
+  optional SemSource workbench under
+  [`add-opt-in-source-workbench`](openspec/changes/add-opt-in-source-workbench/).
+- Treat that takeover as a breaking flag migration: SemTeams will own its UI
+  packaging and consume SemSource through the unchanged headless contracts.
+- Preserve `docs/integration/semteams-ui-profile-feedback.md` as historical
+  integration evidence rather than an ongoing SemSource UI obligation.
 
 ### Query Reliability And Scale
 
@@ -92,6 +93,46 @@ confidence and dependency shape. The "why" behind durable choices lives in
   contract is aligned, then advertise the surface.
 - Validate tier-2 semantic/instruct summaries and local/global/summary search as
   first-class options rather than experimental tier toggles.
+
+### Packaged Local Experience
+
+- Keep the headless backend/MCP stack as SemSource's default deployment for
+  embedded use by SemTeams, SemSpec, SemDragon, SemOps, and other consumers.
+- Add a one-action local start that detects the project, launches pinned runtime
+  artifacts, actively reports ingest/index/embedding readiness, and provides
+  assistant connection instructions.
+- Make the released path independent of sibling repository checkouts and a local
+  JavaScript toolchain; UI activation remains explicit.
+- Proposed follow-on `add-one-action-local-start` is not yet created or approved;
+  it depends on a released workbench artifact.
+
+### Project Knowledge Workbench
+
+- Repurpose the opt-in `ui` profile as a SemSource workbench built from a pinned
+  `semstreams-ui` release; do not add a second browser profile.
+- Consolidate the strongest graph, layout, evidence, search, responsive, and
+  accessibility behavior from the existing sem* UI implementations into
+  `semstreams-ui` instead of copying another renderer.
+- Lead with source status, readiness, search, evidence, and bounded materialized
+  project views; keep whole-graph visualization as investigation drill-down.
+- Preserve a complete headless path: every workbench action must use a SemSource
+  backend contract also available to non-UI automation.
+- Planning is active under
+  [`add-opt-in-source-workbench`](openspec/changes/add-opt-in-source-workbench/);
+  the companion `semstreams-ui` canonicalization change is not yet created.
+
+### Project Knowledge Interoperability
+
+- Consume authored OKF as provenance-qualified explanatory knowledge without
+  rewriting externally owned content.
+- Export bounded materialized project views as OKF with source revision, graph
+  watermark, evidence hash, producer/profile version, and derived classification.
+- Preview and validate OKF bundles in the workbench; evaluate a self-contained
+  offline HTML viewer after the bundle contract is stable.
+- Keep materialized-view, OKF, workbench packaging, and one-action activation as
+  coordinated but independently verifiable OpenSpec changes.
+- Proposed follow-ons are `materialize-project-views` and `add-okf-interop-mvp`,
+  neither created nor approved. OKF work follows the materialized-view contract.
 
 ### Code And Version Intelligence
 
