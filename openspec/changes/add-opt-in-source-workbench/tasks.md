@@ -31,11 +31,11 @@
 
 ## 3. Define and implement SemSource-owned browser contracts
 
-- [ ] 3.1 Audit the live SemStreams graph query/gateway payload for explicit nodes, directed edges,
+- [x] 3.1 Audit the live SemStreams graph query/gateway payload for explicit nodes, directed edges,
       property facts, evidence/provenance, and query revision before designing an adapter.
       - Test: architect contract report maps each required field to a live response and test, or records
         the missing framework-shaped field.
-- [ ] 3.2 If the governed query contract is incomplete, record the gap in
+- [x] 3.2 If the governed query contract is incomplete, record the gap in
       `docs/upstream/semstreams-asks.md`, file the SemStreams issue, and block workbench release rather
       than implementing a parallel SemSource graph projection.
       - Test: each missing field has an upstream issue link and the SemSource release task depends on

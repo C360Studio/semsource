@@ -472,3 +472,28 @@ predicates specially. **Not MVP-blocking:** impact is directionally useful and b
 (`maxImpactNodes`); the count is just noisier than a pure dependency closure.
 **Surfaced by:** task #43 adversarial review (adding type-dependency edges made the
 containment compounding visible).
+
+### 18. Governed graph projection facet for fusion v2 consumers — framework-shaped — filed [semstreams#533](https://github.com/C360Studio/semstreams/issues/533)
+
+The lens-driven fusion v1 response is sufficient for bounded search, body, role-based relations,
+paths, and impact views, but it intentionally drops information required by a canonical graph
+drill-down. `Node.Relations` maps lens roles to human `Ref` values without target handles, original
+predicates, direction, stable edge identity, or fact evidence; underlying triple properties and
+their source/timestamp/confidence metadata are also absent. The per-role relationship cap is silent,
+and the index catch-up watermark is not a coherent response/view revision.
+
+**Ask:** add an optional governed projection facet, or an explicitly versioned fusion response, that
+returns typed property facts; explicit directed edges with source/target handles and original
+predicates; per-fact/per-edge evidence without fabricated defaults; preservation of parallel and
+opposite-direction facts; relationship truncation metadata; and documented response consistency or
+view-revision semantics. Preserve fusion v1 compatibility and keep product lenses responsible for
+domain predicates and human roles. Existing NATS/HTTP/MCP transports can carry the response;
+GraphQL exposure is not a prerequisite.
+
+**SemSource boundary:** continue using fusion v1 through `/code-context/*` and `/doc-context/*` for
+workbench search/list/detail/impact views. Do not build a parallel SemSource graph projection or
+adapt role maps into invented directed/evidenced edges. The canonical graph drill-down remains
+gated on adoption and live validation of the upstream contract.
+
+**Related:** semstreams#376 (fusion framework primitive), semstreams#367 (graph-visible provenance
+conventions), OpenSpec `add-opt-in-source-workbench` D9/tasks 3.1–3.2.

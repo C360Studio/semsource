@@ -171,6 +171,15 @@ query/view revision. Before UI implementation, the architect must audit the live
 query/gateway contract to determine whether that payload already exists. If it does not, SemSource
 records the framework gap in `docs/upstream/semstreams-asks.md` and raises it with the SemStreams team.
 
+The beta.145 audit found that lens-driven fusion v1 already supports the primary workbench
+search/list/detail/body/relations/impact views through SemSource HTTP, but it is not a lossless graph
+projection: relation refs omit target handles, predicates, direction, evidence, and edge identity;
+property facts are absent; relationship truncation is silent; and index readiness is not a coherent
+view revision. The framework gap is recorded as upstream ask 18 and
+[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). Fusion-backed non-graph views
+may proceed; the canonical graph drill-down remains gated on adoption and live validation of that
+additive governed projection contract.
+
 SemSource SHALL NOT infer relationships from literal string shape, manufacture evidence, or implement
 a parallel graph substrate to satisfy the UI. The pinned workbench release is blocked until a real
 backend payload and live compatibility test prove the required semantics.
