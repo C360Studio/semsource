@@ -84,13 +84,13 @@ Remaining core compose smoke work is SemSource-owned coverage, not an upstream b
 
 | Surface | Evidence | Status | Follow-up |
 | --- | --- | --- | --- |
-| `POST /code-context/context` | fusion NATS/live-graph integration below HTTP route | partial | Add HTTP route test |
-| `POST /code-context/callers` | code lens relation tests below HTTP route | partial | Add HTTP route test |
-| `POST /code-context/callees` | code lens relation tests below HTTP route | partial | Add HTTP route test |
-| `POST /code-context/impact` | `TestCodeLens_ImpactWalksTypeDependencies` | partial | Add HTTP route test |
-| `POST /code-context/file` | code context component tests below route | partial | Add HTTP route test |
-| `POST /code-context/search` | fusion lens tests below HTTP route | partial | Add HTTP route test |
-| `POST /doc-context/<verb>` | docs lens tests below HTTP route | partial | Add HTTP route test |
+| `POST /code-context/context` | `TestFusionHTTPErrorContract_PublicHandlers` | covered | None |
+| `POST /code-context/callers` | `TestFusionHTTPErrorContract_AllRegisteredRoutes`; code lens relation tests | covered | None |
+| `POST /code-context/callees` | `TestFusionHTTPErrorContract_AllRegisteredRoutes`; code lens relation tests | covered | None |
+| `POST /code-context/impact` | `TestFusionHTTPErrorContract_AllRegisteredRoutes`; impact tests | covered | None |
+| `POST /code-context/file` | `TestFusionHTTPErrorContract_AllRegisteredRoutes` | covered | None |
+| `POST /code-context/search` | `TestFusionHTTPErrorContract_AllRegisteredRoutes`; fusion lens tests | covered | None |
+| `POST /doc-context/<verb>` | `TestFusionHTTPErrorContract_PublicHandlers`; route matrix | covered | None |
 
 ## Integration-Guide-Only Contracts
 

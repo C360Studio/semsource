@@ -348,7 +348,7 @@ bodies, and returns one ranked answer with a readiness/provenance envelope. Two 
 | Instance | Domain | NATS subjects | HTTP |
 |----------|--------|---------------|------|
 | `code-context` | code symbols | `code.v1.<verb>` | `POST /code-context/<verb>` (proxied via Caddy) |
-| `doc-context` | documents | `docs.v1.<verb>` | `POST /doc-context/<verb>` (ServiceManager :8080; not Caddy-proxied yet) |
+| `doc-context` | documents | `docs.v1.<verb>` | `POST /doc-context/<verb>` (proxied via Caddy) |
 
 **Verbs:** `context` (the primary fused answer), `callers`, `callees`, `impact`
 (transitive reverse-relation closure), `file`, `search`.
@@ -369,6 +369,37 @@ optional; verbs preset sensible defaults.
 grep) — never a false "not found". Verbatim bodies are dereferenced from an ObjectStore
 handle, so a standalone or remote gateway serves source without access to the ingesting
 host's worktree.
+
+### Fusion HTTP errors
+
+Fusion HTTP failures use a versioned JSON envelope. This is a breaking change from the former
+plain-text response that reported nearly every failure as `400 bad request`; clients should branch
+on HTTP status plus `error.code`.
+
+```json
+{
+  "error": {
+    "contract_version": "1",
+    "code": "dependency_unavailable",
+    "class": "transient",
+    "message": "graph query service is temporarily unavailable",
+    "retryable": true
+  }
+}
+```
+
+| Status | Code | Meaning |
+|--------|------|---------|
+| 400 | `invalid_json`, `invalid_request` | Correct the request; do not retry unchanged |
+| 405 | `method_not_allowed` | Use POST |
+| 413 | `request_too_large` | Reduce the request body |
+| 500 | `internal_error` | SemSource failed locally |
+| 502 | `upstream_contract_error`, `upstream_failure` | The graph dependency failed non-transiently |
+| 503 | `component_not_ready`, `dependency_unavailable` | Retry after service/dependency recovery |
+| 504 | `upstream_timeout` | The graph query exceeded its deadline |
+
+Messages are sanitized and never carry raw NATS, storage, or entity details. `index.ready: false`
+and ready responses containing `misses` remain successful HTTP 200 fusion responses.
 
 ## Building from Source
 

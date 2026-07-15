@@ -94,6 +94,13 @@ defects into endlessly retryable `503` responses.
 
 The server does not invent a `Retry-After` delay.
 
+The pinned SemStreams fusion NATS client wraps standard-library `*json.SyntaxError` and
+`*json.UnmarshalTypeError` values when an upstream response cannot decode; it does not yet expose a
+fusion-specific contract-error type. SemSource recognizes those concrete typed causes with
+`errors.As` at this HTTP boundary. This is deliberate, bounded coupling to Go's JSON decoder, not
+message matching. If SemStreams adds a stable fusion transport error type later, the adapter should
+prefer that type and retain these checks only for compatibility with older clients.
+
 ### D3 - Preserve successful honesty semantics
 
 `IndexStatus.Ready == false` is a successful fusion answer and remains HTTP 200. A ready graph with
