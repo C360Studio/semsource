@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 
-const pollTimeoutMs = Number(process.env.UI_PROFILE_TIMEOUT_MS || 30_000);
-const pollIntervalMs = Number(process.env.UI_PROFILE_POLL_MS || 500);
+const pollTimeoutMs = Number(process.env.UI_PROFILE_TIMEOUT_MS || 240_000);
+const pollIntervalMs = Number(process.env.UI_PROFILE_POLL_MS || 1_000);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -11,85 +11,36 @@ function bodySnippet(body) {
   return body.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
-function isSemSourceHealth(json) {
-  return (
-    json &&
-    json.component === "semsource" &&
-    json.healthy === true &&
-    typeof json.status === "string" &&
-    typeof json.message === "string" &&
-    typeof json.namespace === "string" &&
-    json.namespace.length > 0 &&
-    typeof json.phase === "string" &&
-    json.phase.length > 0 &&
-    typeof json.total_entities === "number" &&
-    json.total_entities >= 0 &&
-    (!Object.prototype.hasOwnProperty.call(json, "sub_statuses") ||
-      Array.isArray(json.sub_statuses))
-  );
+function contentType(response) {
+  return response.headers()["content-type"] || "";
 }
 
-async function pollJSON(request, path, label, predicate) {
-  const deadline = Date.now() + pollTimeoutMs;
-  let last = { status: "none", body: "no response" };
-
-  while (Date.now() < deadline) {
-    try {
-      const response = await request.get(path, { failOnStatusCode: false });
-      const body = await response.text();
-      last = { status: response.status(), body: bodySnippet(body) };
-
-      let json;
-      try {
-        json = JSON.parse(body);
-      } catch {
-        json = undefined;
-      }
-
-      if (response.ok() && json && predicate(json)) {
-        return json;
-      }
-    } catch (error) {
-      last = {
-        status: "request-error",
-        body: error instanceof Error ? error.message : String(error),
-      };
-    }
-
-    await sleep(pollIntervalMs);
-  }
-
-  throw new Error(
-    `${label} did not reach expected state at ${path} within ${pollTimeoutMs}ms. ` +
-      `Last response: HTTP ${last.status} ${last.body}`,
-  );
+async function expectBackendResponse(response, label) {
+  const body = await response.text();
+  expect(
+    contentType(response),
+    `${label} fell through to HTML: ${bodySnippet(body)}`,
+  ).not.toContain("text/html");
+  return body;
 }
 
-async function pollGraphQL(request) {
+async function pollCapabilities(request) {
   const deadline = Date.now() + pollTimeoutMs;
   let last = { status: "none", body: "no response" };
-
   while (Date.now() < deadline) {
     try {
-      const response = await request.post("/graphql", {
-        data: { query: "query UiProfileSmoke { __typename }" },
+      const response = await request.get("/source-manifest/capabilities", {
         failOnStatusCode: false,
       });
       const body = await response.text();
       last = { status: response.status(), body: bodySnippet(body) };
-
-      let json;
-      try {
-        json = JSON.parse(body);
-      } catch {
-        json = undefined;
-      }
-
+      const json = JSON.parse(body);
       if (
-        response.status() >= 200 &&
-        response.status() < 500 &&
-        json &&
-        (Object.prototype.hasOwnProperty.call(json, "data") || Array.isArray(json.errors))
+        response.ok() &&
+        json.product?.key === "semsource" &&
+        json.readiness?.source?.state === "ready" &&
+        json.queries?.source_inventory?.availability === "ready" &&
+        json.queries?.code_search?.availability === "ready"
       ) {
         return json;
       }
@@ -99,62 +50,251 @@ async function pollGraphQL(request) {
         body: error instanceof Error ? error.message : String(error),
       };
     }
-
     await sleep(pollIntervalMs);
   }
-
   throw new Error(
-    `GraphQL route did not return a GraphQL-shaped response within ${pollTimeoutMs}ms. ` +
-      `Last response: HTTP ${last.status} ${last.body}`,
+    `capabilities did not become source/search ready within ${pollTimeoutMs}ms; ` +
+      `last response: HTTP ${last.status} ${last.body}`,
   );
 }
 
-test("ui profile serves the SemSource workbench and advertised routes", async ({
+async function assertAdvertisedGetRoutes(request, capabilities) {
+  const routes = Object.values(capabilities.queries).filter(
+    (capability) =>
+      capability.availability === "ready" && capability.method === "GET",
+  );
+  expect(routes.length).toBeGreaterThanOrEqual(4);
+  for (const capability of routes) {
+    expect(capability.href).toMatch(/^\/[a-z0-9/_-]+$/);
+    const response = await request.get(capability.href, {
+      failOnStatusCode: false,
+    });
+    const body = await expectBackendResponse(
+      response,
+      `advertised GET ${capability.href}`,
+    );
+    expect(response.ok(), bodySnippet(body)).toBe(true);
+  }
+}
+
+async function assertProxyAllowlist(request) {
+  const health = await request.get("/health", { failOnStatusCode: false });
+  const healthBody = await expectBackendResponse(health, "health");
+  expect(health.ok(), bodySnippet(healthBody)).toBe(true);
+  expect(JSON.parse(healthBody)).toMatchObject({
+    component: "semsource",
+    healthy: true,
+  });
+
+  const graphQL = await request.post("/graphql", {
+    data: { query: "query UiProfileSmoke { __typename }" },
+    failOnStatusCode: false,
+  });
+  const graphQLBody = await expectBackendResponse(graphQL, "graphql");
+  expect(graphQL.status()).toBeLessThan(500);
+  expect(JSON.parse(graphQLBody)).toEqual(
+    expect.objectContaining({
+      [graphQL.ok() ? "data" : "errors"]: expect.anything(),
+    }),
+  );
+
+  const metrics = await request.get("/metrics", { failOnStatusCode: false });
+  const metricsBody = await expectBackendResponse(metrics, "metrics");
+  expect(metrics.ok(), bodySnippet(metricsBody)).toBe(true);
+
+  for (const [path, data] of [
+    ["/code-context/context", {}],
+    ["/code-context/impact", {}],
+    ["/doc-context/context", {}],
+  ]) {
+    const response = await request.post(path, {
+      data,
+      failOnStatusCode: false,
+    });
+    const body = await expectBackendResponse(response, path);
+    expect(response.status(), bodySnippet(body)).not.toBe(404);
+    expect(response.status(), bodySnippet(body)).toBeLessThan(500);
+  }
+
+  const mcp = await request.post("/mcp-gateway/mcp", {
+    headers: { Accept: "application/json, text/event-stream" },
+    data: {},
+    failOnStatusCode: false,
+  });
+  await expectBackendResponse(mcp, "mcp");
+  expect(mcp.status()).not.toBe(404);
+  expect(mcp.status()).toBeLessThan(500);
+}
+
+async function assertGraphWebSocket(page) {
+  const outcome = await page.evaluate(
+    ({ timeoutMs }) =>
+      new Promise((resolve, reject) => {
+        let opened = false;
+        const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const url = `${scheme}//${window.location.host}/graph`;
+        const socket = new WebSocket(url);
+        const timer = window.setTimeout(() => {
+          socket.close();
+          reject(
+            new Error(`WebSocket did not open and close within ${timeoutMs}ms`),
+          );
+        }, timeoutMs);
+
+        socket.addEventListener(
+          "open",
+          () => {
+            opened = true;
+            socket.close(1000, "ui profile smoke complete");
+          },
+          { once: true },
+        );
+        socket.addEventListener(
+          "error",
+          () => {
+            window.clearTimeout(timer);
+            reject(new Error("WebSocket upgrade failed before an open event"));
+          },
+          { once: true },
+        );
+        socket.addEventListener(
+          "close",
+          (event) => {
+            window.clearTimeout(timer);
+            if (!opened) {
+              reject(
+                new Error(
+                  `WebSocket closed before opening (code ${event.code})`,
+                ),
+              );
+              return;
+            }
+            resolve({ opened, url });
+          },
+          { once: true },
+        );
+      }),
+    { timeoutMs: 10_000 },
+  );
+
+  // The browser emits `open` only after the server accepts the HTTP Upgrade
+  // handshake (101 Switching Protocols). Reaching `close` proves cleanup too.
+  expect(outcome).toEqual({
+    opened: true,
+    url: expect.stringMatching(/^ws(s)?:\/\/[^/]+\/graph$/),
+  });
+}
+
+test("advertised API routes stay behind the Caddy allowlist", async ({
   page,
   request,
 }) => {
-  const health = await pollJSON(
-    request,
-    "/health",
-    "profile health",
-    isSemSourceHealth,
-  );
-  expect(health).toMatchObject({ component: "semsource", healthy: true });
-  expect(health.namespace.length).toBeGreaterThan(0);
-  expect(health.phase.length).toBeGreaterThan(0);
-  expect(health.total_entities).toBeGreaterThanOrEqual(0);
-  expect(health.message).toContain("SemSource");
-
-  const status = await pollJSON(
-    request,
-    "/source-manifest/status",
-    "source manifest status",
-    (json) => typeof json.namespace === "string" && typeof json.phase === "string",
-  );
-  expect(status.namespace.length).toBeGreaterThan(0);
-  expect(status.phase.length).toBeGreaterThan(0);
-
-  const graphQL = await pollGraphQL(request);
-  expect(graphQL.data || graphQL.errors).toBeTruthy();
-
+  const capabilities = await pollCapabilities(request);
+  expect(capabilities).toMatchObject({
+    contract_version: 1,
+    product: { key: "semsource", name: "SemSource" },
+    readiness: {
+      source: { available: true, ready: true, state: "ready" },
+    },
+  });
+  await assertAdvertisedGetRoutes(request, capabilities);
+  await assertProxyAllowlist(request);
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
-  expect(response, "UI root did not return a response").toBeTruthy();
-  expect(response.ok(), `UI root returned HTTP ${response.status()}`).toBe(true);
+  expect(response?.ok()).toBe(true);
+  if (process.env.UI_PROFILE_FORCE_FAILURE === "1") {
+    expect(
+      false,
+      "controlled UI profile failure requested for artifact validation",
+    ).toBe(true);
+  }
+  await assertGraphWebSocket(page);
+});
+
+test("retired and unknown routes return terminal JSON 404", async ({
+  request,
+}) => {
+  for (const path of [
+    "/semsource/health",
+    "/flowbuilder/flows",
+    "/trajectory/runs",
+    "/api/status",
+    "/okf/export",
+    "/project-view/summary",
+    "/definitely-not-a-route",
+  ]) {
+    const response = await request.get(path, { failOnStatusCode: false });
+    expect(response.status(), path).toBe(404);
+    expect(contentType(response), path).toContain("application/json");
+    expect(await response.json()).toEqual({ error: "not_found" });
+  }
+});
+
+test("workbench exposes real search evidence and keyboard detail", async ({
+  page,
+  request,
+}) => {
+  const capabilities = await pollCapabilities(request);
+  const response = await page.goto("/", { waitUntil: "domcontentloaded" });
+  expect(response?.ok()).toBe(true);
+
   await expect(
     page.getByRole("heading", { level: 1, name: "SemSource" }),
   ).toBeVisible();
   await expect(
     page.getByRole("status", { name: /overall readiness/i }),
-  ).toBeVisible();
+  ).toContainText(/ready/i);
   await expect(
     page.getByRole("heading", { level: 2, name: "Sources" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { level: 2, name: "Project summary" }),
+    page.getByText(capabilities.project.key, { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { level: 2, name: "Code search" }),
+    page.getByText("/workspace", { exact: true }).first(),
   ).toBeVisible();
+
+  const search = page.getByLabel(/search code/i);
+  const searchButton = page.getByRole("button", {
+    name: "Search",
+    exact: true,
+  });
+  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe(
+    "BODY",
+  );
+  await page.keyboard.press("Tab");
+  await expect(search).toBeFocused();
+  await page.keyboard.type("UiProfileFixtureAlpha");
+  await page.keyboard.press("Tab");
+  await expect(searchButton).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(searchButton).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  const results = page.getByRole("list", { name: /code search results/i });
+  await expect(results).toBeVisible({ timeout: pollTimeoutMs });
+  const resultButtons = results.getByRole("button");
+  expect(await resultButtons.count()).toBeGreaterThan(0);
+  const keyboardTarget = resultButtons.first();
+  const selectedName = (
+    await keyboardTarget.locator("strong").textContent()
+  )?.trim();
+  await page.keyboard.press("Tab");
+  await expect(keyboardTarget).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(searchButton).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(keyboardTarget).toBeFocused();
+  await page.keyboard.press("Enter");
+  const detail = page.getByRole("article", { name: /result detail/i });
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole("heading", { level: 3 })).toHaveText(
+    selectedName || /UiProfileFixture/,
+  );
+  await expect(detail).toContainText(/provenance/i);
+  await expect(detail).toContainText(/workbench_fixture\.go/i);
+
   await expect(
     page.getByRole("region", { name: /graph drill-down/i }),
   ).toContainText(/governed.*projection.*not available/i);

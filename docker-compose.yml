@@ -5,8 +5,10 @@
 #   docker compose up                 # MVP CORE — NATS + semsource + semembed (tier-1
 #                                     #   semantic search out of the box). No sibling repo
 #                                     #   needed. semsource HTTP/MCP published on :8080.
-#   docker compose --profile ui up    # + SemTeams UI dashboard + Caddy reverse proxy
-#                                     #   (requires the ../semteams/ui repo checked out).
+#   SEMSOURCE_UI_IMAGE=<immutable-ref> docker compose --profile ui up
+#                                     # + released SemSource workbench + Caddy.
+#   docker compose -f docker-compose.yml -f docker-compose.ui-dev.yml --profile ui up --build
+#                                     # + local SemSource workbench development build.
 #
 # The core profile is the shippable MVP: point an agent at the MCP gateway and query.
 # The `ui` profile layers the monitoring dashboard on top for local operators.
@@ -18,7 +20,7 @@
 #   8081  — semembed OpenAI-compatible embeddings (internal Docker network)
 #   7890  — semsource raw graph WebSocket (internal; proxied via Caddy in ui profile)
 #   9091  — semsource Prometheus metrics (internal; proxied via Caddy in ui profile)
-#   5173  — SemTeams UI Vite dev (ui profile; proxied via Caddy)
+#   3000  — SemSource workbench (internal Docker network)
 #   3000  — Caddy entry point (ui profile: UI, GraphQL, status APIs, raw graph WebSocket)
 #
 # Core-profile access:
@@ -26,7 +28,7 @@
 #   http://localhost:8080/source-manifest/status  — SemSource readiness/status
 #
 # ui-profile access (adds Caddy on :3000):
-#   http://localhost:3000                         — SemTeams UI dashboard
+#   http://localhost:3000                         — SemSource workbench
 #   http://localhost:3000/health                  — UI-compatible SemSource proxy health
 #   http://localhost:3000/graphql                 — GraphQL gateway
 #   http://localhost:3000/source-manifest/status  — SemSource readiness/status
@@ -38,7 +40,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: c360-semsource
     # Publish the ServiceManager HTTP API + MCP gateway to the host so an agent can
     # reach it directly in the core profile (no Caddy). In the ui profile Caddy also
     # proxies it on :3000.
@@ -77,7 +78,6 @@ services:
   # SEMEMBED_CPUS caps it for local dev — see configs/tiers/README.md.
   semembed:
     image: ghcr.io/c360studio/semembed:latest
-    container_name: c360-semembed
     environment:
       - SEMEMBED_PORT=8081
       - SEMEMBED_MODEL=${SEMEMBED_MODEL:-Snowflake/snowflake-arctic-embed-s}
@@ -95,28 +95,12 @@ services:
       - c360
     restart: unless-stopped
 
-  # SemTeams UI — operator dashboard and graph shell.
-  # Only runs under `--profile ui`; requires the ../semteams/ui repo (UI_CONTEXT).
+  # SemSource workbench release artifact. The intentionally unavailable default
+  # keeps core Compose renderable while forcing UI-profile callers to select an
+  # immutable released image. Local development uses docker-compose.ui-dev.yml.
   ui:
     profiles: ["ui"]
-    build:
-      context: ${UI_CONTEXT:-../semteams/ui}
-      dockerfile: Dockerfile.dev
-    container_name: c360-ui
-    volumes:
-      - ${UI_CONTEXT:-../semteams/ui}/src:/app/src
-      - ${UI_CONTEXT:-../semteams/ui}/static:/app/static
-      - ${UI_CONTEXT:-../semteams/ui}/svelte.config.js:/app/svelte.config.js
-      - ${UI_CONTEXT:-../semteams/ui}/vite.config.ts:/app/vite.config.ts
-      - ${UI_CONTEXT:-../semteams/ui}/tsconfig.json:/app/tsconfig.json
-      - ui-node-modules:/app/node_modules
-    environment:
-      - NODE_ENV=development
-      # Server-side relative fetches from SemTeams UI resolve to SemSource.
-      # Browser fetches go through Caddy on the same origin.
-      - BACKEND_HOST=${BACKEND_HOST:-semsource:8080}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    image: ${SEMSOURCE_UI_IMAGE:-ghcr.io/c360studio/semsource-ui:unavailable@sha256:0000000000000000000000000000000000000000000000000000000000000000}
     networks:
       - c360
     restart: unless-stopped
@@ -125,10 +109,11 @@ services:
   caddy:
     profiles: ["ui"]
     image: caddy:2-alpine
-    container_name: c360-caddy
     depends_on:
-      - semsource
-      - ui
+      semsource:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -137,6 +122,19 @@ services:
       - "${C360_PORT:-3000}:3000"
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:3000/",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     networks:
       - c360
     restart: unless-stopped
@@ -144,7 +142,6 @@ services:
   # NATS — JetStream/KV substrate for SemStreams graph state and governance
   nats:
     image: nats:2-alpine
-    container_name: c360-nats
     command: ["-js", "-m", "8222", "--name", "c360-nats"]
     # Published to the host so a native `semsource run` (outside compose) can
     # reach JetStream — e.g. `docker compose up -d nats` then `semsource run`.
@@ -153,7 +150,15 @@ services:
       - "${NATS_HOST_PORT:-4222}:4222"
       - "${NATS_MONITOR_HOST_PORT:-8222}:8222"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -165,8 +170,6 @@ networks:
     driver: bridge
 
 volumes:
-  ui-node-modules:
-    driver: local
   caddy-data:
     driver: local
   caddy-config:

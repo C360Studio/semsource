@@ -1,0 +1,8 @@
+**
+!ui/
+!ui/package.json
+!ui/package-lock.json
+!test/
+!test/ui/
+!test/ui/playwright.config.cjs
+!test/ui/ui-profile.spec.cjs

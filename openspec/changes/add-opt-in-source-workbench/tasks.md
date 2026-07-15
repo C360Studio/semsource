@@ -109,30 +109,30 @@
 
 ## 6. Make the breaking `ui` profile migration
 
-- [ ] 6.1 Document the old-to-new mapping: SemSource's `ui` flag changes from a sibling SemTeams
+- [x] 6.1 Document the old-to-new mapping: SemSource's `ui` flag changes from a sibling SemTeams
       checkout to the SemSource-owned workbench; SemTeams owns replacement packaging.
       - Test: architect and technical-writer confirm the changed command, unaffected headless path,
         owner handoff, and rollback.
-- [ ] 6.2 Replace the Compose `ui` service with the SemSource-owned production image and an explicit
+- [x] 6.2 Replace the Compose `ui` service with the SemSource-owned production image and an explicit
       `./ui` development build; remove `UI_CONTEXT`, sibling mounts, and donor images.
       - Test: default Compose renders with an intentionally unavailable UI image because the omitted
         profile never resolves it; the `ui` profile references only SemSource-owned paths/artifacts.
-- [ ] 6.3 Keep Caddy limited to the workbench shell and advertised SemSource health, source-manifest,
+- [x] 6.3 Keep Caddy limited to the workbench shell and advertised SemSource health, source-manifest,
       fusion, GraphQL, MCP, metrics, and raw graph routes.
       - Test: UI-profile Playwright exercises each advertised proxy route through Caddy, rejects
         fallthrough to misleading UI HTML, and finds no stale SemTeams, flow-builder, trajectory, or
         unshipped OKF/project-view routes.
-- [ ] 6.4 Update `task ui:e2e` and `task ui:smoke` to use the owned UI Playwright dependency and
+- [x] 6.4 Update `task ui:e2e` and `task ui:smoke` to use the owned UI Playwright dependency and
       production image/development build, never SemTeams tooling.
       - Test: preflight and execution succeed with no sibling checkout and include final HTTP/UI state
         on forced failures.
 
 ## 7. Prove headless and workbench behavior
 
-- [ ] 7.1 Add a headless smoke assertion that no UI image, source build, Node process, proxy, or UI
+- [x] 7.1 Add a headless smoke assertion that no UI image, source build, Node process, proxy, or UI
       registry credential is required while HTTP, MCP, readiness, and graph query remain available.
       - Test: core smoke passes with an intentionally unreachable UI image and no local Node toolchain.
-- [ ] 7.2 Add UI-profile Playwright coverage through Caddy against real SemSource for shell branding,
+- [x] 7.2 Add UI-profile Playwright coverage through Caddy against real SemSource for shell branding,
       capability bootstrap, readiness, source inventory, search, keyboard result/detail selection,
       graph-unavailable state, and every advertised proxied route.
       - Test: tests use visible accessible UI, not canvas-only hooks, prove backend routes do not fall
@@ -143,13 +143,13 @@
 
 ## 8. Documentation and release gates
 
-- [ ] 8.1 Update operator docs with default headless mode, optional SemSource `ui` mode, SemTeams
+- [x] 8.1 Update operator docs with default headless mode, optional SemSource `ui` mode, SemTeams
       consumer handoff, local development, rollback, and proposed follow-on changes.
       - Test: technical-writer confirms commands, ownership, optionality, and non-goals match the
         implementation; former UI integration notes are clearly historical.
-- [ ] 8.2 Update advertised-surface coverage only after the repurposed profile and routes are proven.
+- [x] 8.2 Update advertised-surface coverage only after the repurposed profile and routes are proven.
       - Test: every newly advertised command and route maps to an automated assertion.
-- [ ] 8.3 Run SemSource gates: strict OpenSpec validation, `task lint`, `go vet ./...`,
+- [x] 8.3 Run SemSource gates: strict OpenSpec validation, `task lint`, `go vet ./...`,
       `go test ./...`, core e2e, owned UI format/lint/check/unit/build, workbench Playwright, headless
       smoke, and production-image smoke.
       - Test: all commands pass with no revive warnings or unresolved reviewer findings.

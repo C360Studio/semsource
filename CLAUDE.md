@@ -21,21 +21,21 @@ are installed — slash commands `/opsx:new`, `/opsx:continue`, `/opsx:apply`,
 `openspec list` / `openspec validate`. Three homes, three jobs — put a thing in
 the right one:
 
-| Home | Holds | Drifts? |
-|------|-------|---------|
-| `openspec/specs/<capability>/spec.md` | **Current truth** — what a capability does *today* (`Requirement` + `GIVEN/WHEN/THEN`) | No — every change edits it via a delta |
-| `openspec/changes/<id>/` | **Proposed target state** — `proposal.md` + `tasks.md` + spec deltas; archived on completion | Resolves on archive |
-| `docs/adr/` | **Genuine decisions only** — irreversible choices + cross-repo contracts (the *why*) | No — history |
+| Home                                  | Holds                                                                                        | Drifts?                                |
+| ------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `openspec/specs/<capability>/spec.md` | **Current truth** — what a capability does _today_ (`Requirement` + `GIVEN/WHEN/THEN`)       | No — every change edits it via a delta |
+| `openspec/changes/<id>/`              | **Proposed target state** — `proposal.md` + `tasks.md` + spec deltas; archived on completion | Resolves on archive                    |
+| `docs/adr/`                           | **Genuine decisions only** — irreversible choices + cross-repo contracts (the _why_)         | No — history                           |
 
 Rules of the road:
 
 - **Non-trivial or cross-cutting work starts with a change** (`/opsx:new`):
-  proposal + tasks + spec deltas *before* code. Small mechanical fixes don't need one.
+  proposal + tasks + spec deltas _before_ code. Small mechanical fixes don't need one.
 - **Specs are seeded lazily** — write a capability's spec when a change first
   touches it, distilled from code + existing docs and **verified against code**.
   Do NOT backfill; an unverified spec is just another drifting doc.
 - **ADRs are pure decision records** — record an irreversible/cross-repo decision
-  as a one-page ADR; the *mechanics* it implies live in the capability's spec.
+  as a one-page ADR; the _mechanics_ it implies live in the capability's spec.
 - **Read `openspec/config.yaml`'s `context:` first** when scoping anything — it
   carries the Purpose and the **Product Boundary** (SemSource owns source
   ingestion, not the SemStreams substrate) plus the per-artifact rules and
@@ -64,6 +64,7 @@ semsource version           # Print version
 ```
 
 Non-interactive examples:
+
 - `semsource add ast --path ./src --language go --watch`
 - `semsource remove --index 2`
 
@@ -95,13 +96,13 @@ Follows the semstreams pattern: **Listen → Process → Persist → Publish**.
 
 All handlers implement the `SourceHandler` interface (`Ingest`, `Watch`, `Supports`, `SourceType`).
 
-| Handler | Sources | Watch Mechanism |
-|---------|---------|-----------------|
-| `GitHandler` | Local/remote repos | git hook / polling |
-| `ASTHandler` | Go, TS/JS (reuses SemSpec AST indexer) | fsnotify |
-| `DocHandler` | Markdown, plain text | fsnotify |
-| `ConfigHandler` | go.mod, package.json, Dockerfile | fsnotify |
-| `URLHandler` | HTTP/S URLs | configurable polling |
+| Handler         | Sources                                | Watch Mechanism      |
+| --------------- | -------------------------------------- | -------------------- |
+| `GitHandler`    | Local/remote repos                     | git hook / polling   |
+| `ASTHandler`    | Go, TS/JS (reuses SemSpec AST indexer) | fsnotify             |
+| `DocHandler`    | Markdown, plain text                   | fsnotify             |
+| `ConfigHandler` | go.mod, package.json, Dockerfile       | fsnotify             |
+| `URLHandler`    | HTTP/S URLs                            | configurable polling |
 
 ### Entity Identity (6-Part ID)
 
@@ -118,12 +119,12 @@ IDs must be purely intrinsic (no timestamps, instance IDs, or insertion-order). 
 
 ### ID Construction by Entity Type
 
-| Entity Type | Construction |
-|------------|--------------|
+| Entity Type | Construction                                                                     |
+| ----------- | -------------------------------------------------------------------------------- |
 | Code symbol | `org + semsource + language + canonical_module_path + symbol_type + symbol_name` |
-| Git commit | `org + semsource + git + repo_slug + commit + short_sha` |
-| URL / doc | `org + semsource + web + domain_slug + doc + sha256(canonical_url)[:6]` |
-| Config file | `org + semsource + config + repo_slug + file_type + sha256(content)[:6]` |
+| Git commit  | `org + semsource + git + repo_slug + commit + short_sha`                         |
+| URL / doc   | `org + semsource + web + domain_slug + doc + sha256(canonical_url)[:6]`          |
+| Config file | `org + semsource + config + repo_slug + file_type + sha256(content)[:6]`         |
 
 ### Event Types
 
@@ -168,16 +169,30 @@ New message types must follow the payload registry pattern: define type → impl
 The public roadmap lives in `ROADMAP.md`; use that instead of the historical
 milestone list in `docs/spec/semsource-spec-v3.md`.
 
-Current beta shape:
+Current release-candidate shape (the latest public tag is still beta.4):
 
 1. `v1.0.0-beta.4` targets SemStreams `v1.0.0-beta.144`.
 2. Core ingestion, governed entity publishing, source manifest/status, fusion
    tools, version diffs, and consumer query integration are present.
-3. The `ui` compose profile targets the SemTeams UI checkout by default and has
-   a SemSource-owned Playwright smoke (`task ui:smoke` / `task ui:e2e`).
-4. Active follow-ups are UI-profile confidence, query-index readiness/scale,
-   GraphQL capabilities alignment, code/version intelligence, and federation
-   validation.
+3. The default Compose profile is UI-free: `docker compose up` resolves only
+   NATS, semembed, and SemSource. In deployment documentation, "headless" means
+   this omitted workbench profile; it is not the removed `mode: "headless"`
+   configuration value, which must continue to fail validation.
+4. The opt-in `ui` profile now belongs to SemSource and serves the local `ui/`
+   workbench. This is a breaking replacement for the former sibling SemTeams UI
+   mapping; SemTeams owns its packaging and consumes unchanged SemSource HTTP,
+   MCP, NATS, GraphQL, and governed graph contracts.
+5. Release use requires `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>` and no sibling
+   checkout or host Node.js. Local development is explicit through
+   `docker-compose.ui-dev.yml` or `task ui:smoke:dev`; `task ui:e2e` uses the
+   lockfile-matched container runner.
+6. The first published immutable workbench digest is still OpenSpec task 7.3.
+   Until it exists, released-profile compatibility is not proven. Graph
+   drill-down separately remains unavailable until SemStreams #533 is adopted
+   and live-tested.
+7. Active follow-ups are the workbench release pin, query-index
+   readiness/scale, GraphQL capabilities alignment, code/version intelligence,
+   and federation validation.
 
 ## Custom Agents & Skills
 

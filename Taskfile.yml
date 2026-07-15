@@ -14,9 +14,21 @@ tasks:
   lint:
     desc: Run Go linters (vet, fmt check, revive)
     cmds:
-      - go vet ./...
-      - test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
-      - revive -config revive.toml -formatter friendly ./...
+      # npm dependencies can contain unrelated Go source. Keep backend gates
+      # scoped to SemSource packages even after the owned UI has been installed.
+      - >-
+        packages="$(go list ./...)" &&
+        packages="$(printf '%s\n' "$packages" | grep -v '/ui/node_modules/')" &&
+        go vet $packages
+      - >-
+        test -z "$(find . -path './ui/node_modules' -prune -o -name '*.go' -print |
+        xargs gofmt -l)" ||
+        (find . -path './ui/node_modules' -prune -o -name '*.go' -print |
+        xargs gofmt -l && exit 1)
+      - >-
+        packages="$(go list ./...)" &&
+        packages="$(printf '%s\n' "$packages" | grep -v '/ui/node_modules/')" &&
+        revive -config revive.toml -formatter friendly $packages
 
   test:
     desc: Run unit tests
@@ -34,19 +46,9 @@ tasks:
       - go test -tags=e2e -timeout 300s ./test/e2e/
 
   ui:e2e:
-    desc: Run Playwright smoke against the running UI profile
-    vars:
-      C360_PORT: '{{.C360_PORT | default "3000"}}'
-    env:
-      NODE_PATH: ui/node_modules
-      UI_PROFILE_BASE_URL: 'http://127.0.0.1:{{.C360_PORT}}'
+    desc: Run locked containerized Playwright against a running UI profile
     cmds:
-      - >-
-        test -x "ui/node_modules/.bin/playwright" ||
-        (echo "SemSource-owned Playwright is not installed in ui/." &&
-        echo "Run npm --prefix ui ci." &&
-        exit 1)
-      - "ui/node_modules/.bin/playwright test --config test/ui/playwright.config.cjs"
+      - ./scripts/ui-profile-e2e.sh
 
   ui:image:verify:
     desc: Build and verify the SemSource workbench production image
@@ -54,9 +56,14 @@ tasks:
       - ./scripts/ui-image-verify.sh
 
   ui:smoke:
-    desc: Start the UI profile, run Playwright smoke, then tear it down
+    desc: Smoke an immutable released SemSource UI image without host Node
     cmds:
-      - ./scripts/ui-profile-smoke.sh
+      - ./scripts/ui-profile-smoke.sh released
+
+  ui:smoke:dev:
+    desc: Build ./ui, smoke the local UI profile, then tear it down
+    cmds:
+      - ./scripts/ui-profile-smoke.sh dev
 
   core:smoke:
     desc: Start the core profile, poll source-manifest status, then tear it down

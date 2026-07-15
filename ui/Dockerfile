@@ -9,6 +9,16 @@ RUN npm run build
 
 FROM node:22-alpine
 
+ARG SEMSOURCE_UI_VERSION=dev
+ARG SEMSOURCE_UI_COMMIT=unknown
+
+LABEL org.opencontainers.image.title="SemSource Workbench" \
+  org.opencontainers.image.description="Optional SemSource source-knowledge workbench" \
+  org.opencontainers.image.source="https://github.com/C360Studio/semsource" \
+  org.opencontainers.image.licenses="MIT" \
+  org.opencontainers.image.version="${SEMSOURCE_UI_VERSION}" \
+  org.opencontainers.image.revision="${SEMSOURCE_UI_COMMIT}"
+
 WORKDIR /app
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json /app/package-lock.json ./

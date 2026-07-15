@@ -14,7 +14,7 @@ confidence and dependency shape. The "why" behind durable choices lives in
 [`docs/adr/`](docs/adr/); non-trivial work is specced first under
 [`openspec/`](openspec/).
 
-## In The Beta Today
+## Current Release-Candidate Shape
 
 - **Graph-first ingestion** of code (Go, TypeScript/JavaScript, Java, Python,
   Svelte), Markdown/docs, config files, git/repo metadata, URLs, and media
@@ -30,12 +30,15 @@ confidence and dependency shape. The "why" behind durable choices lives in
   lexical match.
 - **Versioned source retention** with supersession lineage, current-version
   ranking, and `code_changes` diffs for added, removed, and changed symbols.
-- **SemTeams UI profile**: `docker compose --profile ui up` adds the SemTeams UI
-  checkout, Caddy on `:3000`, `/health`, `/source-manifest/*`, `/graphql`, and
-  the raw `/graph` stream behind one origin.
-- **Light UI smoke**: `task ui:smoke` starts the UI profile, runs Playwright
-  against `/health`, `/source-manifest/status`, `/graphql`, and the UI shell, then
-  tears the stack down.
+- **Optional SemSource workbench implementation**: the repurposed `ui` profile
+  layers the SemSource-owned source/readiness/search workbench and an explicit
+  Caddy allowlist over the unchanged core. A published immutable image is still
+  required before this becomes a released operator path.
+- **Independent core and workbench proof**: `task core:smoke` proves the default
+  profile never resolves UI artifacts; `task ui:smoke:dev` exercises the local
+  workbench through Caddy with containerized Playwright at desktop and narrow
+  widths. Released-image compatibility remains open until a registry digest is
+  published and tested.
 - **Raw graph stream export** remains available in standalone mode for
   stream-oriented consumers such as federation, fan-out, and live UI updates. The
   primary governed read contract is still graph query/MCP/GraphQL.
@@ -54,12 +57,14 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 - **Same-LAN deployment focus.** No built-in TLS/reverse-proxy hardening yet; run
   exposed deployments behind your own gateway.
-- **UI profile depends on a sibling checkout.** The default `UI_CONTEXT` is
-  `../semteams/ui`; the profile is SemSource-owned plumbing, while SemTeams UI
-  owns app behavior and SemTeams-only routes.
-- **SemTeams-only UI routes are best-effort here.** SemSource proves the shared
-  source/graph/status path; SemTeams UI tracks graceful degradation for routes
-  such as `/teams-dispatch/*`.
+- **No released workbench digest yet.** The production profile requires
+  `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>`, but the first registry artifact and
+  compatibility pin are still OpenSpec task 7.3. Local development uses the
+  explicit `docker-compose.ui-dev.yml` override or `task ui:smoke:dev`.
+- **Graph drill-down is capability-gated.** The workbench remains useful for
+  sources, readiness, summary, and search, but reports graph projection as
+  unsupported until [SemStreams #533](https://github.com/C360Studio/semstreams/issues/533)
+  provides and proves the governed projection contract.
 - **GraphQL capabilities are not advertised.** SemStreams beta.144 still routes a
   GraphQL capabilities query to `graph.query.capabilities`, but the graph-query
   responder is not registered yet.
@@ -75,15 +80,16 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Next
 
-### SemTeams UI Profile Transition
+### Workbench Release Completion
 
-- The beta's current SemTeams-targeted `ui` profile is scheduled to become the
-  optional SemSource workbench under
-  [`add-opt-in-source-workbench`](openspec/changes/add-opt-in-source-workbench/).
-- Treat that takeover as a breaking flag migration: SemTeams will own its UI
-  packaging and consume SemSource through the unchanged headless contracts.
-- Preserve `docs/integration/semteams-ui-profile-feedback.md` as historical
-  integration evidence rather than an ongoing SemSource UI obligation.
+- Publish the SemSource-owned `ui/` production image, capture its immutable
+  registry digest, and prove that the released profile pin matches the tested
+  SemSource commit and version.
+- Release the breaking flag migration: `docker compose --profile ui up` no
+  longer builds SemTeams and instead runs the SemSource workbench. SemTeams owns
+  its packaging and remains a consumer of unchanged UI-free SemSource contracts.
+- Keep the former SemTeams profile note as historical evidence only; it creates
+  no current SemSource compatibility obligation.
 
 ### Query Reliability And Scale
 
@@ -96,7 +102,7 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ### Packaged Local Experience
 
-- Keep the headless backend/MCP stack as SemSource's default deployment for
+- Keep the UI-free backend/MCP stack as SemSource's default deployment for
   embedded use by SemTeams, SemSpec, SemDragon, SemOps, and other consumers.
 - Add a one-action local start that detects the project, launches pinned runtime
   artifacts, actively reports ingest/index/embedding readiness, and provides
@@ -108,18 +114,18 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ### Project Knowledge Workbench
 
-- Repurpose the opt-in `ui` profile as a SemSource workbench built from a pinned
-  `semstreams-ui` release; do not add a second browser profile.
-- Consolidate the strongest graph, layout, evidence, search, responsive, and
-  accessibility behavior from the existing sem* UI implementations into
-  `semstreams-ui` instead of copying another renderer.
+- Complete the opt-in SemSource workbench under this repository's `ui/`; do not
+  add a second browser profile or a runtime/build dependency on a sibling UI.
+- Keep the selectively ported search, evidence, responsive, and accessibility
+  behavior locally owned and guarded by SemSource tests. Donor UIs are reference
+  evidence, not canonical dependencies.
 - Lead with source status, readiness, search, evidence, and bounded materialized
   project views; keep whole-graph visualization as investigation drill-down.
-- Preserve a complete headless path: every workbench action must use a SemSource
+- Preserve a complete UI-free path: every workbench action must use a SemSource
   backend contract also available to non-UI automation.
 - Planning is active under
   [`add-opt-in-source-workbench`](openspec/changes/add-opt-in-source-workbench/);
-  the companion `semstreams-ui` canonicalization change is not yet created.
+  governed graph drill-down remains gated by SemStreams #533.
 
 ### Project Knowledge Interoperability
 
