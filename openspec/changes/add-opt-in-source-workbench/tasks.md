@@ -41,18 +41,20 @@
       - Test: each missing field has an upstream issue link and the SemSource release task depends on
         its adopted and live-tested governed query contract. Any decision to omit graph drill-down
         requires a formal amendment to this change and its `source-workbench` specification.
-- [ ] 3.3 Specify the versioned SemSource workbench capability response for product/project identity,
+- [x] 3.3 Specify `GET /source-manifest/capabilities` as the versioned SemSource workbench response for
+      product/project identity,
       authoritative readiness, query surfaces, supported/unavailable actions, and project-view
       availability without importing UI types into the Go backend.
       - Test: architect review approves JSON examples for ready, partially ready, unsupported, and
-        backward-compatible additive states.
-- [ ] 3.4 Write failing Go handler tests for the capability response in headless operation, including
+        backward-compatible additive states, and confirms `project.key` is a deployment-namespace
+        scope rather than a six-part entity ID.
+- [x] 3.4 Write failing Go handler tests for the capability response in headless operation, including
       partial readiness and unavailable optional actions.
       - Test: focused tests fail before implementation for every capability-contract scenario.
-- [ ] 3.5 Implement the capability response through existing SemSource HTTP/component patterns and wrap
+- [x] 3.5 Implement the capability response through existing SemSource HTTP/component patterns and wrap
       I/O errors with operation context.
       - Test: focused handler tests and `go test ./...` pass.
-- [ ] 3.6 Run go-reviewer assessment for context handling, errors, product boundaries, compatibility,
+- [x] 3.6 Run go-reviewer assessment for context handling, errors, product boundaries, compatibility,
       and advertised-surface evidence.
       - Test: go-reviewer signs off with no unresolved blocking findings.
 

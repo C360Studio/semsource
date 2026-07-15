@@ -22,6 +22,14 @@ readiness, enumerate available query surfaces, distinguish supported and unavail
 machine-readable reason, and state whether materialized project views are available. Additive fields
 SHALL preserve compatibility within the declared response version.
 
+The version-1 document SHALL be served by `GET /source-manifest/capabilities`. It SHALL use maps keyed
+by stable query and action capability IDs. Availability SHALL be `ready` when a verified route exists
+and its named readiness dependencies are ready, `not_ready` when the route exists but a dependency is
+building, degraded, or unavailable, and `unsupported` for a known contract that is not implemented.
+Unknown fields and map keys SHALL be additive-compatible within version 1. The project key SHALL be
+the configured deployment namespace with `identity_kind: deployment_namespace`; it SHALL NOT be
+represented as or interpreted as a six-part graph entity ID.
+
 #### Scenario: Headless client reads capabilities
 
 - **WHEN** a headless client requests the workbench capability response without any UI profile running
@@ -35,12 +43,37 @@ SHALL preserve compatibility within the declared response version.
 - **THEN** the response reports the authoritative partial-readiness state and does not advertise the
   affected query action as ready
 
+#### Scenario: Optional readiness responder is unavailable
+
+- **GIVEN** source status is available but an index readiness responder is missing, times out, or
+  returns an undecodable payload
+- **WHEN** a client requests workbench capabilities
+- **THEN** the response remains HTTP 200 with the affected query `not_ready`
+- **AND** the affected signal has state `unknown` and reason `status_unavailable`
+- **AND** raw transport or payload detail is not exposed
+- **AND** repeated discovery requests do not count expected responder absence against the shared NATS
+  circuit breaker
+
+#### Scenario: An all-reported source is errored
+
+- **GIVEN** aggregate source phase is `ready` but a reported source is errored, has a nonzero error
+  count, or carries a last error
+- **WHEN** a client requests workbench capabilities
+- **THEN** source and overall readiness are not ready
+- **AND** the response carries a sanitized retryable reason without the source error detail
+
 #### Scenario: Optional action is not implemented
 
 - **GIVEN** OKF or materialized-view behavior is not present in this SemSource version
 - **WHEN** a client requests workbench capabilities
-- **THEN** the response marks the action unavailable or omits it according to the versioned contract
-  without requiring a failing feature request
+- **THEN** the response marks the known action `unsupported` with a machine-readable reason
+- **AND** the client does not need to call a nonexistent feature route
+
+#### Scenario: Version-1 server adds a capability
+
+- **GIVEN** a version-1 client ignores unknown fields and capability keys
+- **WHEN** a newer version-1 server adds a query, action, contract, or optional metadata field
+- **THEN** the client continues to use known fields without a contract-version change
 
 ### Requirement: Capability-driven product composition
 

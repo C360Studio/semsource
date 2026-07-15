@@ -38,6 +38,12 @@ type Component struct {
 	config Config
 	client *natsclient.Client
 	logger *slog.Logger
+	// readinessRequest is a test seam for the two bounded index-status probes
+	// used by the workbench capability document. Production leaves it nil and
+	// uses client.RequestReady so an absent optional responder cannot trip the
+	// shared NATS circuit breaker.
+	readinessRequest readinessRequestFunc
+	readinessTimeout time.Duration
 
 	// Manifest query
 	querySub     *natsclient.Subscription
@@ -608,7 +614,7 @@ func (c *Component) DataFlow() component.FlowMetrics {
 	return component.FlowMetrics{}
 }
 
-// RegisterHTTPHandlers registers the /sources, /status, and /predicates
+// RegisterHTTPHandlers registers the /sources, /status, /capabilities, and /predicates
 // endpoints on the ServiceManager's shared HTTP mux.
 func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	if prefix != "" && prefix[len(prefix)-1] != '/' {
@@ -632,6 +638,10 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	healthPath := prefix + "health"
 	mux.HandleFunc(healthPath, c.handleHealth)
 	c.logger.Info("registered HTTP handler", "path", healthPath)
+
+	capabilitiesPath := prefix + "capabilities"
+	mux.HandleFunc(capabilitiesPath, c.handleWorkbenchCapabilities)
+	c.logger.Info("registered HTTP handler", "path", capabilitiesPath)
 
 	predicatesPath := prefix + "predicates"
 	mux.HandleFunc(predicatesPath, c.handlePredicates)

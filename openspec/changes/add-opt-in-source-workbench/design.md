@@ -184,6 +184,198 @@ SemSource SHALL NOT infer relationships from literal string shape, manufacture e
 a parallel graph substrate to satisfy the UI. The pinned workbench release is blocked until a real
 backend payload and live compatibility test prove the required semantics.
 
+### D10 - Bootstrap the browser with one product-owned HTTP capability document
+
+The workbench bootstraps from `GET /source-manifest/capabilities`. The source-manifest component owns
+this document because it is always present in the headless product, already owns authoritative source
+status and inventory, has access to the graph readiness responders, and is mounted through the
+ServiceManager shared HTTP mux. The endpoint is available without the optional UI profile.
+
+This is a discovery/control document, not a graph-data query. GraphQL remains the browser's
+schema-driven data-exploration surface, MCP remains the agent tool surface, and NATS remains the
+internal readiness/query transport. Using GraphQL for the bootstrap document would make discovery
+depend on a graph gateway whose own availability is being advertised; using MCP would couple a
+browser to agent session semantics; exposing NATS would cross the external-client boundary.
+
+The version-1 response has this stable shape:
+
+```json
+{
+  "contract_version": 1,
+  "product": {"key": "semsource", "name": "SemSource"},
+  "project": {"key": "acme", "identity_kind": "deployment_namespace"},
+  "readiness": {
+    "overall": "ready",
+    "source": {
+      "available": true,
+      "ready": true,
+      "state": "ready",
+      "source_count": 2,
+      "total_entities": 418,
+      "timestamp": "2026-07-15T15:00:00Z"
+    },
+    "structural_index": {
+      "available": true,
+      "ready": true,
+      "state": "ready",
+      "indexed_revision": 42,
+      "target_revision": 42,
+      "lag": 0
+    },
+    "semantic_index": {
+      "available": true,
+      "ready": true,
+      "state": "ready",
+      "indexed_revision": 42,
+      "target_revision": 42,
+      "lag": 0
+    }
+  },
+  "queries": {
+    "source_inventory": {
+      "availability": "ready",
+      "method": "GET",
+      "href": "/source-manifest/sources",
+      "readiness": ["source"]
+    },
+    "source_status": {
+      "availability": "ready",
+      "method": "GET",
+      "href": "/source-manifest/status",
+      "readiness": ["source"]
+    },
+    "project_summary": {
+      "availability": "ready",
+      "method": "GET",
+      "href": "/source-manifest/summary",
+      "readiness": ["source"]
+    },
+    "predicate_schema": {
+      "availability": "ready",
+      "method": "GET",
+      "href": "/source-manifest/predicates",
+      "readiness": ["source"]
+    },
+    "code_context": {
+      "availability": "ready",
+      "method": "POST",
+      "href": "/code-context/context",
+      "readiness": ["structural_index"]
+    },
+    "code_impact": {
+      "availability": "ready",
+      "method": "POST",
+      "href": "/code-context/impact",
+      "readiness": ["structural_index"]
+    },
+    "code_search": {
+      "availability": "ready",
+      "method": "POST",
+      "href": "/code-context/search",
+      "readiness": ["semantic_index"]
+    },
+    "doc_context": {
+      "availability": "ready",
+      "method": "POST",
+      "href": "/doc-context/context",
+      "readiness": ["structural_index"]
+    },
+    "graph_projection": {
+      "availability": "unsupported",
+      "reason": {
+        "code": "upstream_contract_pending",
+        "message": "The governed fusion graph projection is not available",
+        "retryable": false
+      }
+    }
+  },
+  "actions": {
+    "source_add": {
+      "availability": "ready",
+      "method": "POST",
+      "href": "/source-manifest/sources"
+    },
+    "source_remove": {
+      "availability": "ready",
+      "method": "DELETE",
+      "href": "/source-manifest/sources/{id}"
+    },
+    "okf_import": {
+      "availability": "unsupported",
+      "reason": {
+        "code": "not_implemented",
+        "message": "OKF import is not available",
+        "retryable": false
+      }
+    },
+    "okf_export": {
+      "availability": "unsupported",
+      "reason": {
+        "code": "not_implemented",
+        "message": "OKF export is not available",
+        "retryable": false
+      }
+    }
+  },
+  "project_views": {
+    "availability": "unsupported",
+    "reason": {
+      "code": "not_implemented",
+      "message": "Project views are not available",
+      "retryable": false
+    }
+  },
+  "contracts": {"fusion_http_error": "1"}
+}
+```
+
+`project.key` is the configured SemSource deployment namespace. Its
+`identity_kind: deployment_namespace` label is load-bearing: it is a workbench scope key, not a
+canonical project entity and never a six-part entity ID. A later project-view change may add a
+separate canonical project identity without reinterpreting this field.
+
+Capability support and readiness are distinct. `ready` means a verified route is implemented and its
+named readiness dependencies are ready; `not_ready` means the verified route exists but a dependency
+is building, degraded, or unavailable; and `unsupported` means a known contract is not implemented.
+The top-level `readiness.overall` is `ready` when source ingestion and the structural index are ready;
+semantic readiness gates `code_search` without downgrading unrelated structural/source surfaces. A
+missing, timed-out, or undecodable optional readiness responder
+produces an unavailable signal with `state: unknown` and a sanitized `status_unavailable` reason; it
+does not fail the whole document or expose raw NATS detail. Index status requests share one bounded
+500-millisecond context and execute concurrently through SemStreams `RequestReady`, whose expected
+no-responder/timeout path does not count against the shared NATS circuit breaker. Source readiness
+combines the aggregate phase with per-source phase, error count, and last-error presence; an
+all-reported aggregate with a source error is degraded, never ready.
+
+A partially ready response therefore keeps supported routes visible while describing why a result is
+not yet authoritative:
+
+```json
+{
+  "contract_version": 1,
+  "readiness": {
+    "overall": "partial",
+    "source": {"available": true, "ready": true, "state": "ready"},
+    "structural_index": {"available": true, "ready": false, "state": "building", "lag": 8},
+    "semantic_index": {
+      "available": false,
+      "ready": false,
+      "state": "unknown",
+      "reason": {
+        "code": "status_unavailable",
+        "message": "Semantic index readiness is unavailable",
+        "retryable": true
+      }
+    }
+  }
+}
+```
+
+Maps make query/action additions backward compatible. Within contract version 1, servers may add
+fields and map entries; clients must ignore unknown fields and capability keys. Removing or
+reinterpreting an existing field, enum value, query key, action key, or readiness signal requires a
+new contract version served through negotiation or a distinct route while version 1 remains stable.
+
 ## Follow-on change sequence
 
 These IDs are proposed planning handles, not created or approved changes:
@@ -240,4 +432,3 @@ changing SemTeams code from SemSource. The headless core remains unchanged throu
 
 1. Should the pinned workbench be a separate container image or static assets embedded into a small
    SemSource web service?
-2. What compatibility/version field should the SemSource browser capability document use?

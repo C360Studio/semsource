@@ -304,7 +304,15 @@ routes, and compatibility notes live in the
 | `GET /source-manifest/sources` | Configured sources |
 | `GET /source-manifest/status` | Ingestion status with per-instance phases |
 | `GET /source-manifest/health` | UI-compatible health envelope derived from source-manifest status |
+| `GET /source-manifest/capabilities` | Versioned SemSource workbench discovery and readiness |
 | `POST /supersession/versionDiff` | Changeset between two versions of a source (JSON `{project, from, to}`) |
+
+The capability document is available in headless mode; it does not require the optional UI profile.
+It identifies its project scope as the configured deployment namespace, reports source, structural,
+and semantic readiness, and enumerates exact supported query/action routes. Implemented routes whose
+dependencies are still building are `not_ready`. Planned OKF, project-view, and governed graph
+projection capabilities are `unsupported` with machine-readable reasons rather than speculative
+links. Contract version 1 permits additive fields and map entries while preserving existing meanings.
 
 ### GraphQL Gateway
 
