@@ -2,12 +2,12 @@
 
 ### Requirement: Optional SemSource UI profile
 
-SemSource SHALL provide an opt-in Compose `ui` profile using a pinned released `semstreams-ui`
-artifact configured as the SemSource workbench. The default core and embedded modes SHALL remain fully
-functional without resolving, pulling, building, validating, or starting any UI dependency.
+SemSource SHALL provide an opt-in Compose `ui` profile using a SemSource-owned workbench artifact built
+from `ui/`. The default core and embedded modes SHALL remain fully functional without resolving,
+pulling, building, validating, or starting any UI dependency.
 
-The released profile SHALL NOT require a sibling source checkout or local JavaScript toolchain. A
-SemSource-specific development source override MAY be available, but it SHALL be explicit and SHALL NOT
+The released profile SHALL use an immutable SemSource UI image and SHALL NOT require a sibling source
+checkout or local JavaScript toolchain. An explicit development path MAY build `./ui`, but it SHALL NOT
 be a production prerequisite.
 
 #### Scenario: Default Compose path remains headless
@@ -18,14 +18,14 @@ be a production prerequisite.
 #### Scenario: Operator explicitly starts the SemSource workbench
 
 - **WHEN** an operator enables the `ui` profile
-- **THEN** the pinned SemSource-compatible workbench artifact and same-origin proxy start alongside the
+- **THEN** the SemSource-owned workbench artifact and same-origin proxy start alongside the
   core stack
 
 #### Scenario: Released workbench requires no sibling checkout
 
 - **GIVEN** no C360 UI source repository or Node toolchain exists on the host
 - **WHEN** the operator starts the released `ui` profile
-- **THEN** it uses the pinned released artifact without attempting a local UI build
+- **THEN** it uses the immutable released SemSource artifact without attempting a local UI build
 
 #### Scenario: Embedded consumer remains UI-independent
 
@@ -38,25 +38,31 @@ be a production prerequisite.
 - **WHEN** an operator enables the repurposed `ui` profile
 - **THEN** it serves the SemSource workbench and does not build, mount, or expose the former SemTeams UI
 
-#### Scenario: Development source override is explicit
+#### Scenario: Development build is explicit
 
-- **GIVEN** a developer explicitly selects the documented SemSource UI source override
+- **GIVEN** a developer explicitly selects the documented local UI build path
 - **WHEN** the `ui` profile is rendered
-- **THEN** it uses that development context without changing the pinned released default
+- **THEN** it builds `./ui` without changing the immutable released default
+
+#### Scenario: Donor paths are absent
+
+- **WHEN** the released and development UI profiles are rendered
+- **THEN** neither configuration references `../semteams`, `../semstreams-ui`, or another donor UI
 
 ### Requirement: Workbench and headless release evidence
 
-SemSource SHALL maintain independent release evidence for the headless core and the pinned `ui`
-profile. The UI smoke SHALL actively verify the shell, SemSource health/source status, query
-reachability, and accessible graph drill-down against a real SemSource backend. The headless smoke
-SHALL prove the same backend starts and serves its non-UI contracts without any UI artifact.
+SemSource SHALL maintain independent release evidence for the headless core and the SemSource-owned
+`ui` profile. The UI smoke SHALL actively verify the shell, SemSource health/source status, query
+reachability, accessible result/detail navigation, and the advertised graph state against a real
+SemSource backend. The headless smoke SHALL prove the same backend starts and serves its non-UI
+contracts without any UI artifact.
 
 #### Scenario: Pinned workbench compatibility is tested
 
-- **GIVEN** the released `ui` profile is started with its default pinned artifact
+- **GIVEN** the released `ui` profile is started with its immutable SemSource artifact
 - **WHEN** the SemSource workbench smoke runs
 - **THEN** it verifies the workbench shell, authoritative readiness, source status, search or query
-  reachability, and an entity selection through the accessible navigator
+  reachability, accessible search result/detail selection, and the advertised graph state
 
 #### Scenario: Headless release path is tested independently
 
@@ -97,10 +103,10 @@ return non-JSON text.
 
 ### Requirement: Light Playwright UI-profile smoke
 
-SemSource SHALL provide a lightweight Playwright e2e smoke for the `ui` profile that uses the pinned
-SemSource workbench artifact, actively polls the Caddy entry point, and asserts the shell and SemSource
-backend routes are reachable. The smoke SHALL have bounded deadlines and actionable failure messages
-that include the last observed HTTP response for failed endpoint polls.
+SemSource SHALL provide a lightweight Playwright e2e smoke for the `ui` profile that uses the
+SemSource-owned Playwright dependency, actively polls the Caddy entry point, and asserts the shell and
+SemSource backend routes are reachable. The smoke SHALL have bounded deadlines and actionable failure
+messages that include the last observed HTTP response for failed endpoint polls.
 
 SemSource SHALL also provide a one-command smoke target that starts the `ui` profile, runs the
 Playwright assertions, and tears the profile down by default. The released smoke path SHALL NOT require
@@ -109,7 +115,7 @@ preflight only the prerequisites for that override.
 
 #### Scenario: UI profile smoke proves the operator path
 
-- **GIVEN** the `ui` profile stack is running with its pinned artifact
+- **GIVEN** the `ui` profile stack is running with its SemSource-owned artifact
 - **WHEN** the Playwright smoke is executed against the configured Caddy URL
 - **THEN** it verifies `/health`, `/source-manifest/status`, `/graphql`, and `/` through the same origin
   an operator uses
@@ -131,6 +137,12 @@ preflight only the prerequisites for that override.
 - **GIVEN** no sibling UI checkout or local Node toolchain exists
 - **WHEN** an operator runs the released UI-profile smoke target
 - **THEN** it starts and validates the pinned artifact without local UI preflight failure
+
+#### Scenario: Smoke owns its Playwright dependency
+
+- **WHEN** the SemSource UI smoke resolves Playwright
+- **THEN** it uses the dependency declared and locked under `ui/`
+- **AND** it does not resolve a SemTeams or donor checkout
 
 ## REMOVED Requirements
 

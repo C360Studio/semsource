@@ -1,5 +1,23 @@
 ## ADDED Requirements
 
+### Requirement: SemSource owns the reference workbench
+
+The optional workbench SHALL be implemented, tested, packaged, and released from the SemSource
+repository under `ui/`. SemStreams UI, SemSpec, SemDragon, and SemConnect MAY provide audited donor
+behavior, but the workbench SHALL NOT depend on their source trees, packages, build outputs, images, or
+release processes.
+
+Ported behavior SHALL become locally owned and SHALL be protected by SemSource behavior tests. A
+future shared package or upstream reference MAY be proposed only after this workbench proves a stable
+contract; it is not part of this capability.
+
+#### Scenario: Donor repositories are unavailable
+
+- **GIVEN** no sibling sem* UI checkout exists
+- **WHEN** the SemSource workbench is built and tested
+- **THEN** its source, dependencies, fixtures, tests, and artifact remain complete
+- **AND** no donor repository is resolved at build time or runtime
+
 ### Requirement: Project-first SemSource workbench
 
 The optional SemSource workbench SHALL lead with project identity, source status, readiness, freshness,
@@ -119,13 +137,26 @@ SHALL identify the same entity and expose its details.
 - **WHEN** a keyboard user searches results and selects an entity through the accessible navigator
 - **THEN** the graph selection and entity detail surface update without requiring a canvas click
 
-### Requirement: Explicit directed graph projection
+### Requirement: Capability-gated explicit directed graph projection
 
-The workbench graph drill-down SHALL consume explicit nodes, directed relationships, property facts,
-evidence metadata, and a query or view revision from the governed backend query contract. It SHALL
-preserve opposite-direction and parallel-predicate relationships and SHALL NOT infer relationship
-semantics from the string shape of a property value. The revision SHALL trigger synchronization even
-when entity and relationship identifiers are stable.
+When SemSource advertises `graph_projection` as ready, the graph drill-down SHALL consume explicit
+nodes, directed relationships, property facts, evidence metadata, and a query or view revision from
+the governed backend query contract. It SHALL preserve opposite-direction and parallel-predicate
+relationships and SHALL NOT infer relationship semantics from the string shape of a property value.
+The revision SHALL trigger synchronization even when entity and relationship identifiers are stable.
+
+When `graph_projection` is unsupported or not ready, the workbench SHALL show the supplied concrete
+reason, SHALL remain useful through supported non-graph capabilities, and SHALL NOT request, infer, or
+synthesize a replacement graph payload.
+
+#### Scenario: Governed graph projection is unavailable
+
+- **GIVEN** SemSource advertises `graph_projection` as unsupported with reason
+  `upstream_contract_pending`
+- **WHEN** the workbench loads
+- **THEN** it presents source, readiness, project, and search surfaces that are supported
+- **AND** it shows graph drill-down as unavailable with the supplied reason
+- **AND** it does not request or infer graph nodes or relationships
 
 #### Scenario: Parallel directed relationships are rendered
 

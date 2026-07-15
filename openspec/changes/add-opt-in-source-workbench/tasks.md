@@ -1,39 +1,33 @@
-## 1. Accept and record the cross-repo contract
+## 1. Repair and accept SemSource-local ownership
 
-- [ ] 1.1 Open and obtain both-owner acceptance of a coordinated `semstreams-ui` OpenSpec change for
-      the best-of inventory, canonical graph surface, SemSource product profile, and released artifact.
-      - Progress (2026-07-15): the contract request is filed as
-        [semstreams-ui#2](https://github.com/C360Studio/semstreams-ui/issues/2), and SemSource architect
-        review approves the issue scope. Shared UI owner acceptance and a linked coordinated OpenSpec
-        change remain pending.
-      - Test: the linked change names the audited source implementations, repository owners, behavioral
-        gates, and release handoff with architect sign-off from SemSource and shared UI ownership.
-- [ ] 1.2 Record the accepted headless-default/workbench ownership split in ADR-0009, including the
-      archived `add-ui-profile` D1 and D2 decisions it supersedes and the breaking `ui` flag takeover.
-      - Progress (2026-07-15): ADR-0009 is Proposed and records the SemSource decision. It remains
-        unaccepted until task 1.1 obtains shared-owner sign-off.
-      - Test: ADR review confirms the decision, alternatives, consequences, and cross-repo owners match
-        both accepted OpenSpec changes.
+- [x] 1.1 Replace the shared-UI ownership model in the proposal, design, specs, and integration notes
+      with SemSource ownership of `ui/`, its test toolchain, Compose integration, and release image.
+      - Test: architect review finds no cross-repo runtime, build, package, acceptance, or release
+        dependency and confirms the preserved headless and SemStreams substrate boundaries.
+- [x] 1.2 Revise ADR-0009 to record the accepted SemSource-owned optional workbench, the breaking `ui`
+      flag takeover, and the archived `add-ui-profile` D1/D2 decisions it supersedes.
+      - Test: ADR review confirms ownership, alternatives, consequences, rollback, and #533 scope match
+        the repaired OpenSpec change.
+- [x] 1.3 Correct and close
+      [semstreams-ui#2](https://github.com/C360Studio/semstreams-ui/issues/2) as superseded, and mark the
+      old UI ask as historical donor evidence rather than a delivery request.
+      - Test: the issue records the corrected local-ownership decision and no active SemSource task
+        depends on shared UI owner acceptance.
 
-## 2. Gate the companion canonical UI change
+## 2. Lock the local best-of architecture
 
-- [ ] 2.1 Review the companion inventory and verify that `semstreams-ui` is the canonical destination,
-      with the selected SemSpec, SemDragon, SemConnect, and SemStreams UI behaviors represented.
-      - Test: the accepted inventory maps every D4 concern to behavioral acceptance tests and records
-        rejected behavior, including SemSpec's multiword-NLQ heuristic.
-- [ ] 2.2 Verify the companion contract covers explicit directed multi-predicate relationships,
-      property facts, real evidence fields, revision synchronization, and no string-shape inference.
-      - Test: shared contract tests cover opposite directions, parallel predicates, literal ID-like
-        values, unknown evidence, same-ID attribute updates, and retraction/deletion.
-- [ ] 2.3 Verify the companion behavioral suite covers renderer initialization failure, deterministic
-      seeded layout, ForceAtlas worker cleanup/restart, stale search cancellation, partial loading,
-      disconnected state, responsive evidence access, and product-profile isolation.
-      - Test: each behavior has a named regression test; tests assert behavior rather than source-file
-        lineage.
-- [ ] 2.4 Verify the SemSource profile imports the canonical graph model, renderer, adapter, and layout
-      rather than defining profile-local Sigma, Graphology, transform, or worker copies.
-      - Test: a static dependency check and svelte-reviewer inspection find no duplicate graph stack in
-        the SemSource profile.
+- [ ] 2.1 Review the D4 inventory and verify every selected SemSpec, SemDragon, SemConnect, and
+      SemStreams UI behavior names donor evidence, local destination, port rationale, and rejected
+      behavior.
+      - Test: architect and svelte-reviewer confirm the inventory does not treat a donor repository as
+        canonical or hide an unsafe transform behind copied code.
+- [ ] 2.2 Define the local module boundary for contracts, API clients, state, project/readiness/source
+      components, search, graph-unavailable state, and later graph modules under `ui/src/lib/`.
+      - Test: a dependency check finds no imports, source paths, containers, or packages from donor UI
+        repositories.
+- [ ] 2.3 Specify the owned UI gates: format, lint, Svelte check, unit/component, accessibility, build,
+      Playwright, and production image verification.
+      - Test: each gate has a SemSource-owned command and no SemTeams Node or Playwright dependency.
 
 ## 3. Define and implement SemSource-owned browser contracts
 
@@ -41,100 +35,107 @@
       property facts, evidence/provenance, and query revision before designing an adapter.
       - Test: architect contract report maps each required field to a live response and test, or records
         the missing framework-shaped field.
-- [x] 3.2 If the governed query contract is incomplete, record the gap in
-      `docs/upstream/semstreams-asks.md`, file the SemStreams issue, and block workbench release rather
-      than implementing a parallel SemSource graph projection.
-      - Test: each missing field has an upstream issue link and the SemSource release task depends on
-        its adopted and live-tested governed query contract. Any decision to omit graph drill-down
-        requires a formal amendment to this change and its `source-workbench` specification.
+- [x] 3.2 Record the incomplete governed projection in `docs/upstream/semstreams-asks.md`, file
+      [semstreams#533](https://github.com/C360Studio/semstreams/issues/533), and prohibit a parallel
+      SemSource graph projection.
+      - Test: `graph_projection` remains unsupported until the adopted contract is live-tested; this
+        blocks graph drill-down acceptance but not the source/readiness/search MVP.
 - [x] 3.3 Specify `GET /source-manifest/capabilities` as the versioned SemSource workbench response for
-      product/project identity,
-      authoritative readiness, query surfaces, supported/unavailable actions, and project-view
-      availability without importing UI types into the Go backend.
-      - Test: architect review approves JSON examples for ready, partially ready, unsupported, and
-        backward-compatible additive states, and confirms `project.key` is a deployment-namespace
-        scope rather than a six-part entity ID.
-- [x] 3.4 Write failing Go handler tests for the capability response in headless operation, including
+      product/project identity, authoritative readiness, query surfaces, actions, and project views.
+      - Test: JSON examples cover ready, partial, unsupported, additive states, and the
+        deployment-namespace project key.
+- [x] 3.4 Write failing Go handler tests for capability discovery in headless operation, including
       partial readiness and unavailable optional actions.
       - Test: focused tests fail before implementation for every capability-contract scenario.
-- [x] 3.5 Implement the capability response through existing SemSource HTTP/component patterns and wrap
-      I/O errors with operation context.
+- [x] 3.5 Implement capability discovery through existing SemSource HTTP/component patterns.
       - Test: focused handler tests and `go test ./...` pass.
 - [x] 3.6 Run go-reviewer assessment for context handling, errors, product boundaries, compatibility,
       and advertised-surface evidence.
       - Test: go-reviewer signs off with no unresolved blocking findings.
 
-## 4. Accept the final shared workbench artifact
+## 4. Build the SemSource-owned non-graph MVP with TDD
 
-- [ ] 4.1 Verify the companion SemSource profile composes project/source status, readiness, inventory,
-      search, and graph drill-down from the capability response without probing unadvertised routes.
-      - Test: request-contract tests cover ready, partial, unsupported, empty, disconnected, and
-        query-not-ready states against SemSource-compatible fixtures.
-- [ ] 4.2 Verify keyboard and screen-reader navigation exposes roles/names, focus and selected state,
-      relationship source/predicate/target semantics, evidence labels, and synchronized detail
-      announcements at desktop and narrow widths.
-      - Test: component and Playwright accessibility assertions pass without using canvas-only test
-        hooks.
-- [ ] 4.3 Run svelte-reviewer assessment for Svelte 5 runes, evidence fidelity, directed semantics,
-      attribute refresh, accessibility, responsive behavior, and failure UX.
-      - Test: svelte-reviewer signs off with no unresolved blocking findings.
-- [ ] 4.4 Publish the final versioned `semstreams-ui` artifact only after the SemSource profile and all
-      canonical graph gates pass; record its immutable version and digest.
-      - Test: artifact build is reproducible, reports its digest, and starts without a source checkout.
+- [ ] 4.1 Scaffold `ui/` as a Svelte 5 strict-TypeScript application with its own package lock,
+      format/lint/check/unit/component/Playwright commands, lightweight local styling, and production
+      Dockerfile.
+      - Test: the first shell test fails before implementation; format, lint, check, unit, and build
+        pass afterward without a sibling checkout.
+- [ ] 4.2 Add typed version-1 capability parsing and a classified HTTP client for ready, partial,
+      unsupported, additive-unknown, incompatible-version, invalid-payload, and disconnected states.
+      - Test: contract fixtures fail before implementation and cover every state without probing
+        unadvertised routes.
+- [ ] 4.3 Implement the project-first shell with SemSource identity, project namespace, readiness,
+      source inventory, project summary, and concrete unavailable cards for project views, OKF, and
+      graph projection.
+      - Test: component tests cover ready, partial, empty, degraded, unsupported, narrow-width, and
+        disconnected rendering with accessible names and focus order.
+- [ ] 4.4 Implement fusion search/list/detail using only advertised capability URLs, preserving
+      readiness, provenance, truncation, and classified 400/503/504 behavior.
+      - Test: request, miss, empty, truncated, partial, and error fixtures pass; absent evidence stays
+        unknown rather than being manufactured.
+- [ ] 4.5 Add local request-generation plus `AbortController` cancellation so stale search or bootstrap
+      responses cannot replace newer state.
+      - Test: controlled deferred-response tests prove cancellation and out-of-order suppression.
+- [ ] 4.6 Run svelte-reviewer assessment for Svelte 5 runes, contract fidelity, accessibility,
+      responsive behavior, cancellation, and failure UX.
+      - Test: no unresolved blocking findings remain before Compose integration.
 
-## 5. Make the breaking `ui` profile migration
+## 5. Prepare canonical local graph behavior without bypassing #533
 
-- [ ] 5.1 Document the old-to-new mapping before implementation: SemSource's `ui` flag changes from a
-      sibling SemTeams checkout to the SemSource workbench, and SemTeams owns its replacement packaging.
-      - Test: architect and technical-writer review confirm the migration, affected command, unaffected
-        headless consumers, rollback, and cross-repo handoff are explicit.
-- [ ] 5.2 Replace the existing Compose `ui` service target with the pinned accepted `semstreams-ui`
-      artifact; do not add a separate `workbench` service or profile.
-      - Test: rendered config assigns the SemSource workbench only to `ui`; default startup succeeds
-        with an intentionally unavailable UI image override and never resolves or pulls it; HTTP, MCP,
-        readiness, and graph query remain available.
-- [ ] 5.3 Extend the same-origin proxy only for the workbench shell and existing SemSource health,
-      source-manifest, search, GraphQL, MCP, metrics, and graph routes.
-      - Test: proxy contract tests exercise every advertised existing route, include no unshipped OKF
-        or project-view route, reject fallthrough to misleading UI HTML, and include no stale
-        SemTeams-specific route.
-- [ ] 5.4 Replace or rename `UI_CONTEXT` with an explicit SemSource development-only source override
-      without making it a released-workbench prerequisite.
-      - Test: the pinned profile starts with no sibling checkout; an explicit SemSource override
-        renders the documented development context, and the former SemTeams default is absent.
-- [ ] 5.5 Record the release-note and SemTeams handoff item without editing the SemTeams repository.
-      - Test: the handoff names the changed command, headless integration path, owning team, and
-        previous-release rollback option, and links the SemTeams team's acknowledgment.
+- [ ] 5.1 Define explicit local graph contract fixtures for nodes, directed relationships, property
+      facts, evidence, and view revision, but do not adapt fusion v1 into this shape.
+      - Test: fixtures cover opposite directions, parallel predicates, ID-like literals, unknown
+        evidence, same-ID attribute updates, revision-only updates, and retraction/deletion.
+- [ ] 5.2 Port the selected renderer/layout/accessibility behaviors into local modules only after the
+      explicit fixtures fail, keeping the live graph capability disabled while #533 is open.
+      - Test: unit/component tests cover deterministic placement, renderer initialization failure,
+        worker cleanup/restart, attribute refresh, and synchronized keyboard/list/detail selection.
+- [ ] 5.3 Enable the live graph adapter only after semstreams#533 is adopted and live-tested.
+      - Test: a real SemSource compatibility fixture proves supplied direction, predicates, evidence,
+        identity, retraction, and view revision without inference.
 
-## 6. Prove headless and workbench behavior
+## 6. Make the breaking `ui` profile migration
 
-- [ ] 6.1 Add a headless smoke assertion that no workbench image, checkout, Node process, proxy, or UI
+- [ ] 6.1 Document the old-to-new mapping: SemSource's `ui` flag changes from a sibling SemTeams
+      checkout to the SemSource-owned workbench; SemTeams owns replacement packaging.
+      - Test: architect and technical-writer confirm the changed command, unaffected headless path,
+        owner handoff, and rollback.
+- [ ] 6.2 Replace the Compose `ui` service with the SemSource-owned production image and an explicit
+      `./ui` development build; remove `UI_CONTEXT`, sibling mounts, and donor images.
+      - Test: default Compose renders with an intentionally unavailable UI image because the omitted
+        profile never resolves it; the `ui` profile references only SemSource-owned paths/artifacts.
+- [ ] 6.3 Keep Caddy limited to the workbench shell and advertised SemSource health, source-manifest,
+      fusion, GraphQL, MCP, metrics, and raw graph routes.
+      - Test: route tests reject fallthrough to misleading UI HTML and contain no stale SemTeams,
+        flow-builder, trajectory, or unshipped OKF/project-view routes.
+- [ ] 6.4 Update `task ui:e2e` and `task ui:smoke` to use the owned UI Playwright dependency and
+      production image/development build, never SemTeams tooling.
+      - Test: preflight and execution succeed with no sibling checkout and include final HTTP/UI state
+        on forced failures.
+
+## 7. Prove headless and workbench behavior
+
+- [ ] 7.1 Add a headless smoke assertion that no UI image, source build, Node process, proxy, or UI
       registry credential is required while HTTP, MCP, readiness, and graph query remain available.
-      - Test: the core smoke passes with no UI checkout/toolchain and an unreachable workbench image.
-- [ ] 6.2 Update `task ui:smoke` in place to use the pinned artifact and cover authoritative readiness,
-      source inventory, search/query, keyboard entity selection, graph/detail synchronization, and
-      concrete failures.
-      - Test: the smoke passes against real SemSource and reports the final HTTP/UI state on a forced
-        readiness failure.
-- [ ] 6.3 Add a live attribute-refresh regression proving changed evidence is visible when entity and
-      relationship IDs remain stable.
-      - Test: Playwright observes the new provenance/freshness value without a full page reload.
+      - Test: core smoke passes with an intentionally unreachable UI image and no local Node toolchain.
+- [ ] 7.2 Add Playwright coverage against real SemSource for shell branding, capability bootstrap,
+      readiness, source inventory, search, keyboard result/detail selection, and graph-unavailable
+      state.
+      - Test: tests use visible accessible UI, not canvas-only hooks, and pass at desktop and narrow
+        widths.
+- [ ] 7.3 Add production-image evidence tying the tested image to its SemSource commit, version, and
+      immutable digest.
+      - Test: the digest tested by SemSource matches the profile pin; mutable `latest` is not accepted.
 
-## 7. Documentation and release gates
+## 8. Documentation and release gates
 
-- [ ] 7.1 Update operator docs with the default headless mode, optional SemSource `ui` mode, SemTeams
-      external-consumer handoff, and proposed not-yet-approved follow-ons: `materialize-project-views`,
-      `add-okf-interop-mvp`, and `add-one-action-local-start`.
-      - Test: technical-writer review confirms commands, ownership, optionality, dependency order, and
-        non-goals match the implemented profile, and `semteams-ui-profile-feedback.md` is marked as
-        historical evidence.
-- [ ] 7.2 Update advertised-surface coverage only after the repurposed `ui` profile and routes are
-      proven.
-      - Test: every newly advertised command and route maps to a concrete automated assertion.
-- [ ] 7.3 Run SemSource gates: `openspec validate add-opt-in-source-workbench --strict`, `task lint`,
-      `go vet ./...`, `go test ./...`, the core e2e suite, and the workbench smoke.
-      - Test: all commands pass with no revive warnings.
-- [ ] 7.4 Run the companion UI format, lint, Svelte check, unit/component, build, accessibility, and live
-      SemSource Playwright gates against the exact pinned artifact.
-      - Test: the release digest tested by SemSource matches the artifact recorded in the workbench
-        profile.
+- [ ] 8.1 Update operator docs with default headless mode, optional SemSource `ui` mode, SemTeams
+      consumer handoff, local development, rollback, and proposed follow-on changes.
+      - Test: technical-writer confirms commands, ownership, optionality, and non-goals match the
+        implementation; former UI integration notes are clearly historical.
+- [ ] 8.2 Update advertised-surface coverage only after the repurposed profile and routes are proven.
+      - Test: every newly advertised command and route maps to an automated assertion.
+- [ ] 8.3 Run SemSource gates: strict OpenSpec validation, `task lint`, `go vet ./...`,
+      `go test ./...`, core e2e, owned UI format/lint/check/unit/build, workbench Playwright, headless
+      smoke, and production-image smoke.
+      - Test: all commands pass with no revive warnings or unresolved reviewer findings.

@@ -1,39 +1,40 @@
 ## Context
 
-SemSource currently has an optional `ui` Compose profile that targets a sibling SemTeams UI checkout.
+SemSource currently has an optional `ui` Compose profile that targets a sibling SemTeams checkout.
 The archived `add-ui-profile` change intentionally treated that profile as integration plumbing and
-rejected a SemSource-focused frontend. That decision was appropriate for proving SemTeams as a
-consumer, but it leaves standalone SemSource users without a product surface for source readiness,
-search, evidence, project views, and interoperability actions.
+rejected a SemSource-focused frontend. That decision proved SemTeams could consume SemSource, but it
+does not give standalone SemSource users a focused surface for source readiness, search, evidence,
+project views, and interoperability actions.
 
-The C360 repositories also contain several copies of the Svelte Sigma/Graphology graph explorer. The
-shared work is substantial, but `semstreams-ui` is currently a private application rather than a
-published component library, and downstream copies contain improvements that are not present in its
-version. The workbench must consolidate that work rather than create another copy.
+The C360 repositories contain several descendants of the same Svelte Sigma/Graphology interface.
+No copy is complete: SemSpec has the strongest renderer lifecycle and panel shell, SemDragon has
+stronger selection and source summaries, SemConnect has deterministic placement and responsive
+patterns, and SemStreams UI has mature search and worker tests. Some copies also infer edges from
+ID-shaped literals, fabricate evidence, use random layout, or miss attribute-only updates.
 
-This change records a product-boundary pivot: SemSource owns an optional standalone workbench
-experience, while remaining headless by default. It supersedes both archived `add-ui-profile`
-decisions without rewriting that history: SemTeams no longer owns the app launched by SemSource, and
-`../semteams/ui` is no longer the default UI checkout.
+The corrected product decision is to build a SemSource-owned reference workbench under `ui/` by
+porting selected behavior deliberately. Donor repositories are evidence and design inputs only. They
+are not runtime, build, package, acceptance, or release dependencies.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
 - Keep headless and embedded SemSource complete and UI-free by default.
-- Repurpose the explicit standalone `ui` profile to use a pinned released SemSource UI artifact.
-- Reuse `semstreams-ui` as the canonical shared shell and graph-visualization owner.
-- Keep source, evidence, materialized-view, and OKF semantics in SemSource backend contracts.
-- Make the graph a drill-down from useful project views rather than the whole product experience.
-- Establish correctness and accessibility gates for the canonical graph surface.
+- Repurpose the explicit `ui` profile for a SemSource-owned optional workbench.
+- Build and test the workbench in this repository under `ui/`.
+- Port the strongest audited behaviors from sem* product UIs with local ownership after port.
+- Keep source, evidence, materialized-view, OKF, and action semantics in SemSource backend contracts.
+- Make project/source readiness and search useful before graph drill-down is available.
+- Establish correctness, accessibility, and failure-state gates for later governed graph support.
 
 **Non-Goals:**
 
 - Changing SemTeams code or deciding how SemTeams packages its own UI.
+- Publishing a generic Svelte component package in this change.
+- Depending on sibling UI checkouts or donor packages at runtime or build time.
 - Implementing materialized views, OKF interoperability, or one-action installation here.
-- Requiring an npm component package before the first released workbench profile.
 - Moving source interpretation or graph authority into Svelte.
-- Eliminating every downstream UI copy as part of the SemSource implementation.
 - Adding production authentication, TLS, or arbitrary repository writes.
 
 ## Decisions
@@ -41,12 +42,11 @@ decisions without rewriting that history: SemTeams no longer owns the app launch
 ### D1 - Headless remains the default and complete product contract
 
 `docker compose up`, direct binary execution, MCP clients, and embedded sem* consumers SHALL NOT
-resolve, pull, build, or start a UI artifact. Workbench activation is explicit through the existing
-optional `ui` profile. All meaningful workbench actions remain backed by HTTP, MCP, GraphQL, or CLI
-contracts.
+resolve, pull, build, validate, or start a UI artifact. Workbench activation is explicit through the
+existing optional `ui` profile.
 
-This preserves SemSource's role as an optional service inside SemTeams, SemSpec, SemDragon, SemOps,
-and other products. A browser improves standalone usability; it is not required for correctness.
+Every state-changing or artifact-producing workbench action uses a SemSource-owned backend contract
+available to non-UI automation. Browser-local layout, filter, and selection controls may remain local.
 
 ### D2 - SemSource takes ownership of the existing `ui` profile
 
@@ -58,377 +58,192 @@ docker compose --profile ui up     optional SemSource workbench
 ```
 
 The existing `ui` profile becomes the SemSource workbench; a second `workbench` profile is not
-introduced. This is an intentional breaking change for users who used SemSource's profile to launch
-SemTeams. SemTeams now owns that application packaging and can connect to SemSource through the
-headless contracts. Embedded consumers that never selected the profile are unaffected.
+introduced. This intentionally breaks the former behavior that launched SemTeams. SemTeams now owns
+its own application packaging and connects through SemSource's headless contracts.
 
-### D3 - SemSource owns semantics; `semstreams-ui` owns reusable presentation
+### D3 - SemSource owns the workbench source and artifact
 
-SemSource owns project/source identity, readiness meaning, source inventory, provenance, authority,
-freshness, materialized-view definitions, OKF behavior, backend APIs, and workbench acceptance tests.
+SemSource owns:
 
-`semstreams-ui` owns the reusable Svelte shell, graph renderer, layouts, generic search/filter/detail
-components, accessible graph navigation, product-profile seam, and released UI artifact. A
-SemSource-specific product profile can live in that UI repository while its product contract remains
-defined and tested from SemSource.
+- the Svelte 5 application under `ui/`;
+- product/project/source composition and browser contract types;
+- the local canonical graph model, renderer, adapter, layout, and accessible navigator;
+- evidence fidelity, failure UX, component tests, and Playwright acceptance;
+- Compose/Caddy integration and the released UI image; and
+- maintenance of code deliberately ported from donor repositories.
 
-SemSource SHALL NOT copy the renderer into this repository. The first delivery may consume a pinned
-application image; publishing a standalone component package is optional follow-up work.
+SemStreams owns the governed graph projection contract. SemTeams owns its application. SemStreams UI,
+SemSpec, SemDragon, and SemConnect are audited donors only; SemSource SHALL NOT import their source,
+packages, build outputs, containers, or release artifacts.
 
-### D4 - Canonicalize the best graph implementation before workbench dependency
+The local implementation may later serve as a reference for a shared package or upstream
+canonicalization. That extraction requires a separate decision after at least one external consumer
+and a stable API exist.
 
-The shared UI team must compare the live graph implementations across `semstreams-ui`, SemTeams,
-SemSpec, SemDragon, and SemConnect. The inventory records the strongest implementation and tests for:
+### D4 - Port a tested best-of composite into `ui/`
 
-- directed and multi-edge graph modeling;
-- renderer lifecycle and attribute-aware updates;
-- layout start, stop, refresh, and failure behavior;
-- filters, selection, detail, search, and community navigation;
-- truthful confidence, provenance, authority, and timestamp presentation;
-- loading, empty, disconnected, and query-not-ready states;
-- keyboard and screen-reader alternatives to WebGL interaction;
-- responsive layout, test seams, performance, and large-project evidence; and
-- packaging, tokens, and product-profile boundaries.
+The initial audit selects behavior rather than declaring any donor application canonical:
 
-The initial live-repo audit selects this composite rather than treating any current copy as complete:
+- **Renderer lifecycle:** SemSpec `ui/src/lib/components/graph/SigmaCanvas.svelte` supplies the SSR-safe
+  `MultiDirectedGraph` lifecycle, initialization failure state, refresh, and cleanup reference.
+- **Selection:** SemDragon's Sigma canvas supplies selected/neighbor emphasis and z-order behavior.
+- **Search focus:** SemConnect's Sigma canvas supplies focused result sets instead of only selected
+  adjacency.
+- **Initial layout:** SemConnect supplies deterministic ID-seeded placement. Random positions and its
+  quadratic degree work are rejected.
+- **Force layout:** SemStreams UI `src/lib/utils/sigma-layout.ts` supplies bounded worker
+  start/stop/restart behavior and tests.
+- **Panel shell:** SemSpec layout components supply keyboard resize, input-safe shortcuts, persistence,
+  and reduced-motion behavior when graph/detail panels justify the complexity.
+- **Responsive access:** SemConnect route and app styles supply stack/drawer access that keeps evidence
+  and filters reachable.
+- **Source overview:** SemDragon graph summary and SemStreams UI overview supply the information
+  architecture without their product vocabulary.
+- **Search lifecycle:** SemStreams UI `NlqSearchBar.svelte` tests supply cancellation and elapsed-state
+  behavior. SemSource implements local request generation and `AbortController` ownership.
+- **Partial failure:** SemConnect settled refresh behavior supplies independent loading/error state;
+  its semantic fallback and demo data are rejected.
+- **Test foundation:** SemStreams UI unit/attack patterns inform equivalent SemSource-owned
+  contract/component/Playwright gates.
 
-| Concern | Canonical source behavior |
-| --- | --- |
-| Renderer structure | SemSpec: lazy initialization, `MultiDirectedGraph`, failure state, layout refresh |
-| Selection | SemDragon: explicit selected-node emphasis and selected/neighbor z-ordering |
-| Search focus | SemConnect: focused result sets rather than only selected-node adjacency |
-| Initial layout | SemConnect: deterministic ID-seeded positions, without its quadratic degree calculation |
-| Force layout | `semstreams-ui`: worker-based bounded ForceAtlas2 controller |
-| Panel shell | SemSpec: persisted panels, keyboard resize, safe shortcuts, and reduced-motion handling |
-| Responsive access | SemConnect: stack/drawer behavior that keeps filters and evidence reachable |
-| Filters | Composite: SemStreams dimensions/previews, SemDragon counts, SemConnect state, SemSpec totals |
-| Entity/evidence detail | Composite: SemSpec identity/copy, SemConnect source-per-fact, shared context action |
-| Source overview | SemDragon source/readiness cards plus the compact `semstreams-ui` graph overview |
-| Search lifecycle | `semstreams-ui`: browse/replace/merge, cancellation, duration, errors, and result list |
-| Partial failure | SemConnect: settled loading, cancellation, partial status, live/hybrid/error states |
-| Test foundation | `semstreams-ui`: unit/attack coverage and the live SemSource Playwright stack |
+The local implementation explicitly rejects:
 
-SemTeams contributes the integration consumer and compatibility surface but no distinct newer graph
-behavior in the audited copy. `semstreams-ui` remains the canonical destination and test harness;
-SemSpec supplies the renderer/layout foundation, with selected interaction and resilience patterns
-ported from SemDragon and SemConnect.
+- SemStreams UI's `graphTransform.ts` ID-shape relationship inference and manufactured evidence;
+- plain undirected `Graph` when directed parallel relationships are required;
+- random initial positions;
+- synchronization based only on entity and relationship IDs;
+- SemSpec's multiword-text-equals-NLQ heuristic; and
+- donor product routes, fixtures, vocabulary, or styling copied without a SemSource contract.
 
-The canonical search behavior explicitly does not adopt SemSpec's heuristic that treats multiword text
-as natural-language intent. Search classification remains a backend contract with visible evidence.
+The first implementation slice does not need Sigma. It proves capability-driven project, readiness,
+source inventory, and search behavior, with graph drill-down truthfully unavailable. Graph code is
+added only behind explicit local contract fixtures and later connected to the governed backend.
 
-Two gates are non-negotiable. Missing evidence values remain unknown rather than being manufactured,
-and stable entity/relationship IDs must not suppress attribute-only updates. The current shared code
-does not yet meet either gate consistently. The canonical graph model must also preserve direction and
-parallel predicates explicitly; it must not infer edges by testing whether a triple object merely looks
-like a six-part entity ID.
+### D5 - The release artifact is SemSource-owned
 
-### D5 - Released UI artifacts replace sibling-checkout requirements
+Source and development builds live at `ui/`. The released profile uses an immutable image built from
+`ui/Dockerfile`, with the intended repository and naming shape:
 
-The `ui` profile pulls a pinned `semstreams-ui` release image or immutable artifact.
-End users do not need a sibling repository checkout, Node installation, or local UI build. A
-SemSource-specific source override such as `SEMSOURCE_UI_CONTEXT` may remain available only for
-development and compatibility tests. The former `UI_CONTEXT` meaning is not a stable production
-contract.
+```text
+ghcr.io/c360studio/semsource-ui:<matching-semsource-version>@sha256:<digest>
+```
 
-The SemSource release pins the compatible artifact version or digest and runs a real SemSource
-Playwright smoke against that pin.
+The development and compatibility path may explicitly build `./ui`. The released profile requires no
+sibling checkout, host Node toolchain, or donor repository. Release evidence records the SemSource
+commit, UI image version/digest, and exact gates run against that digest.
+
+The UI image is independently replaceable but versioned with SemSource compatibility. A mutable
+`latest` tag is not a production acceptance artifact.
 
 ### D6 - Workbench composition is capability-driven
 
-A SemSource-owned browser capability contract tells the shared UI which product identity, readiness,
-query surfaces, materialized views, and actions are available. Unsupported capabilities are absent or
-explicitly unavailable; the UI does not probe SemTeams-only or other product routes and interpret
-expected failures as degraded SemSource.
+`GET /source-manifest/capabilities` tells the UI which product identity, readiness signals, query
+surfaces, project views, and actions exist. Unsupported behavior is absent or explicitly unavailable;
+the UI does not probe SemTeams, flow-builder, trajectory, or other product routes.
 
-This change may start with existing status, source-manifest, search, and graph contracts. Later
-materialized-view and OKF changes extend the capability contract without moving their semantics into
-the UI.
+The first workbench uses supported source inventory/status/summary and fusion search/context routes.
+Later materialized-view and OKF changes extend the capability map without moving their semantics into
+the browser.
 
-### D7 - Project knowledge leads; the graph is drill-down
+### D7 - Project knowledge leads; graph is drill-down
 
-The workbench landing experience prioritizes project/source status, readiness and freshness, search,
-source inventory, and opinionated materialized views when available. The graph explorer supports
-investigation and evidence traversal, but a whole-graph canvas is not the default explanation of a
-project.
+The landing experience prioritizes project/source status, readiness and freshness, search, source
+inventory, and opinionated project views when available. Whole-graph visualization is not the default
+explanation of a project.
 
-The WebGL graph must have a synchronized, accessible entity/result navigator. Automated acceptance
-tests must exercise user-visible list/detail behavior rather than depending only on browser test hooks
-that bypass the canvas.
+When enabled, the WebGL graph has a synchronized keyboard- and screen-reader-accessible entity/result
+navigator. Acceptance tests exercise visible list/detail behavior rather than canvas-only test hooks.
 
 ### D8 - Product actions execute through one backend contract
 
 Future OKF preview/export, import validation, materialized-view refresh, and source actions call the
-same SemSource backend contracts used by CLI and MCP automation. The browser does not implement a
-second codec, planner, evidence model, or authority policy.
+same SemSource backend contracts used by CLI, MCP, or HTTP automation. The browser does not implement
+a second codec, planner, evidence model, or authority policy.
 
-For the initial OKF slice, a browser download is preferred over granting server-side write authority.
-Managed repository publication remains an explicit later mode.
+For the initial OKF slice, a browser download is preferred over server-side write authority. Managed
+repository publication remains a later explicit mode.
 
-### D9 - Explicit graph projection stays in the governed query boundary
+### D9 - SemStreams #533 gates graph drill-down, not the workbench MVP
 
-The workbench needs explicit nodes, directed relationships, property facts, evidence metadata, and a
-query/view revision. Before UI implementation, the architect must audit the live SemStreams graph
-query/gateway contract to determine whether that payload already exists. If it does not, SemSource
-records the framework gap in `docs/upstream/semstreams-asks.md` and raises it with the SemStreams team.
+The beta.145 audit found fusion v1 sufficient for search/list/detail/body/impact views but not for a
+lossless graph projection. Relation references omit target handles, predicates, direction, evidence,
+edge identity, property facts, truncation detail, and a coherent view revision.
 
-The beta.145 audit found that lens-driven fusion v1 already supports the primary workbench
-search/list/detail/body/relations/impact views through SemSource HTTP, but it is not a lossless graph
-projection: relation refs omit target handles, predicates, direction, evidence, and edge identity;
-property facts are absent; relationship truncation is silent; and index readiness is not a coherent
-view revision. The framework gap is recorded as upstream ask 18 and
-[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). Fusion-backed non-graph views
-may proceed; the canonical graph drill-down remains gated on adoption and live validation of that
-additive governed projection contract.
+The framework gap is tracked in
+[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). Until it is adopted and
+live-tested, the capability document reports `graph_projection: unsupported`, and the UI shows a
+concrete unavailable state without requesting or inventing graph data.
 
-SemSource SHALL NOT infer relationships from literal string shape, manufacture evidence, or implement
-a parallel graph substrate to satisfy the UI. The pinned workbench release is blocked until a real
-backend payload and live compatibility test prove the required semantics.
+The non-graph workbench MVP and its SemSource-owned image may ship before #533. Graph-enabled
+drill-down acceptance remains blocked. SemSource SHALL NOT infer relationships from literal string
+shape, manufacture evidence, or implement a parallel graph substrate.
 
-### D10 - Bootstrap the browser with one product-owned HTTP capability document
+### D10 - Bootstrap through one product-owned HTTP document
 
 The workbench bootstraps from `GET /source-manifest/capabilities`. The source-manifest component owns
-this document because it is always present in the headless product, already owns authoritative source
-status and inventory, has access to the graph readiness responders, and is mounted through the
-ServiceManager shared HTTP mux. The endpoint is available without the optional UI profile.
+the document because it is always present in headless SemSource and already owns authoritative source
+status and inventory.
 
-This is a discovery/control document, not a graph-data query. GraphQL remains the browser's
-schema-driven data-exploration surface, MCP remains the agent tool surface, and NATS remains the
-internal readiness/query transport. Using GraphQL for the bootstrap document would make discovery
-depend on a graph gateway whose own availability is being advertised; using MCP would couple a
-browser to agent session semantics; exposing NATS would cross the external-client boundary.
+The version-1 response contains:
 
-The version-1 response has this stable shape:
+- `contract_version` and stable product identity;
+- a deployment-namespace `project.key`, explicitly not a six-part entity ID;
+- source, structural-index, and semantic-index readiness;
+- query and action maps with `ready`, `not_ready`, or `unsupported` availability;
+- project-view availability; and
+- additive contract metadata.
 
-```json
-{
-  "contract_version": 1,
-  "product": {"key": "semsource", "name": "SemSource"},
-  "project": {"key": "acme", "identity_kind": "deployment_namespace"},
-  "readiness": {
-    "overall": "ready",
-    "source": {
-      "available": true,
-      "ready": true,
-      "state": "ready",
-      "source_count": 2,
-      "total_entities": 418,
-      "timestamp": "2026-07-15T15:00:00Z"
-    },
-    "structural_index": {
-      "available": true,
-      "ready": true,
-      "state": "ready",
-      "indexed_revision": 42,
-      "target_revision": 42,
-      "lag": 0
-    },
-    "semantic_index": {
-      "available": true,
-      "ready": true,
-      "state": "ready",
-      "indexed_revision": 42,
-      "target_revision": 42,
-      "lag": 0
-    }
-  },
-  "queries": {
-    "source_inventory": {
-      "availability": "ready",
-      "method": "GET",
-      "href": "/source-manifest/sources",
-      "readiness": ["source"]
-    },
-    "source_status": {
-      "availability": "ready",
-      "method": "GET",
-      "href": "/source-manifest/status",
-      "readiness": ["source"]
-    },
-    "project_summary": {
-      "availability": "ready",
-      "method": "GET",
-      "href": "/source-manifest/summary",
-      "readiness": ["source"]
-    },
-    "predicate_schema": {
-      "availability": "ready",
-      "method": "GET",
-      "href": "/source-manifest/predicates",
-      "readiness": ["source"]
-    },
-    "code_context": {
-      "availability": "ready",
-      "method": "POST",
-      "href": "/code-context/context",
-      "readiness": ["structural_index"]
-    },
-    "code_impact": {
-      "availability": "ready",
-      "method": "POST",
-      "href": "/code-context/impact",
-      "readiness": ["structural_index"]
-    },
-    "code_search": {
-      "availability": "ready",
-      "method": "POST",
-      "href": "/code-context/search",
-      "readiness": ["semantic_index"]
-    },
-    "doc_context": {
-      "availability": "ready",
-      "method": "POST",
-      "href": "/doc-context/context",
-      "readiness": ["structural_index"]
-    },
-    "graph_projection": {
-      "availability": "unsupported",
-      "reason": {
-        "code": "upstream_contract_pending",
-        "message": "The governed fusion graph projection is not available",
-        "retryable": false
-      }
-    }
-  },
-  "actions": {
-    "source_add": {
-      "availability": "ready",
-      "method": "POST",
-      "href": "/source-manifest/sources"
-    },
-    "source_remove": {
-      "availability": "ready",
-      "method": "DELETE",
-      "href": "/source-manifest/sources/{id}"
-    },
-    "okf_import": {
-      "availability": "unsupported",
-      "reason": {
-        "code": "not_implemented",
-        "message": "OKF import is not available",
-        "retryable": false
-      }
-    },
-    "okf_export": {
-      "availability": "unsupported",
-      "reason": {
-        "code": "not_implemented",
-        "message": "OKF export is not available",
-        "retryable": false
-      }
-    }
-  },
-  "project_views": {
-    "availability": "unsupported",
-    "reason": {
-      "code": "not_implemented",
-      "message": "Project views are not available",
-      "retryable": false
-    }
-  },
-  "contracts": {"fusion_http_error": "1"}
-}
-```
+Unknown fields and map keys are additive within version 1. Missing or timed-out optional readiness
+responders degrade only the affected capability with a sanitized reason. The implemented Go contract
+and its tests remain authoritative for the exact wire example.
 
-`project.key` is the configured SemSource deployment namespace. Its
-`identity_kind: deployment_namespace` label is load-bearing: it is a workbench scope key, not a
-canonical project entity and never a six-part entity ID. A later project-view change may add a
-separate canonical project identity without reinterpreting this field.
+### D11 - The workbench owns its test toolchain
 
-Capability support and readiness are distinct. `ready` means a verified route is implemented and its
-named readiness dependencies are ready; `not_ready` means the verified route exists but a dependency
-is building, degraded, or unavailable; and `unsupported` means a known contract is not implemented.
-The top-level `readiness.overall` is `ready` when source ingestion and the structural index are ready;
-semantic readiness gates `code_search` without downgrading unrelated structural/source surfaces. A
-missing, timed-out, or undecodable optional readiness responder
-produces an unavailable signal with `state: unknown` and a sanitized `status_unavailable` reason; it
-does not fail the whole document or expose raw NATS detail. Index status requests share one bounded
-500-millisecond context and execute concurrently through SemStreams `RequestReady`, whose expected
-no-responder/timeout path does not count against the shared NATS circuit breaker. Source readiness
-combines the aggregate phase with per-source phase, error count, and last-error presence; an
-all-reported aggregate with a source error is degraded, never ready.
+The `ui/` directory owns its package lock, format/lint/Svelte checks, unit/component tests, build,
+accessibility assertions, and Playwright dependency. SemSource's `task ui:e2e` and `task ui:smoke` use
+that toolchain or the released image's owned test runner; they never borrow SemTeams dependencies.
 
-A partially ready response therefore keeps supported routes visible while describing why a result is
-not yet authoritative:
-
-```json
-{
-  "contract_version": 1,
-  "readiness": {
-    "overall": "partial",
-    "source": {"available": true, "ready": true, "state": "ready"},
-    "structural_index": {"available": true, "ready": false, "state": "building", "lag": 8},
-    "semantic_index": {
-      "available": false,
-      "ready": false,
-      "state": "unknown",
-      "reason": {
-        "code": "status_unavailable",
-        "message": "Semantic index readiness is unavailable",
-        "retryable": true
-      }
-    }
-  }
-}
-```
-
-Maps make query/action additions backward compatible. Within contract version 1, servers may add
-fields and map entries; clients must ignore unknown fields and capability keys. Removing or
-reinterpreting an existing field, enum value, query key, action key, or readiness signal requires a
-new contract version served through negotiation or a distinct route while version 1 remains stable.
+The live smoke verifies capabilities, readiness, source inventory, search/query behavior, keyboard
+result/detail navigation, and the graph-unavailable state while #533 remains open. Headless smoke
+independently proves the UI profile and image are not resolved.
 
 ## Follow-on change sequence
 
-These IDs are proposed planning handles, not created or approved changes:
+These IDs remain proposed planning handles, not created or approved changes:
 
-- `canonicalize-shared-graph-workbench` (`semstreams-ui`): after the cross-repo contract, deliver the
-  canonical renderer and SemSource profile.
-- `materialize-project-views` (SemSource): after the query/readiness contract, deliver bounded
-  project-scoped materialized context views.
-- `add-okf-interop-mvp` (SemSource): after project views, deliver consume-only import and bounded OKF
-  export.
-- `add-one-action-local-start` (SemSource): after the released workbench artifact, deliver headless
-  start plus an explicit UI option.
+- `materialize-project-views`: bounded project-scoped materialized context views;
+- `add-okf-interop-mvp`: consume-only import plus bounded OKF export; and
+- `add-one-action-local-start`: headless start plus an explicit UI option.
 
-A materialized project view is the project-scoped profile of the design note's generic materialized
-context view. The profile narrows subjects, evidence, revision, and budgets; it is not a second
-abstraction or an OKF page.
+A future `extract-shared-workbench-components` change is considered only after the SemSource UI proves
+a stable model and another product requests an importable contract.
 
 ## Risks / Trade-offs
 
-- **Cross-repo delivery can drift.** → Pin the UI artifact and gate SemSource releases with a real
-  compatibility smoke.
-- **A shared UI can absorb product semantics.** → Keep capability definitions, actions, and acceptance
-  scenarios in SemSource; pass typed data to generic presentation components.
-- **The `ui` flag changes meaning.** → Mark the takeover as breaking, publish the old-to-new mapping,
-  and hand SemTeams packaging to the SemTeams team before release.
-- **Canonicalization can become a large rewrite.** → Inventory and select behavior first; require only
-  the renderer, evidence, accessibility, and product-profile gates needed by the initial workbench.
-- **A graph canvas can dominate the UX because it already exists.** → Make project views and source
-  status the primary navigation and treat visualization as drill-down.
-- **Optional can become untested.** → Run both headless and pinned-workbench smokes in the relevant
-  release gate.
+- **SemSource now owns frontend maintenance.** → Keep the first UI small, contract-driven, and tested;
+  port behaviors selectively rather than copying whole applications.
+- **Donor fixes may diverge.** → Record source provenance and behavior tests; local ownership begins at
+  port time, with future upstreaming handled separately.
+- **The `ui` flag changes meaning.** → Publish the old-to-new mapping and SemTeams handoff.
+- **Graph code could outrun its contract.** → Keep graph unavailable until #533; start with explicit
+  contract fixtures and never adapt fusion v1 into inferred edges.
+- **Optional UI can become untested.** → Run independent headless and owned-workbench release gates.
 
 ## Migration Plan
 
-1. Completed: archive `add-ui-profile` to preserve its SemTeams integration decision as historical
-   truth and seed the current `ui-profile` specification.
-2. Accept the cross-repo contract, then record the breaking ownership pivot and both superseded
-   decisions in ADR-0009.
-3. Complete the cross-product graph UI inventory in a coordinated `semstreams-ui` change.
-4. Prove or obtain the explicit governed graph/evidence/revision query contract.
-5. Fix evidence fidelity, attribute refresh, accessible navigation, and selected canonical behaviors.
-6. Add the SemSource product profile, then publish the final pinned `semstreams-ui` artifact.
-7. Replace the existing Compose `ui` service target with the pinned artifact and publish the SemTeams
-   handoff and release note.
-8. Prove headless and workbench behavior against the same SemSource revision.
-9. Propose the follow-on changes in the dependency order recorded above.
+1. Repair this change and ADR-0009 to record SemSource-local ownership; close the superseded shared-UI
+   coordination issue.
+2. Scaffold `ui/` with its owned Svelte 5, strict TypeScript, unit/component, Playwright, and Docker
+   toolchain.
+3. Implement capability bootstrap, project/readiness/source overview, and graph-unavailable state with
+   failing tests first.
+4. Add fusion search/list/detail with cancellation, stale-response, partial, empty, and error tests.
+5. Replace the Compose/Caddy/Task/Playwright sibling path with the SemSource-owned image and `./ui`
+   development build.
+6. Run adversarial Svelte/accessibility review and live headless/workbench gates.
+7. Publish and pin the exact SemSource UI image digest for release.
+8. Graph fixtures and the local renderer may be prepared independently. After #533 is live, connect
+   the governed adapter and run live graph acceptance.
 
-Operational rollback pins the previous SemSource release or restores the former `ui` service
-definition. The additive capability endpoint may remain inert, and no graph-state migration is
-involved. The independently versioned shared UI artifact is rolled back in `semstreams-ui`, never by
-changing SemTeams code from SemSource. The headless core remains unchanged throughout.
-
-## Open Questions
-
-1. Should the pinned workbench be a separate container image or static assets embedded into a small
-   SemSource web service?
+Rollback pins the previous SemSource release or earlier SemSource UI digest. Neither path changes
+graph state, and the headless core remains unchanged throughout.
