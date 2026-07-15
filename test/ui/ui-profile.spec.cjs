@@ -109,7 +109,10 @@ async function pollGraphQL(request) {
   );
 }
 
-test("ui profile serves SemTeams shell and SemSource routes", async ({ page, request }) => {
+test("ui profile serves the SemSource workbench and advertised routes", async ({
+  page,
+  request,
+}) => {
   const health = await pollJSON(
     request,
     "/health",
@@ -137,6 +140,22 @@ test("ui profile serves SemTeams shell and SemSource routes", async ({ page, req
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
   expect(response, "UI root did not return a response").toBeTruthy();
   expect(response.ok(), `UI root returned HTTP ${response.status()}`).toBe(true);
-  await expect(page.getByTestId("brand-home")).toContainText(/semteams/i);
-  await expect(page.getByTestId("board-page")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "SemSource" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: /overall readiness/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Sources" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Project summary" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Code search" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: /graph drill-down/i }),
+  ).toContainText(/governed.*projection.*not available/i);
 });

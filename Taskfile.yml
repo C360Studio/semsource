@@ -36,18 +36,22 @@ tasks:
   ui:e2e:
     desc: Run Playwright smoke against the running UI profile
     vars:
-      UI_CONTEXT: '{{.UI_CONTEXT | default "../semteams/ui"}}'
       C360_PORT: '{{.C360_PORT | default "3000"}}'
     env:
-      NODE_PATH: '{{.UI_CONTEXT}}/node_modules'
+      NODE_PATH: ui/node_modules
       UI_PROFILE_BASE_URL: 'http://127.0.0.1:{{.C360_PORT}}'
     cmds:
       - >-
-        test -x "{{.UI_CONTEXT}}/node_modules/.bin/playwright" ||
-        (echo "Playwright not found in {{.UI_CONTEXT}}." &&
-        echo "Run npm install there or set UI_CONTEXT to a prepared SemTeams UI checkout." &&
+        test -x "ui/node_modules/.bin/playwright" ||
+        (echo "SemSource-owned Playwright is not installed in ui/." &&
+        echo "Run npm --prefix ui ci." &&
         exit 1)
-      - "{{.UI_CONTEXT}}/node_modules/.bin/playwright test --config test/ui/playwright.config.cjs"
+      - "ui/node_modules/.bin/playwright test --config test/ui/playwright.config.cjs"
+
+  ui:image:verify:
+    desc: Build and verify the SemSource workbench production image
+    cmds:
+      - ./scripts/ui-image-verify.sh
 
   ui:smoke:
     desc: Start the UI profile, run Playwright smoke, then tear it down

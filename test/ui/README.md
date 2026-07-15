@@ -2,7 +2,7 @@
 
 This Playwright smoke belongs to SemSource and checks the SemSource-owned
 `docker compose --profile ui` contract. It intentionally asserts only the shared
-operator shell and SemSource routes, not SemTeams-specific workflows.
+workbench shell and SemSource routes, not consumer-product workflows.
 
 Run the full start/test/teardown smoke:
 
@@ -10,7 +10,7 @@ Run the full start/test/teardown smoke:
 task ui:smoke
 ```
 
-The one-command smoke preflights `UI_CONTEXT`, `Dockerfile.dev`, and the local
+The one-command smoke preflights the SemSource-owned `ui/Dockerfile` and local
 Playwright install before starting Docker.
 
 Or run only the Playwright assertions after the profile is already up:
@@ -20,6 +20,5 @@ docker compose --profile ui up
 task ui:e2e
 ```
 
-The task uses Playwright from the SemTeams UI checkout (`../semteams/ui` by
-default). Override `UI_CONTEXT` or `C360_PORT` when using a different checkout or
-port.
+The task uses Playwright from `ui/node_modules`. Run `npm --prefix ui ci` to
+install it. Override `C360_PORT` when the profile uses a different host port.

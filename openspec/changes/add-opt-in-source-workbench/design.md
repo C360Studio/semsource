@@ -84,36 +84,106 @@ and a stable API exist.
 
 The initial audit selects behavior rather than declaring any donor application canonical:
 
-- **Renderer lifecycle:** SemSpec `ui/src/lib/components/graph/SigmaCanvas.svelte` supplies the SSR-safe
-  `MultiDirectedGraph` lifecycle, initialization failure state, refresh, and cleanup reference.
-- **Selection:** SemDragon's Sigma canvas supplies selected/neighbor emphasis and z-order behavior.
-- **Search focus:** SemConnect's Sigma canvas supplies focused result sets instead of only selected
-  adjacency.
-- **Initial layout:** SemConnect supplies deterministic ID-seeded placement. Random positions and its
-  quadratic degree work are rejected.
-- **Force layout:** SemStreams UI `src/lib/utils/sigma-layout.ts` supplies bounded worker
-  start/stop/restart behavior and tests.
-- **Panel shell:** SemSpec layout components supply keyboard resize, input-safe shortcuts, persistence,
-  and reduced-motion behavior when graph/detail panels justify the complexity.
-- **Responsive access:** SemConnect route and app styles supply stack/drawer access that keeps evidence
-  and filters reachable.
-- **Source overview:** SemDragon graph summary and SemStreams UI overview supply the information
-  architecture without their product vocabulary.
-- **Search lifecycle:** SemStreams UI `NlqSearchBar.svelte` tests supply cancellation and elapsed-state
-  behavior. SemSource implements local request generation and `AbortController` ownership.
-- **Partial failure:** SemConnect settled refresh behavior supplies independent loading/error state;
-  its semantic fallback and demo data are rejected.
-- **Test foundation:** SemStreams UI unit/attack patterns inform equivalent SemSource-owned
-  contract/component/Playwright gates.
+The evidence below was audited at SemSpec `5a9496eecc45`, SemDragon `9417173a0b19`, SemConnect
+`a8d1a7d15a94`, and SemStreams UI `3814b3d59dab`. Those revisions make the evidence reproducible;
+they do not create a dependency or require later donor changes to be merged.
 
-The local implementation explicitly rejects:
+- **Renderer lifecycle**
+  - Donor evidence: SemSpec `ui/src/lib/components/graph/SigmaCanvas.svelte` guards browser-only
+    imports, uses `MultiDirectedGraph`, reports initialization/render failures, refreshes, and stops
+    the layout and Sigma renderer during cleanup.
+  - Local destination: `ui/src/lib/graph/SigmaCanvas.svelte` and
+    `ui/src/lib/graph/SigmaCanvas.test.ts`.
+  - Port rationale: preserve SSR-safe initialization, truthful failure UI, refresh, and cleanup.
+  - Rejected: SemSpec product types, route coupling, and any graph adaptation not backed by the local
+    governed graph contract fixtures.
 
-- SemStreams UI's `graphTransform.ts` ID-shape relationship inference and manufactured evidence;
-- plain undirected `Graph` when directed parallel relationships are required;
-- random initial positions;
-- synchronization based only on entity and relationship IDs;
-- SemSpec's multiword-text-equals-NLQ heuristic; and
-- donor product routes, fixtures, vocabulary, or styling copied without a SemSource contract.
+- **Selected-neighbor emphasis**
+  - Donor evidence: SemDragon `ui/src/lib/components/graph/SigmaCanvas.svelte` uses node and edge
+    reducers to dim non-neighbors and place the selected node and neighbors at explicit z-indexes.
+  - Local destination: `ui/src/lib/graph/selection.ts` and `ui/src/lib/graph/selection.test.ts`.
+  - Port rationale: keep selection legible without making canvas state the source of truth.
+  - Rejected: SemDragon entity types, colors, route state, and relationship data shaping.
+
+- **Search-result focus**
+  - Donor evidence: SemConnect `ui/src/lib/components/SigmaCanvas.svelte` accepts a focused-ID set
+    independently of the selected entity and uses reducers to emphasize all focused results.
+  - Local destination: `ui/src/lib/graph/selection.ts` and the synchronized result navigator under
+    `ui/src/lib/components/search/`.
+  - Port rationale: search may focus several results while keyboard selection remains singular.
+  - Rejected: SemConnect demo types and its ID-only graph signature, which misses attribute-only
+    updates.
+
+- **Deterministic initial placement**
+  - Donor evidence: SemConnect `ui/src/lib/utils/graphology-adapter.ts` derives x/y coordinates from
+    the entity ID and preserves existing coordinates across synchronization.
+  - Local destination: `ui/src/lib/graph/seeded-position.ts` and
+    `ui/src/lib/graph/seeded-position.test.ts`.
+  - Port rationale: make initial placement repeatable before the worker layout settles.
+  - Rejected: random positions, demo colors/types, and the donor's per-node relationship scan for
+    degree-derived size.
+
+- **Bounded force-layout worker lifecycle**
+  - Donor evidence: SemStreams UI `src/lib/utils/sigma-layout.ts` and
+    `src/lib/utils/sigma-layout.test.ts` cover start, stop, timed shutdown, restart, and worker kill.
+  - Local destination: `ui/src/lib/graph/force-layout.ts` and
+    `ui/src/lib/graph/force-layout.test.ts`.
+  - Port rationale: prevent leaked workers and unbounded background layout work.
+  - Rejected: treating the donor timeout and tuning constants as a SemSource contract.
+
+- **Keyboard-safe panel shell**
+  - Donor evidence: SemSpec `ui/src/lib/components/layout/ThreePanelLayout.svelte`,
+    `ResizeHandle.svelte`, and `ui/src/lib/stores/panelState.svelte.ts` cover keyboard resize,
+    input-safe shortcuts, bounded widths, persistence, responsive collapse, and reduced motion.
+  - Local destination: `ui/src/lib/components/layout/WorkbenchLayout.svelte`,
+    `ResizeHandle.svelte`, and `ui/src/lib/state/panel-layout.svelte.ts`.
+  - Port rationale: add the complexity only when graph and detail panels need persistent layout.
+  - Rejected: SemSpec route structure, product shortcuts, panel defaults, and storage keys.
+
+- **Responsive stacking**
+  - Donor evidence: SemConnect `ui/src/routes/+page.svelte` and `ui/src/app.css` use explicit 1180 px
+    and 820 px breakpoints and retain visible focus treatment while the shell collapses.
+  - Local destination: `ui/src/routes/+page.svelte` and `ui/src/app.css`.
+  - Port rationale: keep sources, search results, evidence, and filters reachable at narrow widths.
+  - Rejected: the SemConnect demo shell, fixed product copy, icons, and telemetry-specific regions.
+
+- **Source overview information architecture**
+  - Donor evidence: SemDragon `ui/src/lib/components/graph/GraphSummary.svelte` separates loading,
+    error, empty, source, readiness, count, and refresh states. SemStreams UI
+    `src/lib/components/runtime/GraphOverviewPanel.svelte` adds compact status and filter summaries.
+  - Local destination: `ui/src/lib/components/SourceOverview.svelte` and its component tests.
+  - Port rationale: expose source readiness and inventory before graph drill-down exists.
+  - Rejected: donor graph counts as authority, raw agent-output panels, and donor product vocabulary.
+
+- **Search cancellation and elapsed state**
+  - Donor evidence: SemStreams UI `src/lib/components/runtime/NlqSearchBar.svelte`,
+    `NlqSearchBar.cancel.test.ts`, and `NlqSearchBar.test.ts` cover cancel controls, elapsed loading,
+    keyboard submission, accessible names, empty input, and error state.
+  - Local destination: `ui/src/lib/components/SearchPanel.svelte`, `ui/src/lib/api/search.ts`, and
+    `ui/src/routes/+page.svelte`.
+  - Port rationale: keep long or replaced searches observable and cancellable.
+  - Rejected: donor NLQ product copy and SemSpec's heuristic that treats any multiword text as NLQ.
+
+- **Independent partial-failure state**
+  - Donor evidence: SemConnect `ui/src/lib/stores/demoStore.svelte.ts` uses `Promise.allSettled`,
+    retains fulfilled data, records per-source failures, and owns an `AbortController` per refresh.
+  - Local destination: `ui/src/lib/api/workbench.ts`, `ui/src/routes/+page.svelte`, and
+    `ui/src/lib/components/WorkbenchShell.svelte`.
+  - Port rationale: an optional inventory or search failure must not discard valid capabilities.
+  - Rejected: hybrid/demo fallback, merging CS API and graph facts in the browser, and fabricated data.
+
+- **Failure-oriented test patterns**
+  - Donor evidence: SemStreams UI `src/lib/components/runtime/SigmaCanvas.attack.test.ts`,
+    `NlqSearchBar.attack.test.ts`, and `src/lib/services/graphTransform.test.ts` exercise lifecycle,
+    malformed, empty, and adversarial cases.
+  - Local destination: colocated `ui/src/lib/**/*.test.ts` suites plus `ui/e2e/` acceptance tests.
+  - Port rationale: retain the adverse cases while making all fixtures and assertions SemSource-owned.
+  - Rejected: importing donor test helpers, fixtures, packages, test IDs, or expected product copy.
+
+SemStreams UI `src/lib/services/graphTransform.ts` is rejection evidence, not a donor behavior: its
+ID-shaped-literal relationship inference and manufactured evidence SHALL NOT enter the local adapter.
+The local graph also rejects plain undirected `Graph`, ID-only synchronization, and any donor route,
+fixture, vocabulary, or style without a SemSource contract and a failing local behavior test first.
 
 The first implementation slice does not need Sigma. It proves capability-driven project, readiness,
 source inventory, and search behavior, with graph drill-down truthfully unavailable. Graph code is
@@ -206,6 +276,38 @@ that toolchain or the released image's owned test runner; they never borrow SemT
 The live smoke verifies capabilities, readiness, source inventory, search/query behavior, keyboard
 result/detail navigation, and the graph-unavailable state while #533 remains open. Headless smoke
 independently proves the UI profile and image are not resolved.
+
+The UI-profile Playwright smoke owns Caddy integration proof. It exercises the shell and every
+advertised proxied route through the profile entry point and rejects misleading UI-HTML fallthrough.
+The standalone UI image gate does not claim to validate Caddy or backend route wiring.
+
+The canonical owned gates are:
+
+- install: `npm --prefix ui ci`;
+- formatting: `npm --prefix ui run format:check`;
+- lint: `npm --prefix ui run lint`;
+- Svelte and TypeScript: `npm --prefix ui run check`;
+- unit and component behavior: `npm --prefix ui test`;
+- accessibility: `npm --prefix ui run test:a11y`;
+- production bundle: `npm --prefix ui run build`;
+- browser acceptance: `npm --prefix ui run test:e2e`; and
+- production image: `task ui:image:verify`.
+
+`test:a11y` is a separate release gate, not a synonym for Svelte compile success. It covers automated
+accessibility rules, accessible names and state announcements, keyboard-only focus order and result
+selection, narrow-width reachability, and reduced-motion behavior. Playwright asserts visible roles,
+names, list/detail state, and focus; canvas-only test hooks cannot satisfy the gate.
+
+`ui:image:verify` builds `ui/Dockerfile` from a clean `ui/` context with no host `node_modules`, cache,
+bind mount, or sibling checkout. It starts the resulting production image as its declared non-root
+user with no development server or donor dependency, verifies the runtime UID is non-zero, waits for
+image health, and fetches SemSource shell content directly from the container port. It records the
+tested image ID and OCI content digest. A locally cached image, mutable `latest`, bind-mounted build
+output, or Vite development server cannot satisfy this gate. Task 7.3 separately ties the tested
+content to the registry digest, SemSource commit, and release version.
+
+The accessibility and image-verification scripts may be introduced during implementation, but task
+2.3 remains incomplete until every command above exists in SemSource and passes without SemTeams.
 
 ## Follow-on change sequence
 

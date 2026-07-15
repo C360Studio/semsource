@@ -16,18 +16,31 @@
 
 ## 2. Lock the local best-of architecture
 
-- [ ] 2.1 Review the D4 inventory and verify every selected SemSpec, SemDragon, SemConnect, and
+- [x] 2.1 Review the D4 inventory and verify every selected SemSpec, SemDragon, SemConnect, and
       SemStreams UI behavior names donor evidence, local destination, port rationale, and rejected
       behavior.
-      - Test: architect and svelte-reviewer confirm the inventory does not treat a donor repository as
-        canonical or hide an unsafe transform behind copied code.
-- [ ] 2.2 Define the local module boundary for contracts, API clients, state, project/readiness/source
+      - Evidence: review the pinned donor revisions and exact file paths in D4; for each row, trace the
+        selected behavior to its SemSource-owned destination and trace the rejection to a local test or
+        explicit graph-contract prohibition.
+      - Test: architect and svelte-reviewer confirm that every row has all four fields, no donor is
+        canonical, `graphTransform.ts` is rejection evidence only, and no unsafe transform is hidden
+        behind copied code.
+- [x] 2.2 Define the local module boundary for contracts, API clients, state, project/readiness/source
       components, search, graph-unavailable state, and later graph modules under `ui/src/lib/`.
       - Test: a dependency check finds no imports, source paths, containers, or packages from donor UI
         repositories.
-- [ ] 2.3 Specify the owned UI gates: format, lint, Svelte check, unit/component, accessibility, build,
+- [x] 2.3 Specify the owned UI gates: format, lint, Svelte check, unit/component, accessibility, build,
       Playwright, and production image verification.
-      - Test: each gate has a SemSource-owned command and no SemTeams Node or Playwright dependency.
+      - Evidence: D11 names the canonical SemSource-owned command for install and every gate, defines
+        accessibility behavior beyond compile checks, and defines a clean production-image run with
+        no host dependencies or development server.
+      - Test: each command exists and passes using `ui/package-lock.json`; accessibility covers
+        automated rules plus keyboard/focus behavior, and image verification builds without host
+        `node_modules`, starts the production image without bind mounts, proves a non-zero runtime UID,
+        waits for health, fetches SemSource shell content from the container port, and records the
+        tested image ID and OCI content digest.
+      - Rejected: SemTeams Node or Playwright dependencies, donor test fixtures, mutable `latest`, a
+        cached image without rebuild evidence, bind-mounted build output, and Vite as production proof.
 
 ## 3. Define and implement SemSource-owned browser contracts
 
@@ -55,28 +68,28 @@
 
 ## 4. Build the SemSource-owned non-graph MVP with TDD
 
-- [ ] 4.1 Scaffold `ui/` as a Svelte 5 strict-TypeScript application with its own package lock,
+- [x] 4.1 Scaffold `ui/` as a Svelte 5 strict-TypeScript application with its own package lock,
       format/lint/check/unit/component/Playwright commands, lightweight local styling, and production
       Dockerfile.
       - Test: the first shell test fails before implementation; format, lint, check, unit, and build
         pass afterward without a sibling checkout.
-- [ ] 4.2 Add typed version-1 capability parsing and a classified HTTP client for ready, partial,
+- [x] 4.2 Add typed version-1 capability parsing and a classified HTTP client for ready, partial,
       unsupported, additive-unknown, incompatible-version, invalid-payload, and disconnected states.
       - Test: contract fixtures fail before implementation and cover every state without probing
         unadvertised routes.
-- [ ] 4.3 Implement the project-first shell with SemSource identity, project namespace, readiness,
+- [x] 4.3 Implement the project-first shell with SemSource identity, project namespace, readiness,
       source inventory, project summary, and concrete unavailable cards for project views, OKF, and
       graph projection.
       - Test: component tests cover ready, partial, empty, degraded, unsupported, narrow-width, and
         disconnected rendering with accessible names and focus order.
-- [ ] 4.4 Implement fusion search/list/detail using only advertised capability URLs, preserving
+- [x] 4.4 Implement fusion search/list/detail using only advertised capability URLs, preserving
       readiness, provenance, truncation, and classified 400/503/504 behavior.
       - Test: request, miss, empty, truncated, partial, and error fixtures pass; absent evidence stays
         unknown rather than being manufactured.
-- [ ] 4.5 Add local request-generation plus `AbortController` cancellation so stale search or bootstrap
+- [x] 4.5 Add local request-generation plus `AbortController` cancellation so stale search or bootstrap
       responses cannot replace newer state.
       - Test: controlled deferred-response tests prove cancellation and out-of-order suppression.
-- [ ] 4.6 Run svelte-reviewer assessment for Svelte 5 runes, contract fidelity, accessibility,
+- [x] 4.6 Run svelte-reviewer assessment for Svelte 5 runes, contract fidelity, accessibility,
       responsive behavior, cancellation, and failure UX.
       - Test: no unresolved blocking findings remain before Compose integration.
 
@@ -106,8 +119,9 @@
         profile never resolves it; the `ui` profile references only SemSource-owned paths/artifacts.
 - [ ] 6.3 Keep Caddy limited to the workbench shell and advertised SemSource health, source-manifest,
       fusion, GraphQL, MCP, metrics, and raw graph routes.
-      - Test: route tests reject fallthrough to misleading UI HTML and contain no stale SemTeams,
-        flow-builder, trajectory, or unshipped OKF/project-view routes.
+      - Test: UI-profile Playwright exercises each advertised proxy route through Caddy, rejects
+        fallthrough to misleading UI HTML, and finds no stale SemTeams, flow-builder, trajectory, or
+        unshipped OKF/project-view routes.
 - [ ] 6.4 Update `task ui:e2e` and `task ui:smoke` to use the owned UI Playwright dependency and
       production image/development build, never SemTeams tooling.
       - Test: preflight and execution succeed with no sibling checkout and include final HTTP/UI state
@@ -118,11 +132,11 @@
 - [ ] 7.1 Add a headless smoke assertion that no UI image, source build, Node process, proxy, or UI
       registry credential is required while HTTP, MCP, readiness, and graph query remain available.
       - Test: core smoke passes with an intentionally unreachable UI image and no local Node toolchain.
-- [ ] 7.2 Add Playwright coverage against real SemSource for shell branding, capability bootstrap,
-      readiness, source inventory, search, keyboard result/detail selection, and graph-unavailable
-      state.
-      - Test: tests use visible accessible UI, not canvas-only hooks, and pass at desktop and narrow
-        widths.
+- [ ] 7.2 Add UI-profile Playwright coverage through Caddy against real SemSource for shell branding,
+      capability bootstrap, readiness, source inventory, search, keyboard result/detail selection,
+      graph-unavailable state, and every advertised proxied route.
+      - Test: tests use visible accessible UI, not canvas-only hooks, prove backend routes do not fall
+        through to UI HTML, and pass at desktop and narrow widths.
 - [ ] 7.3 Add production-image evidence tying the tested image to its SemSource commit, version, and
       immutable digest.
       - Test: the digest tested by SemSource matches the profile pin; mutable `latest` is not accepted.

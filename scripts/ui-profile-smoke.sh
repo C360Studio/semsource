@@ -9,13 +9,9 @@ fail() {
 	exit 1
 }
 
-ui_context=${UI_CONTEXT:-../semteams/ui}
-
-[ -d "$ui_context" ] || fail "UI_CONTEXT '$ui_context' does not exist"
-[ -f "$ui_context/Dockerfile.dev" ] || fail "missing Dockerfile.dev in UI_CONTEXT '$ui_context'"
-if [ ! -x "$ui_context/node_modules/.bin/playwright" ]; then
-	fail "Playwright is not installed in UI_CONTEXT '$ui_context';" \
-		"run npm install there or set UI_CONTEXT to a prepared SemTeams UI checkout"
+[ -f "ui/Dockerfile" ] || fail "missing SemSource-owned ui/Dockerfile"
+if [ ! -x "ui/node_modules/.bin/playwright" ]; then
+	fail "Playwright is not installed in ui/; run npm --prefix ui ci"
 fi
 
 cleanup() {
