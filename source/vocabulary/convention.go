@@ -17,15 +17,15 @@ const (
 
 	// ConventionAppliesTo specifies file patterns this convention applies to.
 	// Format: glob patterns like "*.go", "handlers/*.go"
-	ConventionAppliesTo = "semspec.convention.applies_to"
+	ConventionAppliesTo = "semspec.convention.applies-to"
 
 	// ConventionSourceTask is the task ID where this convention was learned.
 	// Links the convention to its origin for provenance.
-	ConventionSourceTask = "semspec.convention.source_task"
+	ConventionSourceTask = "semspec.convention.source-task"
 
 	// ConventionApprovedBy is the reviewer model that extracted this convention.
 	// Example: "claude-sonnet-4-20250514"
-	ConventionApprovedBy = "semspec.convention.approved_by"
+	ConventionApprovedBy = "semspec.convention.approved-by"
 
 	// ConventionConfidence is the extraction confidence score (0.0-1.0).
 	ConventionConfidence = "semspec.convention.confidence"

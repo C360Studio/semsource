@@ -142,14 +142,11 @@ func (h *URLHandler) pollLoop(ctx context.Context, rawURL string, interval time.
 		if len(result.Body) > 0 {
 			now := time.Now()
 			lastHash = contentHash(result.Body)
-			entity := h.buildPageEntity(rawURL, result)
 			ev := handler.ChangeEvent{
 				Path:      rawURL,
 				Operation: handler.OperationCreate,
 				Timestamp: now,
-				Entities:  []handler.RawEntity{entity},
 			}
-			// Populate EntityStates for the normalizer-free processor path.
 			if h.org != "" {
 				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.org, now.UTC())}
 			}
@@ -195,14 +192,11 @@ func (h *URLHandler) pollLoop(ctx context.Context, rawURL string, interval time.
 			lastETag = result.ETag
 
 			now := time.Now()
-			entity := h.buildPageEntity(rawURL, result)
 			ev := handler.ChangeEvent{
 				Path:      rawURL,
 				Operation: handler.OperationModify,
 				Timestamp: now,
-				Entities:  []handler.RawEntity{entity},
 			}
-			// Populate EntityStates for the normalizer-free processor path.
 			if h.org != "" {
 				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.org, now.UTC())}
 			}

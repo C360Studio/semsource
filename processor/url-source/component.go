@@ -250,24 +250,29 @@ func (c *Component) startPolling(ctx context.Context, rawURL string) context.Can
 	return cancel
 }
 
-// handleChangeEvent processes a ChangeEvent from a URL watcher channel.
-// When the handler populates EntityStates (normalizer-free path), those are used
-// directly. The Entities fallback is retained for backward compatibility.
+// handleChangeEvent processes a typed ChangeEvent from a URL watcher channel.
 func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeEvent) {
 	c.logger.Debug("URL-source change event received",
 		"url", event.Path,
 		"operation", event.Operation,
-		"entity_states", len(event.EntityStates),
-		"entities", len(event.Entities))
+		"entity_states", len(event.EntityStates))
+
+	if event.Operation == handler.OperationDelete {
+		return
+	}
 
 	// Prefer pre-built EntityStates — no normalizer pass required.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
 			payload, err := entitypub.PayloadFromState(state)
 			if err != nil {
+				stateID := ""
+				if state != nil {
+					stateID = state.ID
+				}
 				c.logger.Warn("Invalid URL entity state on change",
 					"url", event.Path,
-					"id", state.ID,
+					"id", stateID,
 					"error", err)
 				c.ingestErrors.Add(1)
 				continue
@@ -287,12 +292,10 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		return
 	}
 
-	// Fallback: event carried only RawEntities (e.g. handler constructed without org).
-	// This path should not be reached in normal operation but is retained to
-	// avoid silent drops during a mixed-version deployment.
-	c.logger.Warn("URL-source change event has no EntityStates; handler may be missing org",
+	c.ingestErrors.Add(1)
+	c.logger.Warn("URL-source change event missing required EntityStates",
 		"url", event.Path,
-		"entities", len(event.Entities))
+		"operation", event.Operation)
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.

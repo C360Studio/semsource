@@ -7,18 +7,18 @@ projection authority. Every graph write carries a semantic envelope (no reliance
 profile, and in standalone mode SemSource bootstraps ownership (OWNER_CLAIMS /
 OWNER_PRESENCE) before graph-ingest starts. It pins an explicit SemStreams target
 with a toolchain gate, and keeps the current query surfaces available.
-
 ## Requirements
 ### Requirement: Current SemStreams target is explicit
 
-SemSource MUST target the latest verified released SemStreams tag for this
-migration, not an unreleased local `main` commit.
+SemSource MUST target released SemStreams `v1.0.0-beta.148` for this migration and MUST NOT use a
+local replacement, fork, vendored substitute, or unreleased commit as compatibility evidence.
 
 #### Scenario: Migration target is pinned to a release
 
-**GIVEN** SemStreams remote tags include `v1.0.0-beta.144`
-**WHEN** SemSource performs the governed graph migration
-**THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.144`
+**GIVEN** SemStreams has released `v1.0.0-beta.148`
+**WHEN** SemSource completes this migration
+**THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.148`
+**AND** the module has no `replace` directive
 
 ### Requirement: Toolchain gate precedes compatibility work
 
@@ -63,27 +63,16 @@ diagnostic entity is emitted
 
 ### Requirement: Standalone mode boots ownership before graph-ingest
 
-Standalone SemSource MUST create the ownership substrate and bind SemSource
-projection contracts before graph-ingest starts.
+The SemSource external service MUST create the ownership substrate and bind SemSource projection
+contracts before graph-ingest starts. This behavior is intrinsic to the sole runtime and MUST NOT be
+selected through a compatibility mode field or environment variable.
 
 #### Scenario: Graph-ingest sees OWNER_CLAIMS on startup
 
-**GIVEN** SemSource runs in standalone mode
+**GIVEN** SemSource starts as an external service
 **WHEN** graph-ingest starts
 **THEN** OWNER_CLAIMS and OWNER_PRESENCE already exist
 **AND** SemSource projection contracts have been registered
-
-### Requirement: Headless mode declares host-owned governance
-
-Headless SemSource MUST make governance ownership explicit because the host app
-owns graph infrastructure.
-
-#### Scenario: Headless host has not provided governance
-
-**GIVEN** SemSource runs in headless mode
-**WHEN** the host graph substrate has no OWNER_CLAIMS bucket
-**THEN** SemSource reports governance-disabled status instead of implying
-governed graph enforcement is active
 
 ### Requirement: No source relies on triple.add auto-vivify
 
@@ -112,3 +101,35 @@ surfaces needed by SemOps and other consumers.
 **GIVEN** SemSource has ingested source entities
 **WHEN** a consumer requests `graph.query.summary`
 **THEN** the response includes entity type examples and predicate summary data
+
+### Requirement: Incompatible beta graph state is rebuilt from source
+
+An upgrading deployment MUST stop all writers, capture and review a literal NATS account/resource
+inventory, and delete only observed incompatible graph-derived resources before canonical reseed. It
+MUST delete `semstreams_config`; observed `GRAPH`; enabled, observed SemStreams
+`FrameworkOwnedBuckets`; observed `ENTITY_SUFFIX_INDEX`; observed `GRAPH_INGEST_APPLIED_SEQ`; and
+`PREDICATE_CATALOG` only when observed. It MUST preserve authoritative source inputs,
+source/content/media/object stores, component status, and unrelated state.
+
+SemSource MUST NOT preserve or rewrite incompatible graph state, run mixed-version writers, or provide
+an in-place converter, alias reader, or dual writer.
+
+#### Scenario: Cutover is rehearsed
+
+- **WHEN** operators rehearse the migration in a disposable real-NATS account
+- **THEN** all writers are stopped before a literal deletion sheet is executed
+- **AND** every removed resource is both observed and in the allowed incompatible set
+- **AND** every authoritative or unrelated resource in the preservation inventory remains
+
+#### Scenario: Configuration and graph state are recreated
+
+- **WHEN** deletion is complete
+- **THEN** configuration is recreated from the reviewed `semsource.json` through the normal startup
+  path
+- **AND** only migrated writers start and reseed from authoritative source inputs
+- **AND** public status reaches ready and a canonical known-answer query succeeds
+
+#### Scenario: A legacy catalog was not observed
+
+- **WHEN** the captured account inventory does not contain `PREDICATE_CATALOG`
+- **THEN** the cutover does not issue a speculative deletion for it

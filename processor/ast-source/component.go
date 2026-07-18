@@ -1,9 +1,11 @@
 package astsource
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -91,7 +93,16 @@ type Component struct {
 func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	// Start from defaults, then overlay user config.
 	config := DefaultConfig()
-	if err := json.Unmarshal(rawConfig, &config); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(rawConfig))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("multiple JSON values")
+		}
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -122,9 +133,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 func (c *Component) initializeWatchers() error {
 	c.watchers = nil
 
-	watchPaths := c.config.GetWatchPaths()
-
-	resolved, err := ResolveWatchPaths(watchPaths)
+	resolved, err := ResolveWatchPaths(c.config.WatchPaths)
 	if err != nil {
 		return err
 	}

@@ -100,12 +100,9 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 	return out, nil
 }
 
-// enrichEvent re-reads the changed file and populates ev.Entities and, when
-// org is set, ev.EntityStates. For delete events the file is gone, so both
-// slices remain empty.
-//
-// When org is set, only the EntityState path runs (single file read). The
-// RawEntity path is only used as a fallback when org is empty.
+// enrichEvent re-reads the changed file and populates ev.EntityStates when an
+// org is available. Delete events remain path-only. An unscoped non-delete
+// event stays empty so its processor can report the typed-state contract error.
 func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
@@ -121,14 +118,7 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root,
 	}
 
 	if org != "" {
-		// Typed EntityState path — single file read, includes store logic.
 		ev = h.enrichEventEntityStates(ctx, ev, root, org)
-	} else {
-		// Legacy RawEntity fallback — no org means no EntityStates.
-		entity, err := ingestFile(ev.Path, root)
-		if err == nil {
-			ev.Entities = []handler.RawEntity{entity}
-		}
 	}
 
 	ev.Timestamp = time.Now()

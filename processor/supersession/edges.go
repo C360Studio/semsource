@@ -60,13 +60,13 @@ func desiredEdges(groups map[corrKey][]candidate) (map[string][]message.Triple, 
 			stats.Supersedes++
 
 			desired[newer.id] = append(desired[newer.id],
-				lineageTriple(newer.id, semsourceast.CodeSupersedes, older.id))
+				lineageReferenceTriple(newer.id, semsourceast.CodeSupersedes, older.id))
 			desired[older.id] = append(desired[older.id],
-				lineageTriple(older.id, semsourceast.CodeSupersededBy, newer.id))
+				lineageReferenceTriple(older.id, semsourceast.CodeSupersededBy, newer.id))
 
 			if change, ok := classifyChange(older, newer); ok {
 				desired[newer.id] = append(desired[newer.id],
-					lineageTriple(newer.id, semsourceast.CodeLineageChange, change))
+					lineageLiteralTriple(newer.id, semsourceast.CodeLineageChange, change))
 				if change == changeChanged {
 					stats.Changed++
 				} else {
@@ -136,10 +136,23 @@ func objectString(o any) string {
 	return ""
 }
 
-// lineageTriple builds a directional lineage relationship triple. Timestamp is
+// lineageReferenceTriple builds a directional lineage relationship triple. Timestamp is
 // left zero so the triple is byte-stable across runs (diffNew matches on
 // predicate+object, so provenance fields do not affect idempotency).
-func lineageTriple(subject, predicate, object string) message.Triple {
+func lineageReferenceTriple(subject, predicate, object string) message.Triple {
+	return message.Triple{
+		Subject:    subject,
+		Predicate:  predicate,
+		Object:     object,
+		Datatype:   message.EntityReferenceDatatype,
+		Source:     edgeSource,
+		Confidence: 1.0,
+	}
+}
+
+// lineageLiteralTriple records lineage metadata whose object is not an entity
+// identity, so change classifications remain ordinary string literals.
+func lineageLiteralTriple(subject, predicate, object string) message.Triple {
 	return message.Triple{
 		Subject:    subject,
 		Predicate:  predicate,

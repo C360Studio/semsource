@@ -21,7 +21,7 @@ const (
 	// DocAppliesTo specifies file patterns this document applies to.
 	// Format: glob patterns like "*.go", "auth/*", "**/*.ts"
 	// For SOPs, this determines which files trigger SOP inclusion in reviewer context.
-	DocAppliesTo = "source.doc.applies_to"
+	DocAppliesTo = "source.doc.applies-to"
 
 	// DocSeverity indicates violation severity for SOPs.
 	// Values: error (blocks approval), warning (reviewer discretion), info (no enforcement)
@@ -44,28 +44,28 @@ const (
 	DocSection = "source.doc.section"
 
 	// DocChunkIndex is the chunk sequence number (1-indexed).
-	DocChunkIndex = "source.doc.chunk_index"
+	DocChunkIndex = "source.doc.chunk-index"
 
 	// DocChunkCount is the total number of chunks in the parent document.
-	DocChunkCount = "source.doc.chunk_count"
+	DocChunkCount = "source.doc.chunk-count"
 
 	// DocMimeType is the document MIME type.
 	// Values: text/markdown, application/pdf, text/plain, etc.
-	DocMimeType = "source.doc.mime_type"
+	DocMimeType = "source.doc.mime-type"
 
 	// DocFilePath is the original file path in .semspec/sources/docs/.
-	DocFilePath = "source.doc.file_path"
+	DocFilePath = "source.doc.file-path"
 
 	// DocFileHash is the content hash for staleness detection.
-	DocFileHash = "source.doc.file_hash"
+	DocFileHash = "source.doc.file-hash"
 
 	// DocBodyStore and DocBodyKey are the verbatim body handle (ADR-062 hydration
 	// contract), the doc analogue of ast.CodeBodyStore/CodeBodyKey: a doc producer
 	// offloads the passage to a storage.Store and stamps these so the fusion docs
 	// lens returns a StorageReference instead of inline content. Absent until the
 	// doc body producer lands (tracked follow-up); the lens then yields no body.
-	DocBodyStore = "source.doc.body_store" // storage component instance name
-	DocBodyKey   = "source.doc.body_key"   // storage key: the passage blob
+	DocBodyStore = "source.doc.body-store" // storage component instance name
+	DocBodyKey   = "source.doc.body-key"   // storage key: the passage blob
 
 	// DocScope specifies when this document applies.
 	// Values: plan (planning phase), code (implementation), all (both phases)
@@ -85,7 +85,7 @@ const (
 	// Example: auth doc might relate to ["security", "session", "token"]
 	// Used for pulling in cross-domain SOPs during review - when touching auth
 	// code, also include security-domain SOPs.
-	DocRelatedDomains = "source.doc.related_domains"
+	DocRelatedDomains = "source.doc.related-domains"
 
 	// DocKeywords are LLM-extracted semantic keywords for fuzzy matching.
 	// Example: ["token refresh", "expiration", "OAuth", "JWT"]
@@ -103,28 +103,28 @@ const (
 	WebURL = "source.web.url"
 
 	// WebContentType is the HTTP content type (e.g., text/html).
-	WebContentType = "source.web.content_type"
+	WebContentType = "source.web.content-type"
 
 	// WebTitle is the page title extracted from HTML.
 	WebTitle = "source.web.title"
 
 	// WebLastFetched is when the content was last fetched (RFC3339).
-	WebLastFetched = "source.web.last_fetched"
+	WebLastFetched = "source.web.last-fetched"
 
 	// WebETag is the HTTP ETag for staleness detection.
 	WebETag = "source.web.etag"
 
 	// WebContentHash is the SHA256 of fetched content.
-	WebContentHash = "source.web.content_hash"
+	WebContentHash = "source.web.content-hash"
 
 	// WebAutoRefresh indicates whether to auto-refresh for updates.
-	WebAutoRefresh = "source.web.auto_refresh"
+	WebAutoRefresh = "source.web.auto-refresh"
 
 	// WebRefreshInterval is the auto-refresh interval (duration string like "1h").
-	WebRefreshInterval = "source.web.refresh_interval"
+	WebRefreshInterval = "source.web.refresh-interval"
 
 	// WebChunkCount is the total number of chunks.
-	WebChunkCount = "source.web.chunk_count"
+	WebChunkCount = "source.web.chunk-count"
 
 	// WebContent is the chunk text content.
 	// Only present on chunk entities, not parent entities.
@@ -135,7 +135,7 @@ const (
 	WebSection = "source.web.section"
 
 	// WebChunkIndex is the chunk sequence number (1-indexed).
-	WebChunkIndex = "source.web.chunk_index"
+	WebChunkIndex = "source.web.chunk-index"
 
 	// WebDomain is the URL hostname for web sources.
 	// Example: "docs.anthropic.com", "golang.org", "pkg.go.dev"
@@ -148,7 +148,7 @@ const (
 
 	// WebAppliesTo specifies file patterns this web SOP applies to.
 	// Format: glob patterns like "*.go", "auth/*", "**/*.ts"
-	WebAppliesTo = "source.web.applies_to"
+	WebAppliesTo = "source.web.applies-to"
 
 	// WebSeverity indicates violation severity for web SOPs.
 	// Values: error (blocks approval), warning (reviewer discretion), info (no enforcement)
@@ -170,12 +170,12 @@ const (
 	// Values: auth, database, api, security, testing, logging, error-handling,
 	//         performance, deployment, messaging, caching, etc.
 	// Multiple values allowed (array). Used for domain-aware SOP matching.
-	WebSemanticDomain = "source.web.semantic_domain"
+	WebSemanticDomain = "source.web.semantic-domain"
 
 	// WebRelatedDomains links to conceptually related domains.
 	// Example: auth doc might relate to ["security", "session", "token"]
 	// Used for pulling in cross-domain SOPs during review.
-	WebRelatedDomains = "source.web.related_domains"
+	WebRelatedDomains = "source.web.related-domains"
 
 	// WebKeywords are LLM-extracted semantic keywords for fuzzy matching.
 	// Example: ["token refresh", "expiration", "OAuth", "JWT"]
@@ -185,7 +185,7 @@ const (
 	// WebAnalysisSkipped indicates LLM analysis was skipped (timeout/error).
 	// When true, the web source lacks semantic metadata and should be treated
 	// as a basic reference without SOP capabilities.
-	WebAnalysisSkipped = "source.web.analysis_skipped"
+	WebAnalysisSkipped = "source.web.analysis-skipped"
 )
 
 // Repository source predicates for external code sources.
@@ -209,19 +209,19 @@ const (
 	RepoLanguages = "source.repo.languages"
 
 	// RepoEntityCount is the number of entities indexed from this repo.
-	RepoEntityCount = "source.repo.entity_count"
+	RepoEntityCount = "source.repo.entity-count"
 
 	// RepoLastIndexed is the timestamp of last successful indexing (RFC3339).
-	RepoLastIndexed = "source.repo.last_indexed"
+	RepoLastIndexed = "source.repo.last-indexed"
 
 	// RepoAutoPull indicates whether to auto-pull for updates.
-	RepoAutoPull = "source.repo.auto_pull"
+	RepoAutoPull = "source.repo.auto-pull"
 
 	// RepoPullInterval is the auto-pull interval (duration string like "1h").
-	RepoPullInterval = "source.repo.pull_interval"
+	RepoPullInterval = "source.repo.pull-interval"
 
 	// RepoLastCommit is the SHA of the last indexed commit.
-	RepoLastCommit = "source.repo.last_commit"
+	RepoLastCommit = "source.repo.last-commit"
 
 	// RepoError is the error message if indexing failed.
 	RepoError = "source.repo.error"
@@ -254,10 +254,10 @@ const (
 	SourceProject = "source.meta.project"
 
 	// SourceAddedBy is the user/agent who added this source.
-	SourceAddedBy = "source.meta.added_by"
+	SourceAddedBy = "source.meta.added-by"
 
 	// SourceAddedAt is the timestamp when the source was added (RFC3339).
-	SourceAddedAt = "source.meta.added_at"
+	SourceAddedAt = "source.meta.added-at"
 
 	// SourceError is the error message if source processing failed.
 	SourceError = "source.meta.error"
@@ -358,6 +358,16 @@ func registerDocPredicates() {
 		vocabulary.WithDescription("Content hash for staleness detection"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(Namespace+"fileHash"))
+
+	vocabulary.Register(DocBodyStore,
+		vocabulary.WithDescription("Storage component instance containing the verbatim document body"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"bodyStore"))
+
+	vocabulary.Register(DocBodyKey,
+		vocabulary.WithDescription("Storage key for the verbatim document body"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"bodyKey"))
 
 	vocabulary.Register(DocScope,
 		vocabulary.WithDescription("Document scope: plan (planning phase), code (implementation), all (both)"),

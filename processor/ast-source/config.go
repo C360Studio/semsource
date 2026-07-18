@@ -92,16 +92,7 @@ type Config struct {
 	Ports *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
 
 	// WatchPaths defines multiple paths to watch with per-path configuration.
-	// Takes precedence over legacy single-path fields (RepoPath, Org, Project, Languages, ExcludePatterns).
 	WatchPaths []WatchPathConfig `json:"watch_paths" schema:"type:array,description:Watch paths with per-path configuration,category:basic"`
-
-	// Legacy single-path configuration (deprecated, use WatchPaths instead)
-	RepoPath        string   `json:"repo_path"        schema:"type:string,description:Repository path to index (deprecated: use watch_paths),category:basic,default:."`
-	Org             string   `json:"org"              schema:"type:string,description:Organization for entity IDs (deprecated: use watch_paths),category:basic"`
-	Project         string   `json:"project"          schema:"type:string,description:Project name for entity IDs (deprecated: use watch_paths),category:basic"`
-	Version         string   `json:"version,omitempty" schema:"type:string,description:Version/ref qualifier for entity-ID scoping (deprecated: use watch_paths),category:basic"`
-	Languages       []string `json:"languages"        schema:"type:array,description:Languages to index (deprecated: use watch_paths),category:basic,default:[go]"`
-	ExcludePatterns []string `json:"exclude_patterns" schema:"type:array,description:Directory patterns to exclude (deprecated: use watch_paths),category:advanced"`
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
@@ -116,9 +107,10 @@ type Config struct {
 
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
-	// Normalize to WatchPathConfig for uniform validation (handles legacy too).
-	watchPaths := c.GetWatchPaths()
-	for i, wp := range watchPaths {
+	if len(c.WatchPaths) == 0 {
+		return fmt.Errorf("watch_paths must contain at least one path")
+	}
+	for i, wp := range c.WatchPaths {
 		if err := wp.Validate(); err != nil {
 			return fmt.Errorf("watch_paths[%d]: %w", i, err)
 		}
@@ -138,32 +130,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetWatchPaths returns the effective watch paths.
-// If WatchPaths is configured, returns it directly.
-// Otherwise, converts legacy single-path config to WatchPathConfig.
-func (c *Config) GetWatchPaths() []WatchPathConfig {
-	if len(c.WatchPaths) > 0 {
-		return c.WatchPaths
-	}
-
-	// Convert legacy config to WatchPathConfig
-	languages := c.Languages
-	if len(languages) == 0 {
-		languages = []string{"go"}
-	}
-
-	return []WatchPathConfig{
-		{
-			Path:      c.RepoPath,
-			Org:       c.Org,
-			Project:   c.Project,
-			Version:   c.Version,
-			Languages: languages,
-			Excludes:  c.ExcludePatterns,
-		},
-	}
-}
-
 // DefaultConfig returns the default configuration for the ast-source processor.
 func DefaultConfig() Config {
 	outputDefs := []component.PortDefinition{
@@ -181,11 +147,8 @@ func DefaultConfig() Config {
 		Ports: &component.PortConfig{
 			Outputs: outputDefs,
 		},
-		RepoPath:        ".",
-		Languages:       []string{"go"},
-		WatchEnabled:    true,
-		IndexInterval:   "60s",
-		StreamName:      "GRAPH",
-		ExcludePatterns: []string{"vendor", "node_modules", "dist", ".next", "build", "coverage"},
+		WatchEnabled:  true,
+		IndexInterval: "60s",
+		StreamName:    "GRAPH",
 	}
 }

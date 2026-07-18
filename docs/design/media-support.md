@@ -81,43 +81,43 @@ Each predicate lists its standard IRI mapping for RDF export.
 | Predicate | Type | Standard IRI | Description |
 |-----------|------|-------------|-------------|
 | `source.media.type` | string | `ma:hasMediaType` | Entity type: "image", "video", "keyframe" |
-| `source.media.mime_type` | string | `dc:format` | MIME type: image/png, video/mp4, etc. |
+| `source.media.mime-type` | string | `dc:format` | MIME type: image/png, video/mp4, etc. |
 | `source.media.width` | int | `schema:width` | Width in pixels |
 | `source.media.height` | int | `schema:height` | Height in pixels |
-| `source.media.file_path` | string | (semsource) | File path relative to source root |
-| `source.media.file_hash` | string | (semsource) | SHA256 for staleness detection |
-| `source.media.file_size` | int | `schema:contentSize` | File size in bytes |
+| `source.media.file-path` | string | (semsource) | File path relative to source root |
+| `source.media.file-hash` | string | (semsource) | SHA256 for staleness detection |
+| `source.media.file-size` | int | `schema:contentSize` | File size in bytes |
 | `source.media.format` | string | `ma:hasFormat` | Decoded format: "png", "jpeg", "svg" |
-| `source.media.storage_ref` | string | `schema:contentUrl` | ObjectStore key for binary |
-| `source.media.thumbnail_ref` | string | `schema:thumbnail` | ObjectStore key for thumbnail |
+| `source.media.storage-ref` | string | `schema:contentUrl` | ObjectStore key for binary |
+| `source.media.thumbnail-ref` | string | `schema:thumbnail` | ObjectStore key for thumbnail |
 
 **Video metadata (Phase 2):**
 
 | Predicate | Type | Standard IRI | Description |
 |-----------|------|-------------|-------------|
 | `source.media.duration` | string | `ma:duration` | Duration ("1m30s") |
-| `source.media.frame_rate` | float | `ma:frameRate` | Frames per second |
+| `source.media.frame-rate` | float | `ma:frameRate` | Frames per second |
 | `source.media.codec` | string | `ma:hasCompression` | Codec: "h264", "vp9", "av1" |
 | `source.media.bitrate` | int | `ma:averageBitRate` | Average bitrate in kbps |
-| `source.media.keyframe_count` | int | (semsource) | Extracted keyframe count |
+| `source.media.keyframe-count` | int | (semsource) | Extracted keyframe count |
 
 **Keyframe metadata (Phase 2):**
 
 | Predicate | Type | Standard IRI | Description |
 |-----------|------|-------------|-------------|
 | `source.media.timestamp` | string | (semsource) | Position in video ("15s") |
-| `source.media.frame_index` | int | (semsource) | Sequential index (1-indexed) |
+| `source.media.frame-index` | int | (semsource) | Sequential index (1-indexed) |
 
 **ML vision (future, reserved namespace):**
 
 | Predicate | Type | Standard IRI | Description |
 |-----------|------|-------------|-------------|
-| `source.media.vision.labels` | array | `schema:keywords` | ML-detected labels |
-| `source.media.vision.description` | string | `schema:description` | ML-generated description |
-| `source.media.vision.confidence` | float | (semsource) | Overall confidence score |
-| `source.media.vision.objects` | array | (semsource) | Detected objects with bounding boxes |
-| `source.media.vision.text` | string | (semsource) | OCR-extracted text |
-| `source.media.vision.model` | string | `prov:wasGeneratedBy` | Model that produced labels |
+| `source.media.vision-labels` | array | `schema:keywords` | ML-detected labels |
+| `source.media.vision-description` | string | `schema:description` | ML-generated description |
+| `source.media.vision-confidence` | float | (semsource) | Overall confidence score |
+| `source.media.vision-objects` | array | (semsource) | Detected objects with bounding boxes |
+| `source.media.vision-text` | string | (semsource) | OCR-extracted text |
+| `source.media.vision-model` | string | `prov:wasGeneratedBy` | Model that produced labels |
 
 Vision predicates are reserved but not implemented. A downstream `VisionProcessor` will populate them. The entity structure supports adding these triples without schema changes.
 
@@ -203,7 +203,7 @@ Uses the existing time-bucketed key pattern from semstreams ObjectStore.
 
 **Thumbnail generation:**
 
-For images larger than a configurable threshold (default 512x512), generate a resized thumbnail and store it separately. The thumbnail key goes in `source.media.thumbnail_ref`. This keeps the graph lightweight — consumers can fetch thumbnails for previews without pulling full-resolution images.
+For images larger than a configurable threshold (default 512x512), generate a resized thumbnail and store it separately. The thumbnail key goes in `source.media.thumbnail-ref`. This keeps the graph lightweight — consumers can fetch thumbnails for previews without pulling full-resolution images.
 
 ---
 
@@ -340,7 +340,7 @@ video (acme.semsource.media.repo.video.b7d9e4)
 Each keyframe entity has:
 - Its own ObjectStore binary (the extracted frame as JPEG/PNG)
 - `source.media.timestamp` — position in source video
-- `source.media.frame_index` — sequential index (1, 2, 3...)
+- `source.media.frame-index` — sequential index (1, 2, 3...)
 - `keyframe_of` edge back to parent video
 - `code.structure.belongs` triple linking to parent video
 
@@ -348,7 +348,7 @@ Each keyframe entity has:
 
 ## Future: Vision Processor Integration
 
-The `source.media.vision.*` predicate namespace is reserved for downstream ML processors. In the
+The `source.media.vision-*` predicate family is reserved for downstream ML processors. In the
 governed graph model, a vision processor should consume media entities from graph state or
 `graph.ingest.entity`, fetch binary content through `StorageReference`, and publish owned enrichment
 triples back through SemStreams graph ingest.
@@ -373,7 +373,7 @@ The VisionProcessor:
 1. Receives or queries media entities from the governed graph
 2. Fetches binary from ObjectStore via `StorageReference`
 3. Sends to vision model (Claude, OpenAI Vision, local model)
-4. Publishes governed `source.media.vision.*` triples to graph ingest
+4. Publishes governed `source.media.vision-*` triples to graph ingest
 5. Optionally creates `depicts` edges linking images to code entities
 
 This keeps SemSource focused on ingestion. Vision labeling is a consumer-side concern.

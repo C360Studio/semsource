@@ -111,7 +111,6 @@ func runCmd(args []string) error {
 
 	logger.Info("semsource starting",
 		"version", resolveVersion(),
-		"mode", semsourceCfg.Mode,
 		"namespace", semsourceCfg.Namespace,
 		"sources", len(semsourceCfg.Sources),
 		"branch_watchers", len(expandResult.Watchers),

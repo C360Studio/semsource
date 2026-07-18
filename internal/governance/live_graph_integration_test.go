@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semstreams/component"
 	semgraph "github.com/c360studio/semstreams/graph"
+	graphqueryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
@@ -325,6 +326,32 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 	}
 
 	waitForPredicateIndexed(t, ctx, tc.Client, source.DocContent, 2, 5*time.Second)
+
+	predicateClient, err := graphqueryclient.NewClient(ctx, tc.Client, graphqueryclient.DefaultConfig())
+	if err != nil {
+		t.Fatalf("create graph query client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = predicateClient.Close()
+	})
+	predicateEntities, err := predicateClient.GetEntitiesByPredicate(ctx, source.DocContent)
+	if err != nil {
+		t.Fatalf("query canonical predicate %q: %v", source.DocContent, err)
+	}
+	wantPredicateEntities := map[string]bool{
+		"acme.semsource.web.docs.doc.aaa111": false,
+		"acme.semsource.web.docs.doc.bbb222": false,
+	}
+	for _, entityID := range predicateEntities {
+		if _, ok := wantPredicateEntities[entityID]; ok {
+			wantPredicateEntities[entityID] = true
+		}
+	}
+	for entityID, found := range wantPredicateEntities {
+		if !found {
+			t.Errorf("canonical predicate %q missing known entity %q; got %v", source.DocContent, entityID, predicateEntities)
+		}
+	}
 
 	firstPage := requestPrefixPage(t, ctx, tc.Client, semgraph.PrefixQueryRequest{
 		Prefix: "acme.semsource.web.docs",

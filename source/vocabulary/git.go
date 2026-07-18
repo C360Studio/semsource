@@ -11,38 +11,38 @@ import "github.com/c360studio/semstreams/vocabulary"
 const (
 	// DecisionType is the decision category from conventional commit prefix.
 	// Values: feat, fix, refactor, docs, test, chore, perf, ci, build, revert
-	DecisionType = "source.git.decision.type"
+	DecisionType = "source.git.decision-type"
 
 	// DecisionFile is the path of the file that was changed.
-	DecisionFile = "source.git.decision.file"
+	DecisionFile = "source.git.decision-file"
 
 	// DecisionCommit is the git commit hash.
-	DecisionCommit = "source.git.decision.commit"
+	DecisionCommit = "source.git.decision-commit"
 
 	// DecisionMessage is the commit message.
-	DecisionMessage = "source.git.decision.message"
+	DecisionMessage = "source.git.decision-message"
 
 	// DecisionBranch is the branch where the commit was made.
-	DecisionBranch = "source.git.decision.branch"
+	DecisionBranch = "source.git.decision-branch"
 
 	// DecisionAgent is the agent ID that made the commit (if semspec-driven).
-	DecisionAgent = "source.git.decision.agent"
+	DecisionAgent = "source.git.decision-agent"
 
 	// DecisionLoop is the agent loop ID that made the commit (if semspec-driven).
-	DecisionLoop = "source.git.decision.loop"
+	DecisionLoop = "source.git.decision-loop"
 
 	// DecisionProject is the project entity ID.
-	DecisionProject = "source.git.decision.project"
+	DecisionProject = "source.git.decision-project"
 
 	// DecisionTimestamp is when the commit was made (RFC3339).
-	DecisionTimestamp = "source.git.decision.timestamp"
+	DecisionTimestamp = "source.git.decision-timestamp"
 
 	// DecisionRepository is the repository URL or path.
-	DecisionRepository = "source.git.decision.repository"
+	DecisionRepository = "source.git.decision-repository"
 
 	// DecisionOperation is the type of file operation.
 	// Values: add, modify, delete, rename
-	DecisionOperation = "source.git.decision.operation"
+	DecisionOperation = "source.git.decision-operation"
 )
 
 // DecisionTypeValue represents the decision category values.
@@ -106,38 +106,38 @@ const (
 // model the "git-as-memory" pattern.
 const (
 	// GitCommitSHA is the full 40-character commit hash.
-	GitCommitSHA = "source.git.commit.sha"
+	GitCommitSHA = "source.git.commit-sha"
 
 	// GitCommitShortSHA is the abbreviated 7-character commit hash.
 	// Used as the entity instance identifier for deterministic identity.
-	GitCommitShortSHA = "source.git.commit.short_sha"
+	GitCommitShortSHA = "source.git.commit-short-sha"
 
 	// GitCommitAuthor is the combined "Name <email>" author string.
-	GitCommitAuthor = "source.git.commit.author"
+	GitCommitAuthor = "source.git.commit-author"
 
 	// GitCommitSubject is the first line of the commit message.
-	GitCommitSubject = "source.git.commit.subject"
+	GitCommitSubject = "source.git.commit-subject"
 
 	// GitCommitTouches is a relationship predicate: commit → file path touched.
 	// Object is the file path string, not an entity ID.
-	GitCommitTouches = "source.git.commit.touches"
+	GitCommitTouches = "source.git.commit-touches"
 
 	// GitCommitAuthoredBy is a relationship predicate linking a commit entity
 	// to its author entity.
-	GitCommitAuthoredBy = "source.git.commit.authored_by"
+	GitCommitAuthoredBy = "source.git.commit-authored-by"
 
 	// GitAuthorName is the display name of a git author.
-	GitAuthorName = "source.git.author.name"
+	GitAuthorName = "source.git.author-name"
 
 	// GitAuthorEmail is the email address of a git author.
 	// Also used as the stable instance identifier for author entities.
-	GitAuthorEmail = "source.git.author.email"
+	GitAuthorEmail = "source.git.author-email"
 
 	// GitBranchName is the ref name of a git branch.
-	GitBranchName = "source.git.branch.name"
+	GitBranchName = "source.git.branch-name"
 
 	// GitBranchHeadSHA is the abbreviated SHA of the branch's HEAD commit.
-	GitBranchHeadSHA = "source.git.branch.head_sha"
+	GitBranchHeadSHA = "source.git.branch-head-sha"
 )
 
 // Git decision class IRIs for RDF mapping.

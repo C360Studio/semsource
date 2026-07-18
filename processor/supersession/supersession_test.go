@@ -63,6 +63,23 @@ func assertTriple(t *testing.T, triples []message.Triple, pred, obj string) {
 	}
 }
 
+func assertReferenceTriple(t *testing.T, triples []message.Triple, pred, obj string) {
+	t.Helper()
+	for _, triple := range triples {
+		if triple.Predicate != pred || objectString(triple.Object) != obj {
+			continue
+		}
+		if triple.Datatype != message.EntityReferenceDatatype {
+			t.Errorf("triple %s -> %s datatype = %q, want %q", pred, obj, triple.Datatype, message.EntityReferenceDatatype)
+		}
+		if !message.IsValidEntityID(obj) {
+			t.Errorf("triple %s -> %s object is not a canonical entity ID", pred, obj)
+		}
+		return
+	}
+	t.Errorf("missing triple %s -> %s in %v", pred, obj, triples)
+}
+
 // --- 5.1 correspondence ----------------------------------------------------
 
 func TestCorrespondence_SameSymbolAcrossVersionsCorresponds(t *testing.T) {
@@ -170,16 +187,16 @@ func TestOrderGroup_NonSemverTimestampFallback(t *testing.T) {
 // --- 5.2 supersession ------------------------------------------------------
 
 func TestSupersession_NewerSupersedesOlderWithInverse(t *testing.T) {
-	older := cand("id-older", "v1.9.0", "code:a", time.Time{})
-	newer := cand("id-newer", "v1.10.0", "code:b", time.Time{})
+	older := cand("acme.semsource.golang.demo.function.older", "v1.9.0", "code:a", time.Time{})
+	newer := cand("acme.semsource.golang.demo.function.newer", "v1.10.0", "code:b", time.Time{})
 
 	// Input order deliberately reversed — ordering is by version, not input.
 	desired, stats := desiredEdges(groupByCorrespondence([]candidate{newer, older}))
 	if stats.Supersedes != 1 {
 		t.Fatalf("supersedes edges = %d, want 1", stats.Supersedes)
 	}
-	assertTriple(t, desired[newer.id], semsourceast.CodeSupersedes, older.id)
-	assertTriple(t, desired[older.id], semsourceast.CodeSupersededBy, newer.id)
+	assertReferenceTriple(t, desired[newer.id], semsourceast.CodeSupersedes, older.id)
+	assertReferenceTriple(t, desired[older.id], semsourceast.CodeSupersededBy, newer.id)
 }
 
 func TestSupersession_NewOnlySymbolNoEdge(t *testing.T) {

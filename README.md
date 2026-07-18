@@ -137,8 +137,9 @@ everything needed for a working, semantically-searchable graph in one command, w
 proxy, UI image, sibling repo, or Node.js requirement.
 
 Here, **UI-free** (or **headless deployment**) means that no workbench profile is enabled. It does
-not mean `mode: "headless"` in `semsource.json`: that old configuration value was removed and is
-rejected; the supported runtime mode remains `standalone`.
+not select a SemSource runtime mode. Remove the old `mode` key from `semsource.json`; strict loading
+rejects it as an unknown field, and `SEMSOURCE_MODE` is ignored. SemSource has one external-service
+runtime.
 
 ### MVP core (default) — tier-1 semantic search out of the box
 
@@ -306,7 +307,6 @@ Optional top-level fields:
 | Field                     | Default              | Description                                                                                                                                                                                         |
 | ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `http_port`               | `8080`               | ServiceManager HTTP API port                                                                                                                                                                        |
-| `mode`                    | `"standalone"`       | Only `standalone` is supported (retained for back-compat); `headless` was removed in ADR-0006 and now fails validation                                                                              |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
 | `graph.gateway_bind`      | `"0.0.0.0:8082"`     | GraphQL gateway host:port subject used by SemStreams registration; in ServiceManager mode the live HTTP route is `/graph-gateway/graphql` on `:8080` and the `ui` profile exposes it as `/graphql`  |
 | `graph.embedder_type`     | `"bm25"`             | Embedding backend: `bm25` (keyword, no dependencies) or `http` (semantic — **requires `model_registry` with an `embedding` capability**)                                                            |
@@ -319,7 +319,7 @@ Optional top-level fields:
 | `workspace_dir`           | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths)                                                                                                     |
 | `git_token`               | —                    | Token for authenticated remote repo cloning                                                                                                                                                         |
 | `media_store_dir`         | —                    | Local directory for media binary storage                                                                                                                                                            |
-| `streams`                 | —                    | Optional JetStream stream overrides for standalone mode                                                                                                                                             |
+| `streams`                 | —                    | Optional JetStream stream overrides for the external service                                                                                                                                        |
 
 Validate without starting the engine:
 

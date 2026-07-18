@@ -134,6 +134,7 @@ func (e *CommitEntity) Triples() []message.Triple {
 			Subject:    e.ID,
 			Predicate:  source.GitCommitAuthoredBy,
 			Object:     authorID,
+			Datatype:   message.EntityReferenceDatatype,
 			Source:     entityid.PlatformSemsource,
 			Timestamp:  now,
 			Confidence: 1.0,
