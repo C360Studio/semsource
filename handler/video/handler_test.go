@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	videohandler "github.com/c360studio/semsource/handler/video"
 	source "github.com/c360studio/semsource/source/vocabulary"
+	"github.com/c360studio/semstreams/message"
 	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
@@ -206,6 +207,23 @@ func TestKeyframeEntityState_IndexingProfileTrace(t *testing.T) {
 	}
 	if state.IndexingProfile == semvocab.IndexingProfileContent {
 		t.Fatal("keyframe trace artifact must not be indexed as content")
+	}
+	var relationshipFound bool
+	for _, triple := range state.Triples {
+		if triple.Predicate != source.MediaKeyframeOf {
+			continue
+		}
+		relationshipFound = true
+		if triple.Datatype != message.EntityReferenceDatatype {
+			t.Errorf("keyframe-of datatype = %q, want %q", triple.Datatype, message.EntityReferenceDatatype)
+		}
+		videoID, ok := triple.Object.(string)
+		if !ok || !message.IsValidEntityID(videoID) {
+			t.Errorf("keyframe-of object = %#v, want canonical entity ID", triple.Object)
+		}
+	}
+	if !relationshipFound {
+		t.Fatal("keyframe entity missing keyframe-of relationship")
 	}
 }
 
@@ -791,12 +809,12 @@ func TestVideoHandler_IngestEntityStates_WithFFmpeg(t *testing.T) {
 	}
 	for _, p := range []string{
 		"source.media.type",
-		"source.media.file_path",
-		"source.media.mime_type",
-		"source.media.file_hash",
+		"source.media.file-path",
+		"source.media.mime-type",
+		"source.media.file-hash",
 		"source.media.format",
 		"source.media.duration",
-		"source.media.frame_rate",
+		"source.media.frame-rate",
 		"source.media.codec",
 	} {
 		if !predicates[p] {
@@ -824,7 +842,7 @@ func TestVideoHandler_IngestEntityStates_WithFFmpeg(t *testing.T) {
 			}
 		}
 		if !hasKeyframeOf {
-			t.Errorf("keyframe entity %q missing source.media.keyframe_of triple", state.ID)
+			t.Errorf("keyframe entity %q missing source.media.keyframe-of triple", state.ID)
 		}
 	}
 }

@@ -1,0 +1,1807 @@
+version: 1
+row_count: 92
+rows:
+  - old_identity: "code.lineage.superseded_by"
+    canonical_target: "code.lineage.superseded-by"
+    symbol: "CodeSupersededBy"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/ast/vocabulary.go:171"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/supersession/edges.go"
+      - "source/ast/vocabulary.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/governance/multi_source_lineage_integration_test.go"
+      - "internal/governance/supersession_demote_integration_test.go"
+      - "internal/governance/supersession_integration_test.go"
+      - "processor/supersession/supersession_test.go"
+      - "source/ast/salience_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Older symbol to canonical newer symbol; object must be a six-part entity @id.
+  - old_identity: "code.metric.end_line"
+    canonical_target: "code.metric.end-line"
+    symbol: "CodeEndLine"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/ast/vocabulary.go:194"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "source/ast/entities.go"
+      - "source/ast/vocabulary.go"
+    exact_query:
+      - "source/fusion/lens/code/code.go"
+    fixture:
+      - "internal/governance/fusion_gateway_integration_test.go"
+      - "processor/code-context/component_test.go"
+      - "source/ast/entities_test.go"
+      - "source/fusion/lens/code/code_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve CodeEndLine's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "code.metric.start_line"
+    canonical_target: "code.metric.start-line"
+    symbol: "CodeStartLine"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/ast/vocabulary.go:189"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "source/ast/entities.go"
+      - "source/ast/vocabulary.go"
+    exact_query:
+      - "source/fusion/lens/code/code.go"
+    fixture:
+      - "internal/governance/fusion_gateway_integration_test.go"
+      - "processor/code-context/component_test.go"
+      - "source/ast/entities_test.go"
+      - "source/fusion/lens/code/code_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve CodeStartLine's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "semspec.convention.applies_to"
+    canonical_target: "semspec.convention.applies-to"
+    symbol: "ConventionAppliesTo"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/convention.go:52"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      File-glob array, not entity identities; retain literal array.
+  - old_identity: "semspec.convention.approved_by"
+    canonical_target: "semspec.convention.approved-by"
+    symbol: "ConventionApprovedBy"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/convention.go:62"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConventionApprovedBy's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "semspec.convention.source_task"
+    canonical_target: "semspec.convention.source-task"
+    symbol: "ConventionSourceTask"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/convention.go:57"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Convention to originating task entity; object must be a six-part entity @id.
+  - old_identity: "source.config.dependency.configuration"
+    canonical_target: "source.config.dependency-configuration"
+    symbol: "ConfigDepConfiguration"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:160"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigDepConfiguration's registered string meaning; retain the first two axes and fold the
+      remaining property tail into one lower-kebab segment.
+  - old_identity: "source.config.dependency.indirect"
+    canonical_target: "source.config.dependency-indirect"
+    symbol: "ConfigDepIndirect"
+    datatype: "bool"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:145"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigDepIndirect's registered bool meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.dependency.kind"
+    canonical_target: "source.config.dependency-kind"
+    symbol: "ConfigDepKind"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:150"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigDepKind's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.dependency.name"
+    canonical_target: "source.config.dependency-name"
+    symbol: "ConfigDepName"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:135"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigDepName's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.dependency.scope"
+    canonical_target: "source.config.dependency-scope"
+    symbol: "ConfigDepScope"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:155"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigDepScope's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.dependency.version"
+    canonical_target: "source.config.dependency-version"
+    symbol: "ConfigDepVersion"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:140"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigDepVersion's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.file_path"
+    canonical_target: "source.config.file-path"
+    symbol: "ConfigFilePath"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:118"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigFilePath's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.image.exposed_ports"
+    canonical_target: "source.config.image-exposed-ports"
+    symbol: "ConfigImagePorts"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:208"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigImagePorts's registered array meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.image.name"
+    canonical_target: "source.config.image-name"
+    symbol: "ConfigImageName"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:203"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigImageName's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.module.go_version"
+    canonical_target: "source.config.module-go-version"
+    symbol: "ConfigModuleGoVer"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:129"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigModuleGoVer's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.module.path"
+    canonical_target: "source.config.module-path"
+    symbol: "ConfigModulePath"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:124"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigModulePath's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.package.name"
+    canonical_target: "source.config.package-name"
+    symbol: "ConfigPkgName"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:166"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigPkgName's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.package.version"
+    canonical_target: "source.config.package-version"
+    symbol: "ConfigPkgVersion"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:171"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigPkgVersion's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.project.artifact_id"
+    canonical_target: "source.config.project-artifact-id"
+    symbol: "ConfigProjectArtifact"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:182"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigProjectArtifact's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.project.build"
+    canonical_target: "source.config.project-build"
+    symbol: "ConfigProjectBuild"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:197"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigProjectBuild's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.project.group_id"
+    canonical_target: "source.config.project-group-id"
+    symbol: "ConfigProjectGroup"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:177"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigProjectGroup's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.config.project.packaging"
+    canonical_target: "source.config.project-packaging"
+    symbol: "ConfigProjectPackaging"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:192"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigProjectPackaging's registered string meaning; retain the first two axes and fold the
+      remaining property tail into one lower-kebab segment.
+  - old_identity: "source.config.project.version"
+    canonical_target: "source.config.project-version"
+    symbol: "ConfigProjectVersion"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/config.go:187"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/cfgfile/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/cfgfile/entities_test.go"
+      - "source/vocabulary/config_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve ConfigProjectVersion's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.doc.applies_to"
+    canonical_target: "source.doc.applies-to"
+    symbol: "DocAppliesTo"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:301"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      File-glob array, not entity identities; retain literal array.
+  - old_identity: "source.doc.body_key"
+    canonical_target: "source.doc.body-key"
+    symbol: "DocBodyKey"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:367"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/doc/entities.go"
+    exact_query:
+      - "source/fusion/lens/docs/docs.go"
+    fixture:
+      - "handler/doc/handler_test.go"
+      - "source/vocabulary/beta148_contract_test.go"
+      - "processor/code-context/component_test.go"
+      - "source/fusion/lens/docs/docs_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Storage object key, not an entity ID; register as a literal string.
+  - old_identity: "source.doc.body_store"
+    canonical_target: "source.doc.body-store"
+    symbol: "DocBodyStore"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:362"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/doc/entities.go"
+    exact_query:
+      - "source/fusion/lens/docs/docs.go"
+    fixture:
+      - "handler/doc/handler_test.go"
+      - "source/vocabulary/beta148_contract_test.go"
+      - "processor/code-context/component_test.go"
+      - "source/fusion/lens/docs/docs_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Storage component handle, not an entity ID; register as a literal string.
+  - old_identity: "source.doc.chunk_count"
+    canonical_target: "source.doc.chunk-count"
+    symbol: "DocChunkCount"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:342"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DocChunkCount's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.doc.chunk_index"
+    canonical_target: "source.doc.chunk-index"
+    symbol: "DocChunkIndex"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:337"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DocChunkIndex's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.doc.file_hash"
+    canonical_target: "source.doc.file-hash"
+    symbol: "DocFileHash"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:357"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/doc/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/doc/handler_test.go"
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DocFileHash's registered string meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.doc.file_path"
+    canonical_target: "source.doc.file-path"
+    symbol: "DocFilePath"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:352"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/doc/entities.go"
+    exact_query:
+      - "source/fusion/lens/docs/docs.go"
+    fixture:
+      - "handler/doc/handler_test.go"
+      - "source/vocabulary/beta148_contract_test.go"
+      - "processor/code-context/component_test.go"
+      - "source/fusion/lens/docs/docs_test.go"
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+      - "SemSpec and SemDragon exact UI selectors; owner blockers"
+    semantic_rationale: >-
+      Preserve DocFilePath's registered string meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.doc.mime_type"
+    canonical_target: "source.doc.mime-type"
+    symbol: "DocMimeType"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:347"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/doc/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/doc/handler_test.go"
+      - "source/vocabulary/beta148_contract_test.go"
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+      - "SemDragon producer; owner blocker"
+    semantic_rationale: >-
+      Preserve DocMimeType's registered string meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.doc.related_domains"
+    canonical_target: "source.doc.related-domains"
+    symbol: "DocRelatedDomains"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:372"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DocRelatedDomains's registered array meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.author.email"
+    canonical_target: "source.git.author-email"
+    symbol: "GitAuthorEmail"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:260"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitAuthorEmail's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.author.name"
+    canonical_target: "source.git.author-name"
+    symbol: "GitAuthorName"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:255"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitAuthorName's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.branch.head_sha"
+    canonical_target: "source.git.branch-head-sha"
+    symbol: "GitBranchHeadSHA"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:270"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitBranchHeadSHA's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.branch.name"
+    canonical_target: "source.git.branch-name"
+    symbol: "GitBranchName"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:265"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitBranchName's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.commit.author"
+    canonical_target: "source.git.commit-author"
+    symbol: "GitCommitAuthor"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:235"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitCommitAuthor's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.commit.authored_by"
+    canonical_target: "source.git.commit-authored-by"
+    symbol: "GitCommitAuthoredBy"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/git.go:250"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Commit to author entity; object must be a six-part entity @id.
+  - old_identity: "source.git.commit.sha"
+    canonical_target: "source.git.commit-sha"
+    symbol: "GitCommitSHA"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:225"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+      - "SemSpec exact server query; owner blocker"
+    semantic_rationale: >-
+      Preserve GitCommitSHA's registered string meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.git.commit.short_sha"
+    canonical_target: "source.git.commit-short-sha"
+    symbol: "GitCommitShortSHA"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:230"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitCommitShortSHA's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.commit.subject"
+    canonical_target: "source.git.commit-subject"
+    symbol: "GitCommitSubject"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:240"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/governance/live_graph_integration_test.go"
+      - "internal/governance/predicates_test.go"
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve GitCommitSubject's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.commit.touches"
+    canonical_target: "source.git.commit-touches"
+    symbol: "GitCommitTouches"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:245"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/git/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Touched filesystem path, explicitly not an entity ID; retain literal string.
+  - old_identity: "source.git.decision.agent"
+    canonical_target: "source.git.decision-agent"
+    symbol: "DecisionAgent"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/git.go:186"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Decision to agent entity; object must be a six-part entity @id.
+  - old_identity: "source.git.decision.branch"
+    canonical_target: "source.git.decision-branch"
+    symbol: "DecisionBranch"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:180"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionBranch's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.commit"
+    canonical_target: "source.git.decision-commit"
+    symbol: "DecisionCommit"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:168"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionCommit's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.file"
+    canonical_target: "source.git.decision-file"
+    symbol: "DecisionFile"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:162"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionFile's registered string meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.loop"
+    canonical_target: "source.git.decision-loop"
+    symbol: "DecisionLoop"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/git.go:192"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Decision to agent-loop entity; object must be a six-part entity @id.
+  - old_identity: "source.git.decision.message"
+    canonical_target: "source.git.decision-message"
+    symbol: "DecisionMessage"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:174"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionMessage's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.operation"
+    canonical_target: "source.git.decision-operation"
+    symbol: "DecisionOperation"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:216"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionOperation's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.project"
+    canonical_target: "source.git.decision-project"
+    symbol: "DecisionProject"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/git.go:198"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Decision to project entity; object must be a six-part entity @id.
+  - old_identity: "source.git.decision.repository"
+    canonical_target: "source.git.decision-repository"
+    symbol: "DecisionRepository"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:210"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionRepository's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.timestamp"
+    canonical_target: "source.git.decision-timestamp"
+    symbol: "DecisionTimestamp"
+    datatype: "datetime"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:204"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionTimestamp's registered datetime meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.git.decision.type"
+    canonical_target: "source.git.decision-type"
+    symbol: "DecisionType"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/git.go:156"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/git_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve DecisionType's registered string meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.media.bit_depth"
+    canonical_target: "source.media.bit-depth"
+    symbol: "MediaBitDepth"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:259"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaBitDepth's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.media.byte_range"
+    canonical_target: "source.media.byte-range"
+    symbol: "MediaByteRange"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:192"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/binaryproof/synthetic_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+      - "internal/governance/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaByteRange's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.extraction.finding"
+    canonical_target: "source.media.extraction-finding"
+    symbol: "MediaExtractionFinding"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:197"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/binaryproof/synthetic_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+      - "internal/governance/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaExtractionFinding's registered string meaning; retain the first two axes and fold the
+      remaining property tail into one lower-kebab segment.
+  - old_identity: "source.media.file_hash"
+    canonical_target: "source.media.file-hash"
+    symbol: "MediaFileHash"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:167"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+      - "handler/image/entities.go"
+      - "handler/video/entities.go"
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/binaryproof/synthetic_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaFileHash's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.file_path"
+    canonical_target: "source.media.file-path"
+    symbol: "MediaFilePath"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:162"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+      - "handler/image/entities.go"
+      - "handler/video/entities.go"
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaFilePath's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.file_size"
+    canonical_target: "source.media.file-size"
+    symbol: "MediaFileSize"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:172"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+      - "handler/image/entities.go"
+      - "handler/video/entities.go"
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/binaryproof/synthetic_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaFileSize's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.media.frame_index"
+    canonical_target: "source.media.frame-index"
+    symbol: "MediaFrameIndex"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:237"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/video/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaFrameIndex's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.media.frame_rate"
+    canonical_target: "source.media.frame-rate"
+    symbol: "MediaFrameRate"
+    datatype: "float"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:210"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/video/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaFrameRate's registered float meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.keyframe_count"
+    canonical_target: "source.media.keyframe-count"
+    symbol: "MediaKeyframeCount"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:225"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/video/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaKeyframeCount's registered int meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.keyframe_of"
+    canonical_target: "source.media.keyframe-of"
+    symbol: "MediaKeyframeOf"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/media.go:242"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/video/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/video/handler_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Keyframe to parent video entity; object must be a six-part entity @id.
+  - old_identity: "source.media.mime_type"
+    canonical_target: "source.media.mime-type"
+    symbol: "MediaMimeType"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:147"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+      - "handler/image/entities.go"
+      - "handler/video/entities.go"
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaMimeType's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.sample_rate"
+    canonical_target: "source.media.sample-rate"
+    symbol: "MediaSampleRate"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:249"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaSampleRate's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.media.storage_ref"
+    canonical_target: "source.media.storage-ref"
+    symbol: "MediaStorageRef"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:182"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/audio/entities.go"
+      - "handler/image/entities.go"
+      - "handler/video/entities.go"
+      - "internal/binaryproof/synthetic.go"
+    exact_query:
+      - none
+    fixture:
+      - "internal/binaryproof/synthetic_test.go"
+      - "internal/governance/live_graph_integration_test.go"
+      - "internal/governance/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Storage handle, not an entity ID; retain literal string metadata.
+  - old_identity: "source.media.thumbnail_ref"
+    canonical_target: "source.media.thumbnail-ref"
+    symbol: "MediaThumbnailRef"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:187"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/image/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Thumbnail storage handle, not an entity ID; retain literal string metadata.
+  - old_identity: "source.media.vision.confidence"
+    canonical_target: "source.media.vision-confidence"
+    symbol: "MediaVisionConfidence"
+    datatype: "float"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:276"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/vision/processor.go"
+    exact_query:
+      - none
+    fixture:
+      - "processor/vision/processor_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaVisionConfidence's registered float meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.vision.description"
+    canonical_target: "source.media.vision-description"
+    symbol: "MediaVisionDescription"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:271"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/vision/processor.go"
+    exact_query:
+      - none
+    fixture:
+      - "processor/vision/processor_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaVisionDescription's registered string meaning; retain the first two axes and fold the
+      remaining property tail into one lower-kebab segment.
+  - old_identity: "source.media.vision.labels"
+    canonical_target: "source.media.vision-labels"
+    symbol: "MediaVisionLabels"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:266"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/vision/processor.go"
+    exact_query:
+      - none
+    fixture:
+      - "processor/vision/processor_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaVisionLabels's registered array meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.vision.model"
+    canonical_target: "source.media.vision-model"
+    symbol: "MediaVisionModel"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:291"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/vision/processor.go"
+    exact_query:
+      - none
+    fixture:
+      - "processor/vision/processor_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaVisionModel's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.vision.objects"
+    canonical_target: "source.media.vision-objects"
+    symbol: "MediaVisionObjects"
+    datatype: "json"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:281"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/vision/processor.go"
+    exact_query:
+      - none
+    fixture:
+      - "processor/vision/processor_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaVisionObjects's registered json meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.media.vision.text"
+    canonical_target: "source.media.vision-text"
+    symbol: "MediaVisionText"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/media.go:286"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "processor/vision/processor.go"
+    exact_query:
+      - none
+    fixture:
+      - "processor/vision/processor_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve MediaVisionText's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.meta.added_at"
+    canonical_target: "source.meta.added-at"
+    symbol: "SourceAddedAt"
+    datatype: "datetime"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:594"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve SourceAddedAt's registered datetime meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.meta.added_by"
+    canonical_target: "source.meta.added-by"
+    symbol: "SourceAddedBy"
+    datatype: "entity_id"
+    reference_kind: "entity-reference"
+    registration: "source/vocabulary/predicates.go:589"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/beta148_contract_test.go"
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Source to adding user or agent entity; object must be a six-part entity @id.
+  - old_identity: "source.repo.auto_pull"
+    canonical_target: "source.repo.auto-pull"
+    symbol: "RepoAutoPull"
+    datatype: "bool"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:545"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve RepoAutoPull's registered bool meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.repo.entity_count"
+    canonical_target: "source.repo.entity-count"
+    symbol: "RepoEntityCount"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:535"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve RepoEntityCount's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.repo.last_commit"
+    canonical_target: "source.repo.last-commit"
+    symbol: "RepoLastCommit"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:555"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve RepoLastCommit's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.repo.last_indexed"
+    canonical_target: "source.repo.last-indexed"
+    symbol: "RepoLastIndexed"
+    datatype: "datetime"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:540"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve RepoLastIndexed's registered datetime meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.repo.pull_interval"
+    canonical_target: "source.repo.pull-interval"
+    symbol: "RepoPullInterval"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:550"
+    schema: "not exposed by current source schema prefixes"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - "source/vocabulary/predicates_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve RepoPullInterval's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.analysis_skipped"
+    canonical_target: "source.web.analysis-skipped"
+    symbol: "WebAnalysisSkipped"
+    datatype: "bool"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:501"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebAnalysisSkipped's registered bool meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.applies_to"
+    canonical_target: "source.web.applies-to"
+    symbol: "WebAppliesTo"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:461"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      File-glob array, not entity identities; retain literal array.
+  - old_identity: "source.web.auto_refresh"
+    canonical_target: "source.web.auto-refresh"
+    symbol: "WebAutoRefresh"
+    datatype: "bool"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:421"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebAutoRefresh's registered bool meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.web.chunk_count"
+    canonical_target: "source.web.chunk-count"
+    symbol: "WebChunkCount"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:431"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebChunkCount's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.web.chunk_index"
+    canonical_target: "source.web.chunk-index"
+    symbol: "WebChunkIndex"
+    datatype: "int"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:446"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebChunkIndex's registered int meaning; retain the first two axes and fold the remaining property
+      tail into one lower-kebab segment.
+  - old_identity: "source.web.content_hash"
+    canonical_target: "source.web.content-hash"
+    symbol: "WebContentHash"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:416"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/url/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/url/handler_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebContentHash's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.content_type"
+    canonical_target: "source.web.content-type"
+    symbol: "WebContentType"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:396"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - "handler/url/entities.go"
+    exact_query:
+      - none
+    fixture:
+      - "handler/url/handler_test.go"
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebContentType's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.last_fetched"
+    canonical_target: "source.web.last-fetched"
+    symbol: "WebLastFetched"
+    datatype: "datetime"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:406"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebLastFetched's registered datetime meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.refresh_interval"
+    canonical_target: "source.web.refresh-interval"
+    symbol: "WebRefreshInterval"
+    datatype: "string"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:426"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebRefreshInterval's registered string meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.related_domains"
+    canonical_target: "source.web.related-domains"
+    symbol: "WebRelatedDomains"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:491"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebRelatedDomains's registered array meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.
+  - old_identity: "source.web.semantic_domain"
+    canonical_target: "source.web.semantic-domain"
+    symbol: "WebSemanticDomain"
+    datatype: "array"
+    reference_kind: "literal"
+    registration: "source/vocabulary/predicates.go:486"
+    schema: "processor/source-manifest/status.go:135-166 dynamic registered-prefix schema"
+    collision_result: "unique"
+    producer:
+      - none
+    exact_query:
+      - none
+    fixture:
+      - none
+    consumer:
+      - "SemSource"
+    semantic_rationale: >-
+      Preserve WebSemanticDomain's registered array meaning; retain the first two axes and fold the remaining
+      property tail into one lower-kebab segment.

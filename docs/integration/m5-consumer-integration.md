@@ -186,19 +186,17 @@ needed.
 | Item | Reason |
 |------|--------|
 | WebSocket client (`input/websocket`) | Query consumers use `graph.query.*` or GraphQL |
-| `FederationProcessor` registration | Identity and ownership are handled by the graph substrate |
 | Bridge processor | No raw event stream needs to be bridged into consumer storage |
 | `GRAPH_EVENTS` stream | Not exposed to query consumers |
 | `GRAPH_MERGED` stream | Not exposed to query consumers |
-| `federation.ToEntityState()` calls | Consumers receive query responses, not raw event streams |
 
 ## Headless Mode: Removed (ADR-0006)
 
-SemSource no longer supports embedded / host-shared **headless** mode — it runs only as a
-standalone external service (ADR-0006). It provisions and owns its own `GRAPH` stream and
-governed graph contracts; consumers integrate over `graph.query.*` / GraphQL as described
-above and do **not** share JetStream infrastructure with SemSource. A `mode: "headless"`
-config now fails validation with a migration message pointing here.
+SemSource no longer supports an embedded / host-shared runtime selector — it runs as one external
+service (ADR-0006). It provisions and owns its own `GRAPH` stream and governed graph contracts;
+consumers integrate over `graph.query.*` / GraphQL as described above and do **not** share JetStream
+infrastructure with SemSource. Remove any `mode` key from `semsource.json`; strict loading rejects it
+as an ordinary unknown field, and `SEMSOURCE_MODE` has no effect.
 
 (The JetStream `PubAck`-wins-the-race footgun that the old headless boot-time guard checked
 for only arose when a *host* owned the `GRAPH` stream; with SemSource owning its own stream

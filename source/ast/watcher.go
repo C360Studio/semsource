@@ -410,28 +410,3 @@ func (w *Watcher) sendEvent(event WatchEvent) {
 func (w *Watcher) DroppedEvents() int64 {
 	return w.droppedEvents.Load()
 }
-
-// IndexDirectory performs initial indexing of source files.
-// Note: For multi-language support, use the component's parseDirectory method instead
-// which handles language-specific parsers. This method is kept for backward compatibility.
-func (w *Watcher) IndexDirectory(ctx context.Context) ([]*ParseResult, error) {
-	// If parser supports directory parsing (like the Go parser), use it
-	if dp, ok := w.parser.(interface {
-		ParseDirectory(ctx context.Context, dirPath string) ([]*ParseResult, error)
-	}); ok {
-		results, err := dp.ParseDirectory(ctx, w.config.RepoRoot)
-		if err != nil {
-			return nil, err
-		}
-
-		// Record hashes for change detection
-		for _, result := range results {
-			w.SetHash(result.Path, result.Hash)
-		}
-
-		return results, nil
-	}
-
-	// Otherwise return empty results - caller should use component-level parsing
-	return nil, nil
-}

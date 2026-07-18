@@ -574,17 +574,17 @@ func TestAudioHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testin
 
 	required := []string{
 		"source.media.type",
-		"source.media.file_path",
-		"source.media.mime_type",
-		"source.media.file_hash",
-		"source.media.file_size",
+		"source.media.file-path",
+		"source.media.mime-type",
+		"source.media.file-hash",
+		"source.media.file-size",
 		"source.media.format",
 		"source.media.duration",
 		"source.media.codec",
 		"source.media.bitrate",
-		"source.media.sample_rate",
+		"source.media.sample-rate",
 		"source.media.channels",
-		"source.media.bit_depth",
+		"source.media.bit-depth",
 	}
 	for _, p := range required {
 		if !predicates[p] {

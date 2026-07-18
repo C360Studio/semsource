@@ -272,23 +272,28 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 	return cancel
 }
 
-// handleChangeEvent processes a change event from the doc handler's watch channel.
-// When the handler populates EntityStates (normalizer-free path), those are used
-// directly. The Entities fallback is retained for backward compatibility.
+// handleChangeEvent processes a typed change event from the doc handler.
 func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeEvent) {
 	c.logger.Debug("Doc-source change event received",
 		"path", event.Path,
 		"operation", event.Operation,
-		"entity_states", len(event.EntityStates),
-		"entities", len(event.Entities))
+		"entity_states", len(event.EntityStates))
+
+	if event.Operation == handler.OperationDelete {
+		return
+	}
 
 	// Prefer pre-built EntityStates — no normalizer pass required.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
 			payload, err := entitypub.PayloadFromState(state)
 			if err != nil {
+				stateID := ""
+				if state != nil {
+					stateID = state.ID
+				}
 				c.logger.Warn("Invalid doc entity state on change",
-					"id", state.ID,
+					"id", stateID,
 					"error", err)
 				c.ingestErrors.Add(1)
 				continue
@@ -307,12 +312,10 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		return
 	}
 
-	// Fallback: event carried only RawEntities (e.g. handler constructed without org).
-	// This path should not be reached in normal operation but is retained to
-	// avoid silent drops during a mixed-version deployment.
-	c.logger.Warn("Doc-source change event has no EntityStates; handler may be missing org",
+	c.ingestErrors.Add(1)
+	c.logger.Warn("Doc-source change event missing required EntityStates",
 		"path", event.Path,
-		"entities", len(event.Entities))
+		"operation", event.Operation)
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via entitypub.

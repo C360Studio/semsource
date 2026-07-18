@@ -557,82 +557,41 @@ func TestLoadConfigFromReader_VideoInvalidKeyframeMode(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_ModeDefault(t *testing.T) {
+func TestLoadConfigFromReader_WithoutMode(t *testing.T) {
 	input := `{
   "namespace": "acme",
-  "sources": [{"type": "ast", "path": "./", "language": "go"}]
-}`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Mode != config.ModeStandalone {
-		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeStandalone)
-	}
-}
-
-// TestLoadConfigFromReader_ModeHeadlessRejected verifies the ADR-0006 migration
-// guard: the removed "headless" mode now fails validation with a clear message.
-func TestLoadConfigFromReader_ModeHeadlessRejected(t *testing.T) {
-	input := `{
-  "namespace": "acme",
-  "mode": "headless",
   "sources": [{"type": "ast", "path": "./", "language": "go"}]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error for removed headless mode")
-	}
-	if !strings.Contains(err.Error(), "headless") {
-		t.Errorf("error should explain headless removal, got: %v", err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestLoadConfigFromReader_ModeStandalone(t *testing.T) {
+func TestLoadConfigFromReader_ModeIsUnknownField(t *testing.T) {
 	input := `{
   "namespace": "acme",
   "mode": "standalone",
   "sources": [{"type": "ast", "path": "./", "language": "go"}]
 }`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Mode != config.ModeStandalone {
-		t.Errorf("mode: got %q, want %q", cfg.Mode, config.ModeStandalone)
-	}
-}
-
-func TestLoadConfigFromReader_ModeInvalid(t *testing.T) {
-	input := `{
-  "namespace": "acme",
-  "mode": "turbo",
-  "sources": [{"type": "ast", "path": "./", "language": "go"}]
-}`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err == nil {
-		t.Fatal("expected validation error for invalid mode")
+		t.Fatal("expected mode to be rejected as an unknown field")
 	}
-	if !strings.Contains(err.Error(), "mode") {
-		t.Errorf("error should mention mode, got: %v", err)
+	if !strings.Contains(err.Error(), `unknown field "mode"`) {
+		t.Errorf("error should use ordinary unknown-field classification, got: %v", err)
 	}
 }
 
-// TestLoadConfigFromReader_ModeEnvOverride confirms SEMSOURCE_MODE is read (it
-// overrides the file value) and that an env-set headless is rejected too.
-func TestLoadConfigFromReader_ModeEnvOverride(t *testing.T) {
+func TestLoadConfigFromReader_SEMSOURCEMODEIsInert(t *testing.T) {
 	t.Setenv("SEMSOURCE_MODE", "headless")
 	input := `{
   "namespace": "acme",
-  "mode": "standalone",
   "sources": [{"type": "ast", "path": "./", "language": "go"}]
 }`
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected validation error: env SEMSOURCE_MODE=headless must be rejected")
-	}
-	if !strings.Contains(err.Error(), "headless") {
-		t.Errorf("error should explain headless removal, got: %v", err)
+	if err != nil {
+		t.Fatalf("SEMSOURCE_MODE must not affect configuration: %v", err)
 	}
 }
 

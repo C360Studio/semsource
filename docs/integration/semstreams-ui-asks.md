@@ -102,7 +102,7 @@ live-tested.
 ### 4. Versioned-source lineage view  ·  contract: EXISTS (our differentiator)
 SemSource retains every indexed version of a source and relates them (ADR-0008, shipped). Surface:
 - **supersession chains** per symbol — `v1.9.0 → v1.10.0 → v1.11.0` via `code.lineage.supersedes`
-  (newer→older) / `code.lineage.superseded_by` edges;
+  (newer→older) / `code.lineage.superseded-by` edges;
 - **current vs historical** — the current (un-superseded) version leads; historical versions are
   ranking-demoted but still present (a "show historical" toggle);
 - **changed vs unchanged** per adjacent pair — `code.lineage.change`; drives a "what changed in `X`

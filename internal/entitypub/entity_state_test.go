@@ -16,7 +16,7 @@ func TestPayloadFromState_PreservesTraceIndexingProfile(t *testing.T) {
 		Triples: []message.Triple{
 			{
 				Subject:   "acme.semsource.media.videos.keyframe.demo-1s",
-				Predicate: "source.media.keyframe_of",
+				Predicate: "source.media.keyframe-of",
 				Object:    "acme.semsource.media.videos.video.demo",
 			},
 		},
@@ -43,7 +43,7 @@ func TestPayloadFromState_RejectsInvalidState(t *testing.T) {
 			Triples: []message.Triple{
 				{
 					Subject:   "acme.semsource.media.videos.video.demo",
-					Predicate: "source.media.keyframe_of",
+					Predicate: "source.media.keyframe-of",
 					Object:    "acme.semsource.media.videos.video.demo",
 				},
 			},

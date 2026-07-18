@@ -54,13 +54,13 @@ const (
 	// additive; the inverse is emitted for query convenience. code.lineage.change
 	// records whether the body changed across the corresponding pair.
 	CodeSupersedes    = "code.lineage.supersedes"    // newer entity → older entity it supersedes
-	CodeSupersededBy  = "code.lineage.superseded_by" // older entity → newer entity that supersedes it
+	CodeSupersededBy  = "code.lineage.superseded-by" // older entity → newer entity that supersedes it
 	CodeLineageChange = "code.lineage.change"        // "changed" | "unchanged" (body-hash comparison)
 
 	// Metrics
 	CodeLines      = "code.metric.lines"      // line count
-	CodeStartLine  = "code.metric.start_line" // starting line number
-	CodeEndLine    = "code.metric.end_line"   // ending line number
+	CodeStartLine  = "code.metric.start-line" // starting line number
+	CodeEndLine    = "code.metric.end-line"   // ending line number
 	CodeComplexity = "code.metric.complexity" // cyclomatic complexity (future)
 
 	// Verbatim body handle (ADR-062 hydration contract). The producer offloads

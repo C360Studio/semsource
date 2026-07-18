@@ -2,6 +2,7 @@ package git_test
 
 import (
 	"context"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
+	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -229,10 +231,14 @@ func findPredicate(ts []message.Triple, predicate string) *message.Triple {
 }
 
 func TestCommitEntity_Triples(t *testing.T) {
+	repoPath, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatalf("filepath.Abs() error = %v", err)
+	}
 	h := githandler.New(githandler.Config{Org: "acme"})
 	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
 		typ:  "git",
-		path: ".", // current repo — always has at least one commit in CI
+		path: repoPath, // current repo — always has at least one commit in CI
 	}, "acme")
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error = %v", err)
@@ -244,7 +250,7 @@ func TestCommitEntity_Triples(t *testing.T) {
 	// Find the first commit state by looking for the sha predicate.
 	var commitState *handler.EntityState
 	for _, s := range states {
-		if findPredicate(s.Triples, "source.git.commit.sha") != nil {
+		if findPredicate(s.Triples, "source.git.commit-sha") != nil {
 			commitState = s
 			break
 		}
@@ -274,14 +280,26 @@ func TestCommitEntity_Triples(t *testing.T) {
 
 	// Required predicates must be present.
 	for _, pred := range []string{
-		"source.git.commit.sha",
-		"source.git.commit.short_sha",
-		"source.git.commit.author",
-		"source.git.commit.subject",
+		"source.git.commit-sha",
+		"source.git.commit-short-sha",
+		"source.git.commit-author",
+		"source.git.commit-subject",
 	} {
 		if findPredicate(commitState.Triples, pred) == nil {
 			t.Errorf("commit entity missing predicate %q", pred)
 		}
+	}
+
+	authoredBy := findPredicate(commitState.Triples, source.GitCommitAuthoredBy)
+	if authoredBy == nil {
+		t.Fatal("commit entity missing authored-by relationship")
+	}
+	if authoredBy.Datatype != message.EntityReferenceDatatype {
+		t.Errorf("authored-by datatype = %q, want %q", authoredBy.Datatype, message.EntityReferenceDatatype)
+	}
+	authorID, ok := authoredBy.Object.(string)
+	if !ok || !message.IsValidEntityID(authorID) {
+		t.Errorf("authored-by object = %#v, want canonical entity ID", authoredBy.Object)
 	}
 }
 
@@ -297,7 +315,7 @@ func TestAuthorEntity_Triples(t *testing.T) {
 
 	var authorState *handler.EntityState
 	for _, s := range states {
-		if findPredicate(s.Triples, "source.git.author.email") != nil {
+		if findPredicate(s.Triples, "source.git.author-email") != nil {
 			authorState = s
 			break
 		}
@@ -317,7 +335,7 @@ func TestAuthorEntity_Triples(t *testing.T) {
 		t.Errorf("author instance segment %q is not valid", parts[5])
 	}
 
-	for _, pred := range []string{"source.git.author.name", "source.git.author.email"} {
+	for _, pred := range []string{"source.git.author-name", "source.git.author-email"} {
 		if findPredicate(authorState.Triples, pred) == nil {
 			t.Errorf("author entity missing predicate %q", pred)
 		}
@@ -336,7 +354,7 @@ func TestBranchEntity_Triples(t *testing.T) {
 
 	var branchState *handler.EntityState
 	for _, s := range states {
-		if findPredicate(s.Triples, "source.git.branch.name") != nil {
+		if findPredicate(s.Triples, "source.git.branch-name") != nil {
 			branchState = s
 			break
 		}
@@ -356,7 +374,7 @@ func TestBranchEntity_Triples(t *testing.T) {
 		t.Errorf("branch instance segment %q is not valid", parts[5])
 	}
 
-	for _, pred := range []string{"source.git.branch.name", "source.git.branch.head_sha"} {
+	for _, pred := range []string{"source.git.branch-name", "source.git.branch-head-sha"} {
 		if findPredicate(branchState.Triples, pred) == nil {
 			t.Errorf("branch entity missing predicate %q", pred)
 		}

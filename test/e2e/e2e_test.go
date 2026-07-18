@@ -1268,7 +1268,7 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 			if e.ID == expectedBranchID {
 				foundBranch = true
 				// Verify branch triples.
-				assertTriplePredicate(t, e, "source.git.branch.name", "master")
+				assertTriplePredicate(t, e, "source.git.branch-name", "master")
 				break
 			}
 		}
@@ -1286,17 +1286,17 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 				t.Errorf("git commit system = %q, want %q", sys, gitSystem)
 			}
 			// Every commit must have SHA, author, subject predicates.
-			assertHasPredicate(t, e, "source.git.commit.sha")
-			assertHasPredicate(t, e, "source.git.commit.author")
-			assertHasPredicate(t, e, "source.git.commit.subject")
-			assertHasPredicate(t, e, "source.git.commit.authored_by")
+			assertHasPredicate(t, e, "source.git.commit-sha")
+			assertHasPredicate(t, e, "source.git.commit-author")
+			assertHasPredicate(t, e, "source.git.commit-subject")
+			assertHasPredicate(t, e, "source.git.commit-authored-by")
 			break // One commit is enough to validate structure.
 		}
 
 		// Author entity: must have name and email predicates.
 		for _, e := range gitByType["author"] {
-			assertHasPredicate(t, e, "source.git.author.name")
-			assertHasPredicate(t, e, "source.git.author.email")
+			assertHasPredicate(t, e, "source.git.author-name")
+			assertHasPredicate(t, e, "source.git.author-email")
 			break
 		}
 	}
@@ -1320,20 +1320,20 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 
 			// Every project entity must have a file_path predicate.
 			for _, proj := range cfgByType["project"] {
-				assertHasPredicate(t, proj, "source.config.file_path")
+				assertHasPredicate(t, proj, "source.config.file-path")
 			}
 
 			// At least one project should have an artifact_id predicate
 			// (Maven uses project.artifact_id, Gradle uses project.artifact_id).
 			foundArtifact := false
 			for _, e := range cfgByType["project"] {
-				if hasPredicateValue(e, "source.config.project.artifact_id") {
+				if hasPredicateValue(e, "source.config.project-artifact-id") {
 					foundArtifact = true
 					break
 				}
 			}
 			if !foundArtifact {
-				t.Error("config: no project entity has source.config.project.artifact_id predicate")
+				t.Error("config: no project entity has source.config.project-artifact-id predicate")
 			}
 		}
 
@@ -1342,12 +1342,12 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 			t.Error("config: no 'dependency' entities")
 		} else {
 			dep := cfgByType["dependency"][0]
-			assertHasPredicate(t, dep, "source.config.dependency.name")
-			assertHasPredicate(t, dep, "source.config.dependency.kind")
+			assertHasPredicate(t, dep, "source.config.dependency-name")
+			assertHasPredicate(t, dep, "source.config.dependency-kind")
 			// Dependency kind should be "maven" or "gradle".
 			kindOK := false
 			for _, tr := range dep.Triples {
-				if tr.Predicate == "source.config.dependency.kind" {
+				if tr.Predicate == "source.config.dependency-kind" {
 					if s, ok := tr.Object.(string); ok && (s == "maven" || s == "gradle") {
 						kindOK = true
 						t.Logf("config: dependency kind=%s (id=%s)", s, dep.ID)
@@ -1382,9 +1382,9 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 
 			// Verify doc entity triple structure.
 			doc := docDomain.entities[0]
-			assertHasPredicate(t, doc, "source.doc.file_path")
-			assertHasPredicate(t, doc, "source.doc.mime_type")
-			assertHasPredicate(t, doc, "source.doc.file_hash")
+			assertHasPredicate(t, doc, "source.doc.file-path")
+			assertHasPredicate(t, doc, "source.doc.mime-type")
+			assertHasPredicate(t, doc, "source.doc.file-hash")
 		}
 	}
 

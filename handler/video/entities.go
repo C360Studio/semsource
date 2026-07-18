@@ -116,6 +116,7 @@ func (e *KeyframeEntity) Triples() []message.Triple {
 			Subject:    e.ID,
 			Predicate:  source.MediaKeyframeOf,
 			Object:     e.VideoID,
+			Datatype:   message.EntityReferenceDatatype,
 			Source:     src,
 			Timestamp:  now,
 			Confidence: 1.0,

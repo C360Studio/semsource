@@ -22,6 +22,8 @@ func TestPredicatesRegistered(t *testing.T) {
 		DocMimeType,
 		DocFilePath,
 		DocFileHash,
+		DocBodyStore,
+		DocBodyKey,
 	}
 
 	for _, pred := range docPredicates {
@@ -115,6 +117,8 @@ func TestPredicateDataTypes(t *testing.T) {
 		{DocRequirements, "array"},
 		{DocChunkIndex, "int"},
 		{DocChunkCount, "int"},
+		{DocBodyStore, "string"},
+		{DocBodyKey, "string"},
 		{RepoEntityCount, "int"},
 		{RepoAutoPull, "bool"},
 		{RepoLastIndexed, "datetime"},

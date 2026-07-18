@@ -45,10 +45,11 @@ Rules of the road:
 ## Technology
 
 - **Language:** Go
-- **Platform dependency:** semstreams (NATS JetStream infrastructure, `github.com/c360studio/semstreams`). Uses `semstreams/federation` types directly for entities, events, edges, provenance, and the in-memory store.
+- **Platform dependency:** semstreams (governed entity state, component/service APIs, and NATS
+  JetStream infrastructure via `github.com/c360studio/semstreams`).
 - **Transport:** SemStreams ServiceManager over NATS JetStream/KV, HTTP/MCP status
   and tool routes, GraphQL via the UI profile, plus the raw WebSocket graph stream
-  (`output/websocket`) on port 7890 in standalone mode.
+  (`output/websocket`) on port 7890 from the external service.
 - **Config format:** JSON (`semsource.json`)
 
 ## CLI Commands
@@ -133,13 +134,36 @@ IDs must be purely intrinsic (no timestamps, instance IDs, or insertion-order). 
 - **RETRACT** — explicit entity removal
 - **HEARTBEAT** — liveness signal during quiet periods
 
-### Federation
+### Governed graph integration
 
-`FederationProcessor` in `semstreams/processor/federation` handles merge policy for multi-instance deployments: `public.*` merges unconditionally, `{org}.*` is sovereign. Consumers query SemSource's graph directly via NATS `graph.query.*` endpoints — no federation setup needed on the consumer side.
+SemSource publishes governed entity state through the SemStreams substrate. Consumers query the
+result through `graph.query.*`, HTTP/MCP, or GraphQL; they do not register a federation processor or
+bridge SemSource's raw event stream into consumer-owned storage.
 
 ## semstreams Component Patterns
 
-New components must follow the semstreams component structure. Use `semstreams/processor/ast-indexer/` as the canonical reference implementation.
+New components must follow the semstreams component structure. Use
+`semstreams/processor/ast-indexer/` as the canonical reference implementation.
+
+The AST source accepts only complete `watch_paths` entries; component JSON is decoded strictly:
+
+```json
+{
+  "watch_paths": [
+    {
+      "path": "./service",
+      "org": "acme",
+      "project": "service",
+      "languages": ["go"],
+      "excludes": ["vendor"]
+    }
+  ],
+  "watch_enabled": true
+}
+```
+
+Move the former top-level `repo_path`, `org`, `project`, `version`, `languages`, and
+`exclude_patterns` values into each `watch_paths` entry (`exclude_patterns` becomes `excludes`).
 
 ### Required Files per Component
 
@@ -155,13 +179,13 @@ New message types must follow the payload registry pattern: define type → impl
 ## Key Design Decisions
 
 - No separate batch mode — initial seeding is the first pass of the continuous event loop
-- Raw-stream fan-out via WebSocket output remains available in standalone mode
+- Raw-stream fan-out via WebSocket output remains available from the external service
 - `at-least-once` delivery using WebSocket ack/nack protocol
 - MVP targets same-LAN deployment only (no TLS/reverse proxy)
 - AST parsers, doc parsers, weburl, and vocabulary packages are self-contained in `source/` (copied from semspec, no cross-repo dependency)
 - Consumers query SemSource via NATS `graph.query.*` endpoints — no WebSocket ingestion or federation bridge needed
-- `FederationProcessor` is a SemSource-internal concern for multi-instance deployments, not a consumer concern
-- Graph types use `semstreams/federation` directly (`federation.Entity`, `federation.Event`, `federation.Store`). The `graph/` package contains only `EntityPayload` (domain-specific payload registration for `"semsource"`)
+- SemStreams owns governed graph state and mutation/query contracts; SemSource owns source ingestion and projection
+- The `graph/` package contains SemSource's domain-specific payload and graph integration helpers
 - Status gating: consumers wait for `graph.query.status` → `phase: "ready"` before querying
 
 ## Current Roadmap

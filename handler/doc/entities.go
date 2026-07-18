@@ -217,7 +217,7 @@ func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instanc
 }
 
 // enrichEventEntityStates re-reads the changed file and populates ev.EntityStates
-// alongside ev.Entities, using vocabulary-predicate triples. org is required so
+// using vocabulary-predicate triples. org is required so
 // entity IDs are deterministic. For delete events the file is gone and
 // EntityStates remains empty.
 func (h *Handler) enrichEventEntityStates(ctx context.Context, ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
