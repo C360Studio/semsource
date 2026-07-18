@@ -9,10 +9,12 @@ package codecontext
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,6 +87,10 @@ type Component struct {
 	// falls back to its own objectstore attach.
 	storeRegistry *storeregistry.Registry
 	logger        *slog.Logger
+	// marshalHTTPResponse is a test seam for the otherwise-infallible concrete
+	// fusion.Response encoding path. Production leaves it nil and uses
+	// json.Marshal.
+	marshalHTTPResponse func(fusion.Response) ([]byte, error)
 
 	mu        sync.RWMutex
 	running   bool
@@ -234,6 +240,18 @@ func (c *Component) serve(ctx context.Context, verb string, body []byte) ([]byte
 			return nil, fmt.Errorf("decode request: %w", err)
 		}
 	}
+	resp, err := c.fuse(ctx, verb, req)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(resp)
+}
+
+// fuse applies the product defaults and runs the shared SemStreams engine. It
+// returns the typed response so the HTTP adapter can keep dependency and local
+// serialization failures in separate stages; NATS serve still marshals the same
+// response bytes as before.
+func (c *Component) fuse(ctx context.Context, verb string, req fusion.Request) (fusion.Response, error) {
 	lens := c.lensFor()
 	if len(req.Want) == 0 {
 		req.Want = defaultWants(verb)
@@ -249,9 +267,9 @@ func (c *Component) serve(ctx context.Context, verb string, body []byte) ([]byte
 	defer cancel()
 	resp, err := c.engine.Fuse(ctx, req, lens)
 	if err != nil {
-		return nil, err
+		return fusion.Response{}, err
 	}
-	return json.Marshal(resp)
+	return resp, nil
 }
 
 // lensFor builds a fresh lens for the configured domain. Both lenses are
@@ -321,7 +339,8 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 // detail is logged, not echoed across the external boundary.
 func (c *Component) handleHTTP(w http.ResponseWriter, r *http.Request, verb string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		w.Header().Set("Allow", http.MethodPost)
+		writeFusionHTTPError(w, methodNotAllowedError())
 		return
 	}
 	if !c.requireRunning(w) {
@@ -329,13 +348,60 @@ func (c *Component) handleHTTP(w http.ResponseWriter, r *http.Request, verb stri
 	}
 	body, err := readBody(w, r)
 	if err != nil {
-		http.Error(w, "request body too large or unreadable", http.StatusBadRequest)
+		if errors.Is(r.Context().Err(), context.Canceled) {
+			return
+		}
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeFusionHTTPError(w, requestTooLargeError())
+			return
+		}
+		writeFusionHTTPError(w, invalidJSONError())
 		return
 	}
-	data, err := c.serve(r.Context(), verb, body)
+	var req fusion.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeFusionHTTPError(w, invalidJSONError())
+		return
+	}
+	if strings.TrimSpace(req.Query) == "" {
+		writeFusionHTTPError(w, invalidRequestError())
+		return
+	}
+	resp, err := c.fuse(r.Context(), verb, req)
 	if err != nil {
-		c.logger.Warn("code-context request failed", "verb", verb, "error", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
+		if errors.Is(r.Context().Err(), context.Canceled) {
+			return
+		}
+		public := classifyFusionHTTPError(errorOriginDependency, err)
+		c.logger.Warn("fusion HTTP request failed",
+			"component", c.name,
+			"route", r.URL.Path,
+			"verb", verb,
+			"code", public.code,
+			"class", public.class,
+			"origin", errorOriginDependency,
+		)
+		writeFusionHTTPError(w, public)
+		return
+	}
+	var data []byte
+	if c.marshalHTTPResponse != nil {
+		data, err = c.marshalHTTPResponse(resp)
+	} else {
+		data, err = json.Marshal(resp)
+	}
+	if err != nil {
+		public := classifyFusionHTTPError(errorOriginLocal, err)
+		c.logger.Error("fusion HTTP response assembly failed",
+			"component", c.name,
+			"route", r.URL.Path,
+			"verb", verb,
+			"code", public.code,
+			"class", public.class,
+			"origin", errorOriginLocal,
+		)
+		writeFusionHTTPError(w, public)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -358,7 +424,7 @@ func (c *Component) requireRunning(w http.ResponseWriter) bool {
 	started := c.running
 	c.mu.RUnlock()
 	if !started {
-		http.Error(w, "component not started", http.StatusServiceUnavailable)
+		writeFusionHTTPError(w, componentNotReadyError())
 		return false
 	}
 	return true

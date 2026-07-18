@@ -13,6 +13,29 @@ command -v docker >/dev/null 2>&1 || fail "docker is required"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 docker compose version >/dev/null 2>&1 || fail "docker compose is required"
 
+# Never attach smoke containers, networks, or volumes to an operator's default
+# Compose project. A caller may choose a stable isolated name for diagnostics;
+# otherwise the shell PID makes concurrent smoke invocations distinct.
+export COMPOSE_PROJECT_NAME="${SEMSOURCE_SMOKE_PROJECT_NAME:-semsource-core-smoke-$$}"
+
+# The default profile must neither resolve nor authenticate for the UI image.
+# A deliberately impossible immutable ref makes accidental profile leakage fail
+# before any paid or long-running stack work begins.
+export SEMSOURCE_UI_IMAGE="${SEMSOURCE_UI_IMAGE:-registry.invalid/c360/semsource-ui:unavailable@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff}"
+core_services=$(docker compose config --services | sort)
+expected_core_services=$(printf '%s\n' nats semembed semsource | sort)
+if [ "$core_services" != "$expected_core_services" ]; then
+	echo "Default Compose resolved unexpected services:" >&2
+	printf '%s\n' "$core_services" >&2
+	exit 1
+fi
+if docker compose config --images | grep -Eq 'semsource-ui|registry\.invalid|caddy'; then
+	echo "Default Compose unexpectedly resolved a UI or proxy image" >&2
+	docker compose config --images >&2
+	exit 1
+fi
+echo "Default Compose resolves exactly nats, semembed, and semsource; UI image and Caddy are absent"
+
 created_workspace=0
 smoke_workspace=${SEMSOURCE_SMOKE_WORKSPACE:-}
 if [ -z "$smoke_workspace" ]; then
@@ -48,9 +71,9 @@ esac
 [ -d "$smoke_workspace" ] || fail "SEMSOURCE_SMOKE_WORKSPACE '$smoke_workspace' does not exist"
 
 export SEMSOURCE_TARGET="$smoke_workspace"
-export SEMSOURCE_HTTP_PORT="${SEMSOURCE_HTTP_PORT:-8080}"
-export NATS_HOST_PORT="${NATS_HOST_PORT:-14222}"
-export NATS_MONITOR_HOST_PORT="${NATS_MONITOR_HOST_PORT:-18222}"
+export SEMSOURCE_HTTP_PORT="${SEMSOURCE_HTTP_PORT:-28080}"
+export NATS_HOST_PORT="${NATS_HOST_PORT:-24222}"
+export NATS_MONITOR_HOST_PORT="${NATS_MONITOR_HOST_PORT:-28222}"
 
 status_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/status"
 sources_url="http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/sources"
@@ -106,8 +129,17 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 echo "Starting SemSource core profile with SEMSOURCE_TARGET=$SEMSOURCE_TARGET"
+echo "Using isolated Compose project: $COMPOSE_PROJECT_NAME"
 echo "Using host ports: SEMSOURCE_HTTP_PORT=$SEMSOURCE_HTTP_PORT NATS_HOST_PORT=$NATS_HOST_PORT NATS_MONITOR_HOST_PORT=$NATS_MONITOR_HOST_PORT"
 docker compose up -d --build --wait
+
+running_services=$(docker compose ps --services --status running | sort)
+if [ "$running_services" != "$expected_core_services" ]; then
+	echo "Core profile running-service set is not exact:" >&2
+	printf '%s\n' "$running_services" >&2
+	exit 1
+fi
+echo "Core profile runs no UI, Node service, or Caddy proxy"
 
 deadline=$(( $(date +%s) + timeout_seconds ))
 ready=0

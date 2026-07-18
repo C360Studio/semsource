@@ -1,11 +1,37 @@
 # SemSource — UI asks for the semstreams-ui team
 
-**Status (2026-07-04):** the SemSource backend reasoning core is **MVP-validated live** — a 21,507-entity
-semstreams graph was indexed and queried entirely over MCP; structural queries (context / callers /
-callees / impact) decisively beat grep, and tier-1 semantic search (`code_search`) is reasoning-grade.
-This doc is what we'd like the **semstreams-ui** team to build on top of the surfaces that already exist.
-It is a request/contract doc, not a spec — the backend contracts below are live today unless a **gap** is
-flagged.
+## Workbench ownership correction — 2026-07-15
+
+**Status:** Superseded delivery request; retained as donor and backend-contract evidence.
+
+The active product and ownership contract lives in
+`openspec/changes/add-opt-in-source-workbench/` and ADR-0009. SemSource now owns the optional Svelte
+workbench under `ui/`, including its composition, graph implementation, accessibility, tests,
+packaging, and release artifact.
+
+SemStreams UI is one audited donor alongside SemSpec, SemDragon, and SemConnect. None is a runtime,
+build, package, acceptance, or release dependency. The earlier shared-UI coordination request in
+[semstreams-ui#2](https://github.com/C360Studio/semstreams-ui/issues/2) is superseded by this corrected
+local-ownership decision and was closed with no shared UI action required.
+
+SemSource remains headless by default and owns product identity, readiness, source/project semantics,
+provenance, materialized views, OKF behavior, browser capability contracts, and product acceptance.
+SemTeams is a consumer of headless SemSource and owns its own application packaging.
+
+`GET /source-manifest/capabilities` is the browser bootstrap contract. Fusion v1 supports non-graph
+workbench views. Governed graph drill-down remains gated on
+[semstreams#533](https://github.com/C360Studio/semstreams/issues/533), while the useful
+source/readiness/search MVP may ship with `graph_projection` truthfully unavailable.
+
+> **Historical request snapshot — 2026-07-04:** The dated material below is non-normative evidence of
+> the original request. Its graph-explorer assumption is explicitly corrected in Ask 3; the active
+> contract is the workbench change, ADR-0009, and SemStreams #533 named above.
+
+**Historical status (2026-07-04):** the SemSource backend reasoning core had been MVP-validated against
+a 21,507-entity graph queried over MCP. At that time, structural queries and tier-1 semantic search
+motivated this request for the **semstreams-ui** team to build on the available surfaces. The request is
+now superseded; current backend contracts and gaps must be verified against the active OpenSpec change
+and implementation rather than inferred from this snapshot.
 
 ## The surface to build against
 
@@ -60,12 +86,18 @@ A search/inspect panel that runs the query verbs and renders results richly:
 - **doc_context** → the docs-side equivalent (READMEs/ADRs/prose).
 All served by the REST verbs / MCP tools above. No backend work needed.
 
-### 3. Graph explorer  ·  contract: PARTIAL — likely one backend gap
-Interactive visualization of entities + relationships (contains / calls / implements / references /
-lineage). `code_context` already returns a node's direct `relations`, so a **click-to-expand** explorer
-(seed → fetch neighbors on click) works against the existing contract today. **Gap to confirm:** a
-bounded **subgraph-fetch** endpoint (neighborhood to depth K, capped) would make a smooth explorer
-turnkey rather than N per-node calls — flag if you want it and we'll add it (small backend Tier-B item).
+### 3. Graph explorer · contract: SUPERSEDED — governed projection required
+
+The July 4 request assumed `code_context` relations were sufficient for click-to-expand. The later
+fusion-v1 audit disproved that assumption: relation references omit target handles, predicates,
+direction, evidence, edge identity, and coherent view revision. SemSource and the UI must not infer
+those fields.
+
+The canonical graph explorer requires the governed projection tracked in
+[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). Non-graph fusion views may
+proceed, and the SemSource-owned non-graph workbench image may ship while `graph_projection` is
+unsupported. Graph-enabled drill-down remains blocked until the governed contract is adopted and
+live-tested.
 
 ### 4. Versioned-source lineage view  ·  contract: EXISTS (our differentiator)
 SemSource retains every indexed version of a source and relates them (ADR-0008, shipped). Surface:

@@ -1,82 +1,61 @@
 # Caddyfile for C360 Stack
-# Reverse proxy: Routes semsource query/status APIs, raw graph WebSocket,
-# SemTeams UI, and future backends.
+# Reverse proxy: explicit SemSource workbench and advertised API allowlist.
 #
 # Port map (internal Docker network):
 #   semsource:7890  — Raw graph WebSocket output
 #   semsource:8080  — ServiceManager HTTP API, including /graph-gateway/graphql
 #   semsource:9091  — Prometheus metrics
-#   ui:5173         — SemTeams UI (Vite dev)
-#   backend:8080    — Reserved for semspec/semdragon backend
+#   ui:3000         — SemSource workbench production server
 #
 # All traffic enters via :3000 on the host.
-
 {
 	auto_https off
 	admin off
 }
 
 :3000 {
-	# SemSource raw graph WebSocket — proxied so clients connect via Caddy
+	# Exact non-prefix routes.
 	handle /graph {
 		reverse_proxy semsource:7890
 	}
-
-	# SemSource graph query and source-manifest APIs
-	handle /graphql* {
+	handle /graphql {
 		rewrite * /graph-gateway{uri}
 		reverse_proxy semsource:8080
 	}
+	handle /metrics {
+		reverse_proxy semsource:9091
+	}
+	handle /health {
+		rewrite * /source-manifest/health
+		reverse_proxy semsource:8080
+	}
+
+	# Advertised SemSource API prefixes.
 	handle /source-manifest/* {
 		reverse_proxy semsource:8080
 	}
-	# Fused code_context / doc_context queries (ADR-0004). Both are instances of
-	# the one fusion-gateway factory; the instance name is the HTTP prefix.
 	handle /code-context/* {
 		reverse_proxy semsource:8080
 	}
 	handle /doc-context/* {
 		reverse_proxy semsource:8080
 	}
-	# MCP gateway (ADR-0007) — Streamable HTTP MCP for agents (Claude Code).
-	# Endpoint: /mcp-gateway/mcp
 	handle /mcp-gateway/* {
 		reverse_proxy semsource:8080
 	}
-	handle /metrics {
-		reverse_proxy semsource:9091
+
+	# Only the shell root and SvelteKit build assets reach the UI process.
+	handle / {
+		reverse_proxy ui:3000
+	}
+	handle /_app/* {
+		reverse_proxy ui:3000
 	}
 
-	# Health endpoint expected by SemTeams UI's system-status store.
-	handle /health {
-		rewrite * /source-manifest/health
-		reverse_proxy semsource:8080
-	}
-
-	# Legacy profile-health endpoint retained for older bookmarks.
-	handle /semsource/health {
-		rewrite * /source-manifest/health
-		reverse_proxy semsource:8080
-	}
-
-	# Reserved: backend API routes (semspec, semdragon)
-	# Uncomment when backends are added:
-	# handle /api/* {
-	# 	reverse_proxy backend:8080
-	# }
-	# handle /flowbuilder/* {
-	# 	reverse_proxy backend:8080
-	# }
-	# handle /components/* {
-	# 	reverse_proxy backend:8080
-	# }
-	# handle /health {
-	# 	reverse_proxy backend:8080
-	# }
-
-	# SemTeams UI handles everything else
+	# Unknown and retired product paths must never masquerade as UI HTML.
 	handle {
-		reverse_proxy {$UI_HOST:ui:5173}
+		header Content-Type "application/json"
+		respond `{"error":"not_found"}` 404
 	}
 
 	# Security headers

@@ -84,17 +84,17 @@ or live UI updates; it is not the primary governed query contract.
 
 ## Source Types
 
-| Type | What it indexes | Watch |
-|------|----------------|-------|
-| `ast` | Go, TypeScript, Java, Python, Svelte code symbols | fsnotify |
-| `git` | Commits, authors, branches | polling |
-| `repo` | Full remote repo (clones and analyzes code + docs + config) | polling |
-| `docs` | Markdown, plain text | fsnotify |
-| `config` | go.mod, package.json, pom.xml, Dockerfile, etc. | fsnotify |
-| `url` | HTTP/S pages | configurable polling |
-| `image` | PNG, JPG, etc. (metadata + optional thumbnails) | fsnotify |
-| `video` | Keyframe extraction via ffmpeg | fsnotify |
-| `audio` | Audio metadata via ffprobe | fsnotify |
+| Type     | What it indexes                                             | Watch                |
+| -------- | ----------------------------------------------------------- | -------------------- |
+| `ast`    | Go, TypeScript, Java, Python, Svelte code symbols           | fsnotify             |
+| `git`    | Commits, authors, branches                                  | polling              |
+| `repo`   | Full remote repo (clones and analyzes code + docs + config) | polling              |
+| `docs`   | Markdown, plain text                                        | fsnotify             |
+| `config` | go.mod, package.json, pom.xml, Dockerfile, etc.             | fsnotify             |
+| `url`    | HTTP/S pages                                                | configurable polling |
+| `image`  | PNG, JPG, etc. (metadata + optional thumbnails)             | fsnotify             |
+| `video`  | Keyframe extraction via ffmpeg                              | fsnotify             |
+| `audio`  | Audio metadata via ffprobe                                  | fsnotify             |
 
 ## CLI Reference
 
@@ -132,8 +132,13 @@ semsource remove --index 2
 
 ## Docker Compose
 
-The compose file ships two profiles. The default is the **MVP core** — everything you need for a
-working, semantically-searchable graph in one command, with no sibling repo required.
+The compose file ships a UI-free **MVP core** by default and an optional `ui` profile. The core is
+everything needed for a working, semantically-searchable graph in one command, with no browser,
+proxy, UI image, sibling repo, or Node.js requirement.
+
+Here, **UI-free** (or **headless deployment**) means that no workbench profile is enabled. It does
+not mean `mode: "headless"` in `semsource.json`: that old configuration value was removed and is
+rejected; the supported runtime mode remains `standalone`.
 
 ### MVP core (default) — tier-1 semantic search out of the box
 
@@ -143,21 +148,21 @@ docker compose up
 
 Brings up three services and indexes the current directory (`SEMSOURCE_TARGET`, default `.`):
 
-| Service | Port | Description |
-|---------|------|-------------|
+| Service   | Port             | Description                                                            |
+| --------- | ---------------- | ---------------------------------------------------------------------- |
 | SemSource | `localhost:8080` | Ingest + ServiceManager HTTP API **+ MCP gateway** (published to host) |
-| semembed | internal `:8081` | OpenAI-compatible embeddings (tier-1 semantic search) |
-| NATS | internal `:4222` | JetStream and KV substrate |
+| semembed  | internal `:8081` | OpenAI-compatible embeddings (tier-1 semantic search)                  |
+| NATS      | internal `:4222` | JetStream and KV substrate                                             |
 
 SemSource runs on [`configs/mvp.json`](configs/mvp.json) — `embedder_type: http` wired to semembed, so
 `code_search` is true semantic (paraphrase-robust) from the first index, not just BM25. Point an agent at
 the MCP gateway:
 
-| URL | Description |
-|-----|-------------|
-| `http://localhost:8080/mcp-gateway/mcp` | MCP gateway — add this to Claude Code / your agent |
-| `http://localhost:8080/source-manifest/status` | Readiness/status (poll until `phase: ready`) |
-| `http://localhost:8080/source-manifest/sources` | Configured source manifest |
+| URL                                             | Description                                        |
+| ----------------------------------------------- | -------------------------------------------------- |
+| `http://localhost:8080/mcp-gateway/mcp`         | MCP gateway — add this to Claude Code / your agent |
+| `http://localhost:8080/source-manifest/status`  | Readiness/status (poll until `phase: ready`)       |
+| `http://localhost:8080/source-manifest/sources` | Configured source manifest                         |
 
 > **First-index note:** semembed embedding is CPU-heavy on the initial pass (arctic-embed-s / ONNX). The
 > compose caps it at `SEMEMBED_CPUS` (default `2`) for local dev — raise it on a server. Structural
@@ -165,40 +170,72 @@ the MCP gateway:
 > `source-manifest/status` for `index.ready` / `embedding.ready`. See
 > [`configs/tiers/README.md`](configs/tiers/README.md).
 
-### UI profile — add the SemTeams dashboard
+### UI profile — add the SemSource workbench
 
 ```bash
-docker compose --profile ui up
+SEMSOURCE_UI_IMAGE=ghcr.io/c360studio/semsource-ui:<version>@sha256:<digest> \
+  docker compose --profile ui up
 ```
 
-Layers the SemTeams UI dashboard and a Caddy reverse proxy on top of the core. **Requires the
-`../semteams/ui` repo checked out** (`UI_CONTEXT`).
+Layers the SemSource-owned project workbench and a Caddy reverse proxy on top of the unchanged core.
+The image reference must be an immutable tag-plus-digest release reference. The released path does
+not build UI source and needs neither a sibling checkout nor Node.js on the host.
 
-| Service | Port | Description |
-|---------|------|-------------|
-| Caddy | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and raw `/graph` |
-| SemTeams UI | internal `:5173` | Operator dashboard and graph shell |
+> **Breaking profile migration:** the `ui` flag previously built a sibling SemTeams checkout. It now
+> means the SemSource workbench. SemTeams owns its application packaging and connects to SemSource as
+> a consumer through the same HTTP, MCP, NATS, GraphQL, and governed graph contracts used by UI-free
+> deployments. The first immutable workbench registry digest has not yet been published, so OpenSpec
+> release task 7.3 remains open; until it is published, use the explicit local development path below.
+
+| Service             | Port             | Description                                                  |
+| ------------------- | ---------------- | ------------------------------------------------------------ |
+| Caddy               | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and raw `/graph` |
+| SemSource workbench | internal `:3000` | Source/readiness/search workbench                            |
 
 Useful ui-profile endpoints (via Caddy on `:3000`):
 
-| URL | Description |
-|-----|-------------|
-| `http://localhost:3000` | SemTeams UI |
-| `http://localhost:3000/health` | UI-compatible SemSource health JSON |
-| `http://localhost:3000/graphql` | GraphQL gateway |
-| `http://localhost:3000/source-manifest/status` | SemSource readiness/status |
-| `ws://localhost:3000/graph` | Raw GRAPH stream export |
+| URL                                            | Description                         |
+| ---------------------------------------------- | ----------------------------------- |
+| `http://localhost:3000`                        | SemSource workbench                 |
+| `http://localhost:3000/health`                 | UI-compatible SemSource health JSON |
+| `http://localhost:3000/graphql`                | GraphQL gateway                     |
+| `http://localhost:3000/source-manifest/status` | SemSource readiness/status          |
+| `ws://localhost:3000/graph`                    | Raw GRAPH stream export             |
 
-Light UI-profile smoke:
+Graph drill-down is shown as unavailable while
+[SemStreams #533](https://github.com/C360Studio/semstreams/issues/533) is open. Source inventory,
+readiness, project summary, and capability-advertised search remain usable; the workbench does not
+infer a replacement graph payload.
+
+Build and smoke the local `./ui` source explicitly:
 
 ```bash
-task ui:smoke
+task ui:smoke:dev
 ```
 
-This starts the profile, runs Playwright, and tears the stack down. Use `task ui:e2e`
-when the profile is already running. The smoke uses Playwright from the SemTeams UI
-checkout and asserts the same-origin operator path: `/health`, `/source-manifest/status`,
-`/graphql`, and the UI shell.
+The equivalent long-form development start is:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ui-dev.yml \
+  --profile ui up --build
+```
+
+Workbench validation commands:
+
+```bash
+SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest> task ui:smoke  # released-image start/test/teardown
+task ui:smoke:dev                                      # local ./ui build/test/teardown
+task ui:e2e                                            # test an already-running profile
+```
+
+Both smoke paths run SemSource-owned, lockfile-matched Playwright in a container and assert the
+same-origin shell, advertised backend routes, source/readiness state, real search, keyboard
+result/detail navigation, and the graph-unavailable state at desktop and narrow widths. The released
+smoke neither checks out sibling source nor uses host Node.js. `task ui:e2e` joins the Compose network
+of an already-running released or development profile.
+
+To roll back the optional workbench, omit `--profile ui`; the core contracts and graph state are
+unchanged. For a workbench-specific rollback, pin an earlier published tag and immutable digest.
 
 ### Configuration
 
@@ -215,7 +252,7 @@ NATS_HOST_PORT=4222               # Host NATS client port for compose
 NATS_MONITOR_HOST_PORT=8222       # Host NATS monitor port for compose
 LOG_LEVEL=info                    # Log level: debug, info, warn, error
 C360_PORT=3000                    # External port for Caddy (ui profile)
-UI_CONTEXT=../semteams/ui         # Path to SemTeams UI repo (ui profile)
+SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>  # Required immutable workbench release image
 ```
 
 Set `SEMSOURCE_CONFIG=tier0-statistical.json` to run without semembed (BM25 keyword search only); the
@@ -225,16 +262,16 @@ Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--
 
 ### Port Map
 
-| Port | Service | Notes |
-|------|---------|-------|
-| 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile |
-| 8081 | semembed embeddings | Internal Docker network |
-| 4222 | NATS | Internal Docker network by default |
-| 3000 | Caddy entry point | ui profile: UI, GraphQL, source-manifest APIs, raw `/graph` stream |
-| 7890 | SemSource WebSocket | Internal raw GRAPH stream export |
-| 8082 | GraphQL gateway bind subject | Component registration setting; UI profile proxies ServiceManager `/graph-gateway/graphql` at `/graphql` |
-| 9091 | Prometheus metrics | Internal, proxied at `/metrics` (ui profile) |
-| 5173 | SemTeams UI (Vite) | Internal, proxied via `/*` (ui profile) |
+| Port | Service                               | Notes                                                                                                    |
+| ---- | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile                                                                |
+| 8081 | semembed embeddings                   | Internal Docker network                                                                                  |
+| 4222 | NATS                                  | Internal Docker network by default                                                                       |
+| 3000 | Caddy entry point                     | ui profile: UI, GraphQL, source-manifest APIs, raw `/graph` stream                                       |
+| 7890 | SemSource WebSocket                   | Internal raw GRAPH stream export                                                                         |
+| 8082 | GraphQL gateway bind subject          | Component registration setting; UI profile proxies ServiceManager `/graph-gateway/graphql` at `/graphql` |
+| 9091 | Prometheus metrics                    | Internal, proxied at `/metrics` (ui profile)                                                             |
+| 3000 | SemSource workbench                   | Internal UI service, proxied only at `/` and `/_app/*` (ui profile)                                      |
 
 ### Connect an agent (MCP)
 
@@ -266,23 +303,23 @@ SemSource uses a JSON config file (`semsource.json`). The wizard creates it for 
 
 Optional top-level fields:
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `http_port` | `8080` | ServiceManager HTTP API port |
-| `mode` | `"standalone"` | Only `standalone` is supported (retained for back-compat); `headless` was removed in ADR-0006 and now fails validation |
-| `entity_store.nats_url` | — | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set |
-| `graph.gateway_bind` | `"0.0.0.0:8082"` | GraphQL gateway host:port subject used by SemStreams registration; in ServiceManager mode the live HTTP route is `/graph-gateway/graphql` on `:8080` and the `ui` profile exposes it as `/graphql` |
-| `graph.embedder_type` | `"bm25"` | Embedding backend: `bm25` (keyword, no dependencies) or `http` (semantic — **requires `model_registry` with an `embedding` capability**) |
-| `graph.enable_clustering` | `false` | Enable graph-clustering (tier-2 community routes); LLM summaries also need `graph.clustering_llm` + a `model_registry` `community_summary` capability |
-| `model_registry` | — | SemStreams model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"` or clustering LLM is on. See [`configs/tiers/README.md`](configs/tiers/README.md) |
-| `source_roots` | — | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007) |
-| `metrics.port` | `9091` | Prometheus metrics port |
-| `websocket_bind` | `"0.0.0.0:7890"` | Raw GRAPH stream WebSocket bind address |
-| `websocket_path` | `"/graph"` | Raw GRAPH stream WebSocket path |
-| `workspace_dir` | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths) |
-| `git_token` | — | Token for authenticated remote repo cloning |
-| `media_store_dir` | — | Local directory for media binary storage |
-| `streams` | — | Optional JetStream stream overrides for standalone mode |
+| Field                     | Default              | Description                                                                                                                                                                                         |
+| ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http_port`               | `8080`               | ServiceManager HTTP API port                                                                                                                                                                        |
+| `mode`                    | `"standalone"`       | Only `standalone` is supported (retained for back-compat); `headless` was removed in ADR-0006 and now fails validation                                                                              |
+| `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
+| `graph.gateway_bind`      | `"0.0.0.0:8082"`     | GraphQL gateway host:port subject used by SemStreams registration; in ServiceManager mode the live HTTP route is `/graph-gateway/graphql` on `:8080` and the `ui` profile exposes it as `/graphql`  |
+| `graph.embedder_type`     | `"bm25"`             | Embedding backend: `bm25` (keyword, no dependencies) or `http` (semantic — **requires `model_registry` with an `embedding` capability**)                                                            |
+| `graph.enable_clustering` | `false`              | Enable graph-clustering (tier-2 community routes); LLM summaries also need `graph.clustering_llm` + a `model_registry` `community_summary` capability                                               |
+| `model_registry`          | —                    | SemStreams model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"` or clustering LLM is on. See [`configs/tiers/README.md`](configs/tiers/README.md) |
+| `source_roots`            | —                    | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007)                                                                                           |
+| `metrics.port`            | `9091`               | Prometheus metrics port                                                                                                                                                                             |
+| `websocket_bind`          | `"0.0.0.0:7890"`     | Raw GRAPH stream WebSocket bind address                                                                                                                                                             |
+| `websocket_path`          | `"/graph"`           | Raw GRAPH stream WebSocket path                                                                                                                                                                     |
+| `workspace_dir`           | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths)                                                                                                     |
+| `git_token`               | —                    | Token for authenticated remote repo cloning                                                                                                                                                         |
+| `media_store_dir`         | —                    | Local directory for media binary storage                                                                                                                                                            |
+| `streams`                 | —                    | Optional JetStream stream overrides for standalone mode                                                                                                                                             |
 
 Validate without starting the engine:
 
@@ -299,42 +336,51 @@ routes, and compatibility notes live in the
 
 ### HTTP Endpoints (ServiceManager, default :8080)
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /source-manifest/sources` | Configured sources |
-| `GET /source-manifest/status` | Ingestion status with per-instance phases |
-| `GET /source-manifest/health` | UI-compatible health envelope derived from source-manifest status |
-| `POST /supersession/versionDiff` | Changeset between two versions of a source (JSON `{project, from, to}`) |
+| Endpoint                            | Description                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `GET /source-manifest/sources`      | Configured sources                                                      |
+| `GET /source-manifest/status`       | Ingestion status with per-instance phases                               |
+| `GET /source-manifest/health`       | UI-compatible health envelope derived from source-manifest status       |
+| `GET /source-manifest/capabilities` | Versioned SemSource workbench discovery and readiness                   |
+| `POST /supersession/versionDiff`    | Changeset between two versions of a source (JSON `{project, from, to}`) |
+
+The capability document is available from the UI-free core; it does not require the optional `ui`
+profile.
+It identifies its project scope as the configured deployment namespace, reports source, structural,
+and semantic readiness, and enumerates exact supported query/action routes. Implemented routes whose
+dependencies are still building are `not_ready`. Planned OKF, project-view, and governed graph
+projection capabilities are `unsupported` with machine-readable reasons rather than speculative
+links. Contract version 1 permits additive fields and map entries while preserving existing meanings.
 
 ### GraphQL Gateway
 
 SemSource runs the graph gateway through the SemStreams ServiceManager. The live internal route is
 `/graph-gateway/graphql` on the ServiceManager HTTP API (`:8080`). Reach GraphQL from the host via the
 `ui` profile, where Caddy exposes the operator-facing route at `http://localhost:3000/graphql` (see
-[UI profile](#ui-profile--add-the-semteams-dashboard)).
+[UI profile](#ui-profile--add-the-semsource-workbench)).
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /graph-gateway/graphql` | GraphQL playground when enabled on the ServiceManager route |
-| `POST /graph-gateway/graphql` | GraphQL query endpoint on the ServiceManager route |
-| `GET/POST /graphql` | Same GraphQL route through the `ui` profile Caddy proxy |
+| Endpoint                      | Description                                                 |
+| ----------------------------- | ----------------------------------------------------------- |
+| `GET /graph-gateway/graphql`  | GraphQL playground when enabled on the ServiceManager route |
+| `POST /graph-gateway/graphql` | GraphQL query endpoint on the ServiceManager route          |
+| `GET/POST /graphql`           | Same GraphQL route through the `ui` profile Caddy proxy     |
 
 ### Status Phases
 
 The status endpoint reports aggregate and per-source lifecycle:
 
-| Aggregate Phase | Meaning |
-|----------------|---------|
-| `seeding` | Initial ingest in progress |
-| `ready` | All sources completed initial ingest |
-| `degraded` | Seed timeout fired before all sources reported |
+| Aggregate Phase | Meaning                                        |
+| --------------- | ---------------------------------------------- |
+| `seeding`       | Initial ingest in progress                     |
+| `ready`         | All sources completed initial ingest           |
+| `degraded`      | Seed timeout fired before all sources reported |
 
-| Source Phase | Meaning |
-|-------------|---------|
-| `ingesting` | Performing initial ingest |
-| `watching` | Watching for changes |
-| `idle` | No watch configured |
-| `errored` | Error encountered |
+| Source Phase | Meaning                   |
+| ------------ | ------------------------- |
+| `ingesting`  | Performing initial ingest |
+| `watching`   | Watching for changes      |
+| `idle`       | No watch configured       |
+| `errored`    | Error encountered         |
 
 Downstream consumers should gate on `phase: "ready"` before querying the graph.
 
@@ -345,10 +391,10 @@ SemSource runs a **deterministic fusion gateway** (ADR-0004, built on semstreams
 `pkg/fusion`): it resolves a query, expands the structure around it, hydrates verbatim
 bodies, and returns one ranked answer with a readiness/provenance envelope. Two instances:
 
-| Instance | Domain | NATS subjects | HTTP |
-|----------|--------|---------------|------|
+| Instance       | Domain       | NATS subjects    | HTTP                                            |
+| -------------- | ------------ | ---------------- | ----------------------------------------------- |
 | `code-context` | code symbols | `code.v1.<verb>` | `POST /code-context/<verb>` (proxied via Caddy) |
-| `doc-context` | documents | `docs.v1.<verb>` | `POST /doc-context/<verb>` (ServiceManager :8080; not Caddy-proxied yet) |
+| `doc-context`  | documents    | `docs.v1.<verb>` | `POST /doc-context/<verb>` (proxied via Caddy)  |
 
 **Verbs:** `context` (the primary fused answer), `callers`, `callees`, `impact`
 (transitive reverse-relation closure), `file`, `search`.
@@ -356,7 +402,11 @@ bodies, and returns one ranked answer with a readiness/provenance envelope. Two 
 **Request** (JSON):
 
 ```json
-{ "query": "Dispatch", "want": ["body", "relations", "impact"], "budget": { "max_nodes": 20, "max_bytes": 60000 } }
+{
+  "query": "Dispatch",
+  "want": ["body", "relations", "impact"],
+  "budget": { "max_nodes": 20, "max_bytes": 60000 }
+}
 ```
 
 `query` is what the agent already knows — a symbol, a path, or a natural-language question
@@ -369,6 +419,37 @@ optional; verbs preset sensible defaults.
 grep) — never a false "not found". Verbatim bodies are dereferenced from an ObjectStore
 handle, so a standalone or remote gateway serves source without access to the ingesting
 host's worktree.
+
+### Fusion HTTP errors
+
+Fusion HTTP failures use a versioned JSON envelope. This is a breaking change from the former
+plain-text response that reported nearly every failure as `400 bad request`; clients should branch
+on HTTP status plus `error.code`.
+
+```json
+{
+  "error": {
+    "contract_version": "1",
+    "code": "dependency_unavailable",
+    "class": "transient",
+    "message": "graph query service is temporarily unavailable",
+    "retryable": true
+  }
+}
+```
+
+| Status | Code                                            | Meaning                                     |
+| ------ | ----------------------------------------------- | ------------------------------------------- |
+| 400    | `invalid_json`, `invalid_request`               | Correct the request; do not retry unchanged |
+| 405    | `method_not_allowed`                            | Use POST                                    |
+| 413    | `request_too_large`                             | Reduce the request body                     |
+| 500    | `internal_error`                                | SemSource failed locally                    |
+| 502    | `upstream_contract_error`, `upstream_failure`   | The graph dependency failed non-transiently |
+| 503    | `component_not_ready`, `dependency_unavailable` | Retry after service/dependency recovery     |
+| 504    | `upstream_timeout`                              | The graph query exceeded its deadline       |
+
+Messages are sanitized and never carry raw NATS, storage, or entity details. `index.ready: false`
+and ready responses containing `misses` remain successful HTTP 200 fusion responses.
 
 ## Building from Source
 
@@ -388,8 +469,11 @@ go build -o semsource ./cmd/semsource
 go test ./...                              # Unit tests
 go test -tags=integration ./...            # Integration tests (self-ingest)
 go test -tags=e2e ./test/e2e/              # Black-box binary tests
-task ui:smoke                              # UI-profile start/test/teardown smoke
-task ui:e2e                                # UI-profile Playwright smoke
+task core:smoke                            # UI-free Compose contract smoke
+task ui:image:verify                       # Clean local production-image verification
+SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest> task ui:smoke  # Released profile smoke
+task ui:smoke:dev                          # Local ./ui profile smoke
+task ui:e2e                                # Playwright against a running UI profile
 go test -race ./...                        # Race detection
 ```
 

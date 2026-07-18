@@ -1,0 +1,18 @@
+services:
+  ui-e2e:
+    profiles: ["ui-test"]
+    image: semsource-ui-e2e:local
+    build:
+      context: .
+      dockerfile: test/ui/Dockerfile
+    environment:
+      UI_PROFILE_BASE_URL: http://caddy:3000
+      UI_PROFILE_TIMEOUT_MS: ${UI_PROFILE_TIMEOUT_MS:-240000}
+      UI_PROFILE_FORCE_FAILURE: ${UI_PROFILE_FORCE_FAILURE:-0}
+    volumes:
+      - type: bind
+        source: ${UI_PROFILE_ARTIFACT_DIR:?UI_PROFILE_ARTIFACT_DIR must be an absolute host path}
+        target: /work/test-results
+    networks:
+      - c360
+    shm_size: 1gb

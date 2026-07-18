@@ -1,0 +1,10 @@
+services:
+  ui:
+    image: semsource-ui:dev
+    pull_policy: build
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      args:
+        SEMSOURCE_UI_VERSION: ${SEMSOURCE_UI_VERSION:-dev}
+        SEMSOURCE_UI_COMMIT: ${SEMSOURCE_UI_COMMIT:-local}

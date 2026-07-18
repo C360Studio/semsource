@@ -1,9 +1,21 @@
-# SemSource UI Profile Feedback for SemTeams UI
+# Historical SemSource UI Profile Feedback for SemTeams UI
 
-This note tracks findings from validating SemSource's `docker compose --profile ui`
-against the SemTeams UI checkout. It is an integration feedback list, not a
-SemSource spec. SemSource owns the compose/Caddy profile and backend route contract;
-SemTeams UI owns app behavior and UI-specific routes.
+> **Historical and superseded.** This note records validation of the former
+> `add-ui-profile` implementation. It is not a current integration contract or
+> delivery request. The SemSource `ui` flag now launches the SemSource-owned
+> workbench from this repository; it no longer builds, mounts, or validates a
+> SemTeams checkout. `UI_CONTEXT`, the sibling path, and SemTeams-only route
+> expectations below describe the retired profile.
+
+SemTeams now owns its application packaging and consumes SemSource through the
+unchanged UI-free HTTP, MCP, NATS, GraphQL, and governed graph contracts. The
+current SemSource profile contract lives in the
+[`add-opt-in-source-workbench`](../../openspec/changes/add-opt-in-source-workbench/)
+change. Future SemTeams application findings belong in the SemTeams repository.
+
+This note originally tracked findings from validating SemSource's
+`docker compose --profile ui` against the SemTeams UI checkout. It was an
+integration feedback list, not a SemSource specification.
 
 SemTeams UI follow-up issue:
 [C360Studio/semteams#244](https://github.com/C360Studio/semteams/issues/244).
