@@ -205,6 +205,32 @@ commit, UI image version/digest, and exact gates run against that digest.
 The UI image is independently replaceable but versioned with SemSource compatibility. A mutable
 `latest` tag is not a production acceptance artifact.
 
+Pull requests run the owned UI/browser gates, a clean local production-image build, and release
+verifier contract tests without package-write permission and without publishing. Only trusted pushes
+to `main` or a valid `v`-prefixed SemVer tag publish the multi-platform
+`ghcr.io/c360studio/semsource-ui` image for `linux/amd64` and `linux/arm64`:
+
+- `main` publishes `latest` plus `sha-<full-commit>`; the SHA tag is the verification tag and OCI
+  version, while `latest` is convenience only and is forbidden as release evidence even with a
+  digest;
+- a release tag publishes both the exact `v<semver>` tag and the plain `<semver>` tag; the exact
+  `v` tag is the verification tag and the plain SemVer value is the OCI version; and
+- every platform image carries the full Git commit as `org.opencontainers.image.revision` and the
+  derived version as `org.opencontainers.image.version`.
+
+The publish job exports the repository, manifest digest, verification tag, version, and full revision
+to a separate release-smoke job. That job SHALL prove the tag currently resolves to the exported
+manifest digest, the manifest is a multi-platform OCI index with both required platforms, and each
+platform image carries the expected version and revision. It SHALL pull the exact
+`<tag>@<manifest-digest>`, observe the matching local `RepoDigest`, and then run `task ui:smoke` with
+that exact reference. The smoke SHALL prove both the Compose-rendered image and running container's
+configured image equal the same pin. Successful evidence records the GitHub Actions run URL and
+attempt in the job summary and uploaded evidence artifact; failures retain profile diagnostics.
+
+This mechanism does not itself satisfy task 7.3. Release compatibility remains unproven until a real
+trusted run publishes a registry manifest and the success-only evidence records its exact digest,
+version, full revision, run URL, and profile-pin proof.
+
 ### D6 - Workbench composition is capability-driven
 
 `GET /source-manifest/capabilities` tells the UI which product identity, readiness signals, query
@@ -308,10 +334,16 @@ names, list/detail state, and focus; canvas-only test hooks cannot satisfy the g
 `ui:image:verify` builds `ui/Dockerfile` from a clean `ui/` context with no host `node_modules`, cache,
 bind mount, or sibling checkout. It starts the resulting production image as its declared non-root
 user with no development server or donor dependency, verifies the runtime UID is non-zero, waits for
-image health, and fetches SemSource shell content directly from the container port. It records the
-tested image ID and OCI content digest. A locally cached image, mutable `latest`, bind-mounted build
-output, or Vite development server cannot satisfy this gate. Task 7.3 separately ties the tested
-content to the registry digest, SemSource commit, and release version.
+image health, fetches SemSource shell content directly from the container port, and verifies explicit
+OCI version and full-revision labels. It records the tested image ID and local OCI content digest. A
+locally cached image, mutable `latest`, bind-mounted build output, or Vite development server cannot
+satisfy this gate.
+
+`task ui:image:release:test` exercises metadata derivation, workflow permission/event boundaries,
+release verification, mutable-tag rejection, profile preflight, and exact-pin comparison without
+registry access. On trusted pushes, `publish-ui` publishes and exposes its immutable outputs;
+`ui-release-smoke` independently proves the registry manifest and released profile. Task 7.3 remains
+open until that path produces its first real success evidence.
 
 The accessibility and image-verification scripts may be introduced during implementation, but task
 2.3 remains incomplete until every command above exists in SemSource and passes without SemTeams.

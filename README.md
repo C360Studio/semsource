@@ -188,6 +188,26 @@ not build UI source and needs neither a sibling checkout nor Node.js on the host
 > deployments. The first immutable workbench registry digest has not yet been published, so OpenSpec
 > release task 7.3 remains open; until it is published, use the explicit local development path below.
 
+CI now defines the publication and verification mechanism without claiming that first artifact.
+Pull requests run locked UI quality/browser gates, a clean production-image build, and release
+verifier contract tests without publishing. Trusted pushes publish multi-platform `linux/amd64` and
+`linux/arm64` images to `ghcr.io/c360studio/semsource-ui`:
+
+- `main`: `latest` and `sha-<full-commit>`; verification uses the SHA tag and OCI version
+  `sha-<full-commit>`;
+- release tag: exact `v<semver>` and plain `<semver>`; verification uses the `v` tag and OCI version
+  `<semver>`; and
+- every platform image: full `org.opencontainers.image.revision` plus the derived
+  `org.opencontainers.image.version`.
+
+The publish job passes its repository, manifest digest, verification tag, version, and revision to a
+separate release-smoke job. That job proves the tag still resolves to the exact multi-platform
+manifest, checks platform labels, pulls the exact `<tag>@sha256:<manifest-digest>`, confirms the local
+`RepoDigest`, and runs `task ui:smoke`. Released smoke also proves the Compose-rendered and running
+container image references equal that pin. `latest` is never acceptable release evidence, even with
+a digest. A successful run records the GitHub Actions run URL/attempt in its summary and evidence
+artifact; failures upload profile diagnostics.
+
 | Service             | Port             | Description                                                  |
 | ------------------- | ---------------- | ------------------------------------------------------------ |
 | Caddy               | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and raw `/graph` |
@@ -232,6 +252,7 @@ Workbench validation commands:
 SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest> task ui:smoke  # released-image start/test/teardown
 task ui:smoke:dev                                      # local ./ui build/test/teardown
 task ui:e2e                                            # test an already-running profile
+task ui:image:release:test                             # CI/release verifier contracts; no publish
 ```
 
 Both smoke paths run SemSource-owned, lockfile-matched Playwright in a container and assert the

@@ -42,6 +42,10 @@ confidence and dependency shape. The "why" behind durable choices lives in
   workbench through Caddy with containerized Playwright at desktop and narrow
   widths. Released-image compatibility remains open until a registry digest is
   published and tested.
+- **UI image publication mechanism**: pull requests validate UI/browser/clean-image and release
+  verifier contracts without publishing. Trusted `main` and release-tag pushes can publish
+  multi-platform `ghcr.io/c360studio/semsource-ui` images, then verify an exact immutable manifest
+  through the released profile. No successful registry run or digest is claimed yet.
 - **Raw graph stream export** remains available in standalone mode for
   stream-oriented consumers such as federation, fan-out, and live UI updates. The
   primary governed read contract is still graph query/MCP/GraphQL.
@@ -70,8 +74,9 @@ confidence and dependency shape. The "why" behind durable choices lives in
   exposed deployments behind your own gateway.
 - **No released workbench digest yet.** The production profile requires
   `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>`, but the first registry artifact and
-  compatibility pin are still OpenSpec task 7.3. Local development uses the
-  explicit `docker-compose.ui-dev.yml` override or `task ui:smoke:dev`.
+  compatibility pin are still OpenSpec task 7.3. The CI publication and verification mechanism is
+  implemented and contract-tested, but only a real trusted run can close the evidence task. Local
+  development uses the explicit `docker-compose.ui-dev.yml` override or `task ui:smoke:dev`.
 - **Graph drill-down is bounded and capability-gated.** It is offered only when the structural index
   and graph contract are ready. Truncated, incoherent, zero-revision, or stale responses cannot erase
   or overwrite newer displayed state.
@@ -91,9 +96,9 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ### Workbench Release Completion
 
-- Publish the SemSource-owned `ui/` production image, capture its immutable
-  registry digest, and prove that the released profile pin matches the tested
-  SemSource commit and version.
+- Execute the first trusted UI-image publication, capture its immutable multi-platform manifest
+  digest and GitHub Actions run evidence, and prove the exact registry/local/Compose/runtime pin
+  matches the tested SemSource commit and version.
 - Release the breaking flag migration: `docker compose --profile ui up` no
   longer builds SemTeams and instead runs the SemSource workbench. SemTeams owns
   its packaging and remains a consumer of unchanged UI-free SemSource contracts.

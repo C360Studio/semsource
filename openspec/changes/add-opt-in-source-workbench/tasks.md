@@ -155,9 +155,22 @@
       - Test: tests use visible accessible UI, not canvas-only hooks, prove backend routes do not fall
         through to UI HTML, exercise the real ready graph route plus no-graph states, pass automated
         accessibility and keyboard assertions, and pass at desktop and narrow widths.
-- [ ] 7.3 Add production-image evidence tying the tested image to its SemSource commit, version, and
-      immutable digest.
-      - Test: the digest tested by SemSource matches the profile pin; mutable `latest` is not accepted.
+- [ ] 7.3 Publish and capture the first production-image evidence tying the tested image to its
+      SemSource commit, version, immutable manifest digest, and successful trusted CI run.
+      - [x] 7.3.1 Add PR-safe UI/browser/clean-image gates and trusted main/tag multi-platform
+        publication to `ghcr.io/c360studio/semsource-ui`, with deterministic tags, explicit OCI
+        version/full-revision labels, scoped package permissions, and publish-job outputs.
+        - Test: `task ui:image:release:test` proves event/permission boundaries, main
+          `latest` plus `sha-<full-revision>`, release `v<semver>` plus plain `<semver>`, label inputs,
+          job outputs, and the separation of publish from verification without registry access.
+      - [x] 7.3.2 Add independent exact-manifest and released-profile verification.
+        - Test: verifier contract tests cover tag-to-manifest equality, required platforms, OCI
+          version/revision, local `RepoDigest`, rejection of digest-qualified `latest`, exact Compose
+          and running-container pins, success evidence/run URL, and retained failure diagnostics.
+      - [ ] 7.3.3 Record the first real trusted-run evidence.
+        - Test: a successful main or release-tag run publishes a real registry manifest, verifies and
+          smokes the exact `<tag>@sha256:<manifest-digest>`, and records the digest, version, full
+          revision, run URL/attempt, local `RepoDigest`, Compose pin, and running-container pin.
 
 ## 8. Documentation and release gates
 

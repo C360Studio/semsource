@@ -29,8 +29,22 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
   renderer/navigator/detail surface; `task ui:smoke:dev` proves a non-intercepted Caddy-to-SemSource
   graph request and response. GraphQL projection is deliberately outside this slice.
 - Released-profile compatibility remains partial until OpenSpec task 7.3
-  publishes and tests an immutable registry digest. A locally built image and
-  local content digest are not registry evidence.
+  publishes and tests an immutable registry digest. The CI mechanism and its contract tests are
+  complete; a locally built image, local content digest, or unexecuted workflow is not registry
+  evidence.
+
+## UI Image Publication And Release Evidence
+
+| Surface                                                              | Evidence                                                                         | Status  | Follow-up                                         |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------- | ------------------------------------------------- |
+| PR UI/browser/clean-image verification without publication           | `ui-quality`; `task ui:image:release:test` workflow permission/event assertions  | covered | Observe normal PR CI after merge                  |
+| Trusted `main` tags: `latest` + `sha-<full-revision>`                | `ui-image-metadata.sh`; metadata and workflow contract tests                     | covered | `latest` remains forbidden as release evidence    |
+| Trusted release tags: `v<semver>` + plain `<semver>`                 | `ui-image-metadata.sh`; valid/invalid SemVer contract tests                      | covered | None for mechanism                                |
+| Multi-platform publish outputs and OCI version/full revision         | `publish-ui`; workflow and clean-image metadata tests                            | covered | First real trusted publication still pending      |
+| Exact tag-to-manifest/platform/label/local-`RepoDigest` verification | `ui-release-image-verify.sh`; release verifier contract tests                    | covered | First real registry manifest still pending        |
+| Exact Compose-rendered and running-container pin proof               | `ui-profile-pin-verify.sh`; pin/preflight contract tests; `task ui:smoke` wiring | covered | First released-profile registry run still pending |
+| Success run URL/attempt evidence and failure diagnostics             | `ui-release-smoke`; workflow contract tests                                      | covered | Capture first success artifact and run URL        |
+| First immutable registry evidence                                    | None yet                                                                         | gap     | Complete OpenSpec task 7.3.3; keep 7.3 open       |
 
 ## Bootstrap And Compose
 
@@ -43,6 +57,7 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
 | `task ui:smoke:dev`                                                       | `scripts/ui-profile-smoke.sh dev` + six desktop/narrow Playwright tests                         | covered  | Builds local `./ui`; no release claim                    |
 | `task ui:e2e`                                                             | `scripts/ui-profile-e2e.sh` + `test/ui/ui-profile.spec.cjs`                                     | covered  | Requires a running released or development UI profile    |
 | `task ui:image:verify`                                                    | `scripts/ui-image-verify.sh`                                                                    | covered  | Local production-image proof only; not registry evidence |
+| `task ui:image:release:test`                                              | Release metadata/workflow/verifier/pin contract test suite                                      | covered  | No registry access and no release claim                  |
 | `go install ...@latest`                                                   | e2e `buildBinary` compiles `./cmd/semsource`                                                    | partial  | Consider install smoke                                   |
 | `docker run ... nats:2-alpine -js`                                        | `TestE2E_NativeQuickStart`                                                                      | covered  | None                                                     |
 | `git clone ...` / `cd semsource`                                          | External Git behavior                                                                           | external | None                                                     |

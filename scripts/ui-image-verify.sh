@@ -5,8 +5,28 @@ project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
 
 image=${SEMSOURCE_UI_VERIFY_IMAGE:-semsource-ui:verify-local}
+head_revision=$(git rev-parse HEAD)
+version=${SEMSOURCE_UI_VERSION:-sha-$head_revision}
+revision=${SEMSOURCE_UI_COMMIT:-$head_revision}
 container="semsource-ui-verify-$$"
 metadata=$(mktemp)
+
+if ! printf '%s\n' "$revision" | grep -Eq '^[0-9a-f]{40}$'; then
+	echo "ui:image:verify failed: revision must be a full lowercase Git commit SHA" >&2
+	exit 1
+fi
+if ! printf '%s\n' "$version" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+	echo "ui:image:verify failed: invalid OCI version '$version'" >&2
+	exit 1
+fi
+case "$version" in
+sha-*)
+	[ "$version" = "sha-$revision" ] || {
+		echo "ui:image:verify failed: SHA version '$version' does not match revision '$revision'" >&2
+		exit 1
+	}
+	;;
+esac
 
 cleanup() {
 	docker rm -f "$container" >/dev/null 2>&1 || true
@@ -15,13 +35,26 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Building SemSource-owned workbench image from clean context"
-docker buildx build --no-cache --load --metadata-file "$metadata" --tag "$image" ./ui
+docker buildx build --no-cache --load --metadata-file "$metadata" --tag "$image" \
+	--build-arg "SEMSOURCE_UI_VERSION=$version" \
+	--build-arg "SEMSOURCE_UI_COMMIT=$revision" ./ui
 
 user=$(docker image inspect --format '{{.Config.User}}' "$image")
 if [ "$user" != "semsource" ]; then
 	echo "ui:image:verify failed: image user is '$user', want 'semsource'" >&2
 	exit 1
 fi
+
+actual_version=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image")
+actual_revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+[ "$actual_version" = "$version" ] || {
+	echo "ui:image:verify failed: OCI version is '$actual_version', want '$version'" >&2
+	exit 1
+}
+[ "$actual_revision" = "$revision" ] || {
+	echo "ui:image:verify failed: OCI revision is '$actual_revision', want '$revision'" >&2
+	exit 1
+}
 
 image_id=$(docker image inspect --format '{{.Id}}' "$image")
 content_digest=$(sed -n 's/.*"containerimage\.digest"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$metadata")
