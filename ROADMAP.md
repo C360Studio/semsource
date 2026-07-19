@@ -35,17 +35,18 @@ confidence and dependency shape. The "why" behind durable choices lives in
   ranking, and `code_changes` diffs for added, removed, and changed symbols.
 - **Optional SemSource workbench implementation**: the repurposed `ui` profile
   layers the SemSource-owned source/readiness/search workbench and an explicit
-  Caddy allowlist over the unchanged core. A published immutable image is still
-  required before this becomes a released operator path.
+  Caddy allowlist over the unchanged core. Its first immutable multi-platform image
+  and released-profile compatibility evidence are published.
 - **Independent core and workbench proof**: `task core:smoke` proves the default
   profile never resolves UI artifacts; `task ui:smoke:dev` exercises the local
   workbench through Caddy with containerized Playwright at desktop and narrow
-  widths. Released-image compatibility remains open until a registry digest is
-  published and tested.
+  widths. The released profile also passed browser smoke 6/6 against its exact first registry digest.
 - **UI image publication mechanism**: pull requests validate UI/browser/clean-image and release
   verifier contracts without publishing. Trusted `main` and release-tag pushes can publish
   multi-platform `ghcr.io/c360studio/semsource-ui` images, then verify an exact immutable manifest
-  through the released profile. No successful registry run or digest is claimed yet.
+  through the released profile. The first trusted `main` workflow passed all six jobs for revision
+  `25b2816d14a147c1d6eb7b54e40668b51ba3574a` and manifest
+  `sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`.
 - **Raw graph stream export** remains available in standalone mode for
   stream-oriented consumers such as federation, fan-out, and live UI updates. The
   primary governed read contract is still graph query/MCP/GraphQL.
@@ -72,11 +73,10 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 - **Same-LAN deployment focus.** No built-in TLS/reverse-proxy hardening yet; run
   exposed deployments behind your own gateway.
-- **No released workbench digest yet.** The production profile requires
-  `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>`, but the first registry artifact and
-  compatibility pin are still OpenSpec task 7.3. The CI publication and verification mechanism is
-  implemented and contract-tested, but only a real trusted run can close the evidence task. Local
-  development uses the explicit `docker-compose.ui-dev.yml` override or `task ui:smoke:dev`.
+- **Released workbench use is exact-pin only.** The first verified pin is
+  `ghcr.io/c360studio/semsource-ui:sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`.
+  Mutable `latest` remains forbidden as release evidence. Local development uses the explicit
+  `docker-compose.ui-dev.yml` override or `task ui:smoke:dev`.
 - **Graph drill-down is bounded and capability-gated.** It is offered only when the structural index
   and graph contract are ready. Truncated, incoherent, zero-revision, or stale responses cannot erase
   or overwrite newer displayed state.
@@ -94,14 +94,10 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Next
 
-### Workbench Release Completion
+### Workbench Release Discipline
 
-- Execute the first trusted UI-image publication, capture its immutable multi-platform manifest
-  digest and GitHub Actions run evidence, and prove the exact registry/local/Compose/runtime pin
-  matches the tested SemSource commit and version.
-- Release the breaking flag migration: `docker compose --profile ui up` no
-  longer builds SemTeams and instead runs the SemSource workbench. SemTeams owns
-  its packaging and remains a consumer of unchanged UI-free SemSource contracts.
+- Carry each verified immutable workbench pin into the matching SemSource release notes and keep
+  future tag publications subject to the same registry/local/Compose/runtime evidence gate.
 - Keep the former SemTeams profile note as historical evidence only; it creates
   no current SemSource compatibility obligation.
 

@@ -28,32 +28,34 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
   non-deletion for partial views. Desktop/narrow Sigma and accessibility tests cover the synchronized
   renderer/navigator/detail surface; `task ui:smoke:dev` proves a non-intercepted Caddy-to-SemSource
   graph request and response. GraphQL projection is deliberately outside this slice.
-- Released-profile compatibility remains partial until OpenSpec task 7.3
-  publishes and tests an immutable registry digest. The CI mechanism and its contract tests are
-  complete; a locally built image, local content digest, or unexecuted workflow is not registry
-  evidence.
+- Released-profile compatibility is covered by the first trusted `main` UI
+  publication and release-smoke evidence. Revision
+  `25b2816d14a147c1d6eb7b54e40668b51ba3574a` published and verified
+  `ghcr.io/c360studio/semsource-ui:sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`.
+  A locally built image, local content digest, or unexecuted workflow remains
+  insufficient registry evidence.
 
 ## UI Image Publication And Release Evidence
 
-| Surface                                                              | Evidence                                                                         | Status  | Follow-up                                         |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------- | ------------------------------------------------- |
-| PR UI/browser/clean-image verification without publication           | `ui-quality`; `task ui:image:release:test` workflow permission/event assertions  | covered | Observe normal PR CI after merge                  |
-| Trusted `main` tags: `latest` + `sha-<full-revision>`                | `ui-image-metadata.sh`; metadata and workflow contract tests                     | covered | `latest` remains forbidden as release evidence    |
-| Trusted release tags: `v<semver>` + plain `<semver>`                 | `ui-image-metadata.sh`; valid/invalid SemVer contract tests                      | covered | None for mechanism                                |
-| Multi-platform publish outputs and OCI version/full revision         | `publish-ui`; workflow and clean-image metadata tests                            | covered | First real trusted publication still pending      |
-| Exact tag-to-manifest/platform/label/local-`RepoDigest` verification | `ui-release-image-verify.sh`; release verifier contract tests                    | covered | First real registry manifest still pending        |
-| Exact Compose-rendered and running-container pin proof               | `ui-profile-pin-verify.sh`; pin/preflight contract tests; `task ui:smoke` wiring | covered | First released-profile registry run still pending |
-| Success run URL/attempt evidence and failure diagnostics             | `ui-release-smoke`; workflow contract tests                                      | covered | Capture first success artifact and run URL        |
-| First immutable registry evidence                                    | None yet                                                                         | gap     | Complete OpenSpec task 7.3.3; keep 7.3 open       |
+| Surface                                                              | Evidence                                                                                                                                                 | Status  | Follow-up                                        |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------ |
+| PR UI/browser/clean-image verification without publication           | `ui-quality`; `task ui:image:release:test` workflow permission/event assertions                                                                          | covered | Observe normal PR CI after merge                 |
+| Trusted `main` tags: `latest` + `sha-<full-revision>`                | `ui-image-metadata.sh`; metadata and workflow contract tests                                                                                             | covered | `latest` remains forbidden as release evidence   |
+| Trusted release tags: `v<semver>` + plain `<semver>`                 | `ui-image-metadata.sh`; valid/invalid SemVer contract tests                                                                                              | covered | None for mechanism                               |
+| Multi-platform publish outputs and OCI version/full revision         | Trusted `main` publication for revision `25b2816d14a147c1d6eb7b54e40668b51ba3574a`; `linux/amd64`, `linux/arm64`                                         | covered | Repeat for future trusted releases               |
+| Exact tag-to-manifest/platform/label/local-`RepoDigest` verification | Manifest and local `RepoDigest` `sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`                                                | covered | Repeat for future trusted releases               |
+| Exact Compose-rendered and running-container pin proof               | Both `Config.Image` values matched the exact tag-plus-digest reference                                                                                   | covered | `latest` remains forbidden as release evidence   |
+| Success run URL/attempt evidence and failure diagnostics             | [Actions run 29693062800](https://github.com/C360Studio/semsource/actions/runs/29693062800), attempt 1; all six jobs green; released browser profile 6/6 | covered | Preserve diagnostics and evidence on future runs |
+| First immutable registry evidence                                    | [Evidence artifact 8444245976](https://github.com/C360Studio/semsource/actions/runs/29693062800/artifacts/8444245976)                                    | covered | Preserve exact reference in release evidence     |
 
 ## Bootstrap And Compose
 
 | Surface                                                                   | Evidence                                                                                        | Status   | Follow-up                                                |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------- |
 | `docker compose up`                                                       | Isolated `task core:smoke` probes the exact core service set, status, sources, GraphQL, and MCP | covered  | None                                                     |
-| `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest> docker compose --profile ui up` | Released mode in `scripts/ui-profile-smoke.sh` enforces the immutable reference                 | partial  | Publish and test the registry digest in OpenSpec 7.3     |
+| `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest> docker compose --profile ui up` | Trusted run 29693062800 verified the exact Compose-rendered and running-container reference     | covered  | Use a verified tag-plus-digest; `latest` is rejected     |
 | Explicit `docker-compose.ui-dev.yml` profile                              | `task ui:smoke:dev` passes the desktop and narrow Playwright projects                           | covered  | Local development only                                   |
-| `task ui:smoke`                                                           | Released lifecycle path in `scripts/ui-profile-smoke.sh`                                        | partial  | Requires the OpenSpec 7.3 registry artifact              |
+| `task ui:smoke`                                                           | Trusted `ui-release-smoke` job passed all 6 released-profile browser checks                     | covered  | Repeat for future trusted releases                       |
 | `task ui:smoke:dev`                                                       | `scripts/ui-profile-smoke.sh dev` + six desktop/narrow Playwright tests                         | covered  | Builds local `./ui`; no release claim                    |
 | `task ui:e2e`                                                             | `scripts/ui-profile-e2e.sh` + `test/ui/ui-profile.spec.cjs`                                     | covered  | Requires a running released or development UI profile    |
 | `task ui:image:verify`                                                    | `scripts/ui-image-verify.sh`                                                                    | covered  | Local production-image proof only; not registry evidence |
