@@ -15,12 +15,20 @@ import (
 
 // stubStore satisfies sourcespawn.ConfigStore for tests that exercise the
 // ingest handler's pre-flight checks without committing to KV.
-type stubStore struct{}
+type stubStore struct {
+	// components pre-registers instance names so honest removal (NOT_FOUND
+	// for unknown handles) can be exercised.
+	components []string
+}
 
-func (stubStore) GetConfig() *semconfig.SafeConfig {
+func (s stubStore) GetConfig() *semconfig.SafeConfig {
+	comps := map[string]types.ComponentConfig{}
+	for _, name := range s.components {
+		comps[name] = types.ComponentConfig{}
+	}
 	return semconfig.NewSafeConfig(&semconfig.Config{
 		Platform:   semconfig.PlatformConfig{Org: "test", ID: "test"},
-		Components: map[string]types.ComponentConfig{},
+		Components: comps,
 	})
 }
 func (stubStore) PutComponentToKV(_ context.Context, _ string, _ types.ComponentConfig) error {
@@ -203,7 +211,7 @@ func TestRemoveManifestSourceByInstance_FindsViaBuild(t *testing.T) {
 		t.Fatal("Build returned no instance name")
 	}
 
-	if !c.removeManifestSourceByInstance(instanceName, sourcespawn.Options{Org: "acme"}) {
+	if !c.removeManifestSourceByInstance(instanceName, sourcespawn.Options{Org: "acme"}, nil) {
 		t.Fatal("removeManifestSourceByInstance returned false; want true")
 	}
 	c.manifestMu.RLock()

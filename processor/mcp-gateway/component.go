@@ -73,7 +73,7 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.addSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "remove_source",
-		Description: "Deregister a source by its handle (instance name). Stops ingestion; existing graph data is not retracted.",
+		Description: "Deregister a source by its handle (instance name). Stops ingestion; existing graph data is not retracted. Removal is verifiable: the source leaves source_status within one aggregation pass, and an unknown handle returns NOT_FOUND (never silent success).",
 	}, c.removeSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "source_status",

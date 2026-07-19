@@ -158,7 +158,9 @@ func TestHandleAddHTTP_NotReady(t *testing.T) {
 // --- DELETE /sources/{id} --------------------------------------------------
 
 func TestHandleRemoveHTTP(t *testing.T) {
-	mux := newHTTPComponent(t, stubIngestCfg(), nil)
+	cfg := stubIngestCfg()
+	cfg.Store = stubStore{components: []string{"doc-source-abc"}}
+	mux := newHTTPComponent(t, cfg, nil)
 
 	rec := doJSON(t, mux, http.MethodDelete, "/source-manifest/sources/doc-source-abc", nil, nil)
 	if rec.Code != http.StatusOK {
@@ -169,6 +171,24 @@ func TestHandleRemoveHTTP(t *testing.T) {
 		t.Fatalf("decode reply: %v", err)
 	}
 	if !reply.Removed || reply.InstanceName != "doc-source-abc" {
+		t.Fatalf("unexpected reply: %+v", reply)
+	}
+}
+
+// TestHandleRemoveHTTP_UnknownHandle pins honest removal over HTTP: an
+// unregistered handle is 404 NOT_FOUND, never removed:true (audit 2026-07-19).
+func TestHandleRemoveHTTP_UnknownHandle(t *testing.T) {
+	mux := newHTTPComponent(t, stubIngestCfg(), nil)
+
+	rec := doJSON(t, mux, http.MethodDelete, "/source-manifest/sources/nope-source", nil, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	var reply RemoveReply
+	if err := json.Unmarshal(rec.Body.Bytes(), &reply); err != nil {
+		t.Fatalf("decode reply: %v", err)
+	}
+	if reply.Removed || reply.Error == nil || reply.Error.Code != CodeNotFound {
 		t.Fatalf("unexpected reply: %+v", reply)
 	}
 }
