@@ -155,7 +155,7 @@
       - Test: tests use visible accessible UI, not canvas-only hooks, prove backend routes do not fall
         through to UI HTML, exercise the real ready graph route plus no-graph states, pass automated
         accessibility and keyboard assertions, and pass at desktop and narrow widths.
-- [ ] 7.3 Publish and capture the first production-image evidence tying the tested image to its
+- [x] 7.3 Publish and capture the first production-image evidence tying the tested image to its
       SemSource commit, version, immutable manifest digest, and successful trusted CI run.
       - [x] 7.3.1 Add PR-safe UI/browser/clean-image gates and trusted main/tag multi-platform
         publication to `ghcr.io/c360studio/semsource-ui`, with deterministic tags, explicit OCI
@@ -167,10 +167,16 @@
         - Test: verifier contract tests cover tag-to-manifest equality, required platforms, OCI
           version/revision, local `RepoDigest`, rejection of digest-qualified `latest`, exact Compose
           and running-container pins, success evidence/run URL, and retained failure diagnostics.
-      - [ ] 7.3.3 Record the first real trusted-run evidence.
-        - Test: a successful main or release-tag run publishes a real registry manifest, verifies and
-          smokes the exact `<tag>@sha256:<manifest-digest>`, and records the digest, version, full
-          revision, run URL/attempt, local `RepoDigest`, Compose pin, and running-container pin.
+      - [x] 7.3.3 Record the first real trusted-run evidence.
+        - Evidence: trusted `main` UI publish/smoke jobs for revision
+          `25b2816d14a147c1d6eb7b54e40668b51ba3574a` published and passed against
+          `ghcr.io/c360studio/semsource-ui:sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`.
+        - Test: [Actions run 29693062800, attempt 1](https://github.com/C360Studio/semsource/actions/runs/29693062800)
+          verified `linux/amd64` and `linux/arm64`, OCI version/full revision, local `RepoDigest`, the
+          exact Compose-rendered and running-container pins, and released-profile browser smoke 6/6.
+          [Evidence artifact 8444245976](https://github.com/C360Studio/semsource/actions/runs/29693062800/artifacts/8444245976)
+          records the successful release-smoke evidence. All six workflow jobs completed green,
+          including `build-and-push` and `ui-release-smoke`.
 
 ## 8. Documentation and release gates
 

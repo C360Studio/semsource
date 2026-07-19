@@ -185,10 +185,10 @@ not build UI source and needs neither a sibling checkout nor Node.js on the host
 > **Breaking profile migration:** the `ui` flag previously built a sibling SemTeams checkout. It now
 > means the SemSource workbench. SemTeams owns its application packaging and connects to SemSource as
 > a consumer through the same HTTP, MCP, NATS, GraphQL, and governed graph contracts used by UI-free
-> deployments. The first immutable workbench registry digest has not yet been published, so OpenSpec
-> release task 7.3 remains open; until it is published, use the explicit local development path below.
+> deployments. The first immutable workbench registry artifact is published and verified for merged
+> `main` revision `25b2816d14a147c1d6eb7b54e40668b51ba3574a`; use the exact pin below.
 
-CI now defines the publication and verification mechanism without claiming that first artifact.
+CI publishes and verifies trusted workbench artifacts while keeping pull requests publication-free.
 Pull requests run locked UI quality/browser gates, a clean production-image build, and release
 verifier contract tests without publishing. Trusted pushes publish multi-platform `linux/amd64` and
 `linux/arm64` images to `ghcr.io/c360studio/semsource-ui`:
@@ -207,6 +207,23 @@ manifest, checks platform labels, pulls the exact `<tag>@sha256:<manifest-digest
 container image references equal that pin. `latest` is never acceptable release evidence, even with
 a digest. A successful run records the GitHub Actions run URL/attempt in its summary and evidence
 artifact; failures upload profile diagnostics.
+
+First trusted evidence:
+
+- exact image:
+  `ghcr.io/c360studio/semsource-ui:sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`;
+- OCI version and full revision: `sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a` and
+  `25b2816d14a147c1d6eb7b54e40668b51ba3574a`;
+- platforms: `linux/amd64` and `linux/arm64`;
+- observed local `RepoDigest`:
+  `ghcr.io/c360studio/semsource-ui@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`;
+- Compose-rendered image and running container `Config.Image`: both the exact image above; and
+- [Actions run 29693062800, attempt 1](https://github.com/C360Studio/semsource/actions/runs/29693062800),
+  all six workflow jobs green, including `build-and-push` and `ui-release-smoke`, released-profile
+  browser 6/6, and
+  [evidence artifact 8444245976](https://github.com/C360Studio/semsource/actions/runs/29693062800/artifacts/8444245976).
+
+This is the completed successful trusted publication and release-smoke workflow evidence.
 
 | Service             | Port             | Description                                                  |
 | ------------------- | ---------------- | ------------------------------------------------------------ |

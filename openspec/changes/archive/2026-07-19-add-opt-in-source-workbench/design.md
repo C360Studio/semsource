@@ -227,9 +227,20 @@ that exact reference. The smoke SHALL prove both the Compose-rendered image and 
 configured image equal the same pin. Successful evidence records the GitHub Actions run URL and
 attempt in the job summary and uploaded evidence artifact; failures retain profile diagnostics.
 
-This mechanism does not itself satisfy task 7.3. Release compatibility remains unproven until a real
-trusted run publishes a registry manifest and the success-only evidence records its exact digest,
-version, full revision, run URL, and profile-pin proof.
+The first trusted `main` UI publish/smoke jobs satisfied task 7.3 for merged revision
+`25b2816d14a147c1d6eb7b54e40668b51ba3574a`. They published OCI version/tag
+`sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a` at manifest digest
+`sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20` and verified
+`linux/amd64` plus `linux/arm64`. The observed local repository digest was
+`ghcr.io/c360studio/semsource-ui@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`;
+both the Compose-rendered image and running container `Config.Image` equaled the exact
+tag-plus-manifest-digest reference.
+
+[Actions run 29693062800, attempt 1](https://github.com/C360Studio/semsource/actions/runs/29693062800)
+completed with all six jobs green, including `build-and-push` and `ui-release-smoke`; the released
+browser profile passed 6/6. Its
+[evidence artifact 8444245976](https://github.com/C360Studio/semsource/actions/runs/29693062800/artifacts/8444245976)
+is the durable success record for the completed trusted publication and release-smoke workflow.
 
 ### D6 - Workbench composition is capability-driven
 
@@ -342,11 +353,11 @@ satisfy this gate.
 `task ui:image:release:test` exercises metadata derivation, workflow permission/event boundaries,
 release verification, mutable-tag rejection, profile preflight, and exact-pin comparison without
 registry access. On trusted pushes, `publish-ui` publishes and exposes its immutable outputs;
-`ui-release-smoke` independently proves the registry manifest and released profile. Task 7.3 remains
-open until that path produces its first real success evidence.
+`ui-release-smoke` independently proves the registry manifest and released profile. Task 7.3 closed
+when the trusted `main` UI publish/smoke jobs produced the exact evidence recorded in D5.
 
-The accessibility and image-verification scripts may be introduced during implementation, but task
-2.3 remains incomplete until every command above exists in SemSource and passes without SemTeams.
+The accessibility and image-verification scripts were introduced during implementation; task 2.3
+closed only after every command above existed in SemSource and passed without SemTeams.
 
 ## Follow-on change sequence
 

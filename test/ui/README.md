@@ -48,3 +48,23 @@ HTTP snapshots for the shell, health, and capability endpoints before cleanup.
 Trusted CI failures additionally upload the preserved profile diagnostics; a
 successful release-smoke run records the authoritative run URL and attempt in
 its summary and evidence artifact.
+
+## First Trusted Released-Image Evidence
+
+Trusted `main` UI publish/smoke jobs for revision
+`25b2816d14a147c1d6eb7b54e40668b51ba3574a` published and verified:
+
+- exact image:
+  `ghcr.io/c360studio/semsource-ui:sha-25b2816d14a147c1d6eb7b54e40668b51ba3574a@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`
+- platforms: `linux/amd64` and `linux/arm64`
+- local `RepoDigest`:
+  `ghcr.io/c360studio/semsource-ui@sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`
+- Compose-rendered and running-container `Config.Image`: the same exact image
+  reference
+- [Actions run 29693062800](https://github.com/C360Studio/semsource/actions/runs/29693062800),
+  attempt 1; all six jobs green, including `build-and-push` and
+  `ui-release-smoke`, with released browser profile 6/6
+- [evidence artifact 8444245976](https://github.com/C360Studio/semsource/actions/runs/29693062800/artifacts/8444245976)
+
+This evidence records the completed successful trusted publication and
+release-smoke workflow.

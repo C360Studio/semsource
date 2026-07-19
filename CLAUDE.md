@@ -210,16 +210,19 @@ Current release-candidate shape (the latest public tag is still beta.4):
    checkout or host Node.js. Local development is explicit through
    `docker-compose.ui-dev.yml` or `task ui:smoke:dev`; `task ui:e2e` uses the
    lockfile-matched container runner.
-6. The first published immutable workbench digest is still OpenSpec task 7.3.
-   CI now contract-tests PR quality/clean-image gates, trusted main/tag publication,
-   exact-manifest verification, and released-profile pin proof, but no real registry
-   digest/run evidence exists yet. Until it does, released-profile compatibility is
-   not proven. Graph drill-down uses the adopted SemStreams #533 facet in
-   `v1.0.0-beta.153` through the existing code-context route, with local and
-   real-profile acceptance; GraphQL is not part of that slice.
-7. Active follow-ups are the workbench release pin, query-index
-   readiness/scale, GraphQL capabilities alignment, code/version intelligence,
-   and federation validation.
+6. OpenSpec task 7.3 is complete. Trusted `main` UI publish/smoke jobs verified
+   revision `25b2816d14a147c1d6eb7b54e40668b51ba3574a` at manifest digest
+   `sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`
+   for `linux/amd64` and `linux/arm64`, including registry, local, Compose-rendered,
+   and running-container pin proof in
+   [Actions run 29693062800](https://github.com/C360Studio/semsource/actions/runs/29693062800),
+   attempt 1. All six workflow jobs passed, including `build-and-push` and
+   `ui-release-smoke`; the released browser profile passed 6/6. Graph drill-down
+   uses the adopted SemStreams #533 facet in `v1.0.0-beta.153` through the existing
+   code-context route, with local and real-profile acceptance; GraphQL is not part
+   of that slice.
+7. Active follow-ups are query-index readiness/scale, GraphQL capabilities
+   alignment, code/version intelligence, and federation validation.
 
 ## Custom Agents & Skills
 
