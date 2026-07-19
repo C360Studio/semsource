@@ -32,6 +32,10 @@ describe("searchCode", () => {
 
   it.each([
     [400, "invalid_request", "invalid", false],
+    [405, "method_not_allowed", "invalid", false],
+    [413, "payload_too_large", "invalid", false],
+    [500, "internal_error", "fatal", false],
+    [502, "upstream_unavailable", "transient", true],
     [503, "dependency_unavailable", "transient", true],
     [504, "upstream_timeout", "transient", true],
   ])(
@@ -61,6 +65,15 @@ describe("searchCode", () => {
       });
     },
   );
+
+  it("falls back to a generic status error when the envelope fails to parse, for any status", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("not json", { status: 500 }));
+    await expect(
+      searchCode(fetcher, "/code-context/search", "query", "1"),
+    ).rejects.toMatchObject({ status: 500, code: "http_error" });
+  });
 
   it("does not trust an error body when the contract was not advertised", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(

@@ -7,6 +7,7 @@
     syncGraph,
     type GraphSyncResult,
   } from "$lib/graph/model";
+  import { groupEntities } from "$lib/graph/drilldown";
   import type { GraphRendererFactory } from "$lib/graph/renderer";
   import GraphView from "./GraphView.svelte";
 
@@ -41,6 +42,12 @@
   let selectedHandle = $state<string | null>(null);
   let focusedHandles = $state<string[]>([]);
   let queryNotice = $state<string | null>(null);
+  // The query behind the currently displayed result (drives queried-symbol
+  // selection) and the query behind the last failed attempt (drives Retry —
+  // D5), tracked separately from the live `input` so neither is at the mercy
+  // of the user editing the box afterward.
+  let resultQuery = $state("");
+  let erroredQuery = $state<string | null>(null);
   let controller: AbortController | null = null;
   let generation = 0;
   const usable = $derived(
@@ -51,6 +58,11 @@
   );
   const resetKey = $derived(
     `${JSON.stringify(capability ?? null)}:${graphContract ?? ""}:${errorContract ?? ""}`,
+  );
+  const retryLabel = $derived(
+    erroredQuery !== null && erroredQuery !== input.trim()
+      ? `Retry graph query: "${erroredQuery}"`
+      : "Retry graph query",
   );
 
   function cancel(): void {
@@ -64,8 +76,10 @@
     if (!resetKeyValue) return;
     cancel();
     error = null;
+    erroredQuery = null;
     queryNotice = null;
     result = { graph: emptyGraph(), mode: "complete" };
+    resultQuery = "";
     selectedHandle = null;
     focusedHandles = [];
   }
@@ -75,10 +89,10 @@
     return cancel;
   });
 
-  async function submit(): Promise<void> {
-    const graphQuery = input.trim();
+  async function runQuery(graphQuery: string): Promise<void> {
     cancel();
     error = null;
+    erroredQuery = null;
     queryNotice = null;
     if (!graphQuery || !usable || !capability?.href) return;
     const request = new AbortController();
@@ -107,12 +121,16 @@
         return;
       }
       result = syncGraph(result.graph, response.graph, response.nodes);
+      resultQuery = graphQuery;
       focusedHandles = response.graph.nodes.map((node) => node.handle);
       if (
         !selectedHandle ||
         !result.graph.nodes.some((node) => node.handle === selectedHandle)
       )
-        selectedHandle = result.graph.nodes[0]?.handle ?? null;
+        selectedHandle = groupEntities(
+          result.graph.nodes,
+          resultQuery,
+        ).selectedHandle;
     } catch (cause) {
       if (request.signal.aborted || current !== generation) return;
       error =
@@ -126,12 +144,21 @@
               message: "Graph investigation could not be completed",
               retryable: false,
             };
+      erroredQuery = graphQuery;
     } finally {
       if (current === generation) {
         loading = false;
         controller = null;
       }
     }
+  }
+
+  async function submit(): Promise<void> {
+    await runQuery(input.trim());
+  }
+
+  async function retryErrored(): Promise<void> {
+    if (erroredQuery !== null) await runQuery(erroredQuery);
   }
 </script>
 
@@ -209,7 +236,7 @@
           {#if error.code}<p>Error code: {error.code}</p>{/if}
           {#if error.retryable}<button
               type="button"
-              onclick={() => void submit()}>Retry graph query</button
+              onclick={() => void retryErrored()}>{retryLabel}</button
             >{/if}
         </div>{/if}
       {#if result.mode === "partial"}
@@ -225,6 +252,7 @@
         {focusedHandles}
         bind:selectedHandle
         {rendererFactory}
+        queriedName={resultQuery}
       />
     {/if}
   {/if}

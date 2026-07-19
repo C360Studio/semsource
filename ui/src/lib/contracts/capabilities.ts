@@ -2,7 +2,8 @@ export type Availability = "ready" | "not_ready" | "unsupported";
 import { isRFC3339 } from "./validation";
 export type OverallReadiness = "ready" | "partial";
 export type SourceReadinessState = "ready" | "seeding" | "degraded" | "unknown";
-export type IndexReadinessState = "ready" | "building" | "degraded" | "unknown";
+export type IndexReadinessState =
+  "ready" | "building" | "degraded" | "reset_required" | "unknown";
 
 export class CapabilityContractError extends Error {
   constructor(
@@ -147,7 +148,7 @@ function readinessSignal(
   const states =
     kind === "source"
       ? ["ready", "seeding", "degraded", "unknown"]
-      : ["ready", "building", "degraded", "unknown"];
+      : ["ready", "building", "degraded", "reset_required", "unknown"];
   if (
     !item ||
     typeof item.available !== "boolean" ||

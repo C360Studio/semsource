@@ -121,7 +121,9 @@ export async function postFusionRequest(
 
   const body = await response.text();
   if (!response.ok) {
-    if (errorContract === "1" && [400, 503, 504].includes(response.status)) {
+    // The advertised contract itself says whether a body-envelope applies —
+    // not a status allowlist, which drifts as the backend adds statuses (D5).
+    if (errorContract === "1") {
       try {
         const error = parseFusionError(JSON.parse(body) as unknown);
         if (error) {

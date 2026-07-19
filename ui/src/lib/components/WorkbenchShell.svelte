@@ -4,7 +4,11 @@
   import type { GraphQuery } from "$lib/api/graph";
   import type { GraphRendererFactory } from "$lib/graph/renderer";
   import type { WorkbenchCapabilities } from "$lib/contracts/capabilities";
-  import type { ManifestSource } from "$lib/contracts/sourceManifest";
+  import {
+    sourceKey,
+    type ManifestSource,
+  } from "$lib/contracts/sourceManifest";
+  import { deriveReadinessCoverage } from "$lib/state/readiness";
   import CapabilityCard from "./CapabilityCard.svelte";
   import SearchPanel from "./SearchPanel.svelte";
   import GraphPanel from "./GraphPanel.svelte";
@@ -31,7 +35,15 @@
     graphRendererFactory?: GraphRendererFactory;
   } = $props();
 
-  const overall = $derived(capabilities?.readiness.overall ?? "unknown");
+  // D4: derived from ALL advertised readiness signals, not just the
+  // backend's own `overall` field (which only gates on source + structural
+  // index) — so "Ready" can never mask a still-building tracked signal.
+  const coverage = $derived(
+    capabilities ? deriveReadinessCoverage(capabilities.readiness) : null,
+  );
+  const overall = $derived(
+    coverage === null ? "unknown" : coverage.ready ? "ready" : "partial",
+  );
   const errorMessage = $derived(
     typeof error === "string" ? error : error?.message,
   );
@@ -68,6 +80,14 @@
   function stateLabel(status: string): string {
     return status === "not_ready" ? "Not ready" : label(status);
   }
+
+  // D3: reset_required gets a distinct, actionable not-ready presentation
+  // rather than the generic label — never a parse failure.
+  function indexStateLabel(status: string): string {
+    return status === "reset_required"
+      ? "Reset required — reindex needed"
+      : label(status);
+  }
 </script>
 
 <svelte:head>
@@ -87,7 +107,7 @@
         Project <strong>{capabilities?.project.key ?? "connecting"}</strong>
       </p>
     </div>
-    {#if capabilities}
+    {#if capabilities && coverage}
       <div
         class="overall"
         role="status"
@@ -96,6 +116,7 @@
       >
         <span>Overall readiness</span>
         <strong>{label(overall)}</strong>
+        <small>Covers {coverage.covered.join(", ")}</small>
       </div>
     {/if}
   </header>
@@ -148,9 +169,12 @@
             >
           {/if}
         </article>
-        <article>
+        <article data-state={capabilities.readiness.structural_index.state}>
           <span>Structural index</span>
-          <strong>{label(capabilities.readiness.structural_index.state)}</strong
+          <strong
+            >{indexStateLabel(
+              capabilities.readiness.structural_index.state,
+            )}</strong
           >
           {#if capabilities.readiness.structural_index.lag !== undefined}
             <small
@@ -164,9 +188,13 @@
             >
           {/if}
         </article>
-        <article>
+        <article data-state={capabilities.readiness.semantic_index.state}>
           <span>Semantic index</span>
-          <strong>{label(capabilities.readiness.semantic_index.state)}</strong>
+          <strong
+            >{indexStateLabel(
+              capabilities.readiness.semantic_index.state,
+            )}</strong
+          >
         </article>
       </div>
     </section>
@@ -183,7 +211,7 @@
       </div>
       {#if inventory?.status === "ready"}
         <ul>
-          {#each inventory.data.sources as source (`${source.type}:${sourceLocation(source)}`)}
+          {#each inventory.data.sources as source (sourceKey(source))}
             <li>
               <div>
                 <strong>{label(source.type)}</strong>
@@ -369,6 +397,7 @@
   }
 
   .overall span,
+  .overall small,
   article span,
   article small {
     color: var(--muted);
@@ -381,6 +410,11 @@
 
   .overall[data-state="ready"] strong {
     color: var(--accent);
+  }
+
+  article[data-state="reset_required"] strong,
+  article[data-state="degraded"] strong {
+    color: var(--danger);
   }
 
   .readiness,

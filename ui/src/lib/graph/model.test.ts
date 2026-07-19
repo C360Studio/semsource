@@ -80,6 +80,35 @@ describe("syncGraph", () => {
     expect(result.graph.edges.length).toBe(4);
   });
 
+  it("never downgrades a previously resolved node to an unresolved stub on a partial update", () => {
+    const first = parsed();
+    const state = syncGraph(emptyGraph(), first.graph!, first.nodes).graph;
+    const partial = structuredClone(completeGraphResponse);
+    // This partial supplies no node metadata at all for handle-a/handle-b —
+    // only an edge referencing them, so incomingNodes synthesizes unresolved
+    // stubs for both. The fix (D2) must not let those stubs overwrite the
+    // already-resolved nodes retained from the prior sync.
+    partial.nodes = [];
+    partial.graph.nodes = [];
+    partial.graph.edges = [partial.graph.edges[0]];
+    partial.graph.truncated = true;
+    const response = parsed(partial);
+    const result = syncGraph(state, response.graph!, response.nodes);
+    expect(result.mode).toBe("partial");
+    expect(
+      result.graph.nodes.find((node) => node.handle === "handle-a"),
+    ).toEqual(state.nodes.find((node) => node.handle === "handle-a"));
+    expect(
+      result.graph.nodes.find((node) => node.handle === "handle-a")?.resolved,
+    ).toBe(true);
+    expect(
+      result.graph.nodes.find((node) => node.handle === "handle-a")?.facts,
+    ).toHaveLength(2);
+    expect(
+      result.graph.nodes.find((node) => node.handle === "handle-b")?.resolved,
+    ).toBe(true);
+  });
+
   it("retains newer state when a lower complete revision arrives late", () => {
     const first = parsed();
     const state = syncGraph(emptyGraph(), first.graph!, first.nodes).graph;
