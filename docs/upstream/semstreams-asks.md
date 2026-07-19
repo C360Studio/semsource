@@ -524,3 +524,18 @@ directed/evidenced edges, or make GraphQL a prerequisite.
 
 **Related:** semstreams#376 (fusion framework primitive), semstreams#367 (graph-visible provenance
 conventions), OpenSpec `add-opt-in-source-workbench` D9/tasks 3.1–3.2.
+
+### 19. Impact facet should name direct dependents (bounded, truncation-labeled) — framework-shaped — not yet filed
+
+`fusion.Impact` is counts-only (`{nodes, files, truncated}`): the blast radius is sized but
+never named, so "what depends on this" costs a follow-up query per node. semsource's interim
+(go-callgraph-recall D5) adds `WantRelations` to its impact verb so seed nodes carry the
+reverse-role refs (caller/extended_by/implemented_by/referenced_by/embedded_by) — but that is
+one product's want-set workaround, the per-role `maxRelationsPerNode` cap truncates SILENTLY,
+and deeper closure members stay nameless. Ask: the Impact facet itself names at least the
+direct dependents (bounded, per-role/per-facet truncation labeled, human `Ref`s like the
+relations facet), so every fusion consumer gets named blast radii without widening `Want`.
+Generalizes beyond code (docs backlinks, config dependents).
+**Surfaced by:** audit 2026-07-19 graded Q7 — `code_impact` returned bare counts for
+`SystemSlug`; the answer "5 nodes / 3 files" grades wrong when the asker needs *which* callers.
+**Interim in semsource:** exact-seed decorator + WantRelations default (go-callgraph-recall).

@@ -53,6 +53,29 @@ func TestListTools(t *testing.T) {
 	}
 }
 
+// TestCodeImpactDescriptionNamesDependents pins the code_impact contract text
+// (go-callgraph-recall D5): the tool advertises byte-exact symbol lookup and
+// the named direct-dependent roles with their documented per-role bound.
+func TestCodeImpactDescriptionNamesDependents(t *testing.T) {
+	cs := connect(t, newTestComponent(nil))
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != "code_impact" {
+			continue
+		}
+		for _, want := range []string{"byte-exact", "direct dependents", "12 per role"} {
+			if !strings.Contains(tool.Description, want) {
+				t.Errorf("code_impact description missing %q: %s", want, tool.Description)
+			}
+		}
+		return
+	}
+	t.Fatal("code_impact tool not registered")
+}
+
 func TestREADMEAdvertisedMCPToolsAreRegistered(t *testing.T) {
 	cs := connect(t, newTestComponent(nil))
 	registered := make(map[string]bool)

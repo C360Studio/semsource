@@ -83,7 +83,12 @@ type Component struct {
 	// mu after buildEngine returns; serve only runs once running/subscribed)
 	// publishes it safely. Guarded by that ordering, not by mu; keep it that way.
 	engine *fusion.Engine
-	client *natsclient.Client
+	// exactEngine fuses the exact-seed verbs (context/callers/callees/impact)
+	// of the code lens through the exactSeedClient decorator (D4); for the docs
+	// lens it aliases engine (doc titles are prose — byte-exact filtering is a
+	// code-symbol policy). Same write-once publication contract as engine.
+	exactEngine *fusion.Engine
+	client      *natsclient.Client
 	// storeRegistry is the shared {StorageInstance → store} resolver (ADR-063),
 	// injected via deps. When set, body hydration resolves offloaded bodies
 	// through it (lazily, per query); nil in standalone/tests, where buildEngine
@@ -176,6 +181,9 @@ func (c *Component) Start(ctx context.Context) error {
 // Fuse — so Start fails fast rather than run half-built.
 func (c *Component) buildEngine(ctx context.Context) error {
 	if c.engine != nil {
+		if c.exactEngine == nil {
+			c.exactEngine = c.engine // test-injected engine serves every verb
+		}
 		return nil
 	}
 	if c.client == nil {
@@ -191,6 +199,13 @@ func (c *Component) buildEngine(ctx context.Context) error {
 	// ranks on resolve-order + lexical only, ignoring the ontology class we emit
 	// on every entity. fusionvocab resolves both against the framework registries.
 	c.engine = fusion.NewEngine(c.graph, resolver).WithSignals(fusionvocab.New())
+	c.exactEngine = c.engine
+	if c.lensKind != "docs" {
+		// Code answers demand byte-exact symbol seeds (D4); search keeps the
+		// folded recall of the shared engine — discovery is where
+		// case-insensitivity is a feature, not a leak.
+		c.exactEngine = fusion.NewEngine(exactSeedClient{c.graph}, resolver).WithSignals(fusionvocab.New())
+	}
 	return nil
 }
 
@@ -268,11 +283,25 @@ func (c *Component) fuse(ctx context.Context, verb string, req fusion.Request) (
 	}
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
-	resp, err := c.engine.Fuse(ctx, req, lens)
+	resp, err := c.engineFor(verb).Fuse(ctx, req, lens)
 	if err != nil {
 		return fusion.Response{}, err
 	}
 	return resp, nil
+}
+
+// engineFor selects the engine per verb (D4): the answer verbs — context,
+// callers, callees, impact — go through exact symbol seeding; search and file
+// keep folded recall. The nil fallback covers directly-constructed test
+// components that inject engine without exactEngine.
+func (c *Component) engineFor(verb string) *fusion.Engine {
+	switch verb {
+	case "context", "callers", "callees", "impact":
+		if c.exactEngine != nil {
+			return c.exactEngine
+		}
+	}
+	return c.engine
 }
 
 // lensFor builds a fresh lens for the configured domain. Both lenses are
@@ -313,7 +342,11 @@ func defaultWants(verb string) []fusion.Want {
 	case "callers", "callees":
 		return []fusion.Want{fusion.WantBody, fusion.WantRelations}
 	case "impact":
-		return []fusion.Want{fusion.WantBody, fusion.WantImpact}
+		// Relations ride along so the response NAMES direct dependents (the
+		// lens's reverse roles: caller, extended_by, implemented_by,
+		// referenced_by, embedded_by — engine-capped per role) instead of
+		// returning bare closure counts (D5).
+		return []fusion.Want{fusion.WantBody, fusion.WantImpact, fusion.WantRelations}
 	case "file", "search":
 		return []fusion.Want{fusion.WantBody}
 	default:
