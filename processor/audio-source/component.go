@@ -294,8 +294,7 @@ func entityStateToPayload(state *handler.EntityState) (*graph.EntityPayload, err
 // entity publisher. The call is non-blocking; backpressure is handled by the
 // publisher's circular buffer with DropOldest overflow policy.
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	c.publisher.Send(payload)
-	return nil
+	return c.publisher.Send(payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -348,7 +347,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		SourceType:   "audio",
 		Phase:        phase,
 		EntityCount:  c.entitiesPublished.Load(),
-		ErrorCount:   c.ingestErrors.Load(),
+		ErrorCount:   c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:   c.snapshotTypeCounts(),
 		Timestamp:    time.Now(),
 	}
@@ -487,7 +486,7 @@ func (c *Component) Health() component.HealthStatus {
 	return component.HealthStatus{
 		Healthy:    running,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

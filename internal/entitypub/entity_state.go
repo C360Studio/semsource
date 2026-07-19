@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	semtypes "github.com/c360studio/semstreams/pkg/types"
+
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -47,6 +49,14 @@ func ValidatePayload(payload *graph.EntityPayload) error {
 		if part == "" {
 			return fmt.Errorf("entity payload ID %q has empty part %d", payload.ID, i)
 		}
+	}
+	// Enforce the same per-segment contract graph-ingest applies downstream
+	// (semstreams ValidateEntityID). Without this, an entity can pass the
+	// producer's checks, be published, and be Termed by graph-ingest — silent
+	// loss the source never sees (audit 2026-07-19, no-silent-entity-loss).
+	if err := semtypes.ValidateEntityID(payload.ID); err != nil {
+		return fmt.Errorf("entity payload ID %q violates the graph-ingest segment contract "+
+			"(entity will never land; fix the producing sanitizer): %w", payload.ID, err)
 	}
 	for i, triple := range payload.TripleData {
 		if triple.Subject == "" {

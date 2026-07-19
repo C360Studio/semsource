@@ -135,14 +135,20 @@ func NewScopedCodeEntity(org, language, project string, entityType CodeEntityTyp
 	}
 }
 
-// SanitizePathSegment converts a path to a NATS-safe entity ID segment by
-// replacing slashes and dots with hyphens and stripping leading hyphens.
-// Exported for reuse in hierarchy construction.
+// SanitizePathSegment converts a path to a graph-ingest-safe entity ID
+// fragment: slashes and dots map to hyphens (the historical mapping every
+// existing ID depends on), then entityid.SanitizeSegment enforces the full
+// per-segment alphabet. Fragments the historical mapping already made valid
+// pass through byte-for-byte; shapes it could not handle (SvelteKit "+page",
+// "[slug]"/"(group)"/"@modal" directories, "$"-identifiers, leading "_")
+// are sanitized with a deterministic hash suffix instead of producing IDs
+// that graph-ingest silently rejects. Exported for reuse in hierarchy
+// construction.
 func SanitizePathSegment(path string) string {
 	s := strings.ReplaceAll(path, "/", "-")
 	s = strings.ReplaceAll(s, ".", "-")
 	s = strings.TrimPrefix(s, "-")
-	return s
+	return entityid.SanitizeSegment(s)
 }
 
 // BuildInstanceID creates a unique instance identifier from path and name.
@@ -165,7 +171,7 @@ func BuildScopedInstanceID(path string, scope []string, name string, entityType 
 		}
 	}
 	if name != "" && entityType != TypeFile && entityType != TypePackage {
-		parts = append(parts, name)
+		parts = append(parts, entityid.SanitizeSegment(name))
 	}
 	return strings.Join(parts, "-")
 }

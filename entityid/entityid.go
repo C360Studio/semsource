@@ -252,6 +252,40 @@ func SanitizeInstance(s string) string {
 	return out
 }
 
+// SanitizeSegment makes an ID-segment fragment safe for the graph-ingest
+// per-segment contract (^[a-zA-Z0-9][a-zA-Z0-9_-]*$ per segment): every rune
+// outside [a-zA-Z0-9_-] maps to '-', then leading non-alphanumeric runes are
+// trimmed so the fragment can never break a segment's required alphanumeric
+// first byte.
+//
+// Unlike SanitizeInstance it applies NO dash collapsing, NO trailing trim, and
+// NO length cap: any fragment that is already contract-valid passes through
+// byte-for-byte, keeping every previously-valid entity ID stable. When
+// sanitization alters the input, a short content hash of the original is
+// appended so distinct raw inputs that map to the same string (e.g. "+page"
+// vs "page") cannot collide. Inputs that sanitize to nothing become the hash
+// alone. The result is idempotent: SanitizeSegment(SanitizeSegment(s)) ==
+// SanitizeSegment(s).
+func SanitizeSegment(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if isAllowedInstanceRune(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	out := strings.TrimLeftFunc(b.String(), func(r rune) bool { return !isASCIIAlnum(r) })
+	if out == "" {
+		return shortHash(s)
+	}
+	if out == s {
+		return out
+	}
+	return out + "-" + shortHash(s)
+}
+
 func isAllowedInstanceRune(r rune) bool {
 	return isASCIIAlnum(r) || r == '-' || r == '_'
 }

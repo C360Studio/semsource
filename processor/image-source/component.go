@@ -292,8 +292,7 @@ func entityStateToPayload(state *handler.EntityState) (*graph.EntityPayload, err
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	c.publisher.Send(payload)
-	return nil
+	return c.publisher.Send(payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -346,7 +345,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		SourceType:   "image",
 		Phase:        phase,
 		EntityCount:  c.entitiesPublished.Load(),
-		ErrorCount:   c.ingestErrors.Load(),
+		ErrorCount:   c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:   c.snapshotTypeCounts(),
 		Timestamp:    time.Now(),
 	}
@@ -485,7 +484,7 @@ func (c *Component) Health() component.HealthStatus {
 	return component.HealthStatus{
 		Healthy:    running,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

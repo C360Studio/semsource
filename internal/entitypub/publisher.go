@@ -42,6 +42,11 @@ const (
 
 	// circuitOpenBackoff is how long to wait when the circuit breaker is open.
 	circuitOpenBackoff = 500 * time.Millisecond
+
+	// defaultSendTimeout bounds how long Send applies backpressure when the
+	// buffer is full before dropping loudly. Bounded so a wedged NATS cannot
+	// silently freeze ingest loops forever; loud so a drop is never invisible.
+	defaultSendTimeout = 5 * time.Second
 )
 
 // NATSPublisher is the subset of natsclient.Client needed for publishing.
@@ -52,13 +57,15 @@ type NATSPublisher interface {
 // Publisher buffers EntityPayload messages and drains them to NATS at a
 // controlled rate with circuit breaker backoff.
 type Publisher struct {
-	client NATSPublisher
-	logger *slog.Logger
-	buf    buffer.Buffer[*graph.EntityPayload]
+	client      NATSPublisher
+	logger      *slog.Logger
+	buf         buffer.Buffer[*graph.EntityPayload]
+	sendTimeout time.Duration
 
 	// Metrics
 	published atomic.Int64
 	dropped   atomic.Int64
+	failed    atomic.Int64
 	retries   atomic.Int64
 
 	// Lifecycle
@@ -73,6 +80,7 @@ type publisherConfig struct {
 	capacity        int
 	batchSize       int
 	drainInterval   time.Duration
+	sendTimeout     time.Duration
 	metricsRegistry *metric.MetricsRegistry
 	metricsPrefix   string
 }
@@ -92,6 +100,12 @@ func WithDrainInterval(d time.Duration) Option {
 	return func(c *publisherConfig) { c.drainInterval = d }
 }
 
+// WithSendTimeout bounds Send's backpressure wait when the buffer is full
+// (default 5s). After the timeout the entity is dropped loudly.
+func WithSendTimeout(d time.Duration) Option {
+	return func(c *publisherConfig) { c.sendTimeout = d }
+}
+
 // WithMetrics enables buffer metrics export.
 func WithMetrics(registry *metric.MetricsRegistry, prefix string) Option {
 	return func(c *publisherConfig) {
@@ -106,13 +120,18 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		capacity:      defaultCapacity,
 		batchSize:     defaultBatchSize,
 		drainInterval: defaultDrainInterval,
+		sendTimeout:   defaultSendTimeout,
 	}
 	for _, o := range opts {
 		o(&cfg)
 	}
 
+	// Block (bounded by Send's timeout) instead of DropOldest: DropOldest made
+	// buffer overflow invisible — Write always succeeded while the buffer
+	// silently discarded the oldest entity, so the dropped counter could never
+	// increment (audit 2026-07-19, no-silent-entity-loss).
 	var bufOpts []buffer.Option[*graph.EntityPayload]
-	bufOpts = append(bufOpts, buffer.WithOverflowPolicy[*graph.EntityPayload](buffer.DropOldest))
+	bufOpts = append(bufOpts, buffer.WithOverflowPolicy[*graph.EntityPayload](buffer.Block))
 	if cfg.metricsRegistry != nil && cfg.metricsPrefix != "" {
 		bufOpts = append(bufOpts, buffer.WithMetrics[*graph.EntityPayload](cfg.metricsRegistry, cfg.metricsPrefix))
 	}
@@ -123,10 +142,11 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 	}
 
 	return &Publisher{
-		client: client,
-		logger: logger,
-		buf:    buf,
-		done:   make(chan struct{}),
+		client:      client,
+		logger:      logger,
+		buf:         buf,
+		sendTimeout: cfg.sendTimeout,
+		done:        make(chan struct{}),
 	}, nil
 }
 
@@ -146,12 +166,35 @@ func (p *Publisher) Stop() {
 	p.buf.Close()
 }
 
-// Send enqueues an entity for publishing. Non-blocking; if the buffer is full
-// the oldest entity is dropped (DropOldest policy).
-func (p *Publisher) Send(payload *graph.EntityPayload) {
-	if err := p.buf.Write(payload); err != nil {
-		p.dropped.Add(1)
+// timeoutWriter is the optional bounded-blocking write surface of the
+// underlying buffer (implemented by the circular buffer under the Block
+// policy). Kept as a local interface because buffer.Buffer does not expose it.
+type timeoutWriter interface {
+	WriteWithTimeout(item *graph.EntityPayload, timeout time.Duration) error
+}
+
+// Send enqueues an entity for publishing. When the buffer is full it applies
+// bounded backpressure (blocking up to the configured send timeout); if the
+// buffer stays full past the timeout the entity is dropped LOUDLY: the drop
+// counter increments, a WARN names the entity, and the error is returned so
+// the caller can attribute the loss in its source status.
+func (p *Publisher) Send(payload *graph.EntityPayload) error {
+	var err error
+	if tw, ok := p.buf.(timeoutWriter); ok {
+		err = tw.WriteWithTimeout(payload, p.sendTimeout)
+	} else {
+		err = p.buf.Write(payload)
 	}
+	if err != nil {
+		p.dropped.Add(1)
+		p.logger.Warn("entitypub: dropping entity after bounded backpressure",
+			"id", payload.ID,
+			"timeout", p.sendTimeout,
+			"error", err)
+		return fmt.Errorf("entitypub: buffer full beyond %s, dropped %s: %w",
+			p.sendTimeout, payload.ID, err)
+	}
+	return nil
 }
 
 // Published returns the total number of successfully published entities.
@@ -159,6 +202,15 @@ func (p *Publisher) Published() int64 { return p.published.Load() }
 
 // Dropped returns the total number of dropped entities (buffer overflow).
 func (p *Publisher) Dropped() int64 { return p.dropped.Load() }
+
+// Failed returns the number of entities whose NATS publish failed terminally
+// after retries (they left the buffer but never reached the stream).
+func (p *Publisher) Failed() int64 { return p.failed.Load() }
+
+// Lost returns the total entities accepted by Send that never reached the
+// stream (dropped on overflow + terminal publish failures). Zero means every
+// accepted entity was delivered.
+func (p *Publisher) Lost() int64 { return p.dropped.Load() + p.failed.Load() }
 
 // Retries returns the number of circuit-breaker backoff retries.
 func (p *Publisher) Retries() int64 { return p.retries.Load() }
@@ -201,6 +253,7 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
+			p.failed.Add(1)
 			p.logger.Warn("entity publish failed after retries",
 				"id", payload.ID,
 				"error", err)
@@ -264,6 +317,7 @@ func (p *Publisher) flush(ctx context.Context) {
 		}
 		for _, payload := range batch {
 			if err := p.publishOne(ctx, payload); err != nil {
+				p.failed.Add(1)
 				p.logger.Warn("flush: entity publish failed",
 					"id", payload.ID,
 					"error", err)

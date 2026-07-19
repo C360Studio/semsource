@@ -252,6 +252,7 @@ func (c *Component) Start(ctx context.Context) error {
 				c.logger.Warn("Failed to publish parse result",
 					"path", result.Path,
 					"error", err)
+				c.incrementErrors()
 			}
 			if result.Hash != "" {
 				c.setFileHash(result.Path, result.Hash)
@@ -458,6 +459,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 				c.logger.Warn("Failed to publish parse result during reindex",
 					"path", result.Path,
 					"error", err)
+				c.incrementErrors()
 			}
 			published++
 		}
@@ -630,8 +632,7 @@ func payloadFromASTState(state *semsourceast.EntityState, ref *message.StorageRe
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	c.publisher.Send(payload)
-	return nil
+	return c.publisher.Send(payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -709,9 +710,12 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		SourceType:   "ast",
 		Phase:        phase,
 		EntityCount:  c.entitiesIndexed.Load(),
-		ErrorCount:   c.errors.Load(),
-		TypeCounts:   c.snapshotTypeCounts(),
-		Timestamp:    time.Now(),
+		// Delivery truth: parse failures and publisher losses (overflow drops +
+		// terminal publish failures) surface here — a healthy-looking status must
+		// imply entities actually reached the substrate (no-silent-entity-loss).
+		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost(),
+		TypeCounts: c.snapshotTypeCounts(),
+		Timestamp:  time.Now(),
 	}
 	data, err := json.Marshal(report)
 	if err != nil {
@@ -855,7 +859,7 @@ func (c *Component) Health() component.HealthStatus {
 	return component.HealthStatus{
 		Healthy:    running,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.errors.Load()),
+		ErrorCount: int(c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}
