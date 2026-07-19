@@ -456,10 +456,15 @@
 
   article {
     display: grid;
+    min-width: 0;
     gap: 0.35rem;
     padding: 1rem;
     border-radius: 0.75rem;
     background: var(--surface-raised);
+  }
+
+  article strong {
+    overflow-wrap: anywhere;
   }
 
   ul {
