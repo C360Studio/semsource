@@ -10,9 +10,10 @@ import (
 )
 
 // TestIngest_DefaultExcludesArchivedPlanningDocs pins search-ranking-and-reach
-// D3: archived OpenSpec planning artifacts and node_modules never enter the
-// docs corpus (the audit's doc_context misses cited archive entries over
-// canonical docs), while active changes, specs, and docs/adr stay indexed.
+// D3: OpenSpec planning artifacts (active AND archived — the graded re-run
+// showed even active proposals outrank the README for product questions) and
+// node_modules never enter the docs corpus; canonical docs incl. docs/adr
+// stay indexed.
 func TestIngest_DefaultExcludesArchivedPlanningDocs(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, body string) {
@@ -44,15 +45,15 @@ func TestIngest_DefaultExcludesArchivedPlanningDocs(t *testing.T) {
 	for _, want := range []string{
 		"README.md",
 		"docs/adr/0001-decision.md",
-		"openspec/changes/active-change/proposal.md",
-		"openspec/specs/cap/spec.md",
 	} {
 		if !paths[want] {
 			t.Errorf("expected %s in corpus; got %v", want, paths)
 		}
 	}
 	for _, banned := range []string{
+		"openspec/changes/active-change/proposal.md",
 		"openspec/changes/archive/2026-01-01-old/proposal.md",
+		"openspec/specs/cap/spec.md",
 		"ui/node_modules/pkg/README.md",
 	} {
 		if paths[banned] {

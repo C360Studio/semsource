@@ -31,11 +31,13 @@ NAME_INDEX; NL scopes exclude the domain).
   `test_*.py`/`*_test.py`; Java `src/test/` trees and `*Test.java`. One helper
   in `source/ast`, unit-pinned; conservative (miss = no demotion, never a wrong
   boost).
-- **D3 — docs source default-excludes archived planning artifacts**:
-  the walker skips `openspec/changes/archive` (relative to each root) and
-  `node_modules`. Active proposals/specs and docs/adr stay indexed — the audit's
-  polluting citations were archive entries. No new config surface until someone
-  needs to opt back in.
+- **D3 — docs source default-excludes OpenSpec planning artifacts**:
+  the walker skips `openspec` (relative to each root) and `node_modules`.
+  Iterated after the graded re-run: archive-only exclusion left ACTIVE change
+  proposals outranking the README (Q17), so the whole planning tree is out —
+  it serves the dev loop, not the product doc corpus. docs/** incl. ADRs stay
+  indexed; deployments wanting specs add an explicit docs source. No new
+  config surface until someone needs to opt back in.
 - **D4 — reach via titles + docs-lens scope**: cfgfile entities gain
   `dc.terms.title` (dependency name, module path, image name, package name);
   git entities gain it too (commit subject, author name, branch name). The
