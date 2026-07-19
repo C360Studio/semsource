@@ -1,10 +1,13 @@
 <script lang="ts">
   import type { InventoryState, ProjectSummaryState } from "$lib/api/workbench";
   import type { CodeSearch } from "$lib/api/search";
+  import type { GraphQuery } from "$lib/api/graph";
+  import type { GraphRendererFactory } from "$lib/graph/renderer";
   import type { WorkbenchCapabilities } from "$lib/contracts/capabilities";
   import type { ManifestSource } from "$lib/contracts/sourceManifest";
   import CapabilityCard from "./CapabilityCard.svelte";
   import SearchPanel from "./SearchPanel.svelte";
+  import GraphPanel from "./GraphPanel.svelte";
 
   let {
     capabilities,
@@ -14,6 +17,8 @@
     error,
     onRetry,
     search,
+    graphQuery,
+    graphRendererFactory,
   }: {
     capabilities: WorkbenchCapabilities | null;
     inventory: InventoryState | null;
@@ -22,6 +27,8 @@
     error: string | { message: string; kind: string } | null;
     onRetry: () => void;
     search?: CodeSearch;
+    graphQuery?: GraphQuery;
+    graphRendererFactory?: GraphRendererFactory;
   } = $props();
 
   const overall = $derived(capabilities?.readiness.overall ?? "unknown");
@@ -279,15 +286,21 @@
           title="Project views"
           capability={capabilities.project_views}
         />{/if}
-      {#if capabilities.queries.graph_projection}<CapabilityCard
-          title="Graph drill-down"
-          capability={capabilities.queries.graph_projection}
-        />{/if}
       {#if capabilities.actions.okf_export}<CapabilityCard
           title="OKF export"
           capability={capabilities.actions.okf_export}
         />{/if}
     </section>
+
+    {#if capabilities.queries.graph_projection}
+      <GraphPanel
+        capability={capabilities.queries.graph_projection}
+        errorContract={capabilities.contracts.fusion_http_error}
+        graphContract={capabilities.contracts.fusion_graph_projection}
+        query={graphQuery}
+        rendererFactory={graphRendererFactory}
+      />
+    {/if}
 
     <SearchPanel
       capability={capabilities.queries.code_search}

@@ -26,7 +26,7 @@
         canonical, `graphTransform.ts` is rejection evidence only, and no unsafe transform is hidden
         behind copied code.
 - [x] 2.2 Define the local module boundary for contracts, API clients, state, project/readiness/source
-      components, search, graph-unavailable state, and later graph modules under `ui/src/lib/`.
+      components, search, capability-gated graph state, and graph modules under `ui/src/lib/`.
       - Test: a dependency check finds no imports, source paths, containers, or packages from donor UI
         repositories.
 - [x] 2.3 Specify the owned UI gates: format, lint, Svelte check, unit/component, accessibility, build,
@@ -51,8 +51,8 @@
 - [x] 3.2 Record the incomplete governed projection in `docs/upstream/semstreams-asks.md`, file
       [semstreams#533](https://github.com/C360Studio/semstreams/issues/533), and prohibit a parallel
       SemSource graph projection.
-      - Test: `graph_projection` remains unsupported until the adopted contract is live-tested; this
-        blocks graph drill-down acceptance but not the source/readiness/search MVP.
+      - Test: `graph_projection` remained unsupported until the adopted contract was live-tested;
+        this blocked graph drill-down acceptance but not the source/readiness/search MVP.
 - [x] 3.3 Specify `GET /source-manifest/capabilities` as the versioned SemSource workbench response for
       product/project identity, authoritative readiness, query surfaces, actions, and project views.
       - Test: JSON examples cover ready, partial, unsupported, additive states, and the
@@ -93,19 +93,36 @@
       responsive behavior, cancellation, and failure UX.
       - Test: no unresolved blocking findings remain before Compose integration.
 
-## 5. Prepare canonical local graph behavior without bypassing #533
+## 5. Adopt the canonical governed graph projection
 
-- [ ] 5.1 Define explicit local graph contract fixtures for nodes, directed relationships, property
-      facts, evidence, and view revision, but do not adapt fusion v1 into this shape.
-      - Test: fixtures cover opposite directions, parallel predicates, ID-like literals, unknown
-        evidence, same-ID attribute updates, revision-only updates, and retraction/deletion.
-- [ ] 5.2 Port the selected renderer/layout/accessibility behaviors into local modules only after the
-      explicit fixtures fail, keeping the live graph capability disabled while #533 is open.
-      - Test: unit/component tests cover deterministic placement, renderer initialization failure,
-        worker cleanup/restart, attribute refresh, and synchronized keyboard/list/detail selection.
-- [ ] 5.3 Enable the live graph adapter only after semstreams#533 is adopted and live-tested.
-      - Test: a real SemSource compatibility fixture proves supplied direction, predicates, evidence,
-        identity, retraction, and view revision without inference.
+- [x] 5.1 Define explicit local graph contract fixtures for nodes, directed relationships, typed
+      property facts, verbatim optional evidence, opaque handles, explicit unresolved endpoints,
+      meaningful view revision, and graph-local truncation. Do not adapt fusion v1 role maps or
+      ID-shaped literals into this shape.
+      - Test: `contracts/graph.test.ts` and the owned graph fixture cover opposite directions,
+        parallel predicates, ID-like literals, absent evidence, per-fact/per-edge truncation,
+        malformed revisions, and explicit edge endpoints whose node details were not returned.
+      - Test: `graph/model.test.ts` covers same-handle attribute updates, revision-only updates, and
+        deletion only for a complete projection with a coherent equal nonzero revision; truncated,
+        incoherent, and zero-revision responses retain previously known nodes and edges.
+- [x] 5.2 Implement the specified local WebGL/Sigma renderer, deterministic worker layout, failure
+      handling, and synchronized accessible navigator against the explicit fixtures.
+      - Test: renderer/layout and `GraphPanel` tests cover deterministic placement, SSR-safe renderer
+        initialization failure, worker and Sigma cleanup/restart, same-handle refresh,
+        partial-response retention, distinguishable unresolved endpoints, visible truncation detail,
+        and synchronized keyboard/list/detail selection.
+- [x] 5.3 Adopt semstreams#533 from SemStreams `v1.0.0-beta.153` through the existing
+      `POST /code-context/context` contract with `want: ["graph"]`; do not add another endpoint,
+      synthesize a projection, or make GraphQL part of this slice.
+      - Test: `TestHTTPGraphProjectionCompatibility` runs the real beta.153 fusion engine and proves
+        typed property facts, verbatim optional evidence, explicit source/predicate/target direction,
+        parallel and opposite-direction edges, an ID-like literal that remains a fact, and a
+        meaningful coherent nonzero view revision.
+      - Test: `queryGraph` and `GraphPanel` tests prove the advertised route/request, strict response
+        parsing, opaque-handle behavior, explicit unresolved endpoint rendering, independent graph
+        truncation, revision-regression rejection, fusion HTTP error-envelope classification, valid
+        no-graph miss/not-ready responses, and non-deletion on truncated, incoherent, or
+        unavailable-revision responses.
 
 ## 6. Make the breaking `ui` profile migration
 
@@ -134,9 +151,10 @@
       - Test: core smoke passes with an intentionally unreachable UI image and no local Node toolchain.
 - [x] 7.2 Add UI-profile Playwright coverage through Caddy against real SemSource for shell branding,
       capability bootstrap, readiness, source inventory, search, keyboard result/detail selection,
-      graph-unavailable state, and every advertised proxied route.
+      capability-gated graph state, and every advertised proxied route.
       - Test: tests use visible accessible UI, not canvas-only hooks, prove backend routes do not fall
-        through to UI HTML, and pass at desktop and narrow widths.
+        through to UI HTML, exercise the real ready graph route plus no-graph states, pass automated
+        accessibility and keyboard assertions, and pass at desktop and narrow widths.
 - [ ] 7.3 Add production-image evidence tying the tested image to its SemSource commit, version, and
       immutable digest.
       - Test: the digest tested by SemSource matches the profile pin; mutable `latest` is not accepted.

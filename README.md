@@ -203,10 +203,15 @@ Useful ui-profile endpoints (via Caddy on `:3000`):
 | `http://localhost:3000/source-manifest/status` | SemSource readiness/status          |
 | `ws://localhost:3000/graph`                    | Raw GRAPH stream export             |
 
-Graph drill-down is shown as unavailable while
-[SemStreams #533](https://github.com/C360Studio/semstreams/issues/533) is open. Source inventory,
-readiness, project summary, and capability-advertised search remain usable; the workbench does not
-infer a replacement graph payload.
+The release candidate adopts the governed projection shipped for
+[SemStreams #533](https://github.com/C360Studio/semstreams/issues/533) in
+[`v1.0.0-beta.153`](https://github.com/C360Studio/semstreams/releases/tag/v1.0.0-beta.153). The
+workbench calls the existing `POST /code-context/context` route with `want: ["graph"]`; there is no
+separate projection endpoint and GraphQL is not part of this slice. Returned handles remain opaque,
+and missing node details are shown as unresolved only when an explicit edge names that endpoint.
+Truncated, incoherent, or zero-revision projections retain prior graph items instead of interpreting
+bounded omissions as deletion. Unit/component, desktop/narrow accessibility, and non-intercepted
+Caddy-to-SemSource smoke coverage prove the ready graph and valid no-graph states.
 
 Build and smoke the local `./ui` source explicitly:
 
@@ -231,8 +236,8 @@ task ui:e2e                                            # test an already-running
 
 Both smoke paths run SemSource-owned, lockfile-matched Playwright in a container and assert the
 same-origin shell, advertised backend routes, source/readiness state, real search, keyboard
-result/detail navigation, and the graph-unavailable state at desktop and narrow widths. The released
-smoke neither checks out sibling source nor uses host Node.js. `task ui:e2e` joins the Compose network
+result/detail navigation, and the capability-advertised graph state at desktop and narrow widths. The
+released smoke neither checks out sibling source nor uses host Node.js. `task ui:e2e` joins the Compose network
 of an already-running released or development profile.
 
 To roll back the optional workbench, omit `--profile ui`; the core contracts and graph state are

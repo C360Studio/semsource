@@ -1,5 +1,7 @@
 export type FusionProvenance = "deterministic" | "embedding" | "llm";
-export type FusionIndexState = "building" | "ready" | "degraded";
+import { parseGraphProjection, type GraphProjection } from "./graph";
+export type FusionIndexState =
+  "building" | "ready" | "degraded" | "reset_required";
 
 export interface FusionIndexStatus {
   ready: boolean;
@@ -55,6 +57,7 @@ export interface FusionResponse {
   misses: FusionMiss[];
   paths?: FusionPath[];
   impact?: FusionImpact;
+  graph?: GraphProjection;
   truncated: boolean;
 }
 
@@ -96,7 +99,9 @@ function parseIndex(value: unknown): FusionIndexStatus {
   if (
     !item ||
     typeof item.ready !== "boolean" ||
-    !["building", "ready", "degraded"].includes(String(item.state))
+    !["building", "ready", "degraded", "reset_required"].includes(
+      String(item.state),
+    )
   ) {
     throw new Error("Invalid fusion response: malformed index");
   }
@@ -309,6 +314,8 @@ export function parseFusionResponse(value: unknown): FusionResponse {
         ? undefined
         : optionalArray(item.paths, "paths", parsePath),
     impact: parseImpact(item.impact),
+    graph:
+      item.graph === undefined ? undefined : parseGraphProjection(item.graph),
     truncated: item.truncated,
   };
 }

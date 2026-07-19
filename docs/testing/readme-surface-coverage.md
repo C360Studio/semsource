@@ -20,9 +20,14 @@ link to that guide unless a low-level subject is required for first-run usage.
 The former runtime WebSocket restart blocker, `semstreams#490`, is adopted in
 SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
 
-- Governed graph drill-down remains explicitly unavailable until SemStreams
-  #533 is adopted and live-tested. The current workbench tests the advertised
-  unavailable state; it does not claim graph-projection coverage.
+- Governed graph drill-down is adopted from SemStreams `v1.0.0-beta.153` (#533, PR #577).
+  `TestHTTPGraphProjectionCompatibility` covers the real fusion engine through
+  `POST /code-context/context` with `want: ["graph"]`; owned TypeScript/component tests cover strict
+  facts/edges/evidence parsing, opaque and explicit unresolved handles, graph-local truncation,
+  meaningful coherent nonzero revisions, stale-revision protection, classified errors, and
+  non-deletion for partial views. Desktop/narrow Sigma and accessibility tests cover the synchronized
+  renderer/navigator/detail surface; `task ui:smoke:dev` proves a non-intercepted Caddy-to-SemSource
+  graph request and response. GraphQL projection is deliberately outside this slice.
 - Released-profile compatibility remains partial until OpenSpec task 7.3
   publishes and tests an immutable registry digest. A locally built image and
   local content digest are not registry evidence.
@@ -62,24 +67,25 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
 
 ## HTTP And GraphQL
 
-| Surface                                                                                         | Evidence                                                               | Status  | Follow-up                                                                                         |
-| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `GET /source-manifest/sources`                                                                  | `TestHandleSources_GET`; e2e manifest poll; `task core:smoke`          | covered | None                                                                                              |
-| `GET /source-manifest/status`                                                                   | `TestHandleStatus_GET`; e2e poll; UI Playwright assertion              | covered | None                                                                                              |
-| `GET /source-manifest/health`                                                                   | `TestHandleHealth_Ready`; UI Playwright health assertion               | covered | None                                                                                              |
-| `GET /source-manifest/capabilities`                                                             | Capability contract + real-NATS circuit tests                          | covered | None                                                                                              |
-| `POST /supersession/versionDiff`                                                                | `TestIntegration_VersionDiff` NATS and HTTP route assertions           | covered | None                                                                                              |
-| `GET /graph-gateway/graphql`                                                                    | `task core:smoke` ServiceManager route probe                           | covered | None                                                                                              |
-| `POST /graph-gateway/graphql`                                                                   | `task core:smoke` GraphQL-shaped POST assertion                        | covered | None                                                                                              |
-| `POST /graphql` through UI profile                                                              | `test/ui/ui-profile.spec.cjs`                                          | covered | None                                                                                              |
-| `GET /graphql` through UI profile                                                               | Caddy route is configured; no profile-level GET assertion              | partial | Add only if the playground remains an advertised release surface                                  |
-| `GET /health` through UI profile                                                                | `test/ui/ui-profile.spec.cjs` health JSON assertion                    | covered | None                                                                                              |
-| `GET /metrics` through UI profile                                                               | `test/ui/ui-profile.spec.cjs` non-HTML successful response assertion   | covered | None                                                                                              |
-| `POST /code-context/context`, `/code-context/impact`, `/doc-context/context` through UI profile | `test/ui/ui-profile.spec.cjs` allowlist assertions                     | covered | Other fusion verbs are unit/integration-covered but not advertised here as profile-smoke coverage |
-| `POST /mcp-gateway/mcp` through UI profile                                                      | `test/ui/ui-profile.spec.cjs` non-HTML/non-404 assertion               | covered | Full MCP initialize/tools proof remains in `task core:smoke`                                      |
-| UI `/` and loaded `/_app/*` assets                                                              | `test/ui/ui-profile.spec.cjs` visible shell/search flow                | covered | None                                                                                              |
-| Retired/unknown profile routes return JSON 404                                                  | `test/ui/ui-profile.spec.cjs` route rejection matrix                   | covered | Includes former SemTeams-style/product-placeholder paths                                          |
-| `ws://localhost:3000/graph` raw stream                                                          | Browser-native Playwright WebSocket open/close assertion through Caddy | covered | None                                                                                              |
+| Surface                                                                                         | Evidence                                                                         | Status  | Follow-up                                                                                         |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `GET /source-manifest/sources`                                                                  | `TestHandleSources_GET`; e2e manifest poll; `task core:smoke`                    | covered | None                                                                                              |
+| `GET /source-manifest/status`                                                                   | `TestHandleStatus_GET`; e2e poll; UI Playwright assertion                        | covered | None                                                                                              |
+| `GET /source-manifest/health`                                                                   | `TestHandleHealth_Ready`; UI Playwright health assertion                         | covered | None                                                                                              |
+| `GET /source-manifest/capabilities`                                                             | Capability contract + real-NATS circuit tests                                    | covered | None                                                                                              |
+| `POST /supersession/versionDiff`                                                                | `TestIntegration_VersionDiff` NATS and HTTP route assertions                     | covered | None                                                                                              |
+| `GET /graph-gateway/graphql`                                                                    | `task core:smoke` ServiceManager route probe                                     | covered | None                                                                                              |
+| `POST /graph-gateway/graphql`                                                                   | `task core:smoke` GraphQL-shaped POST assertion                                  | covered | None                                                                                              |
+| `POST /graphql` through UI profile                                                              | `test/ui/ui-profile.spec.cjs`                                                    | covered | None                                                                                              |
+| `GET /graphql` through UI profile                                                               | Caddy route is configured; no profile-level GET assertion                        | partial | Add only if the playground remains an advertised release surface                                  |
+| `GET /health` through UI profile                                                                | `test/ui/ui-profile.spec.cjs` health JSON assertion                              | covered | None                                                                                              |
+| `GET /metrics` through UI profile                                                               | `test/ui/ui-profile.spec.cjs` non-HTML successful response assertion             | covered | None                                                                                              |
+| `POST /code-context/context`, `/code-context/impact`, `/doc-context/context` through UI profile | `test/ui/ui-profile.spec.cjs` allowlist assertions                               | covered | Other fusion verbs are unit/integration-covered but not advertised here as profile-smoke coverage |
+| `POST /code-context/context` with `want: ["graph"]`                                             | Backend compatibility, UI contract/model/component, and real-profile smoke tests | covered | Existing HTTP surface; no parallel endpoint or GraphQL claim                                      |
+| `POST /mcp-gateway/mcp` through UI profile                                                      | `test/ui/ui-profile.spec.cjs` non-HTML/non-404 assertion                         | covered | Full MCP initialize/tools proof remains in `task core:smoke`                                      |
+| UI `/` and loaded `/_app/*` assets                                                              | `test/ui/ui-profile.spec.cjs` visible shell/search flow                          | covered | None                                                                                              |
+| Retired/unknown profile routes return JSON 404                                                  | `test/ui/ui-profile.spec.cjs` route rejection matrix                             | covered | Includes former SemTeams-style/product-placeholder paths                                          |
+| `ws://localhost:3000/graph` raw stream                                                          | Browser-native Playwright WebSocket open/close assertion through Caddy           | covered | None                                                                                              |
 
 ## MCP And Agent Tools
 

@@ -160,8 +160,8 @@ func (c *Component) buildWorkbenchCapabilities(structural, semantic workbenchInd
 			"semantic_index", semantic.Ready, semantic.Reason),
 		"doc_context": capabilityForSignal(http.MethodPost, "/doc-context/context",
 			"structural_index", structural.Ready, structural.Reason),
-		"graph_projection": unsupportedCapability(
-			"upstream_contract_pending", "The governed fusion graph projection is not available"),
+		"graph_projection": capabilityForSignal(http.MethodPost, "/code-context/context",
+			"structural_index", structural.Ready, structural.Reason),
 	}
 
 	c.mu.RLock()
@@ -190,7 +190,10 @@ func (c *Component) buildWorkbenchCapabilities(structural, semantic workbenchInd
 		Queries:      queries,
 		Actions:      actions,
 		ProjectViews: unsupportedCapability("not_implemented", "Project views are not available"),
-		Contracts:    map[string]string{"fusion_http_error": "1"},
+		Contracts: map[string]string{
+			"fusion_http_error":       "1",
+			"fusion_graph_projection": "1",
+		},
 	}
 }
 

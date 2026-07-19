@@ -40,7 +40,9 @@ async function pollCapabilities(request) {
         json.product?.key === "semsource" &&
         json.readiness?.source?.state === "ready" &&
         json.queries?.source_inventory?.availability === "ready" &&
-        json.queries?.code_search?.availability === "ready"
+        json.queries?.code_search?.availability === "ready" &&
+        json.queries?.graph_projection?.availability === "ready" &&
+        json.contracts?.fusion_graph_projection === "1"
       ) {
         return json;
       }
@@ -234,6 +236,12 @@ test("workbench exposes real search evidence and keyboard detail", async ({
   request,
 }) => {
   const capabilities = await pollCapabilities(request);
+  const graphCapability = capabilities.queries.graph_projection;
+  expect(graphCapability).toMatchObject({
+    availability: "ready",
+    method: "POST",
+    href: "/code-context/context",
+  });
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
   expect(response?.ok()).toBe(true);
 
@@ -258,9 +266,15 @@ test("workbench exposes real search evidence and keyboard detail", async ({
     name: "Search",
     exact: true,
   });
+  const graphInput = page.getByLabel(/graph query/i);
+  const graphButton = page.getByRole("button", { name: /investigate graph/i });
   expect(await page.evaluate(() => document.activeElement?.tagName)).toBe(
     "BODY",
   );
+  await page.keyboard.press("Tab");
+  await expect(graphInput).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(graphButton).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(search).toBeFocused();
   await page.keyboard.type("UiProfileFixtureAlpha");
@@ -295,7 +309,59 @@ test("workbench exposes real search evidence and keyboard detail", async ({
   await expect(detail).toContainText(/provenance/i);
   await expect(detail).toContainText(/workbench_fixture\.go/i);
 
+  const graphQuery = "UiProfileFixtureAlpha";
+  const graphResponsePromise = page.waitForResponse((candidate) => {
+    const request = candidate.request();
+    return (
+      new URL(candidate.url()).pathname === graphCapability.href &&
+      request.method() === graphCapability.method &&
+      request.postDataJSON()?.want?.includes("graph")
+    );
+  });
+  await graphInput.fill(graphQuery);
+  await graphButton.click();
+
+  const graphResponse = await graphResponsePromise;
+  const graphRequest = graphResponse.request();
+  expect(new URL(graphRequest.url()).pathname).toBe(graphCapability.href);
+  expect(graphRequest.method()).toBe(graphCapability.method);
+  expect(graphRequest.headers()["content-type"]).toContain("application/json");
+  expect(graphRequest.postDataJSON()).toEqual({
+    query: graphQuery,
+    want: ["graph"],
+  });
+
+  const graphBody = await expectBackendResponse(
+    graphResponse,
+    `advertised graph POST ${graphCapability.href}`,
+  );
+  expect(graphResponse.ok(), bodySnippet(graphBody)).toBe(true);
+  expect(contentType(graphResponse)).toContain("application/json");
+  const graphEnvelope = JSON.parse(graphBody);
+  expect(graphEnvelope).toMatchObject({
+    contract_version: "1",
+    index: { ready: true, state: "ready" },
+    graph: {
+      nodes: expect.any(Array),
+      edges: expect.any(Array),
+      view_revision: {
+        start: expect.any(Number),
+        end: expect.any(Number),
+        coherent: true,
+      },
+      truncated: expect.any(Boolean),
+    },
+  });
+  expect(graphEnvelope.graph.nodes.length).toBeGreaterThan(0);
+  expect(graphEnvelope.graph.view_revision.start).toBeGreaterThan(0);
+  expect(graphEnvelope.graph.view_revision.end).toBe(
+    graphEnvelope.graph.view_revision.start,
+  );
+
+  const graphNavigator = page.getByRole("list", { name: /graph entities/i });
+  await expect(graphNavigator).toBeVisible({ timeout: pollTimeoutMs });
+  expect(await graphNavigator.getByRole("button").count()).toBeGreaterThan(0);
   await expect(
-    page.getByRole("region", { name: /graph drill-down/i }),
-  ).toContainText(/governed.*projection.*not available/i);
+    page.getByRole("region", { name: /selected entity details/i }),
+  ).toContainText(/UiProfileFixtureAlpha/i);
 });

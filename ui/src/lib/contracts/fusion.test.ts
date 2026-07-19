@@ -149,4 +149,13 @@ describe("parseFusionResponse", () => {
       }).index.revision,
     ).toBe("8");
   });
+
+  it("accepts the beta.153 reset-required not-ready index state", () => {
+    expect(
+      parseFusionResponse({
+        ...response,
+        index: { ready: false, state: "reset_required" },
+      }).index.state,
+    ).toBe("reset_required");
+  });
 });
