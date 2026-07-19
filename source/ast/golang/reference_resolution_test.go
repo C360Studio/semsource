@@ -25,6 +25,9 @@ func parseAllGo(t *testing.T, project string, files map[string]string) map[strin
 	byName := make(map[string]*ast.CodeEntity)
 	p := NewParser("acme", project, root)
 	for rel := range files {
+		if !strings.HasSuffix(rel, ".go") {
+			continue // support files (go.mod) shape resolution but are not parsed
+		}
 		res, err := p.ParseFile(context.Background(), filepath.Join(root, rel))
 		if err != nil {
 			t.Fatalf("parse %s: %v", rel, err)

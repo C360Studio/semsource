@@ -89,7 +89,7 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.codeContext)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_impact",
-		Description: "Reverse-dependency closure of a symbol — what depends on it, i.e. what would break if you change it. Answers questions grep cannot. If it misses while index.ready is false (check source_status), the structural index is still catching up — retry once ready.",
+		Description: "Reverse-dependency closure of a symbol — what depends on it, i.e. what would break if you change it. Answers questions grep cannot. Symbol lookup is byte-exact on the name (a case lookalike is a different symbol; a miss suggests near matches). Besides closure counts (impact.nodes/files, truncated = lower bound), each resolved node NAMES its direct dependents in relations (caller, extended_by, implemented_by, referenced_by, embedded_by — up to 12 per role). If it misses while index.ready is false (check source_status), the structural index is still catching up — retry once ready.",
 	}, c.codeImpact)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_search",

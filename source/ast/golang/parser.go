@@ -36,12 +36,18 @@ type Parser struct {
 	// importMap holds the current file's imports, keyed by local name (alias or last path segment)
 	importMap map[string]string
 
-	// pkgTypesCache memoizes each package directory's type declarations
-	// (name -> defining file + kind), keyed by directory and validated by a
-	// name+size+mtime signature (see imports.go), so a bulk index parses each
-	// directory once and a watch edit rebuilds it. Persisted across ParseFile calls;
-	// serialized per source path by ast-source's parseFileWithWatcher lock (#44 D6).
+	// pkgTypesCache memoizes each package directory's type and package-level
+	// func declarations (name -> defining file [+ kind]), keyed by directory and
+	// validated by a name+size+mtime signature (see imports.go), so a bulk index
+	// parses each directory once and a watch edit rebuilds it. Persisted across
+	// ParseFile calls; serialized per source path by ast-source's
+	// parseFileWithWatcher lock (#44 D6).
 	pkgTypesCache map[string]pkgTypesEntry
+
+	// modCache memoizes nearest-go.mod module mappings per directory (see
+	// gomod.go), validated by a go.mod presence signature along the walk, under
+	// the same per-source-path serialization as pkgTypesCache.
+	modCache map[string]modOrigin
 }
 
 // NewParser creates a new Go AST parser
@@ -451,21 +457,33 @@ func (p *Parser) extractFunctionCalls(block *goast.BlockStmt, filePath string) [
 	goast.Inspect(block, func(n goast.Node) bool {
 		if call, ok := n.(*goast.CallExpr); ok {
 			var name string
+			localBase := false
 			switch fn := call.Fun.(type) {
 			case *goast.Ident:
 				name = fn.Name
 			case *goast.SelectorExpr:
 				if x, ok := fn.X.(*goast.Ident); ok {
 					name = x.Name + "." + fn.Sel.Name
+					// A base ident the parser resolved to a same-file
+					// declaration is a value, so this is a method call — never
+					// a package qualifier, even when the name shadows an import
+					// alias (D3). Without this guard, in-repo resolution (D2)
+					// could turn that shadowed call into a wrong real edge.
+					localBase = x.Obj != nil
 				} else {
 					name = fn.Sel.Name
 				}
 			}
 			if name != "" && !seen[name] {
 				seen[name] = true
-				// Resolve to entity ID for function calls
-				callID := p.callNameToEntityID(name, filePath)
-				calls = append(calls, callID)
+				if localBase {
+					// Method call on a local value: keep the raw inert form
+					// (same shape callNameToEntityID yields for non-import
+					// qualifiers), bypassing import lookup entirely.
+					calls = append(calls, name)
+				} else {
+					calls = append(calls, p.callNameToEntityID(name, filePath))
+				}
 			}
 		}
 		return true
@@ -489,6 +507,17 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 
 		// Look up the import path for this package alias
 		if importPath, ok := p.importMap[pkgAlias]; ok {
+			// An import path inside this file's own module resolves to the
+			// defining entity — byte-matching the definition's ID — when the
+			// target package declares the function (D2). The declaration
+			// requirement is the no-guessed-edges guarantee: an excluded
+			// directory, a func-typed var, or a type conversion finds no
+			// FuncDecl and stays an external marker.
+			if dirRel, ok := p.inRepoImportDir(importPath, filePath); ok {
+				if def, ok := p.packageFuncs(dirRel)[funcPart]; ok {
+					return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, funcPart, def).ID
+				}
+			}
 			// External function: create reference ID with import path
 			return fmt.Sprintf("external:%s.%s", importPath, funcPart)
 		}
@@ -504,12 +533,16 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 		return fmt.Sprintf("builtin:%s", callName)
 	}
 
-	// Local function: build via the definition's own path so the system segment is
-	// SystemSlug(project), not the raw project. This resolves a same-file call; a
-	// call to a package-level function in a sibling file still targets the caller's
-	// path and stays inert. Cross-file *call* resolution (a packageTypes-style scan
-	// for funcs) is deferred with the multi-language call graph — this task (#46)
-	// scopes type-dependency edges, not calls.
+	// Resolve within the package (same directory, possibly a sibling file) so the
+	// edge byte-matches the definition's own ID (D1) — the same sibling scan type
+	// references use. The same-file case degenerates to the previous behavior.
+	if def, ok := p.packageFuncs(filepath.Dir(filePath))[callName]; ok {
+		return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, callName, def).ID
+	}
+
+	// Undefined in the package (a dot import, a shadowed name): keep targeting
+	// the caller's own path — inert (dropped) since no such entity exists, never
+	// a wrong edge.
 	return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, callName, filePath).ID
 }
 

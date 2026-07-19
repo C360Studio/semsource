@@ -76,7 +76,7 @@ an agent point SemSource at new sources at runtime; `source_status` is the readi
 | Tool | Use it to… | Notes |
 |------|-----------|-------|
 | `code_context` | Understand a symbol — resolved definition, verbatim body, callers **and** callees. | Structural. Gate on `index.ready`. |
-| `code_impact` | See the reverse-dependency closure — what breaks if you change this symbol. | Structural. Answers what grep can't. |
+| `code_impact` | See the reverse-dependency closure — what breaks if you change this symbol. Names direct dependents (callers, subclasses, implementers, referrers, embedders; up to 12 per role) alongside the counts. | Structural. Answers what grep can't. Symbol lookup is byte-exact on the name. Graphs indexed before v1.0.0-beta.6 gain Go cross-package edges on their next reindex. |
 | `code_search` | Semantic / natural-language search over code (*"where is the retry-with-backoff logic"*). | Semantic. Reliable once `embedding.ready`. |
 | `code_changes` | See what changed between two versions of a source — added/removed/changed symbols with before/after bodies. Args: `project`, `from`, `to`. | Structural. A rename shows as remove + add. |
 | `doc_context` | Get the intended design from prose — READMEs, ADRs, docs — not just the code. | Structural over the doc graph. |
