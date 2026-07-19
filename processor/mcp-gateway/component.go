@@ -77,12 +77,12 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.removeSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "source_status",
-		Description: "Report semsource graph readiness: the source-manifest ingest phase + per-source counts, the graph-index structural readiness (index), and the graph-embedding semantic readiness (embedding), plus a note. Readiness is honest (semstreams ADR-066): 'ready' means caught up to the latest committed write. Gate structural queries (byName / code_context / code_impact) on index.ready; code_search reliability tracks embedding.ready.",
+		Description: "Report semsource graph readiness: the source-manifest ingest phase + per-source counts, the graph-index structural readiness (index), and the graph-embedding semantic readiness (embedding), plus a note. Readiness is honest (semstreams ADR-066): status.phase 'ready' means every configured source finished its initial seed, and index/embedding 'ready' mean caught up to the latest committed write. Gate structural queries (byName / code_context / code_impact) on phase ready AND index.ready; code_search reliability tracks embedding.ready. A miss is a genuine absence only once both gates hold.",
 	}, c.sourceStatus)
 
-	// Fused query tools (ADR-0004 read side over MCP). Readiness is honest as of
-	// beta.128 (ADR-066): a miss once the relevant source_status signal is ready
-	// is a genuine absence, not a build-window lag.
+	// Fused query tools (ADR-0004 read side over MCP). Readiness is honest
+	// (ADR-066 + the seeded-phase gate): a miss is a genuine absence only once
+	// status.phase is ready AND the relevant source_status signal is ready.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_context",
 		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. Use to understand a symbol and how it connects. If a symbol misses while index.ready is false (check source_status), the structural index is still catching up — retry once ready.",
@@ -158,11 +158,16 @@ func (c *Component) authMiddleware(next http.Handler) http.Handler {
 }
 
 // request performs a NATS request/reply with the configured timeout.
+// RequestClassified (not plain Request) so ADR-060 handler-error replies
+// (X-Error-Class/X-Error-Code + {message, detail} body) surface as Go errors
+// and therefore as MCP isError results — with plain Request an infrastructure
+// failure arrived as a SUCCESSFUL tool answer, detectable only by the missing
+// contract_version (audit 2026-07-19, honest-readiness-and-errors).
 func (c *Component) request(ctx context.Context, subject string, data []byte) ([]byte, error) {
 	if c.client == nil {
 		return nil, fmt.Errorf("no NATS client")
 	}
-	return c.client.Request(ctx, subject, data, c.timeout())
+	return c.client.RequestClassified(ctx, subject, data, c.timeout())
 }
 
 func (c *Component) timeout() time.Duration {

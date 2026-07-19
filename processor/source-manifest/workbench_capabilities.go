@@ -297,27 +297,7 @@ func (c *Component) collectIndexReadiness(parent context.Context) (workbenchInde
 
 func (c *Component) fetchIndexReadiness(ctx context.Context, subject, label string) workbenchIndexReadiness {
 	raw, err := c.requestReadiness(ctx, subject)
-	if err != nil {
-		return unavailableReadiness(label + " readiness is unavailable")
-	}
-	var status workbenchIndexStatusWire
-	if err := json.Unmarshal(raw, &status); err != nil {
-		return unavailableReadiness(label + " readiness is unavailable")
-	}
-	state := status.State
-	if state == "" {
-		state = readinessUnknown
-	}
-	return workbenchIndexReadiness{
-		Available:       true,
-		Ready:           status.Ready,
-		State:           state,
-		IndexedRevision: status.IndexedRevision,
-		TargetRevision:  status.TargetRevision,
-		Lag:             status.Lag,
-		Revision:        status.Revision,
-		LastSynced:      status.LastSynced,
-	}
+	return indexReadinessFrom(raw, err, label)
 }
 
 func (c *Component) requestReadiness(ctx context.Context, subject string) ([]byte, error) {

@@ -54,10 +54,14 @@ const (
 // SourceStatusReport is the internal message published by source components
 // to semsource.internal.status after initial ingest and periodically.
 type SourceStatusReport struct {
-	InstanceName string           `json:"instance_name"`
-	SourceType   string           `json:"source_type"`
-	Phase        string           `json:"phase"`
+	InstanceName string `json:"instance_name"`
+	SourceType   string `json:"source_type"`
+	Phase        string `json:"phase"`
+	// EntityCount is the DISTINCT entity count (invariant under periodic
+	// republication); PublishTotal is raw publish throughput (audit
+	// 2026-07-19: the old publish-counter-as-entity-count inflated forever).
 	EntityCount  int64            `json:"entity_count"`
+	PublishTotal int64            `json:"publish_total,omitempty"`
 	ErrorCount   int64            `json:"error_count"`
 	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 	LastError    *SourceError     `json:"last_error,omitempty"`
@@ -95,6 +99,7 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			SourceType:   r.SourceType,
 			Phase:        r.Phase,
 			EntityCount:  r.EntityCount,
+			PublishTotal: r.PublishTotal,
 			ErrorCount:   r.ErrorCount,
 			TypeCounts:   r.TypeCounts,
 			LastError:    r.LastError,
@@ -102,10 +107,21 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 		totalEntities += r.EntityCount
 	}
 
+	// Ready means SEEDED, not merely started: every expected source must have
+	// reported AND be past its initial seed (watching/idle). Components report
+	// "ingesting" at Start, so all-reported alone is exactly the mid-seed
+	// window the documented consumer gate must not pass (audit 2026-07-19,
+	// honest-readiness-and-errors). An errored source degrades the aggregate
+	// even when everything has reported (the old else-if made that branch
+	// unreachable once reports were in).
 	phase := PhaseSeeding
-	if a.allReported() {
+	switch {
+	case a.allSeeded() && !a.anyErrored():
 		phase = PhaseReady
-	} else if a.degraded {
+		// A seed-timeout degradation is transient: if every source finished
+		// its seed cleanly afterwards, ready is the truthful answer.
+		a.degraded = false
+	case a.degraded || a.anyErrored():
 		phase = PhaseDegraded
 	}
 
@@ -124,6 +140,30 @@ func (a *statusAggregator) allReported() bool {
 		return len(a.reports) > 0
 	}
 	return len(a.reports) >= a.expectedCount
+}
+
+// allSeeded returns true when all expected sources have reported AND every
+// reported source is past its initial seed (watching or idle).
+func (a *statusAggregator) allSeeded() bool {
+	if !a.allReported() {
+		return false
+	}
+	for _, r := range a.reports {
+		if r.Phase != SourcePhaseWatching && r.Phase != SourcePhaseIdle {
+			return false
+		}
+	}
+	return true
+}
+
+// anyErrored returns true when any reported source is in the errored phase.
+func (a *statusAggregator) anyErrored() bool {
+	for _, r := range a.reports {
+		if r.Phase == SourcePhaseErrored {
+			return true
+		}
+	}
+	return false
 }
 
 // markDegraded forces the aggregate to degraded phase (used on seed timeout).

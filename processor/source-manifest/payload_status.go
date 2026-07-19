@@ -22,10 +22,13 @@ type StatusPayload struct {
 
 // SourceStatus reports the status of a single source instance.
 type SourceStatus struct {
-	InstanceName string           `json:"instance_name"`
-	SourceType   string           `json:"source_type"`
-	Phase        string           `json:"phase"` // "ingesting", "watching", "idle", "errored"
+	InstanceName string `json:"instance_name"`
+	SourceType   string `json:"source_type"`
+	Phase        string `json:"phase"` // "ingesting", "watching", "idle", "errored"
+	// EntityCount is the DISTINCT entity count; PublishTotal is raw publish
+	// throughput (separately named so counts are never a readiness proxy).
 	EntityCount  int64            `json:"entity_count"`
+	PublishTotal int64            `json:"publish_total,omitempty"`
 	ErrorCount   int64            `json:"error_count"`
 	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 	LastError    *SourceError     `json:"last_error,omitempty"`
