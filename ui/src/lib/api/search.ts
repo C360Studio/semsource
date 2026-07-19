@@ -68,20 +68,21 @@ export function isSameOriginRelativeHref(
   }
 }
 
-function statusError(status: number): FusionSearchError {
+function statusError(status: number, label: string): FusionSearchError {
   return new FusionSearchError(
-    `Code search failed with HTTP ${status}`,
+    `${label} failed with HTTP ${status}`,
     "http_error",
     status === 503 || status === 504,
     status,
   );
 }
 
-export async function searchCode(
+export async function postFusionRequest(
   fetcher: typeof fetch,
   href: string,
-  query: string,
+  request: { query: string; want?: string[] },
   errorContract: string | undefined,
+  label: "Code search" | "Graph query",
   signal?: AbortSignal,
 ): Promise<FusionResponse> {
   try {
@@ -91,7 +92,7 @@ export async function searchCode(
     );
   } catch {
     throw new FusionSearchError(
-      "Code search is unavailable because its advertised route is invalid",
+      `${label} is unavailable because its advertised route is invalid`,
       "invalid_capability",
       false,
     );
@@ -105,14 +106,14 @@ export async function searchCode(
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify(request),
       signal,
     });
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError")
       throw cause;
     throw new FusionSearchError(
-      "Could not reach SemSource code search",
+      `Could not reach SemSource ${label.toLowerCase()}`,
       "disconnected",
       true,
     );
@@ -135,7 +136,7 @@ export async function searchCode(
         if (cause instanceof FusionSearchError) throw cause;
       }
     }
-    throw statusError(response.status);
+    throw statusError(response.status, label);
   }
 
   try {
@@ -146,15 +147,32 @@ export async function searchCode(
       cause.message.startsWith("Invalid fusion response")
     ) {
       throw new FusionSearchError(
-        "SemSource code search returned an invalid response",
+        `SemSource ${label.toLowerCase()} returned an invalid response`,
         "invalid_payload",
         false,
       );
     }
     throw new FusionSearchError(
-      "SemSource code search returned invalid JSON",
+      `SemSource ${label.toLowerCase()} returned invalid JSON`,
       "invalid_payload",
       false,
     );
   }
+}
+
+export async function searchCode(
+  fetcher: typeof fetch,
+  href: string,
+  query: string,
+  errorContract: string | undefined,
+  signal?: AbortSignal,
+): Promise<FusionResponse> {
+  return postFusionRequest(
+    fetcher,
+    href,
+    { query },
+    errorContract,
+    "Code search",
+    signal,
+  );
 }

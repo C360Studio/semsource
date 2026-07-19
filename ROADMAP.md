@@ -3,6 +3,9 @@
 SemSource is in **public beta**. The current public tag is `v1.0.0-beta.4`,
 running on SemStreams `v1.0.0-beta.144`.
 
+The current release-candidate branch adopts SemStreams `v1.0.0-beta.153`, including the governed
+fusion graph-projection facet resolved by SemStreams #533.
+
 The promise is simple: SemSource deliberately scrapes the pile of source files
 and turns it into a live, governed semantic knowledge graph (SKG). Humans,
 agents, and operator UIs can ask what exists, what changed, where something is
@@ -42,6 +45,11 @@ confidence and dependency shape. The "why" behind durable choices lives in
 - **Raw graph stream export** remains available in standalone mode for
   stream-oriented consumers such as federation, fan-out, and live UI updates. The
   primary governed read contract is still graph query/MCP/GraphQL.
+- **Governed workbench graph drill-down integration** uses `want: ["graph"]` on the existing
+  `POST /code-context/context` route. It preserves explicit typed facts, directed edges, supplied
+  evidence, graph-local truncation, opaque handles, and coherent revision semantics without adding a
+  SemSource graph endpoint or GraphQL dependency. The local WebGL/Sigma renderer has synchronized
+  keyboard and screen-reader surfaces.
 
 ## Recently Shipped
 
@@ -50,6 +58,9 @@ confidence and dependency shape. The "why" behind durable choices lives in
 - SemStreams [#490](https://github.com/C360Studio/semstreams/issues/490) was
   resolved and adopted; the full SemSource e2e gate now passes against the
   restart-safe WebSocket metrics fix.
+- SemStreams [#533](https://github.com/C360Studio/semstreams/issues/533) was resolved by
+  [PR #577](https://github.com/C360Studio/semstreams/pull/577), released in `v1.0.0-beta.153`, and
+  adopted by SemSource through the existing code-context HTTP contract.
 - README/product docs now describe WebSocket as a useful raw stream, not as the
   main query contract.
 
@@ -61,13 +72,11 @@ confidence and dependency shape. The "why" behind durable choices lives in
   `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>`, but the first registry artifact and
   compatibility pin are still OpenSpec task 7.3. Local development uses the
   explicit `docker-compose.ui-dev.yml` override or `task ui:smoke:dev`.
-- **Graph drill-down is capability-gated.** The workbench remains useful for
-  sources, readiness, summary, and search, but reports graph projection as
-  unsupported until [SemStreams #533](https://github.com/C360Studio/semstreams/issues/533)
-  provides and proves the governed projection contract.
-- **GraphQL capabilities are not advertised.** SemStreams beta.144 still routes a
-  GraphQL capabilities query to `graph.query.capabilities`, but the graph-query
-  responder is not registered yet.
+- **Graph drill-down is bounded and capability-gated.** It is offered only when the structural index
+  and graph contract are ready. Truncated, incoherent, zero-revision, or stale responses cannot erase
+  or overwrite newer displayed state.
+- **GraphQL capabilities are not advertised.** The beta.153 graph-facet adoption uses the existing
+  code-context HTTP route and does not claim or require GraphQL projection coverage.
 - **Large-corpus query readiness is still being hardened.** Real dogfooding found
   graph-index scale and readiness gaps in SemStreams; SemSource tracks them
   upstream instead of hiding them locally.
@@ -125,7 +134,7 @@ confidence and dependency shape. The "why" behind durable choices lives in
   backend contract also available to non-UI automation.
 - Planning is active under
   [`add-opt-in-source-workbench`](openspec/changes/add-opt-in-source-workbench/);
-  governed graph drill-down remains gated by SemStreams #533.
+  governed graph drill-down is implemented against the adopted SemStreams #533 contract.
 
 ### Project Knowledge Interoperability
 

@@ -20,6 +20,9 @@
   "dependencies": {
     "@sveltejs/adapter-node": "^5.4.0",
     "@sveltejs/kit": "^2.43.2",
+    "graphology": "^0.26.0",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "sigma": "^3.0.3",
     "svelte": "^5.39.5"
   },
   "devDependencies": {

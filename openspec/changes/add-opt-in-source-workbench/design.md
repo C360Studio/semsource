@@ -233,20 +233,27 @@ a second codec, planner, evidence model, or authority policy.
 For the initial OKF slice, a browser download is preferred over server-side write authority. Managed
 repository publication remains a later explicit mode.
 
-### D9 - SemStreams #533 gates graph drill-down, not the workbench MVP
+### D9 - Adopt the SemStreams #533 governed projection without a parallel surface
 
 The beta.145 audit found fusion v1 sufficient for search/list/detail/body/impact views but not for a
-lossless graph projection. Relation references omit target handles, predicates, direction, evidence,
-edge identity, property facts, truncation detail, and a coherent view revision.
+lossless graph projection. SemStreams resolved that framework gap in
+[PR #577](https://github.com/C360Studio/semstreams/pull/577), shipped it in
+[`v1.0.0-beta.153`](https://github.com/C360Studio/semstreams/releases/tag/v1.0.0-beta.153), and closed
+[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). SemSource adopts the additive
+facet through its existing `POST /code-context/context` route by sending `want: ["graph"]`. This
+change adds no graph-projection endpoint, no browser reconstruction, and no GraphQL dependency.
 
-The framework gap is tracked in
-[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). Until it is adopted and
-live-tested, the capability document reports `graph_projection: unsupported`, and the UI shows a
-concrete unavailable state without requesting or inventing graph data.
+The returned `graph` facet is authoritative for typed property facts, explicit directed edges,
+original predicates, opaque source and target handles, optional verbatim evidence, view revision,
+and graph-local truncation. A handle absent from the returned node details may appear only as an
+explicit edge endpoint and is displayed as unresolved; dotted or six-part-looking literals never
+create an edge. Missing evidence remains missing.
 
-The non-graph workbench MVP and its SemSource-owned image may ship before #533. Graph-enabled
-drill-down acceptance remains blocked. SemSource SHALL NOT infer relationships from literal string
-shape, manufacture evidence, or implement a parallel graph substrate.
+A response is deletion-authoritative only when its graph projection is untruncated and its view
+revision is coherent, equal at start and end, and nonzero. Truncated, incoherent, or zero-revision
+responses merge supplied updates but retain previously known nodes and edges, identify the view as
+partial, and invite retry. Top-level fusion truncation remains separate from `graph.truncated` and
+does not erase the graph facet's explicit completeness signal.
 
 ### D10 - Bootstrap through one product-owned HTTP document
 
@@ -274,8 +281,8 @@ accessibility assertions, and Playwright dependency. SemSource's `task ui:e2e` a
 that toolchain or the released image's owned test runner; they never borrow SemTeams dependencies.
 
 The live smoke verifies capabilities, readiness, source inventory, search/query behavior, keyboard
-result/detail navigation, and the graph-unavailable state while #533 remains open. Headless smoke
-independently proves the UI profile and image are not resolved.
+result/detail navigation, and the capability-advertised graph state. Headless smoke independently
+proves the UI profile and image are not resolved.
 
 The UI-profile Playwright smoke owns Caddy integration proof. It exercises the shell and every
 advertised proxied route through the profile entry point and rejects misleading UI-HTML fallthrough.
@@ -327,8 +334,9 @@ a stable model and another product requests an importable contract.
 - **Donor fixes may diverge.** → Record source provenance and behavior tests; local ownership begins at
   port time, with future upstreaming handled separately.
 - **The `ui` flag changes meaning.** → Publish the old-to-new mapping and SemTeams handoff.
-- **Graph code could outrun its contract.** → Keep graph unavailable until #533; start with explicit
-  contract fixtures and never adapt fusion v1 into inferred edges.
+- **Graph code could outrun its contract.** → Pin the adopted beta.153 contract, keep explicit local
+  fixtures, require a meaningful coherent nonzero revision for deletion, and never adapt fusion v1
+  role maps into inferred edges.
 - **Optional UI can become untested.** → Run independent headless and owned-workbench release gates.
 
 ## Migration Plan
@@ -337,15 +345,15 @@ a stable model and another product requests an importable contract.
    coordination issue.
 2. Scaffold `ui/` with its owned Svelte 5, strict TypeScript, unit/component, Playwright, and Docker
    toolchain.
-3. Implement capability bootstrap, project/readiness/source overview, and graph-unavailable state with
-   failing tests first.
+3. Implement capability bootstrap, project/readiness/source overview, and a capability-gated graph
+   state with failing tests first.
 4. Add fusion search/list/detail with cancellation, stale-response, partial, empty, and error tests.
 5. Replace the Compose/Caddy/Task/Playwright sibling path with the SemSource-owned image and `./ui`
    development build.
 6. Run adversarial Svelte/accessibility review and live headless/workbench gates.
 7. Publish and pin the exact SemSource UI image digest for release.
-8. Graph fixtures and the local renderer may be prepared independently. After #533 is live, connect
-   the governed adapter and run live graph acceptance.
+8. Adopt the beta.153 `want: ["graph"]` facet through the existing code-context route, connect the
+   local renderer, and run compatibility and partial-view acceptance.
 
 Rollback pins the previous SemSource release or earlier SemSource UI digest. Neither path changes
 graph state, and the headless core remains unchanged throughout.

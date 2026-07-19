@@ -22,9 +22,9 @@ dependency.
   provenance, rejection rationale, and behavior-level regression tests.
 - Make SemSource responsible for the workbench application, source/project composition,
   provenance/evidence presentation, accessibility, packaging, and release acceptance.
-- Keep governed graph projection in SemStreams. Ship the non-graph source/readiness/search MVP while
-  `graph_projection` is unsupported; enable graph drill-down only after semstreams#533 is adopted and
-  live-tested.
+- Keep governed graph projection in SemStreams. Adopt the semstreams#533 facet shipped in
+  `v1.0.0-beta.153` through the existing `POST /code-context/context` request with `want: ["graph"]`;
+  do not create another endpoint or make GraphQL part of this slice.
 - Explicitly supersede both UI ownership decisions in archived `add-ui-profile`: SemTeams no longer
   owns the app launched by SemSource's profile, and `../semteams/ui` is no longer its default context.
 
@@ -70,4 +70,5 @@ dependency.
 - Compose, Caddy, Task, and smoke scripts drop sibling UI paths and SemTeams-owned dependencies.
 - Browser-facing source, readiness, evidence, and future materialized-view/OKF contracts require
   explicit compatibility tests.
-- SemStreams #533 gates only graph-enabled drill-down; it does not block the useful non-graph MVP.
+- SemStreams #533 gated only graph-enabled drill-down; its beta.153 contract is now adopted without
+  changing the useful non-graph workbench or the SemStreams ownership boundary.

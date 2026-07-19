@@ -75,11 +75,15 @@ func TestWorkbenchCapabilities_ReadyHeadlessContract(t *testing.T) {
 		"/source-manifest/sources")
 	assertCapability(t, got.Actions, "source_remove", capabilityReady, http.MethodDelete,
 		"/source-manifest/sources/{id}")
-	assertUnsupported(t, got.Queries["graph_projection"], "upstream_contract_pending")
+	assertCapability(t, got.Queries, "graph_projection", capabilityReady, http.MethodPost,
+		"/code-context/context")
 	assertUnsupported(t, got.Actions["okf_import"], "not_implemented")
 	assertUnsupported(t, got.Actions["okf_export"], "not_implemented")
 	assertUnsupported(t, got.ProjectViews, "not_implemented")
 	if got.Contracts["fusion_http_error"] != "1" {
+		t.Fatalf("contracts = %+v", got.Contracts)
+	}
+	if got.Contracts["fusion_graph_projection"] != "1" {
 		t.Fatalf("contracts = %+v", got.Contracts)
 	}
 	for _, absent := range []string{"flow-builder", "trajectory", "semteams", "semops", "graphql"} {
@@ -150,7 +154,8 @@ func TestWorkbenchCapabilities_PartialAndUnavailableSignals(t *testing.T) {
 			}
 			if got.Queries["code_context"].Availability != tt.structuralQuery ||
 				got.Queries["code_impact"].Availability != tt.structuralQuery ||
-				got.Queries["doc_context"].Availability != tt.structuralQuery {
+				got.Queries["doc_context"].Availability != tt.structuralQuery ||
+				got.Queries["graph_projection"].Availability != tt.structuralQuery {
 				t.Fatalf("structural query states = %+v", got.Queries)
 			}
 			if got.Queries["code_search"].Availability != tt.semanticQuery {

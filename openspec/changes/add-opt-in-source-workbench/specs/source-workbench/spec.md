@@ -145,6 +145,19 @@ the governed backend query contract. It SHALL preserve opposite-direction and pa
 relationships and SHALL NOT infer relationship semantics from the string shape of a property value.
 The revision SHALL trigger synchronization even when entity and relationship identifiers are stable.
 
+SemSource SHALL expose this projection through the existing `POST /code-context/context` contract
+with `want: ["graph"]`. It SHALL NOT create a parallel projection endpoint, adapt display-oriented
+fusion role maps into edges, or require GraphQL for this capability. Node and edge handles SHALL be
+treated as opaque. A handle absent from returned node details MAY be represented only when the backend
+supplies it as an explicit edge endpoint, and SHALL remain visibly unresolved.
+
+Graph completeness SHALL be evaluated from the graph facet independently of top-level fusion
+truncation. The workbench MAY delete previously displayed nodes or edges absent from a replacement
+only when `graph.truncated` is false and `view_revision` is coherent, has equal nonzero start and end
+values, and therefore identifies a meaningful complete view. A truncated, incoherent, or zero-revision
+projection SHALL retain prior nodes and edges while merging supplied updates and SHALL be presented as
+partial rather than authoritative deletion.
+
 When `graph_projection` is unsupported or not ready, the workbench SHALL show the supplied concrete
 reason, SHALL remain useful through supported non-graph capabilities, and SHALL NOT request, infer, or
 synthesize a replacement graph payload.
@@ -171,6 +184,29 @@ synthesize a replacement graph payload.
   the backend does not classify it as a relationship
 - **WHEN** the workbench renders the property
 - **THEN** it remains a literal fact and does not create a graph edge
+
+#### Scenario: Edge endpoint details are not returned
+
+- **GIVEN** the backend returns an explicit directed edge whose source or target handle has no node
+  detail in the bounded projection
+- **WHEN** the workbench renders the projection
+- **THEN** it creates an unresolved display stub only for that explicit opaque handle
+- **AND** it does not infer identity, label, type, facts, or evidence for the endpoint
+
+#### Scenario: Partial projection omits previously displayed items
+
+- **GIVEN** a replacement graph projection is truncated, has an incoherent revision, or has a zero
+  revision bound
+- **WHEN** nodes or edges from the previous view are absent from the replacement
+- **THEN** the workbench retains the absent items and marks the projection partial
+- **AND** supplied nodes, facts, edges, evidence, and revision values still refresh
+
+#### Scenario: Complete projection omits previously displayed items
+
+- **GIVEN** a replacement graph projection is untruncated and has an equal coherent nonzero start and
+  end revision
+- **WHEN** nodes or edges from the previous view are absent from the replacement
+- **THEN** the workbench removes those absent items
 
 ### Requirement: Backend parity for workbench actions
 

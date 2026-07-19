@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const capabilities = {
@@ -73,6 +74,93 @@ const capabilities = {
   },
   contracts: { fusion_http_error: "1" },
 };
+
+const graphResponse = {
+  contract_version: "1",
+  index: {
+    ready: true,
+    state: "ready",
+    indexed_revision: 153,
+    target_revision: 153,
+    lag: 0,
+  },
+  provenance: "deterministic",
+  nodes: [
+    {
+      name: "Alpha",
+      kind: "function",
+      path: "alpha.go",
+      handle: "opaque-alpha",
+    },
+    { name: "Beta", kind: "function", path: "beta.go", handle: "opaque-beta" },
+  ],
+  graph: {
+    nodes: [
+      {
+        handle: "opaque-alpha",
+        facts: [
+          { predicate: "source.line", value: 12, datatype: "xsd:integer" },
+        ],
+      },
+      { handle: "opaque-beta" },
+    ],
+    edges: [
+      {
+        id: "opaque-alpha|calls|opaque-beta",
+        source: "opaque-alpha",
+        target: "opaque-beta",
+        predicate: "calls",
+        direction: "outgoing",
+        evidence: [{ source: "ast" }],
+      },
+    ],
+    view_revision: { start: 153, end: 153, coherent: true },
+    truncated: false,
+  },
+  truncated: false,
+};
+
+function graphCapabilities() {
+  const ready = structuredClone(capabilities);
+  ready.queries.graph_projection = {
+    availability: "ready",
+    method: "POST",
+    href: "/code-context/context",
+  };
+  ready.contracts = {
+    ...ready.contracts,
+    fusion_graph_projection: "1",
+  };
+  return ready;
+}
+
+async function routeWorkbenchBootstrap(page: Page, document = capabilities) {
+  await page.route("**/source-manifest/capabilities", (route) =>
+    route.fulfill({ json: document }),
+  );
+  await page.route("**/source-manifest/sources", (route) =>
+    route.fulfill({
+      json: {
+        namespace: "acme-workbench",
+        timestamp: "2026-07-15T12:00:00Z",
+        sources: [],
+      },
+    }),
+  );
+  await page.route("**/source-manifest/summary", (route) =>
+    route.fulfill({
+      json: {
+        namespace: "acme-workbench",
+        phase: "ready",
+        entity_id_format: "org.platform.domain.entity_type.source_id.entity_id",
+        total_entities: 2,
+        domains: [],
+        predicates: [],
+        timestamp: "2026-07-15T12:01:00Z",
+      },
+    }),
+  );
+}
 
 test("renders the owned SemSource shell truthfully", async ({ page }) => {
   let searchBody: unknown;
@@ -330,4 +418,127 @@ test("@a11y keeps degraded truth states reachable at narrow width", async ({
     page.getByRole("region", { name: /graph drill-down/i }),
   ).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("@a11y renders the ready graph route with keyboard-synchronized detail", async ({
+  page,
+}) => {
+  const ready = graphCapabilities();
+  await routeWorkbenchBootstrap(page, ready);
+  let graphBody: unknown;
+  await page.route("**/code-context/context", async (route) => {
+    graphBody = route.request().postDataJSON();
+    await route.fulfill({ json: graphResponse });
+  });
+  await page.goto("/");
+  await page.getByLabel("Graph query").fill("Alpha");
+  await page.getByRole("button", { name: "Investigate graph" }).click();
+
+  const entities = page.getByRole("list", { name: "Graph entities" });
+  await expect(entities).toBeVisible();
+  await expect(entities.getByRole("button")).toHaveCount(2);
+  expect(graphBody).toEqual({ query: "Alpha", want: ["graph"] });
+  await expect(
+    page.getByTestId("sigma-graph").locator("canvas"),
+  ).not.toHaveCount(0);
+  await expect(
+    page.getByRole("alert", { name: "Graph visualization" }),
+  ).toHaveCount(0);
+
+  const beta = entities.getByRole("button", { name: /^Beta/ });
+  await beta.focus();
+  await page.keyboard.press("Enter");
+  await expect(beta).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("region", { name: "Selected entity details" }),
+  ).toContainText("Beta");
+  await expect(page.getByLabel("Graph query")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("keeps graph not-ready separate and does not call its route", async ({
+  page,
+}) => {
+  const notReady = graphCapabilities();
+  notReady.queries.graph_projection = {
+    availability: "not_ready",
+    method: "POST",
+    href: "/code-context/context",
+    reason: {
+      code: "structural_index_not_ready",
+      message: "Graph projection is still building",
+      retryable: true,
+    },
+  };
+  await routeWorkbenchBootstrap(page, notReady);
+  let requests = 0;
+  await page.route("**/code-context/context", (route) => {
+    requests += 1;
+    return route.abort();
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("region", { name: "Graph drill-down" }),
+  ).toContainText("Graph projection is still building");
+  expect(requests).toBe(0);
+});
+
+test("cancels an in-flight graph request without publishing stale state", async ({
+  page,
+}) => {
+  await routeWorkbenchBootstrap(page, graphCapabilities());
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let requests = 0;
+  await page.route("**/code-context/context", async (route) => {
+    requests += 1;
+    if (requests === 1) {
+      await held;
+      await route.abort("aborted");
+      return;
+    }
+    await route.fulfill({ json: graphResponse });
+  });
+  await page.goto("/");
+  await page.getByLabel("Graph query").fill("Alpha");
+  await page.getByRole("button", { name: "Investigate graph" }).click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  release();
+  await expect(page.getByRole("list", { name: "Graph entities" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Investigate graph" }).click();
+  await expect(
+    page.getByRole("list", { name: "Graph entities" }),
+  ).toBeVisible();
+});
+
+test("falls back to the accessible graph surface when WebGL initialization fails", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...options) {
+      if (String(type).includes("webgl")) return null;
+      return original.call(this, type, ...options);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await routeWorkbenchBootstrap(page, graphCapabilities());
+  await page.route("**/code-context/context", (route) =>
+    route.fulfill({ json: graphResponse }),
+  );
+  await page.goto("/");
+  await page.getByLabel("Graph query").fill("Alpha");
+  await page.getByRole("button", { name: "Investigate graph" }).click();
+  await expect(
+    page.getByRole("alert", { name: "Graph visualization" }),
+  ).toContainText("visualization unavailable");
+  await expect(
+    page.getByRole("list", { name: "Graph entities" }),
+  ).toBeVisible();
 });

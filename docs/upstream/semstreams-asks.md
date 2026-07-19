@@ -473,7 +473,34 @@ predicates specially. **Not MVP-blocking:** impact is directionally useful and b
 **Surfaced by:** task #43 adversarial review (adding type-dependency edges made the
 containment compounding visible).
 
-### 18. Governed graph projection facet for fusion v2 consumers — framework-shaped — filed [semstreams#533](https://github.com/C360Studio/semstreams/issues/533)
+### 18. Governed graph projection facet for fusion v2 consumers — framework-shaped — RESOLVED in beta.153 ([semstreams#533](https://github.com/C360Studio/semstreams/issues/533), [PR #577](https://github.com/C360Studio/semstreams/pull/577)) — ADOPTED
+
+**RESOLVED (beta.153):** SemStreams added the requested additive `want: ["graph"]` fusion facet in
+PR #577 (`f54c06bd`) and released it in
+[`v1.0.0-beta.153`](https://github.com/C360Studio/semstreams/releases/tag/v1.0.0-beta.153). Non-requesting
+fusion v1 callers retain their existing response shape. The facet supplies typed property facts,
+explicit directed source/predicate/target edges, opaque handles, optional verbatim evidence,
+independent fact/edge/projection truncation, and a pre/post-fetch `ViewRevision` with a `Coherent`
+flag.
+
+**ADOPTED (SemSource):** SemSource pins beta.153 and requests the facet through the existing
+`POST /code-context/context` endpoint with `want: ["graph"]`. The compatibility test
+`TestHTTPGraphProjectionCompatibility` exercises the real fusion engine through that HTTP route;
+owned browser contract/model/component tests cover strict facts/edges/evidence parsing, explicit
+unresolved endpoints, opaque handles, deterministic rendering, and non-deletion when the projection
+is truncated, incoherent, or has no meaningful nonzero revision. No new projection endpoint or
+GraphQL dependency was added.
+
+This RESOLVED/ADOPTED status covers both dependency/backend adoption and the SemSource workbench:
+tasks 5.2, 5.3, and 7.2 prove the WebGL renderer, valid no-graph behavior, classified errors,
+stale-revision protection, and ready-graph browser/accessibility/live-route path.
+
+Two upstream limits remain explicit rather than repaired locally: incoming edges for lens-undeclared
+predicates are not discoverable, and stored confidence `0.0` is currently indistinguishable from
+unset and therefore projects as absent. Product lenses must declare incoming predicates they need;
+SemSource does not infer either missing relationship vocabulary or evidence.
+
+Original ask below (for history):
 
 The lens-driven fusion v1 response is sufficient for bounded search, body, role-based relations,
 paths, and impact views, but it intentionally drops information required by a canonical graph
@@ -491,9 +518,9 @@ domain predicates and human roles. Existing NATS/HTTP/MCP transports can carry t
 GraphQL exposure is not a prerequisite.
 
 **SemSource boundary:** continue using fusion v1 through `/code-context/*` and `/doc-context/*` for
-workbench search/list/detail/impact views. Do not build a parallel SemSource graph projection or
-adapt role maps into invented directed/evidenced edges. The canonical graph drill-down remains
-gated on adoption and live validation of the upstream contract.
+workbench search/list/detail/impact views. Adopt the optional graph facet through the existing context
+request. Do not build a parallel SemSource graph projection, adapt role maps into invented
+directed/evidenced edges, or make GraphQL a prerequisite.
 
 **Related:** semstreams#376 (fusion framework primitive), semstreams#367 (graph-visible provenance
 conventions), OpenSpec `add-opt-in-source-workbench` D9/tasks 3.1–3.2.

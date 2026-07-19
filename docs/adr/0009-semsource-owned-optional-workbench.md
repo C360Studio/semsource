@@ -4,7 +4,8 @@
 > technical writer on 2026-07-15. | **Date:** 2026-07-15
 > **Owners:** SemSource owns the workbench source, tests, packaging, and artifact. SemStreams owns the
 > governed graph projection. SemTeams owns its application as a headless SemSource consumer.
-> **Graph gate:** [semstreams#533](https://github.com/C360Studio/semstreams/issues/533)
+> **Graph adoption:** [semstreams#533](https://github.com/C360Studio/semstreams/issues/533) was
+> resolved by SemStreams PR #577; SemSource pinned `v1.0.0-beta.153` for adoption on 2026-07-19.
 
 ## Context
 
@@ -91,18 +92,27 @@ host Node installation, or local frontend build.
 
 An explicit development path may build `./ui`. A mutable `latest` tag is not release evidence.
 
-### 7. SemStreams #533 gates graph drill-down only
+### 7. Adopt SemStreams #533 without moving graph authority
 
 Fusion v1 supports project, search, list, detail, body, and impact views. It does not provide the
 lossless directed, evidence-bearing graph projection required by the explorer.
 
-The missing framework contract is tracked in
-[semstreams#533](https://github.com/C360Studio/semstreams/issues/533). Until adopted and live-tested,
-SemSource advertises `graph_projection` as unsupported and the UI presents that state without
-requesting or inventing graph data.
+SemStreams supplied the missing contract in
+[PR #577](https://github.com/C360Studio/semstreams/pull/577), released as
+[`v1.0.0-beta.153`](https://github.com/C360Studio/semstreams/releases/tag/v1.0.0-beta.153). SemSource
+adopts its additive graph facet through the existing `POST /code-context/context` request with
+`want: ["graph"]`; it does not add a projection endpoint or require GraphQL for the drill-down.
 
-The useful source/readiness/search workbench and its image may ship before #533. SemSource does not
-infer relationships from string shape, manufacture evidence, or build a parallel graph substrate.
+The workbench treats returned handles as opaque, creates unresolved display nodes only for explicit
+edge endpoints, preserves typed facts, directed predicates, and supplied evidence, and keeps graph
+truncation separate from top-level fusion truncation. Only an untruncated response with an equal,
+coherent, nonzero view revision may delete previously displayed nodes or edges. Partial or
+incoherent responses merge supplied updates without treating omissions as deletion.
+
+SemSource still does not infer relationships from string shape, manufacture evidence, or build a
+parallel graph substrate. The local WebGL/Sigma renderer, valid miss/not-ready behavior, classified
+errors, stale-revision protection, and ready-graph browser/accessibility/live-route behavior are
+covered by local and real-profile acceptance tests.
 
 ## Superseded and preserved decisions
 
@@ -132,7 +142,8 @@ This corrected ADR also supersedes its own unaccepted shared-UI draft. That draf
 - SemSource now owns a Node/Svelte toolchain and frontend maintenance.
 - Ported donor behavior can diverge; provenance and behavior tests must make that explicit.
 - Existing `ui` profile users receive a breaking application change.
-- Graph drill-down remains unavailable until the governed projection is proven.
+- The workbench must preserve the governed projection's completeness and revision semantics rather
+  than treating every bounded response as deletion-authoritative.
 - SemSource must maintain independent headless and workbench release evidence.
 
 ## Migration and rollback

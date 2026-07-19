@@ -61,6 +61,18 @@ func (m *MemGraph) AddEntity(id string, props map[string]any) {
 	}
 }
 
+// AddTriple appends one complete stored assertion to an entity. Unlike
+// AddEntity's convenient property map, this preserves datatype and provenance
+// so compatibility tests can exercise evidence-sensitive fusion contracts.
+// The entity must already have been registered with AddEntity.
+func (m *MemGraph) AddTriple(triple message.Triple) {
+	entity := m.entities[triple.Subject]
+	if entity == nil {
+		panic("fusiontest: AddTriple subject must be registered with AddEntity")
+	}
+	entity.Triples = append(entity.Triples, triple)
+}
+
 // AddEdge registers a directed predicate edge from → to.
 func (m *MemGraph) AddEdge(from, predicate, to string) {
 	m.out[from] = append(m.out[from], fusion.Edge{Predicate: predicate, Target: to})
