@@ -14,7 +14,6 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	cfghandler "github.com/c360studio/semsource/handler/cfgfile"
@@ -70,8 +69,9 @@ type Component struct {
 	lastActivityMu    sync.RWMutex
 	lastActivity      time.Time
 
-	// Entity type counters: domain.type → *atomic.Int64
-	typeCounts sync.Map
+	// distinct tracks distinct entity IDs for honest status counts
+	// (publish counters inflate under periodic reindex — audit 2026-07-19).
+	distinct *entitypub.DistinctTracker
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
@@ -104,6 +104,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		name:       "cfgfile-source",
 		config:     config,
 		publisher:  pub,
+		distinct:   entitypub.NewDistinctTracker(),
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
 		platform:   deps.Platform,
@@ -200,7 +201,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			continue
 		}
 		c.entitiesPublished.Add(1)
-		c.trackEntityType(state.ID)
+		c.distinct.Observe(state.ID)
 		c.updateLastActivity()
 	}
 
@@ -275,7 +276,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			continue
 		}
 		c.entitiesPublished.Add(1)
-		c.trackEntityType(state.ID)
+		c.distinct.Observe(state.ID)
 		c.updateLastActivity()
 	}
 }
@@ -300,27 +301,6 @@ func (c *Component) getLastActivity() time.Time {
 	return c.lastActivity
 }
 
-// trackEntityType increments the per-type counter for the given entity ID.
-func (c *Component) trackEntityType(id string) {
-	domain, eType := entityid.Parts(id)
-	if domain == "" {
-		return
-	}
-	key := domain + "." + eType
-	val, _ := c.typeCounts.LoadOrStore(key, &atomic.Int64{})
-	val.(*atomic.Int64).Add(1)
-}
-
-// snapshotTypeCounts returns a point-in-time copy of all per-type counts.
-func (c *Component) snapshotTypeCounts() map[string]int64 {
-	counts := make(map[string]int64)
-	c.typeCounts.Range(func(k, v any) bool {
-		counts[k.(string)] = v.(*atomic.Int64).Load()
-		return true
-	})
-	return counts
-}
-
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	report := struct {
@@ -328,6 +308,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		SourceType   string           `json:"source_type"`
 		Phase        string           `json:"phase"`
 		EntityCount  int64            `json:"entity_count"`
+		PublishTotal int64            `json:"publish_total,omitempty"`
 		ErrorCount   int64            `json:"error_count"`
 		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 		Timestamp    time.Time        `json:"timestamp"`
@@ -335,9 +316,10 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		InstanceName: c.config.InstanceName,
 		SourceType:   "config",
 		Phase:        phase,
-		EntityCount:  c.entitiesPublished.Load(),
+		EntityCount:  c.distinct.Count(),
+		PublishTotal: c.entitiesPublished.Load(),
 		ErrorCount:   c.ingestErrors.Load() + c.publisher.Lost(),
-		TypeCounts:   c.snapshotTypeCounts(),
+		TypeCounts:   c.distinct.TypeCounts(),
 		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)

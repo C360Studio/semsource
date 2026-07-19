@@ -287,7 +287,12 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 	wasComplete := c.seedComplete
 	wasDegraded := c.aggregator.degraded
 	c.aggregator.update(&report)
-	nowComplete := c.aggregator.allReported()
+	// Seed-complete means SEEDED (every source watching/idle), not merely
+	// all-reported — components report "ingesting" at Start, and treating
+	// first-reports as completion was exactly the mid-seed ready gate the
+	// audit flagged (honest-readiness-and-errors). This also keeps the
+	// seed-timeout live until sources actually finish seeding.
+	nowComplete := c.aggregator.allSeeded() && !c.aggregator.anyErrored()
 	if nowComplete {
 		c.seedComplete = true
 		// Clear the sticky degraded flag — a late source finally reporting
@@ -314,7 +319,7 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 			c.logger.Warn("failed to publish recovery status", "error", err)
 		}
 	case nowComplete && !wasComplete:
-		c.logger.Info("all sources reported — seed complete",
+		c.logger.Info("all sources seeded — seed complete",
 			"total_entities", status.TotalEntities,
 			"sources", len(status.Sources))
 		if err := c.publishPayload(ctx, StatusType, status, statusSubject); err != nil {
@@ -485,6 +490,9 @@ func (c *Component) buildSummary() *SummaryPayload {
 
 // publishPayload marshals and publishes a payload to JetStream.
 func (c *Component) publishPayload(ctx context.Context, msgType message.Type, payload message.Payload, subject string) error {
+	if c.client == nil {
+		return fmt.Errorf("publish %s: NATS client is unavailable", subject)
+	}
 	msg := message.NewBaseMessage(msgType, payload, "semsource")
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -693,6 +701,22 @@ func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 	c.statusMu.RLock()
 	data := c.statusData
 	c.statusMu.RUnlock()
+
+	// Readiness parity with the MCP source_status tool (audit 2026-07-19): the
+	// README documents polling this endpoint for index.ready / embedding.ready,
+	// but those fields never existed here. Additive top-level fields keep the
+	// envelope backward compatible (namespace/phase/sources untouched); failed
+	// sub-queries yield explicit {available:false, reason}, never key omission.
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err == nil {
+		ctx := r.Context()
+		payload["index"] = c.fetchIndexReadiness(ctx, structuralStatusSubject, "structural index")
+		payload["embedding"] = c.fetchIndexReadiness(ctx, semanticStatusSubject, "semantic index")
+		payload["note"] = ReadinessNote
+		if merged, mErr := json.Marshal(payload); mErr == nil {
+			data = merged
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)

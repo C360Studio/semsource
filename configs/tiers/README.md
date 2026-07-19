@@ -31,8 +31,9 @@ semsource run --config configs/tiers/tier0-statistical.json
 ```
 
 > Observed while indexing a large dependency: on a big one-shot ingest, embeddings (even BM25) lag
-> readiness — see semstreams#431. Poll `source_status` until `index.ready` and `total_entities` is
-> stable before trusting `code_search`.
+> structural readiness. Poll `source_status` until `embedding.ready` is `true` before trusting
+> `code_search` (`index.ready` gates the structural tools; the old "total_entities is stable"
+> heuristic is retired — counts are no longer a readiness proxy).
 
 ## Tier 1 — Semantic (semembed) — wired (`tier1-semantic.json`)
 

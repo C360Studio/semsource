@@ -78,8 +78,9 @@ type Component struct {
 	lastActivityMu  sync.RWMutex
 	lastActivity    time.Time
 
-	// Entity type counters: domain.type → *atomic.Int64
-	typeCounts sync.Map
+	// distinct tracks distinct entity IDs for honest status counts
+	// (publish counters inflate under periodic reindex — audit 2026-07-19).
+	distinct *entitypub.DistinctTracker
 
 	// Cancel functions for background goroutines
 	cancelFuncs []context.CancelFunc
@@ -119,6 +120,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		name:       "ast-source",
 		config:     config,
 		publisher:  pub,
+		distinct:   entitypub.NewDistinctTracker(),
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
 		platform:   deps.Platform,
@@ -560,7 +562,7 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)
 		}
 		c.entitiesIndexed.Add(1)
-		c.trackEntityType(state.ID)
+		c.distinct.Observe(state.ID)
 		c.updateLastActivity()
 	}
 	return nil
@@ -584,7 +586,7 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 			continue
 		}
 		c.entitiesIndexed.Add(1)
-		c.trackEntityType(state.ID)
+		c.distinct.Observe(state.ID)
 	}
 }
 
@@ -607,7 +609,7 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, org, proje
 			continue
 		}
 		c.entitiesIndexed.Add(1)
-		c.trackEntityType(state.ID)
+		c.distinct.Observe(state.ID)
 	}
 }
 
@@ -666,27 +668,6 @@ func (c *Component) setFileHash(path, hash string) {
 	c.fileHashesMu.Unlock()
 }
 
-// trackEntityType increments the per-type counter for the given entity ID.
-func (c *Component) trackEntityType(id string) {
-	domain, eType := entityid.Parts(id)
-	if domain == "" {
-		return
-	}
-	key := domain + "." + eType
-	val, _ := c.typeCounts.LoadOrStore(key, &atomic.Int64{})
-	val.(*atomic.Int64).Add(1)
-}
-
-// snapshotTypeCounts returns a point-in-time copy of all per-type counts.
-func (c *Component) snapshotTypeCounts() map[string]int64 {
-	counts := make(map[string]int64)
-	c.typeCounts.Range(func(k, v any) bool {
-		counts[k.(string)] = v.(*atomic.Int64).Load()
-		return true
-	})
-	return counts
-}
-
 // getFileHash returns the recorded content hash for a file path.
 func (c *Component) getFileHash(path string) (string, bool) {
 	c.fileHashesMu.RLock()
@@ -702,6 +683,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		SourceType   string           `json:"source_type"`
 		Phase        string           `json:"phase"`
 		EntityCount  int64            `json:"entity_count"`
+		PublishTotal int64            `json:"publish_total,omitempty"`
 		ErrorCount   int64            `json:"error_count"`
 		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 		Timestamp    time.Time        `json:"timestamp"`
@@ -709,12 +691,16 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		InstanceName: c.config.InstanceName,
 		SourceType:   "ast",
 		Phase:        phase,
-		EntityCount:  c.entitiesIndexed.Load(),
+		// Distinct entities, invariant under periodic republication; raw
+		// publish throughput is the separately named publish_total
+		// (honest-readiness-and-errors D5).
+		EntityCount:  c.distinct.Count(),
+		PublishTotal: c.entitiesIndexed.Load(),
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).
 		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost(),
-		TypeCounts: c.snapshotTypeCounts(),
+		TypeCounts: c.distinct.TypeCounts(),
 		Timestamp:  time.Now(),
 	}
 	data, err := json.Marshal(report)

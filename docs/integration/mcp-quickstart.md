@@ -20,9 +20,13 @@ SEMSOURCE_TARGET=/path/to/your/repo docker compose up
 Confirm the endpoint is live:
 
 ```bash
-curl -s http://localhost:8080/source-manifest/status | jq '{phase, total_entities}'
-# → { "phase": "ready", "total_entities": 3665 }
+curl -s http://localhost:8080/source-manifest/status | jq '{phase, index: .index.ready, embedding: .embedding.ready}'
+# → { "phase": "ready", "index": true, "embedding": true }
 ```
+
+`phase: "ready"` means every configured source has finished its initial seed (during seeding you
+will see `phase: "seeding"`); `index.ready` and `embedding.ready` are the structural and semantic
+catch-up signals described below.
 
 ## 2. Add the server to Claude Code
 
