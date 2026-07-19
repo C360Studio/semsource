@@ -58,11 +58,24 @@ services:
       - /etc/semsource/${SEMSOURCE_CONFIG:-mvp.json}
       - --log-level
       - ${LOG_LEVEL:-info}
+    # Liveness = the serving surface answers (audit: `semsource version` exits 0
+    # even when the long-running service is wedged — healthy was theater).
+    # Readiness stays the status payload's job (ADR-066): a seeding stack is
+    # healthy-but-not-ready by design.
     healthcheck:
-      test: ["CMD", "semsource", "version"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/source-manifest/status",
+        ]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 30s
     depends_on:
       nats:
         condition: service_healthy
@@ -77,7 +90,11 @@ services:
   # First-index embedding is CPU-heavy (arctic-embed-s / ONNX fans out across cores);
   # SEMEMBED_CPUS caps it for local dev — see configs/tiers/README.md.
   semembed:
-    image: ghcr.io/c360studio/semembed:latest
+    # Pinned by immutable index digest (compose-packaging-hardening D6): a moved
+    # `latest` must never silently change what an install runs. Refresh with:
+    #   docker buildx imagetools inspect ghcr.io/c360studio/semembed:latest
+    # and update the digest below to the reported index Digest.
+    image: ghcr.io/c360studio/semembed:latest@sha256:7972174f8e3462fd38bf3ad95d94870f406bb3d1350e0ea3280ce002cb2e09b2
     environment:
       - SEMEMBED_PORT=8081
       - SEMEMBED_MODEL=${SEMEMBED_MODEL:-Snowflake/snowflake-arctic-embed-s}
@@ -139,10 +156,16 @@ services:
       - c360
     restart: unless-stopped
 
-  # NATS — JetStream/KV substrate for SemStreams graph state and governance
+  # NATS — JetStream/KV substrate for SemStreams graph state and governance.
+  # JetStream state lives on the named nats-data volume (-sd /data): recreating
+  # the container must not wipe the graph (audit: no volume = silent total data
+  # loss under a still-healthy stack). Container-lifecycle durability only —
+  # graph retention semantics stay ADR-0008's (no NATS TTL/MaxBytes lifecycle).
   nats:
     image: nats:2-alpine
-    command: ["-js", "-m", "8222", "--name", "c360-nats"]
+    command: ["-js", "-sd", "/data", "-m", "8222", "--name", "c360-nats"]
+    volumes:
+      - nats-data:/data
     # Published to the host so a native `semsource run` (outside compose) can
     # reach JetStream — e.g. `docker compose up -d nats` then `semsource run`.
     # Override host ports if another local NATS stack is already running.
@@ -164,6 +187,7 @@ services:
       retries: 10
     networks:
       - c360
+    restart: unless-stopped
 
 networks:
   c360:
@@ -173,4 +197,6 @@ volumes:
   caddy-data:
     driver: local
   caddy-config:
+    driver: local
+  nats-data:
     driver: local

@@ -301,6 +301,8 @@ echo "MCP tools/list returned the expected SemSource tools"
 # Removal-integrity round-trip (source-removal-integrity): a real tools/call
 # per lifecycle tool, asserting answer content — not just name listing.
 mcp_call() {
+	# The tool result's inner JSON rides escaped inside the SSE frame's "text"
+	# field; strip the escapes so content assertions match the actual payload.
 	curl -sS --max-time 10 \
 		-X POST \
 		-H 'Content-Type: application/json' \
@@ -308,10 +310,13 @@ mcp_call() {
 		-H 'MCP-Protocol-Version: 2025-06-18' \
 		-H "Mcp-Session-Id: $mcp_session_id" \
 		-d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" \
-		"$mcp_url" | sed -n 's/^data: //p'
+		"$mcp_url" | sed -n 's/^data: //p' | tr -d '\\'
 }
 
-add_reply=$(mcp_call add_source '{"type":"docs","path":"/workspace","actor":"core-smoke"}')
+# /workspace/docs (not /workspace): the config-declared docs source already
+# owns /workspace, and re-adding it answers created:false — the round-trip
+# needs a source this call genuinely creates.
+add_reply=$(mcp_call add_source '{"type":"docs","path":"/workspace/docs","actor":"core-smoke"}')
 handle=$(printf '%s' "$add_reply" | sed -n 's/.*"instance_name":"\([^"]*\)".*/\1/p' | head -1)
 if [ -z "$handle" ]; then
 	echo "add_source returned no instance handle: $add_reply" >&2
@@ -352,4 +357,93 @@ if ! printf '%s' "$unknown_reply" | grep -q 'NOT_FOUND'; then
 	exit 1
 fi
 echo "remove_source rejects unknown handles with NOT_FOUND"
+
+# --- compose-packaging-hardening assertions ---
+
+# D5: the compose-built image must identify its build, not report "dev".
+built_version=$(docker compose exec -T semsource semsource version) ||
+	fail "semsource version not runnable in the container"
+if printf '%s' "$built_version" | grep -Eq '(^|[^a-zA-Z0-9-])dev([^a-zA-Z0-9-]|$)'; then
+	echo "compose-built image reports an unidentifiable version: $built_version" >&2
+	exit 1
+fi
+echo "Built image identifies itself: $built_version"
+
+# D2: the rendered healthcheck must target the HTTP serving surface, and the
+# probe must discriminate serving from not-serving (same binary present in both
+# cases — the audit's 'semsource version' check could not tell them apart).
+rendered=$(docker compose config)
+if ! printf '%s' "$rendered" | grep -q 'source-manifest/status'; then
+	echo "semsource healthcheck does not target the HTTP status endpoint" >&2
+	exit 1
+fi
+docker compose exec -T semsource wget --quiet --tries=1 --spider \
+	"http://localhost:8080/source-manifest/status" ||
+	fail "healthcheck probe fails against the live serving surface"
+if docker compose exec -T semsource wget --quiet --tries=1 --spider \
+	"http://localhost:1/source-manifest/status" 2>/dev/null; then
+	echo "healthcheck probe cannot discriminate a non-serving endpoint" >&2
+	exit 1
+fi
+echo "Healthcheck targets the serving surface and discriminates serving from not"
+
+# D6: no mutable :latest image without an immutable digest in the core profile.
+if docker compose config --images | grep ':latest$'; then
+	echo "core profile resolves a mutable :latest image without a digest pin" >&2
+	exit 1
+fi
+echo "All core-profile images are digest-pinned or locally built"
+
+# D3: graph state must survive NATS container recreation (named volume).
+echo "Recreating the nats container to prove state durability"
+docker compose rm -sf nats >/dev/null
+docker compose up -d --wait nats
+durable=""
+durability_deadline=$(( $(date +%s) + 120 ))
+while [ "$(date +%s)" -le "$durability_deadline" ]; do
+	post_body=$(curl -fsS --max-time 5 "$status_url" 2>/dev/null) || { sleep 2; continue; }
+	post_entities=$(printf '%s' "$post_body" | sed -n 's/.*"total_entities":\([0-9][0-9]*\).*/\1/p')
+	if printf '%s' "$post_body" | grep -q '"phase":"ready"' &&
+		[ -n "$post_entities" ] && [ "$post_entities" -gt 0 ]; then
+		context_reply=$(mcp_call code_context '{"query":"main"}')
+		if printf '%s' "$context_reply" | grep -q '"name":"main"'; then
+			durable="yes"
+			break
+		fi
+	fi
+	sleep 2
+done
+if [ -z "$durable" ]; then
+	echo "entities not queryable after nats recreation (graph state lost?)" >&2
+	echo "last status: ${post_body:-none}" >&2
+	echo "last code_context: ${context_reply:-none}" >&2
+	exit 1
+fi
+echo "Graph state survived nats recreation (code_context answers post-recreate)"
+
+# D1: the documented tier0 path must boot exactly as written (BM25, no
+# semembed dependency, no crash loop). Runs LAST — it replaces the config.
+echo "Rebooting semsource with SEMSOURCE_CONFIG=tiers/tier0-statistical.json"
+docker compose rm -sf semsource >/dev/null
+SEMSOURCE_CONFIG=tiers/tier0-statistical.json docker compose up -d --wait semsource ||
+	fail "tier0 config did not reach healthy (documented path crash-loops?)"
+tier0_ready=""
+tier0_deadline=$(( $(date +%s) + timeout_seconds ))
+while [ "$(date +%s)" -le "$tier0_deadline" ]; do
+	tier0_body=$(curl -fsS --max-time 5 "$status_url" 2>/dev/null) || { sleep "$poll_seconds"; continue; }
+	if printf '%s' "$tier0_body" | grep -q '"phase":"ready"'; then
+		tier0_ready="yes"
+		break
+	fi
+	if printf '%s' "$tier0_body" | grep -q '"phase":"degraded"'; then
+		echo "tier0 boot degraded: $tier0_body" >&2
+		exit 1
+	fi
+	sleep "$poll_seconds"
+done
+if [ -z "$tier0_ready" ]; then
+	echo "tier0 config never reached ready: ${tier0_body:-no response}" >&2
+	exit 1
+fi
+echo "tier0 documented path boots ready (BM25 mode)"
 exit 0

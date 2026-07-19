@@ -14,10 +14,12 @@ The other query verbs — `code_context`, `code_impact`, `doc_context`, and byNa
 are **structural** and work at every tier (they don't depend on the embedder). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
 
-> **Paths in these files are Docker-container paths** (`/workspace`, `/mnt/workspace/myrepo`) — they
-> match what `docker compose` mounts, not your host. To run a tier config natively, edit the `sources`
-> paths (and `source_roots`) to real host directories; under compose, point `SEMSOURCE_TARGET` at the
-> directory to index instead of editing the file.
+> **Paths in these files are Docker-container paths** (`/workspace`) — exactly the mount the shipped
+> compose stack creates (`SEMSOURCE_TARGET` on the host → `/workspace` in the container, defaulting to
+> the repo checkout). Under compose, select a tier with
+> `SEMSOURCE_CONFIG=tiers/<file>.json` (the config mount is `configs/` → `/etc/semsource/`, so the
+> `tiers/` prefix is part of the value) and point `SEMSOURCE_TARGET` at the directory to index. To run
+> a tier config natively, edit the `sources` paths (and `source_roots`) to real host directories.
 
 ## Tier 0 — Statistical (BM25) — works today
 

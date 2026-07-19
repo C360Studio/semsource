@@ -1,4 +1,6 @@
-.git
+# .git stays IN the context so the builder can stamp `semsource version` with
+# `git describe` when no VERSION arg is passed (compose-packaging-hardening D5:
+# a compose-built image must identify itself, not report "dev").
 .github
 .claude
 docs
