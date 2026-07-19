@@ -54,7 +54,18 @@
       caller (SanitizeInstance-shaped), assert the impact closure includes the cross-package
       caller and the response names it in a reverse role. Proves:
       `TestIntegration_GoCallGraphImpact` in `internal/governance/`.
-- [ ] 5.2 Re-run graded Q7 (SystemSlug impact) against a live stack (isolated
+- [x] 5.2 Re-run graded Q7 (SystemSlug impact) against a live stack (isolated
       COMPOSE_PROJECT_NAME + high ports per the harness rule) and record the grade flip in
       the change; note reindex requirement in release notes/docs where impact behavior is
       described.
+
+**Q7 acceptance evidence (2026-07-19, live compose stack `semsource-q7-verify` on
+28080/24222/28222, branch build, mvp.json over the semsource repo):**
+`POST /code-context/impact {"query":"SystemSlug"}` with `index.ready=true` returned exactly
+one seed — `SystemSlug` at `entityid/entityid.go` (no case-lookalike seeds) — with
+`impact = {nodes: 156, files: 43, truncated: false}` (audit baseline: same-file-only, closure
+hollow, lookalike seeds merged) and NAMED callers including `ScopedSystemSlug` (the dependent
+Q7 graded as missing), cross-package callers `pathToSystemSlug`, `ingestFile`,
+`astComponentConfig`, `removeBranchComponents`, and the genuine wrapper-caller `systemSlug`
+(a true dependent, not a leaked seed). Q7 grades correct. Reindex note added to
+`docs/integration/mcp-quickstart.md`.
