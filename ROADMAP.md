@@ -1,10 +1,17 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.4`,
-running on SemStreams `v1.0.0-beta.144`.
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.5`,
+running on SemStreams `v1.0.0-beta.153`, including the governed fusion
+graph-projection facet resolved by SemStreams #533.
 
-The current release-candidate branch adopts SemStreams `v1.0.0-beta.153`, including the governed
-fusion graph-projection facet resolved by SemStreams #533.
+`v1.0.0-beta.5` is the audit-hardening release (2026-07-19 top-to-bottom
+audit): no silent entity loss (sanitized IDs, publish-gate parity, loud
+publisher), honest readiness on every surface (`ready` means seeded;
+HTTP/MCP parity; classified errors as tool errors; distinct-entity counts),
+verifiable source removal (NOT_FOUND, no phantoms), a first-run wizard whose
+defaults actually ingest, and NL retrieval that ranks production code above
+tests and canonical docs above planning artifacts, with the config domain
+reachable through doc_context.
 
 The promise is simple: SemSource deliberately scrapes the pile of source files
 and turns it into a live, governed semantic knowledge graph (SKG). Humans,
