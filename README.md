@@ -11,7 +11,7 @@ Run it beside one project or many. Each instance emits stable IDs, provenance, a
 downstream tools can inspect impact, compare versions, or build UI views without reverse-engineering
 the source files.
 
-> **Public beta (`v1.0.0-beta.4`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
+> **Public beta (`v1.0.0-beta.5`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
 > limitations, and what's coming next.
 
 ## Prerequisites
