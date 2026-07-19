@@ -247,7 +247,10 @@ func (c *Component) publishDelta(delta map[string][]message.Triple) int {
 			c.logger.Warn("invalid supersession edge payload; skipping", "id", id, "error", err)
 			continue
 		}
-		pub.Send(payload)
+		if err := pub.Send(payload); err != nil {
+			c.logger.Warn("supersession edge publish dropped", "id", id, "error", err)
+			continue
+		}
 		updated++
 	}
 	return updated
