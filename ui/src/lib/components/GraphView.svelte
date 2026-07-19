@@ -229,10 +229,14 @@
 <style>
   .graph-layout {
     display: grid;
+    min-width: 0;
+    max-width: 100%;
     gap: 1rem;
   }
   .visual-surface {
     position: relative;
+    min-width: 0;
+    max-width: 100%;
     min-height: 22rem;
     overflow: hidden;
     border: 1px solid var(--border);
@@ -254,8 +258,13 @@
   }
   .accessible-surface {
     display: grid;
+    min-width: 0;
+    max-width: 100%;
     grid-template-columns: minmax(13rem, 0.8fr) minmax(0, 1.4fr);
     gap: 1rem;
+  }
+  .accessible-surface > * {
+    min-width: 0;
   }
   h3,
   h4,
@@ -271,6 +280,7 @@
   }
   li button {
     display: grid;
+    min-width: 0;
     width: 100%;
     gap: 0.15rem;
     padding: 0.7rem;
@@ -287,6 +297,7 @@
     background: rgb(99 214 199 / 18%);
   }
   small {
+    overflow-wrap: anywhere;
     color: var(--muted);
   }
   .detail {

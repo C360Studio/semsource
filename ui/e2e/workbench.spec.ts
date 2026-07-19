@@ -2,6 +2,33 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+async function horizontalOverflowReport(page: Page) {
+  return page.evaluate(() => {
+    const viewportWidth = window.innerWidth;
+    const documentWidth = document.documentElement.scrollWidth;
+    const offenders = Array.from(document.querySelectorAll<HTMLElement>("*"))
+      .map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          element: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}${Array.from(
+            element.classList,
+          )
+            .map((name) => `.${name}`)
+            .join("")}`,
+          left: Math.round(bounds.left * 100) / 100,
+          right: Math.round(bounds.right * 100) / 100,
+          width: Math.round(bounds.width * 100) / 100,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+        };
+      })
+      .filter(({ left, right }) => left < -0.5 || right > viewportWidth + 0.5)
+      .sort((left, right) => right.right - left.right)
+      .slice(0, 12);
+    return { viewportWidth, documentWidth, offenders };
+  });
+}
+
 const capabilities = {
   contract_version: 1,
   product: { key: "semsource", name: "SemSource" },
@@ -453,11 +480,11 @@ test("@a11y renders the ready graph route with keyboard-synchronized detail", as
     page.getByRole("region", { name: "Selected entity details" }),
   ).toContainText("Beta");
   await expect(page.getByLabel("Graph query")).toBeVisible();
+  const overflow = await horizontalOverflowReport(page);
   expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
+    overflow.documentWidth,
+    `horizontal overflow: ${JSON.stringify(overflow)}`,
+  ).toBeLessThanOrEqual(overflow.viewportWidth);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
