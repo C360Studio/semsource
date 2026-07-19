@@ -31,6 +31,9 @@ if [ "$mode" = "released" ]; then
 		fail "SEMSOURCE_UI_IMAGE must end in a 64-character lowercase @sha256 digest"
 	fi
 	case "$SEMSOURCE_UI_IMAGE" in
+	*:latest@sha256:*)
+		fail "SEMSOURCE_UI_IMAGE cannot use mutable tag 'latest'"
+		;;
 	*@sha256:0000000000000000000000000000000000000000000000000000000000000000)
 		fail "SEMSOURCE_UI_IMAGE cannot use the unavailable placeholder"
 		;;
@@ -98,6 +101,16 @@ compose_with_test() {
 	docker compose $compose_files -f test/ui/docker-compose.test.yml "$@"
 }
 
+verify_profile_pin() {
+	observed_pin=$1
+	pin_source=$2
+	set -- --expected "$SEMSOURCE_UI_IMAGE" --observed "$observed_pin" --source "$pin_source"
+	if [ -n "${UI_PROFILE_PIN_EVIDENCE_FILE:-}" ]; then
+		set -- "$@" --evidence "$UI_PROFILE_PIN_EVIDENCE_FILE"
+	fi
+	./scripts/ui-profile-pin-verify.sh "$@"
+}
+
 print_diagnostics() {
 	echo "Recent UI profile state:" >&2
 	compose ps >&2 || true
@@ -141,7 +154,13 @@ echo "Starting SemSource UI profile ($mode) with deterministic fixture $SEMSOURC
 echo "Using isolated Compose project: $COMPOSE_PROJECT_NAME"
 echo "Preserving Playwright artifacts at: $UI_PROFILE_ARTIFACT_DIR"
 if [ "$mode" = "released" ]; then
+	rendered_ui_image=$(compose --profile ui config --images | grep -Fx "$SEMSOURCE_UI_IMAGE" | head -n 1)
+	verify_profile_pin "$rendered_ui_image" compose-render
 	compose --profile ui up -d --wait
+	ui_container=$(compose --profile ui ps -q ui)
+	[ -n "$ui_container" ] || fail "released UI container was not created"
+	running_ui_image=$(docker inspect --format '{{.Config.Image}}' "$ui_container")
+	verify_profile_pin "$running_ui_image" running-container
 else
 	compose --profile ui up -d --build --wait
 fi

@@ -55,6 +55,15 @@ tasks:
     cmds:
       - ./scripts/ui-image-verify.sh
 
+  ui:image:release:test:
+    desc: Test immutable UI release-image verification without registry access
+    cmds:
+      - ./scripts/test-ui-image-metadata.sh
+      - ./scripts/test-ui-profile-pin-verify.sh
+      - ./scripts/test-ui-profile-smoke-preflight.sh
+      - ./scripts/test-ui-release-image-verify.sh
+      - ./scripts/test-ui-publish-workflow.sh
+
   ui:smoke:
     desc: Smoke an immutable released SemSource UI image without host Node
     cmds:

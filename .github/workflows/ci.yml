@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
@@ -48,6 +47,66 @@ jobs:
       - name: revive
         run: revive -config revive.toml -formatter friendly ./...
 
+  ui-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install locked UI dependencies
+        run: npm ci --ignore-scripts
+        working-directory: ui
+
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+        working-directory: ui
+
+      - name: UI format
+        run: npm run format:check
+        working-directory: ui
+
+      - name: UI lint
+        run: npm run lint
+        working-directory: ui
+
+      - name: UI type and Svelte checks
+        run: npm run check
+        working-directory: ui
+
+      - name: UI unit tests
+        run: npm test
+        working-directory: ui
+
+      - name: UI accessibility tests
+        run: npm run test:a11y
+        working-directory: ui
+
+      - name: UI production build
+        run: npm run build
+        working-directory: ui
+
+      - name: UI end-to-end tests
+        run: npm run test:e2e
+        working-directory: ui
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: go-task/setup-task@v2
+
+      - name: Clean production image verification
+        env:
+          SEMSOURCE_UI_VERSION: sha-${{ github.sha }}
+          SEMSOURCE_UI_COMMIT: ${{ github.sha }}
+        run: task ui:image:verify
+
+      - name: Release verifier contract tests
+        run: task ui:image:release:test
+
   # NOTE: an `e2e` job (go test -tags=e2e) is intentionally NOT wired in yet.
   # The local black-box e2e gate now passes on semstreams beta.145, but it is
   # Docker-backed and slower than the PR unit/lint gates. Run it before release
@@ -56,6 +115,9 @@ jobs:
   build-and-push:
     needs: [test, lint]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     # Runs on main pushes and on release tags (v*). Tag pushes produce the
     # versioned image; `latest` only moves on the default branch (not on a
     # pre-release beta tag).
@@ -94,3 +156,130 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  publish-ui:
+    needs: [test, lint, ui-quality]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.repository }}
+      digest: ${{ steps.publish.outputs.digest }}
+      smoke_tag: ${{ steps.image.outputs.primary_tag }}
+      version: ${{ steps.image.outputs.version }}
+      revision: ${{ steps.image.outputs.revision }}
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Derive immutable UI image metadata
+        id: image
+        env:
+          IMAGE_REPOSITORY: ghcr.io/c360studio/semsource-ui
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_REF_NAME: ${{ github.ref_name }}
+          SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          ./scripts/ui-image-metadata.sh \
+            --repository "$IMAGE_REPOSITORY" \
+            --ref "$SOURCE_REF" \
+            --ref-name "$SOURCE_REF_NAME" \
+            --revision "$SOURCE_REVISION" \
+            --output "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish multi-platform workbench image
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ui
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            SEMSOURCE_UI_VERSION=${{ steps.image.outputs.version }}
+            SEMSOURCE_UI_COMMIT=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: ${{ steps.image.outputs.tags }}
+          provenance: mode=max
+          sbom: true
+
+  ui-release-smoke:
+    needs: publish-ui
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: go-task/setup-task@v2
+
+      - name: Verify immutable registry image and provenance
+        id: verify
+        env:
+          IMAGE_REPOSITORY: ${{ needs.publish-ui.outputs.image }}
+          IMAGE_TAG: ${{ needs.publish-ui.outputs.smoke_tag }}
+          IMAGE_DIGEST: ${{ needs.publish-ui.outputs.digest }}
+          IMAGE_VERSION: ${{ needs.publish-ui.outputs.version }}
+          IMAGE_REVISION: ${{ needs.publish-ui.outputs.revision }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p release-evidence
+          ./scripts/ui-release-image-verify.sh \
+            --repository "$IMAGE_REPOSITORY" \
+            --tag "$IMAGE_TAG" \
+            --digest "$IMAGE_DIGEST" \
+            --version "$IMAGE_VERSION" \
+            --revision "$IMAGE_REVISION" \
+            --run-url "$RUN_URL" \
+            --run-attempt "$RUN_ATTEMPT" \
+            --output "$GITHUB_OUTPUT" \
+            --evidence release-evidence/semsource-ui-image.md
+
+      - name: Smoke exact published workbench digest
+        env:
+          SEMSOURCE_UI_IMAGE: ${{ steps.verify.outputs.image_ref }}
+          UI_PROFILE_PIN_EVIDENCE_FILE: release-evidence/semsource-ui-image.md
+        run: task ui:smoke
+
+      - name: Upload UI profile failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semsource-ui-smoke-failure-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: test-results/ui-profile/**
+          if-no-files-found: warn
+
+      - name: Record release evidence in job summary
+        if: success()
+        run: cat release-evidence/semsource-ui-image.md >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release evidence
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semsource-ui-image-${{ github.sha }}
+          path: release-evidence/semsource-ui-image.md
+          if-no-files-found: error

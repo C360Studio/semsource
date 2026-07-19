@@ -30,11 +30,21 @@ network.
 The task builds the locked Playwright runner in `test/ui/Dockerfile` and joins
 the running Compose network. It does not require host Node or `node_modules`.
 The suite exercises desktop and narrow widths, real advertised SemSource routes
-and search evidence, keyboard result/detail selection, the graph-unavailable
-state, and terminal JSON 404s for retired paths.
+and search evidence, keyboard result/detail selection, the capability-advertised
+graph state, and terminal JSON 404s for retired paths.
+
+Released mode rejects `latest` even when digest-qualified. Before starting the
+stack it proves the Compose-rendered UI image equals `SEMSOURCE_UI_IMAGE`; after
+start it proves the running UI container's configured image equals the same exact
+tag-plus-digest. CI additionally verifies the published tag, multi-platform
+manifest, OCI version/full revision labels, and local `RepoDigest` before passing
+that exact reference into `task ui:smoke`.
 
 Failure screenshots, videos, traces, and page snapshots survive the disposable
 runner under `test-results/ui-profile/<compose-project>/`. To verify the failure
 diagnostics deliberately, run `UI_PROFILE_FORCE_FAILURE=1 task ui:smoke:dev`;
 the command is expected to fail after loading the real shell and prints bounded
 HTTP snapshots for the shell, health, and capability endpoints before cleanup.
+Trusted CI failures additionally upload the preserved profile diagnostics; a
+successful release-smoke run records the authoritative run URL and attempt in
+its summary and evidence artifact.
