@@ -163,6 +163,11 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 			SourceType:   r.SourceType,
 			Created:      r.Created,
 		})
+		// Re-adding a previously removed instance makes its status reports
+		// welcome again (see the removedSources guard in handleStatusReport).
+		c.statusMu.Lock()
+		delete(c.removedSources, r.InstanceName)
+		c.statusMu.Unlock()
 	}
 
 	reply := &AddReply{
@@ -211,14 +216,13 @@ func (c *Component) appendManifestSources(src config.SourceEntry) {
 	c.manifestSources = append(c.manifestSources, entry)
 }
 
-// removeManifestSourceByInstance drops the first manifest entry whose
-// expanded instance name matches target. Used by the Remove path so the
-// manifest stays in sync with the KV. The mapping is not always perfect for
-// "repo" expansions (one manifest entry → many instances); a remove by
-// instance name only clears the manifest when the *last* expanded instance
-// for that source is gone — left as a follow-on, since v1 manifest semantics
-// are "what was registered," not "what is alive."
-func (c *Component) removeManifestSourceByInstance(instanceName string, opts sourcespawn.Options) bool {
+// removeManifestSourceByInstance keeps the manifest in sync with the KV on
+// removal, instance-scoped: for "repo" expansions (one manifest entry → many
+// instances) the entry is dropped only when the removed instance was the LAST
+// of its expansion still registered — removing just the git instance of an
+// expanded repo previously erased the whole repo from the manifest while its
+// sibling components kept ingesting (audit 2026-07-19).
+func (c *Component) removeManifestSourceByInstance(instanceName string, opts sourcespawn.Options, store sourcespawn.ConfigStore) bool {
 	c.manifestMu.Lock()
 	defer c.manifestMu.Unlock()
 	for i, existing := range c.manifestSources {
@@ -226,12 +230,51 @@ func (c *Component) removeManifestSourceByInstance(instanceName string, opts sou
 		if err != nil {
 			continue
 		}
-		if _, ok := built[instanceName]; ok {
-			c.manifestSources = append(c.manifestSources[:i], c.manifestSources[i+1:]...)
-			return true
+		if _, ok := built[instanceName]; !ok {
+			continue
 		}
+		// This entry owns the removed instance. Keep the entry while any
+		// sibling instance of the same expansion remains registered.
+		if store != nil {
+			if cfg := store.GetConfig().Get(); cfg != nil {
+				for sibling := range built {
+					if sibling == instanceName {
+						continue
+					}
+					if _, alive := cfg.Components[sibling]; alive {
+						return false
+					}
+				}
+			}
+		}
+		c.manifestSources = append(c.manifestSources[:i], c.manifestSources[i+1:]...)
+		return true
 	}
 	return false
+}
+
+// dropSourceStatus removes a deregistered source from the status aggregator
+// and republishes the rebuilt status so the change is observable within one
+// aggregation pass. The instance is also remembered as removed so an
+// in-flight periodic report from the tearing-down component cannot resurrect
+// a phantom status entry.
+func (c *Component) dropSourceStatus(ctx context.Context, instanceName string) {
+	c.statusMu.Lock()
+	if c.removedSources == nil {
+		c.removedSources = make(map[string]struct{})
+	}
+	c.removedSources[instanceName] = struct{}{}
+	if c.aggregator == nil || !c.aggregator.remove(instanceName) {
+		c.statusMu.Unlock()
+		return
+	}
+	status := c.aggregator.buildStatus(c.config.Namespace)
+	c.statusMu.Unlock()
+
+	c.updateStatusData(status)
+	if err := c.publishPayload(ctx, StatusType, status, statusSubject); err != nil {
+		c.logger.Warn("failed to publish status after source removal", "error", err)
+	}
 }
 
 func sourceEntryToManifestSource(src config.SourceEntry) ManifestSource {
@@ -319,7 +362,12 @@ func (c *Component) removeSource(ctx context.Context, instanceName, actor string
 		"instance_name", instanceName,
 		"actor", actor)
 
-	if c.removeManifestSourceByInstance(instanceName, cfg.Spawn) {
+	// Drop the removed source from status aggregation immediately — before
+	// this, removed sources reported as phantom "watching" entries forever
+	// (audit 2026-07-19, live-confirmed at a 20-minute horizon).
+	c.dropSourceStatus(ctx, instanceName)
+
+	if c.removeManifestSourceByInstance(instanceName, cfg.Spawn, cfg.Store) {
 		if err := c.publishManifest(ctx); err != nil {
 			c.logger.Warn("failed to republish manifest after remove", "error", err)
 		}
@@ -353,6 +401,8 @@ func mapSpawnError(err error) *IngestError {
 		code = CodeKVWriteFailed
 	case sourcespawn.CodeUnsupportedType:
 		code = CodeUnsupportedType
+	case sourcespawn.CodeNotFound:
+		code = CodeNotFound
 	}
 	return &IngestError{Code: code, Message: serr.Message}
 }

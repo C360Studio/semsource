@@ -477,11 +477,36 @@ func TestAddWithChecker_DetectsExisting(t *testing.T) {
 func TestRemove_DeletesByInstanceName(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
+	if err := store.cfg.Mutate(func(c *semconfig.Config) error {
+		c.Components["url-source-example-com"] = types.ComponentConfig{
+			Type:   "processor",
+			Name:   "url-source",
+			Config: json.RawMessage(`{}`),
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed component: %v", err)
+	}
 	if err := Remove(context.Background(), "url-source-example-com", store); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if len(store.deletes) != 1 || store.deletes[0] != "url-source-example-com" {
 		t.Errorf("deletes = %v, want [url-source-example-com]", store.deletes)
+	}
+}
+
+// TestRemove_UnknownInstance_NotFound pins honest removal (audit 2026-07-19):
+// KV deletes are idempotent, so without the registry check a typo'd handle
+// returned removed:true and removal was unverifiable.
+func TestRemove_UnknownInstance_NotFound(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	err := Remove(context.Background(), "does-not-exist", store)
+	if CodeOf(err) != CodeNotFound {
+		t.Fatalf("CodeOf = %q, want %q", CodeOf(err), CodeNotFound)
+	}
+	if len(store.deletes) != 0 {
+		t.Errorf("deletes = %v, want none for unknown instance", store.deletes)
 	}
 }
 

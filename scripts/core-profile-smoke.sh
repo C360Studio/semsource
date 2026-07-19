@@ -297,4 +297,59 @@ for tool_name in add_source code_changes code_context code_impact code_search do
 	fi
 done
 echo "MCP tools/list returned the expected SemSource tools"
+
+# Removal-integrity round-trip (source-removal-integrity): a real tools/call
+# per lifecycle tool, asserting answer content — not just name listing.
+mcp_call() {
+	curl -sS --max-time 10 \
+		-X POST \
+		-H 'Content-Type: application/json' \
+		-H 'Accept: application/json, text/event-stream' \
+		-H 'MCP-Protocol-Version: 2025-06-18' \
+		-H "Mcp-Session-Id: $mcp_session_id" \
+		-d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" \
+		"$mcp_url" | sed -n 's/^data: //p'
+}
+
+add_reply=$(mcp_call add_source '{"type":"docs","path":"/workspace","actor":"core-smoke"}')
+handle=$(printf '%s' "$add_reply" | sed -n 's/.*"instance_name":"\([^"]*\)".*/\1/p' | head -1)
+if [ -z "$handle" ]; then
+	echo "add_source returned no instance handle: $add_reply" >&2
+	exit 1
+fi
+echo "add_source registered $handle"
+
+remove_reply=$(mcp_call remove_source "{\"instance_name\":\"$handle\",\"actor\":\"core-smoke\"}")
+if ! printf '%s' "$remove_reply" | grep -q '"removed":true'; then
+	echo "remove_source did not confirm removal: $remove_reply" >&2
+	exit 1
+fi
+
+# Removal must be observable: the handle leaves source_status within 15s.
+removal_seen=""
+for _ in $(seq 1 15); do
+	status_reply=$(mcp_call source_status '{}')
+	if ! printf '%s' "$status_reply" | grep -q "$handle"; then
+		removal_seen="yes"
+		break
+	fi
+	sleep 1
+done
+if [ -z "$removal_seen" ]; then
+	echo "removed source $handle still present in source_status: $status_reply" >&2
+	exit 1
+fi
+echo "remove_source removal observable in source_status"
+
+# Unknown handles are NOT_FOUND, never removed:true (honest removal).
+unknown_reply=$(mcp_call remove_source '{"instance_name":"smoke-no-such-source"}')
+if printf '%s' "$unknown_reply" | grep -q '"removed":true'; then
+	echo "remove_source claimed success for an unknown handle: $unknown_reply" >&2
+	exit 1
+fi
+if ! printf '%s' "$unknown_reply" | grep -q 'NOT_FOUND'; then
+	echo "remove_source unknown-handle reply lacks NOT_FOUND: $unknown_reply" >&2
+	exit 1
+fi
+echo "remove_source rejects unknown handles with NOT_FOUND"
 exit 0

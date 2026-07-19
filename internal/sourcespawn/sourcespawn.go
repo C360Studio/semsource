@@ -35,6 +35,10 @@ const (
 	// implementable through this API (e.g., multi-branch repo). The type may
 	// be a valid SourceEntry type but unspawnable in the current build.
 	CodeUnsupportedType ErrorCode = "UNSUPPORTED_TYPE"
+
+	// CodeNotFound indicates a remove request named an instance that is not
+	// registered. Not retryable.
+	CodeNotFound ErrorCode = "NOT_FOUND"
 )
 
 // Error wraps a typed error code with a message and optional cause.
@@ -284,6 +288,18 @@ func Build(src config.SourceEntry, opts Options) (map[string]types.ComponentConf
 func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 	if instanceName == "" {
 		return &Error{Code: CodeValidationFailed, Message: "instance_name is required"}
+	}
+	// Honest removal: an unknown handle is NOT_FOUND, never silent success.
+	// KV deletes are idempotent, so without this check a typo'd handle
+	// returned removed:true and curator workflows (ADR-040) could not verify
+	// a removal happened (audit 2026-07-19, source-removal-integrity).
+	if cfg := store.GetConfig().Get(); cfg != nil {
+		if _, ok := cfg.Components[instanceName]; !ok {
+			return &Error{
+				Code:    CodeNotFound,
+				Message: fmt.Sprintf("no source component named %q is registered", instanceName),
+			}
+		}
 	}
 	// beta.145's ConfigManager applies targeted deletes in memory and still
 	// notifies ComponentManager subscribers for engine-owned revisions, so the

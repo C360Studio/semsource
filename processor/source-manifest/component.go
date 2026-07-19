@@ -61,6 +61,10 @@ type Component struct {
 	statusData     []byte // pre-marshaled latest status for HTTP and NATS
 	statusMu       sync.RWMutex
 	seedComplete   bool
+	// removedSources guards against in-flight periodic reports from
+	// deregistered components resurrecting phantom status entries. Cleared
+	// per-instance on re-add. Guarded by statusMu.
+	removedSources map[string]struct{}
 
 	// Predicate schema
 	predicatesQuerySub *natsclient.Subscription
@@ -284,6 +288,12 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 	}
 
 	c.statusMu.Lock()
+	if _, removed := c.removedSources[report.InstanceName]; removed {
+		// A deregistered component's last in-flight report must not
+		// resurrect its status entry (source-removal-integrity).
+		c.statusMu.Unlock()
+		return
+	}
 	wasComplete := c.seedComplete
 	wasDegraded := c.aggregator.degraded
 	c.aggregator.update(&report)

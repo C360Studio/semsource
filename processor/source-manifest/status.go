@@ -172,6 +172,22 @@ func (a *statusAggregator) markDegraded(namespace string) *StatusPayload {
 	return a.buildStatus(namespace)
 }
 
+// remove drops a deregistered source's record so it stops appearing in status
+// (the audit found removed sources reported as phantom "watching" entries
+// forever). The expected count decrements with it — a removal means the
+// operator no longer expects that source — floored at zero so allReported
+// degenerates gracefully to "any source reported".
+func (a *statusAggregator) remove(instanceName string) bool {
+	if _, ok := a.reports[instanceName]; !ok {
+		return false
+	}
+	delete(a.reports, instanceName)
+	if a.expectedCount > 0 {
+		a.expectedCount--
+	}
+	return true
+}
+
 // sourcePredicates maps source types to predicate prefixes.
 var sourcePredicatePrefixes = map[string][]string{
 	"ast":    {"code.", "dc.", "agentic."},
