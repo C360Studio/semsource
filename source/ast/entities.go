@@ -256,6 +256,12 @@ func (e *CodeEntity) identityTriples() []message.Triple {
 	if e.Visibility == VisibilityPublic {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeExported, Object: "true"})
 	}
+	// Demotion complement: test code sinks below production symbols in NL
+	// retrieval (exported TestXxx would otherwise ride the boost above the
+	// very code it tests — the audit's code_search failure mode).
+	if IsTestPath(e.Path) {
+		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeTest, Object: "true"})
+	}
 	if e.StartLine > 0 {
 		triples = append(triples, message.Triple{Subject: e.ID, Predicate: CodeStartLine, Object: e.StartLine})
 	}

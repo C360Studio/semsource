@@ -111,6 +111,8 @@ func newCommitEntity(org, fullSHA, authorFull, subject, system string, indexedAt
 func (e *CommitEntity) Triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		// Title makes the commit NAME_INDEX-visible (search-ranking-and-reach D4).
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Subject, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitCommitSHA, Object: e.SHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitCommitShortSHA, Object: e.ShortSHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitCommitAuthor, Object: e.Author, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -179,6 +181,7 @@ func newAuthorEntity(org, name, email, system string, indexedAt time.Time) *Auth
 func (e *AuthorEntity) Triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitAuthorName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitAuthorEmail, Object: e.Email, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
@@ -220,6 +223,7 @@ func newBranchEntity(org, branchName, headSHA, system string, indexedAt time.Tim
 func (e *BranchEntity) Triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.BranchName, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitBranchName, Object: e.BranchName, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.GitBranchHeadSHA, Object: e.HeadSHA, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}

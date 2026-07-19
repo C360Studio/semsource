@@ -58,6 +58,8 @@ func newGoModuleEntity(org, modulePath, goVersion, filePath, system string, inde
 func (e *goModuleEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		// Title makes the entity NAME_INDEX-visible (search-ranking-and-reach D4).
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.ModulePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigModulePath, Object: e.ModulePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigModuleGoVer, Object: e.GoVersion, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -112,6 +114,7 @@ func (e *goDependencyEntity) triples() []message.Triple {
 		indirect = "true"
 	}
 	return []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepIndirect, Object: indirect, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -158,6 +161,7 @@ func newNPMPackageEntity(org, name, version, filePath, system string, indexedAt 
 func (e *npmPackageEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigPkgName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigPkgVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -212,6 +216,7 @@ func newNPMDependencyEntity(org, name, version string, dev bool, system string, 
 func (e *npmDependencyEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: e.Kind, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -251,6 +256,7 @@ func newDockerImageEntity(org, image string, exposedPorts []string, filePath, sy
 func (e *dockerImageEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Image, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigImageName, Object: e.Image, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
@@ -311,6 +317,7 @@ func newMavenProjectEntity(org, groupID, artifactID, version, packaging, filePat
 func (e *mavenProjectEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.GroupID + ":" + e.ArtifactID, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigProjectGroup, Object: e.GroupID, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigProjectArtifact, Object: e.ArtifactID, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigProjectVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -373,6 +380,7 @@ func newMavenDependencyEntity(org, groupID, artifactID, version, scope, system s
 func (e *mavenDependencyEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "maven", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -468,6 +476,7 @@ func newGradleProjectEntity(org, name, filePath, system string, indexedAt time.T
 func (e *gradleProjectEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigProjectArtifact, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigProjectBuild, Object: "gradle", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},

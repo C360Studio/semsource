@@ -128,6 +128,9 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 				return err
 			}
 			if info.IsDir() {
+				if isDefaultExcludedDocDir(root, path) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 
@@ -217,4 +220,22 @@ func mimeForExt(ext string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// isDefaultExcludedDocDir reports directories the docs corpus skips by
+// default: OpenSpec planning artifacts and node_modules. Planning docs
+// (proposals, deltas, archives — and the graded re-run showed even ACTIVE
+// change proposals) outrank canonical docs like the README for product
+// questions; they serve the dev loop, not the product doc corpus
+// (search-ranking-and-reach D3). docs/adr and docs/** stay indexed; a
+// deployment that wants specs indexed can add an explicit docs source.
+func isDefaultExcludedDocDir(root, path string) bool {
+	if filepath.Base(path) == "node_modules" {
+		return true
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return filepath.ToSlash(rel) == "openspec"
 }

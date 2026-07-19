@@ -42,9 +42,12 @@ import (
 var codeScopeDomains = []string{"golang", "python", "typescript", "javascript", "java", "svelte"}
 
 // docScopeDomains are the entity-ID domain segments the "docs" lens covers.
-// Doc/prose entities (handler/doc type "doc", handler/url type "page") all live
-// under the "web" domain.
-var docScopeDomains = []string{"web"}
+// Doc/prose entities (handler/doc type "doc", handler/url type "page") live
+// under "web"; "config" joins them so dependency/manifest questions ("what
+// version of semstreams does this repo declare") answer through doc_context —
+// the audit proved the whole config domain was unreachable through every MCP
+// tool (search-ranking-and-reach D4).
+var docScopeDomains = []string{"web", "config"}
 
 // maxBodyBytes bounds an HTTP request body (queries are small JSON).
 const maxBodyBytes = 1 << 20

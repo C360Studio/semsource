@@ -100,7 +100,7 @@ All handlers implement the `SourceHandler` interface (`Ingest`, `Watch`, `Suppor
 | Handler         | Sources                                | Watch Mechanism      |
 | --------------- | -------------------------------------- | -------------------- |
 | `GitHandler`    | Local/remote repos                     | git hook / polling   |
-| `ASTHandler`    | Go, TS/JS (reuses SemSpec AST indexer) | fsnotify             |
+| `ASTHandler`    | Go, TS/JS, Java, Python, Svelte        | fsnotify             |
 | `DocHandler`    | Markdown, plain text                   | fsnotify             |
 | `ConfigHandler` | go.mod, package.json, Dockerfile       | fsnotify             |
 | `URLHandler`    | HTTP/S URLs                            | configurable polling |
