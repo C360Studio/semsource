@@ -465,9 +465,9 @@ func TestSanitizePathSegment(t *testing.T) {
 		{".hidden/dir", "hidden-dir"},
 		{"a/b/c/d", "a-b-c-d"},
 		{"no-change", "no-change"},
-		{"", ""},
-		{"...dots", "--dots"},      // leading dots become hyphens, first stripped
-		{"a//double", "a--double"}, // consecutive slashes
+		{"", "e3b0c442"},             // empty sanitizes to a deterministic hash — an empty fragment would corrupt joined instances
+		{"...dots", "dots-286eb3fb"}, // leading dashes violate the segment contract (never landed); sanitized + hash-disambiguated
+		{"a//double", "a--double"},   // consecutive slashes
 		{"/leading/slash", "leading-slash"},
 	}
 
