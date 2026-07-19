@@ -393,6 +393,23 @@ func writeQuickStartFixture(t *testing.T, parent string) string {
 			t.Fatalf("write fixture file %s: %v", name, err)
 		}
 	}
+	// A real git repo with one commit: the default install must ingest git
+	// history (audit 2026-07-19, init-config-validation — the wizard's old
+	// git URL "." produced an empty source identity and zero git entities
+	// while status looked healthy).
+	for _, args := range [][]string{
+		{"init", "--initial-branch=main"},
+		{"config", "user.email", "quickstart@example.com"},
+		{"config", "user.name", "Quickstart Fixture"},
+		{"add", "."},
+		{"commit", "-m", "fixture commit"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
 	return dir
 }
 
@@ -542,13 +559,20 @@ func TestE2E_NativeQuickStart(t *testing.T) {
 		t.Fatalf("manifest sources count = %d, want at least 3", len(manifest.Sources))
 	}
 	manifestTypes := map[string]bool{}
+	gitURL := ""
 	for _, source := range manifest.Sources {
 		manifestTypes[source.Type] = true
+		if source.Type == "git" {
+			gitURL = source.URL
+		}
 	}
-	for _, want := range []string{"ast", "docs", "config"} {
+	for _, want := range []string{"ast", "docs", "config", "git"} {
 		if !manifestTypes[want] {
 			t.Fatalf("manifest missing source type %q: %+v", want, manifest.Sources)
 		}
+	}
+	if gitURL == "." || gitURL == "" {
+		t.Fatalf("git source URL = %q; init must derive a resolvable identity, never \".\"", gitURL)
 	}
 
 	status := waitForNonEmptyStatus(t, httpPort, 90*time.Second)
@@ -563,6 +587,29 @@ func TestE2E_NativeQuickStart(t *testing.T) {
 	}
 	if status.TotalEntities == 0 {
 		t.Fatalf("status total_entities = 0; status=%+v", status)
+	}
+
+	// The default install must actually ingest git history: commit entities
+	// land (entity_count > 0) with zero errors. Before the fix the git URL
+	// "." produced an empty source identity — every commit entity was
+	// rejected while the aggregate status looked healthy.
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		var gitStatus *sourceStatus
+		for i := range status.Sources {
+			if status.Sources[i].SourceType == "git" {
+				gitStatus = &status.Sources[i]
+				break
+			}
+		}
+		if gitStatus != nil && gitStatus.EntityCount > 0 && gitStatus.ErrorCount == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("git source never ingested cleanly; status=%+v", status.Sources)
+		}
+		time.Sleep(2 * time.Second)
+		status = waitForNonEmptyStatus(t, httpPort, 30*time.Second)
 	}
 }
 

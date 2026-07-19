@@ -110,6 +110,21 @@ func DetectProject(dir string) *ProjectInfo {
 	return info
 }
 
+// resolvableGitURL returns a git source URL that yields a non-empty source
+// identity: the origin remote when available, else the repository's absolute
+// path. Never "." — it slugs to an empty system segment, so every commit
+// entity is rejected at the publish gate while status looks healthy (audit
+// 2026-07-19: the default install ingested zero git history).
+func resolvableGitURL(remote string) string {
+	if remote != "" {
+		return remote
+	}
+	if abs, err := filepath.Abs("."); err == nil {
+		return abs
+	}
+	return ""
+}
+
 // detectGitRemote runs git to get the origin remote URL.
 func detectGitRemote(dir string) string {
 	cmd := exec.Command("git", "-C", dir, "remote", "get-url", "origin")

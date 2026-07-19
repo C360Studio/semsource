@@ -40,10 +40,20 @@ func Init(term *Term, configPath string, overrides ...*ProjectInfo) error {
 	term.Header("semsource setup wizard")
 	printDetectionSummary(term, info)
 
-	// Step 1: namespace (with smart default).
-	namespace := term.Prompt("Organization name (namespace)", info.Namespace)
-	if namespace == "" {
-		return fmt.Errorf("namespace is required")
+	// Step 1: namespace (with smart default). Validated inline: the namespace
+	// becomes the org segment of every entity ID, and an invalid value would
+	// pass the old wizard, boot cleanly, and produce a permanently empty
+	// graph (audit 2026-07-19, init-config-validation).
+	var namespace string
+	for {
+		namespace = term.Prompt("Organization name (namespace)", info.Namespace)
+		if namespace == "" {
+			return fmt.Errorf("namespace is required")
+		}
+		if err := config.ValidateNamespace(namespace); err == nil {
+			break
+		}
+		term.Info("  Namespace must start with a letter or digit and contain only letters, digits, '-' or '_' (no dots or spaces).")
 	}
 
 	// Step 2: source type multi-select (pre-selected based on detection).
@@ -111,12 +121,14 @@ func buildDetectedSources(info *ProjectInfo) []config.SourceEntry {
 	var sources []config.SourceEntry
 
 	if info.HasGit {
-		sources = append(sources, config.SourceEntry{
-			Type:   "git",
-			URL:    ".",
-			Branch: "main",
-			Watch:  true,
-		})
+		if gitURL := resolvableGitURL(info.GitRemote); gitURL != "" {
+			sources = append(sources, config.SourceEntry{
+				Type:   "git",
+				URL:    gitURL,
+				Branch: "main",
+				Watch:  true,
+			})
+		}
 	}
 
 	if info.Language != "" {
