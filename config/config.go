@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/c360studio/semstreams/model"
+	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // EntityStoreConfig configures persistent graph storage via NATS KV.
@@ -182,6 +183,9 @@ func (c *Config) Validate() error {
 	if c.Namespace == "" {
 		return fmt.Errorf("config: namespace is required")
 	}
+	if err := validateNamespaceSegment(c.Namespace); err != nil {
+		return err
+	}
 	if len(c.Sources) == 0 {
 		return fmt.Errorf("config: sources must contain at least one source")
 	}
@@ -192,6 +196,29 @@ func (c *Config) Validate() error {
 	}
 
 	return c.validateModelRegistry()
+}
+
+// validateNamespaceSegment rejects a namespace that cannot be an entity-ID
+// org segment, using the substrate's own validator on a composed probe ID —
+// so a config that passes validate can never be rejected later purely for
+// ID shape. Values are rejected with guidance, never silently rewritten
+// (audit 2026-07-19, init-config-validation: a dotted org passed
+// `semsource validate` and produced a permanently empty graph at runtime).
+func validateNamespaceSegment(namespace string) error {
+	return ValidateNamespace(namespace)
+}
+
+// ValidateNamespace reports whether a namespace can serve as an entity-ID org
+// segment. Exported for the CLI wizard so bad values are rejected at the
+// earliest surface with the same rule the config loader enforces.
+func ValidateNamespace(namespace string) error {
+	probe := namespace + ".semsource.golang.probe.function.probe"
+	if err := semtypes.ValidateEntityID(probe); err != nil {
+		return fmt.Errorf("config: namespace %q cannot be used as an entity-ID org segment "+
+			"(allowed: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ — no dots, spaces, or leading symbols); "+
+			"every published entity would be rejected by the graph: %w", namespace, err)
+	}
+	return nil
 }
 
 // validateModelRegistry checks the optional model registry and the tier wiring
