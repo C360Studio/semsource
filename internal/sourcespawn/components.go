@@ -82,27 +82,46 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 	}
 
 	slug := entityid.SystemSlug(path)
+	// An explicit project overrides the path-derived slug: supersession
+	// corresponds entities by project, and version directories slug
+	// differently per version (D1 amendment). Slugified for ID-safety.
+	if src.Project != "" {
+		slug = entityid.SystemSlug(src.Project)
+	}
 	if slug == "" {
 		slug = "src-" + contentHashSlug(src)
 	}
 	project := entityid.BranchScopedSlug(slug, src.BranchSlug)
 	instanceName := fmt.Sprintf("ast-source-%s", project)
+	// Two versioned registrations of one project need distinct component
+	// instances; the version suffix keeps them unique. Version-less names
+	// stay byte-identical to today.
+	if src.Version != "" {
+		if vs := entityid.SystemSlug(src.Version); vs != "" {
+			instanceName = fmt.Sprintf("ast-source-%s-%s", project, vs)
+		}
+	}
 
 	indexInterval := src.IndexInterval
 	if indexInterval == "" {
 		indexInterval = "60s"
 	}
 
+	watchPath := map[string]any{
+		"path":      path,
+		"org":       org,
+		"project":   project,
+		"languages": languages,
+	}
+	// An explicit version flows to the component's version-scoped entity IDs
+	// and code.artifact.version triples — the supersession/code_changes input
+	// (version-registration-surface D1). Absent stays byte-identical.
+	if src.Version != "" {
+		watchPath["version"] = src.Version
+	}
 	compCfg := map[string]any{
-		"ports": outputPorts(),
-		"watch_paths": []map[string]any{
-			{
-				"path":      path,
-				"org":       org,
-				"project":   project,
-				"languages": languages,
-			},
-		},
+		"ports":          outputPorts(),
+		"watch_paths":    []map[string]any{watchPath},
 		"watch_enabled":  src.Watch,
 		"index_interval": indexInterval,
 		"instance_name":  instanceName,

@@ -38,6 +38,11 @@ func TestSourceEntryFromAddInput(t *testing.T) {
 			in:       AddSourceInput{Type: "repo", Path: "/workspace", Languages: []string{"go", "svelte"}},
 			wantPath: "/workspace",
 		},
+		{
+			name:     "version rides through",
+			in:       AddSourceInput{Type: "ast", Path: "/workspace", Version: "v2.1.0"},
+			wantPath: "/workspace",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,6 +55,9 @@ func TestSourceEntryFromAddInput(t *testing.T) {
 			}
 			if !slices.Equal(src.Languages, tc.in.Languages) {
 				t.Errorf("Languages = %v, want %v", src.Languages, tc.in.Languages)
+			}
+			if src.Version != tc.in.Version {
+				t.Errorf("Version = %q, want %q", src.Version, tc.in.Version)
 			}
 			if err := src.Validate(); err != nil {
 				t.Errorf("mapped entry fails validation: %v", err)

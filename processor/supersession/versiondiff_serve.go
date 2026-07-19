@@ -120,7 +120,11 @@ func (c *Component) serveDiff(ctx context.Context, body []byte) ([]byte, error) 
 	}
 
 	if req.wantBodies() && resolver != nil {
-		resp.OmittedBodies = hydrateBodies(ctx, resolver, changes, pairs, req.maxBodyBytes())
+		resp.OmittedBodies, resp.FailedBodies = hydrateBodies(ctx, resolver, changes, pairs, req.maxBodyBytes())
+		if resp.FailedBodies > 0 {
+			resp.Note = appendNote(resp.Note,
+				fmt.Sprintf("%d bodies unavailable due to storage errors (marked body_error)", resp.FailedBodies))
+		}
 	}
 	resp.Changes = changes
 	return json.Marshal(resp)
@@ -129,48 +133,63 @@ func (c *Component) serveDiff(ctx context.Context, body []byte) ([]byte, error) 
 // hydrateBodies fills from/to verbatim bodies for the listed changes from their
 // offloaded-body handles, bounded by a cumulative byte budget. Entries whose body
 // is skipped because the budget is exhausted (or that carry no offloaded body) are
-// left empty; returns the count skipped for budget reasons.
-func hydrateBodies(ctx context.Context, resolver *fusion.BodyResolver, changes []Change, pairs map[string]sidePair, maxBytes int) int {
-	var used, omitted int
+// left empty; a resolve FAILURE is marked on the change (body_error) so an
+// incomplete answer is distinguishable from a complete one. Returns
+// (budget-skipped count, failed count).
+func hydrateBodies(ctx context.Context, resolver *fusion.BodyResolver, changes []Change, pairs map[string]sidePair, maxBytes int) (int, int) {
+	var used, omitted, failed int
 	for i := range changes {
 		pair := pairs[changeID(changes[i])]
 		if pair.from != nil {
-			if b, skipped := hydrateOne(ctx, resolver, pair.from, &used, maxBytes); skipped {
+			switch b, skipped, err := hydrateOne(ctx, resolver, pair.from, &used, maxBytes); {
+			case err:
+				failed++
+				changes[i].FromBodyError = true
+			case skipped:
 				omitted++
-			} else {
+			default:
 				changes[i].FromBody = b
 			}
 		}
 		if pair.to != nil {
-			if b, skipped := hydrateOne(ctx, resolver, pair.to, &used, maxBytes); skipped {
+			switch b, skipped, err := hydrateOne(ctx, resolver, pair.to, &used, maxBytes); {
+			case err:
+				failed++
+				changes[i].ToBodyError = true
+			case skipped:
 				omitted++
-			} else {
+			default:
 				changes[i].ToBody = b
 			}
 		}
 	}
-	return omitted
+	return omitted, failed
 }
 
-// hydrateOne resolves one candidate's verbatim body if it has an offloaded handle
-// and fits the remaining byte budget. Returns (body, skipped): skipped is true
-// only when a real body was dropped for budget reasons (not when absent).
-func hydrateOne(ctx context.Context, resolver *fusion.BodyResolver, cand *candidate, used *int, maxBytes int) (string, bool) {
+// hydrateOne resolves one candidate's verbatim body if it has an offloaded
+// handle and fits the remaining byte budget. Returns (body, skipped, failed):
+// skipped is true only when a real body was dropped for budget reasons (not
+// when absent); failed is true when a stamped handle could not be resolved
+// (storage error) — absence stays (empty, false, false), never conflated (D3).
+func hydrateOne(ctx context.Context, resolver *fusion.BodyResolver, cand *candidate, used *int, maxBytes int) (string, bool, bool) {
 	if cand.bodyStore == "" || cand.bodyKey == "" {
-		return "", false
+		return "", false, false
 	}
 	if *used >= maxBytes {
-		return "", true
+		return "", true, false
 	}
 	data, err := resolver.ResolveBody(ctx, &message.StorageReference{StorageInstance: cand.bodyStore, Key: cand.bodyKey})
-	if err != nil || len(data) == 0 {
-		return "", false
+	if err != nil {
+		return "", false, true
+	}
+	if len(data) == 0 {
+		return "", false, false
 	}
 	if *used+len(data) > maxBytes {
-		return "", true
+		return "", true, false
 	}
 	*used += len(data)
-	return string(data), false
+	return string(data), false, false
 }
 
 // indexReady reports structural index readiness for the honest envelope. It is

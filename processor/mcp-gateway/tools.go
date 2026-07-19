@@ -21,6 +21,8 @@ type AddSourceInput struct {
 	Branch    string   `json:"branch,omitempty" jsonschema:"git branch or ref to track"`
 	Language  string   `json:"language,omitempty" jsonschema:"primary code language (go, typescript, javascript, java, python, svelte)"`
 	Languages []string `json:"languages,omitempty" jsonschema:"code languages to parse for repo/ast sources (wins over language when both set)"`
+	Version   string   `json:"version,omitempty" jsonschema:"explicit source version (e.g. v1.9.0) — enables supersession lineage and code_changes between versions of the same project; omit for version-independent ingestion"`
+	Project   string   `json:"project,omitempty" jsonschema:"explicit project identity shared across versioned registrations of one dependency (versions correspond BY project); omit to derive from the path"`
 	Watch     bool     `json:"watch,omitempty" jsonschema:"watch for live changes; omit for a one-shot snapshot (the default)"`
 	Actor     string   `json:"actor,omitempty" jsonschema:"caller identity, recorded as provenance"`
 }
@@ -48,6 +50,8 @@ func sourceEntryFromAddInput(in AddSourceInput) config.SourceEntry {
 		Branch:    in.Branch,
 		Language:  in.Language,
 		Languages: in.Languages,
+		Version:   in.Version,
+		Project:   in.Project,
 		Watch:     in.Watch,
 	}
 	if src.Path != "" {

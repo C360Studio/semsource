@@ -19,6 +19,8 @@ type BranchWatcherRef struct {
 	MaxBranches        int
 	Language           string
 	Languages          []string
+	Version            string
+	Project            string
 	Watch              bool
 	Org                string // needed for component config building
 }
@@ -119,6 +121,12 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 	if len(src.Languages) > 0 {
 		astEntry.Languages = src.Languages
 	}
+	if src.Version != "" {
+		astEntry.Version = src.Version
+	}
+	if src.Project != "" {
+		astEntry.Project = src.Project
+	}
 	entries = append(entries, astEntry)
 
 	// 3. Docs source — markdown/text docs
@@ -183,6 +191,8 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 		MaxBranches:        src.MaxBranches,
 		Language:           src.Language,
 		Languages:          src.Languages,
+		Version:            src.Version,
+		Project:            src.Project,
 		Watch:              src.Watch,
 	}
 
@@ -215,6 +225,12 @@ func expandBranchSources(src SourceEntry, bs workspace.BranchState) []SourceEntr
 	}
 	if len(src.Languages) > 0 {
 		astEntry.Languages = src.Languages
+	}
+	if src.Version != "" {
+		astEntry.Version = src.Version
+	}
+	if src.Project != "" {
+		astEntry.Project = src.Project
 	}
 	entries = append(entries, astEntry)
 

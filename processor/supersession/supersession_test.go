@@ -172,15 +172,76 @@ func TestOrderGroup_SemverNotLexical(t *testing.T) {
 	}
 }
 
-func TestOrderGroup_NonSemverTimestampFallback(t *testing.T) {
-	early := cand("early", "main", "h", time.Unix(100, 0))
-	late := cand("late", "develop", "h", time.Unix(200, 0))
-	ordered := orderGroup([]candidate{late, early})
-	if ordered[0].id != "early" || ordered[1].id != "late" {
-		t.Errorf("timestamp fallback order = [%s %s], want [early late]", ordered[0].id, ordered[1].id)
+// TestOrderGroup_NonSemverNaturalOrder pins D2 (version-registration-surface):
+// non-semver versions order by natural version-string comparison — a pure
+// function of the strings — never by index timestamps, which graph-ingest
+// rewrites on restart (the audit's lineage-inversion defect).
+func TestOrderGroup_NonSemverNaturalOrder(t *testing.T) {
+	// Deliberately adversarial timestamps: "develop" indexed LATER than
+	// "main"; natural string order (develop < main) must win regardless.
+	develop := cand("dev", "develop", "h", time.Unix(200, 0))
+	main := cand("main", "main", "h", time.Unix(100, 0))
+	ordered := orderGroup([]candidate{main, develop})
+	if ordered[0].id != "dev" || ordered[1].id != "main" {
+		t.Errorf("natural order = [%s %s], want [dev main]", ordered[0].id, ordered[1].id)
 	}
 	if !versionComparable(ordered[0], ordered[1]) {
-		t.Error("distinct timestamps should be comparable")
+		t.Error("distinct non-semver version strings should be comparable")
+	}
+	same1 := cand("a", "snapshot", "h", time.Unix(100, 0))
+	same2 := cand("b", "snapshot", "h", time.Unix(999, 0))
+	if versionComparable(same1, same2) {
+		t.Error("identical version strings must be incomparable (timestamps must not matter)")
+	}
+}
+
+// TestCandidateLess_NaturalNonSemver pins the numeric-aware comparison: digit
+// runs by value, text runs lexically, plus transitivity spot-checks.
+func TestCandidateLess_NaturalNonSemver(t *testing.T) {
+	at := func(v string) candidate { return cand("id-"+v, v, "h", time.Unix(0, 0)) }
+	// All strings here are genuinely non-semver ("v9"-style parses as valid
+	// semver and orders in the semver partition, which its own tests cover).
+	pairs := []struct{ lo, hi string }{
+		{"build9", "build10"},  // numeric run by value, not lexically
+		{"r2023b", "r2024a"},   // year then letter
+		{"build7", "build07x"}, // equal numeric value, longer string later
+		{"alpha", "beta"},
+	}
+	for _, p := range pairs {
+		if !candidateLess(at(p.lo), at(p.hi)) || candidateLess(at(p.hi), at(p.lo)) {
+			t.Errorf("want %q < %q in natural order", p.lo, p.hi)
+		}
+	}
+	// Transitivity spot-check within the non-semver partition.
+	seq := []string{"alpha", "beta", "build9", "build10"}
+	for i := 0; i < len(seq); i++ {
+		for j := i + 1; j < len(seq); j++ {
+			if !candidateLess(at(seq[i]), at(seq[j])) {
+				t.Errorf("transitive chain broken: %q !< %q", seq[i], seq[j])
+			}
+		}
+	}
+}
+
+// TestOrdering_RestartStable pins D2's core claim: rewriting every index
+// timestamp (what a restart/re-ingest does to dc.terms.created) cannot change
+// non-semver ordering or edge comparability.
+func TestOrdering_RestartStable(t *testing.T) {
+	before := []candidate{
+		cand("a", "r2024a", "h", time.Unix(100, 0)),
+		cand("b", "r2023b", "h", time.Unix(200, 0)),
+	}
+	after := []candidate{ // same versions, timestamps inverted by "restart"
+		cand("a", "r2024a", "h", time.Unix(999, 0)),
+		cand("b", "r2023b", "h", time.Unix(1, 0)),
+	}
+	ob, oa := orderGroup(before), orderGroup(after)
+	if ob[0].id != oa[0].id || ob[1].id != oa[1].id {
+		t.Fatalf("restart flipped ordering: before=[%s %s] after=[%s %s]",
+			ob[0].id, ob[1].id, oa[0].id, oa[1].id)
+	}
+	if ob[0].id != "b" {
+		t.Errorf("natural order start = %s, want b (r2023b oldest)", ob[0].id)
 	}
 }
 
@@ -238,19 +299,35 @@ func TestSupersession_IdempotentReRun(t *testing.T) {
 
 // --- 5.4 incomparable versions ---------------------------------------------
 
-func TestSupersession_IncomparableVersionsCoexistNoEdge(t *testing.T) {
+// Distinct non-semver versions of ONE project now relate with a stable,
+// string-derived direction (D2) — the old same-timestamp incomparability made
+// lineage a function of ingest timing luck. Branch-scoped sources cannot meet
+// in one correspondence group (BranchScopedSlug differentiates project), so
+// in-group versions are genuinely declared versions of the same project.
+func TestSupersession_DistinctNonSemverVersionsRelateStably(t *testing.T) {
 	t0 := time.Unix(100, 0)
 	a := cand("id-a", "feature-x", "code:a", t0) // non-semver
 	b := cand("id-b", "feature-y", "code:b", t0) // non-semver, same timestamp
 	desired, stats := desiredEdges(groupByCorrespondence([]candidate{a, b}))
-	if stats.Supersedes != 0 {
-		t.Fatalf("non-orderable pair must get no edge, got %d", stats.Supersedes)
+	if stats.Supersedes != 1 {
+		t.Fatalf("distinct non-semver versions must relate, got %d edges", stats.Supersedes)
 	}
-	if stats.Incomparable != 1 {
-		t.Fatalf("incomparable count = %d, want 1", stats.Incomparable)
+	if stats.Incomparable != 0 {
+		t.Fatalf("incomparable count = %d, want 0", stats.Incomparable)
 	}
-	if len(desired) != 0 {
-		t.Fatalf("no edges expected, got %d entities", len(desired))
+	if len(desired) == 0 {
+		t.Fatal("expected supersession edges")
+	}
+}
+
+// A semver/non-semver pair stays cross-scheme incomparable — no guessed edges.
+func TestSupersession_CrossSchemeStaysIncomparable(t *testing.T) {
+	t0 := time.Unix(100, 0)
+	a := cand("id-a", "1.2.3", "code:a", t0)
+	b := cand("id-b", "snapshot", "code:b", t0)
+	_, stats := desiredEdges(groupByCorrespondence([]candidate{a, b}))
+	if stats.Supersedes != 0 || stats.Incomparable != 1 {
+		t.Fatalf("cross-scheme pair: supersedes=%d incomparable=%d, want 0/1", stats.Supersedes, stats.Incomparable)
 	}
 }
 
