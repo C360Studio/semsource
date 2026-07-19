@@ -8,10 +8,16 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-# VERSION is injected into `semsource version` and the startup log. CI passes the
-# release tag (see .github/workflows/ci.yml); defaults to "dev" for a plain build.
+# VERSION is injected into `semsource version` and the startup log. Precedence:
+# explicit arg (CI passes the release tag — see .github/workflows/ci.yml) >
+# `git describe` when the build context carries .git (a plain
+# `docker compose up --build`) > "dev" (e.g. a tarball context). A support
+# bundle from a compose install must identify its build, not say "dev".
 ARG VERSION=dev
-RUN CGO_ENABLED=1 go build \
+RUN if [ "$VERSION" = "dev" ] && [ -d .git ]; then \
+    VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev); \
+    fi && \
+    CGO_ENABLED=1 go build \
     -ldflags="-s -w -linkmode external -extldflags '-static' -X main.version=${VERSION}" \
     -o /bin/semsource ./cmd/semsource
 

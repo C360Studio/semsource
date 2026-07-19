@@ -76,9 +76,9 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 		path = "."
 	}
 
-	lang := src.Language
-	if lang == "" {
-		lang = "go"
+	languages := src.EffectiveLanguages()
+	if len(languages) == 0 {
+		languages = []string{"go"}
 	}
 
 	slug := entityid.SystemSlug(path)
@@ -100,7 +100,7 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 				"path":      path,
 				"org":       org,
 				"project":   project,
-				"languages": []string{lang},
+				"languages": languages,
 			},
 		},
 		"watch_enabled":  src.Watch,

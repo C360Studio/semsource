@@ -37,6 +37,11 @@ docker compose up            # indexes the current directory; MCP gateway on :80
 One command, no NATS to run yourself. See [Docker Compose](#docker-compose) for profiles,
 ports, config, and connecting an agent.
 
+> **Port already allocated?** Another NATS is using 4222 — set `NATS_HOST_PORT=24222` (and
+> `NATS_MONITOR_HOST_PORT=28222`) and re-run.
+> **Picked up a stale image?** `docker compose up` reuses previously built/pulled images — use
+> `docker compose up --build` (local changes) or `--pull always` (released images) to refresh.
+
 ### Native CLI
 
 ```bash
@@ -299,7 +304,7 @@ C360_PORT=3000                    # External port for Caddy (ui profile)
 SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>  # Required immutable workbench release image
 ```
 
-Set `SEMSOURCE_CONFIG=tier0-statistical.json` to run without semembed (BM25 keyword search only); the
+Set `SEMSOURCE_CONFIG=tiers/tier0-statistical.json` to run without semembed (BM25 keyword search only); the
 `semembed` container still starts but the embedder ignores it. NATS is required because SemSource runs on
 the SemStreams ServiceManager and uses JetStream/KV for graph state, ownership, and query indices.
 Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.

@@ -15,13 +15,14 @@ import (
 // AddSourceInput is the add_source tool's typed argument set. The SDK derives
 // the tool's JSON Schema (with these descriptions) from the struct tags.
 type AddSourceInput struct {
-	Type     string `json:"type" jsonschema:"source type: repo (fans out to git+ast+docs+config), git, docs, config, or url"`
-	Path     string `json:"path,omitempty" jsonschema:"local filesystem path to index in place (a mounted repo/worktree); must be under an allowlisted root"`
-	URL      string `json:"url,omitempty" jsonschema:"remote URL (git remote or http url) — an alternative to path"`
-	Branch   string `json:"branch,omitempty" jsonschema:"git branch or ref to track"`
-	Language string `json:"language,omitempty" jsonschema:"primary code language (go, typescript, java, python, svelte)"`
-	Watch    bool   `json:"watch,omitempty" jsonschema:"watch for live changes; omit for a one-shot snapshot (the default)"`
-	Actor    string `json:"actor,omitempty" jsonschema:"caller identity, recorded as provenance"`
+	Type      string   `json:"type" jsonschema:"source type: repo (fans out to git+ast+docs+config), git, docs, config, or url"`
+	Path      string   `json:"path,omitempty" jsonschema:"local filesystem path to index in place (a mounted repo/worktree); must be under an allowlisted root"`
+	URL       string   `json:"url,omitempty" jsonschema:"remote URL (git remote or http url) — an alternative to path"`
+	Branch    string   `json:"branch,omitempty" jsonschema:"git branch or ref to track"`
+	Language  string   `json:"language,omitempty" jsonschema:"primary code language (go, typescript, javascript, java, python, svelte)"`
+	Languages []string `json:"languages,omitempty" jsonschema:"code languages to parse for repo/ast sources (wins over language when both set)"`
+	Watch     bool     `json:"watch,omitempty" jsonschema:"watch for live changes; omit for a one-shot snapshot (the default)"`
+	Actor     string   `json:"actor,omitempty" jsonschema:"caller identity, recorded as provenance"`
 }
 
 // RemoveSourceInput is the remove_source tool's argument set.
@@ -33,6 +34,32 @@ type RemoveSourceInput struct {
 // SourceStatusInput is empty: source_status takes no arguments.
 type SourceStatusInput struct{}
 
+// sourceEntryFromAddInput maps the tool's flat argument set onto a
+// config.SourceEntry. The tool's single `path` is the ergonomic form for every
+// type; docs/config/media sources validate on the plural Paths, so it is mapped
+// here — without this, the advertised call add_source{type:docs,path:...} is an
+// unconditional VALIDATION_FAILED (caught by the extended compose smoke; the
+// #81 lifecycle round-trip was never actually runnable).
+func sourceEntryFromAddInput(in AddSourceInput) config.SourceEntry {
+	src := config.SourceEntry{
+		Type:      in.Type,
+		Path:      in.Path,
+		URL:       in.URL,
+		Branch:    in.Branch,
+		Language:  in.Language,
+		Languages: in.Languages,
+		Watch:     in.Watch,
+	}
+	if src.Path != "" {
+		switch src.Type {
+		case "docs", "config", "image", "video", "audio":
+			src.Paths = []string{src.Path}
+			src.Path = ""
+		}
+	}
+	return src
+}
+
 // addSource registers a source: it enforces the path allowlist at this external
 // boundary, then forwards an AddRequest to source-manifest over NATS. Returns
 // the AddReply JSON (handles + status_subject + ready_when) as tool text.
@@ -40,14 +67,7 @@ func (c *Component) addSource(ctx context.Context, _ *mcp.CallToolRequest, in Ad
 	if in.Type == "" {
 		return nil, nil, fmt.Errorf("type is required")
 	}
-	src := config.SourceEntry{
-		Type:     in.Type,
-		Path:     in.Path,
-		URL:      in.URL,
-		Branch:   in.Branch,
-		Language: in.Language,
-		Watch:    in.Watch,
-	}
+	src := sourceEntryFromAddInput(in)
 	// Boundary guard: a path-based source must resolve under an allowlisted root.
 	if err := sourceallow.Enforce(src, c.config.AllowedRoots); err != nil {
 		return nil, nil, err

@@ -38,7 +38,15 @@ type SourceEntry struct {
 	Paths []string `json:"paths,omitempty"`
 
 	// Language specifies the programming language for ast sources (e.g., "go").
+	// Superseded by Languages when both are set; kept for back-compat.
 	Language string `json:"language,omitempty"`
+
+	// Languages lists the programming languages for ast (and expanded repo)
+	// sources — registered parser names: go, typescript, javascript, java,
+	// python, svelte. When set it wins over the singular Language, whose value
+	// (if also set) must appear in the list (compose-packaging-hardening D4: a
+	// polyglot workspace must not get a silently partial graph).
+	Languages []string `json:"languages,omitempty"`
 
 	// URLs is a list of HTTP/S URLs for url sources.
 	URLs []string `json:"urls,omitempty"`
@@ -107,6 +115,39 @@ type SourceEntry struct {
 	SceneThreshold float64 `json:"scene_threshold,omitempty"`
 }
 
+// EffectiveLanguages resolves the plural/singular language fields into the
+// language list a spawned ast component should parse: Languages when set,
+// else the singular Language, else nil (the spawner applies its own default).
+func (s SourceEntry) EffectiveLanguages() []string {
+	if len(s.Languages) > 0 {
+		return s.Languages
+	}
+	if s.Language != "" {
+		return []string{s.Language}
+	}
+	return nil
+}
+
+// validateLanguages enforces plural/singular consistency: entries must be
+// non-empty, and a singular Language set alongside Languages must appear in
+// the list (a contradiction would silently drop the singular's intent).
+func (s SourceEntry) validateLanguages() error {
+	for _, lang := range s.Languages {
+		if lang == "" {
+			return fmt.Errorf("source type %q: languages must not contain empty strings", s.Type)
+		}
+	}
+	if s.Language == "" || len(s.Languages) == 0 {
+		return nil
+	}
+	for _, lang := range s.Languages {
+		if lang == s.Language {
+			return nil
+		}
+	}
+	return fmt.Errorf("source type %q: language %q is not in languages %v (set one or make them consistent)", s.Type, s.Language, s.Languages)
+}
+
 // validatePositiveDuration checks that an optional duration-string field is
 // either empty (use default) or a positive Go duration. Zero-valued durations
 // would disable the associated ticker entirely, which is almost never what a
@@ -154,9 +195,15 @@ func (s SourceEntry) Validate() error {
 		if len(s.Branches) > 0 && s.Branch != "" {
 			return fmt.Errorf("source type %q: cannot set both branch and branches", s.Type)
 		}
+		if err := s.validateLanguages(); err != nil {
+			return err
+		}
 	case "ast":
 		if s.Path == "" {
 			return fmt.Errorf("source type %q: path is required", s.Type)
+		}
+		if err := s.validateLanguages(); err != nil {
+			return err
 		}
 	case "docs", "config":
 		if len(s.Paths) == 0 {
