@@ -26,7 +26,7 @@
 
 ## 4. Acceptance
 
-- [ ] 4.1 Rebuild the live stack and re-run the audit's failed graded questions
+- [x] 4.1 Rebuild the live stack and re-run the audit's failed graded questions
       (Q9–Q13 code_search, Q16–Q17 doc_context, Q19 config reach); record grades
-- [ ] 4.2 Gates green (revive v1.15.0, gofmt, vet, `go test -race`); openspec
+- [x] 4.2 Gates green (revive v1.15.0, gofmt, vet, `go test -race`); openspec
       validate; PR with re-run evidence
