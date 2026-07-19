@@ -56,10 +56,10 @@ func TestDefaultScope(t *testing.T) {
 		want     []string
 	}{
 		{
-			name:     "docs lens scopes to the web domain",
+			name:     "docs lens scopes to the web and config domains",
 			lensKind: "docs",
 			org:      "acme",
-			want:     []string{"acme.semsource.web"},
+			want:     []string{"acme.semsource.web", "acme.semsource.config"},
 		},
 		{
 			name:     "code lens scopes to the code-language domains",
@@ -98,7 +98,10 @@ func TestServeDefaultsScopeWhenEmpty(t *testing.T) {
 	if _, err := c.serve(context.Background(), "context", []byte(`{"query":"how does retry work"}`)); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
-	want := []string{"acme.semsource.web"}
+	// config joined the docs lens so dependency/manifest questions answer
+	// through doc_context (search-ranking-and-reach D4 — the audit proved the
+	// config domain was unreachable through every MCP tool).
+	want := []string{"acme.semsource.web", "acme.semsource.config"}
 	if !reflect.DeepEqual(g.lastScope, want) {
 		t.Errorf("resolved scope = %v, want %v", g.lastScope, want)
 	}

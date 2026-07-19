@@ -79,6 +79,17 @@ func registerArtifactPredicates() {
 		vocabulary.WithDataType("bool"),
 		vocabulary.WithIRI(CodeNamespace+"exported"),
 		vocabulary.WithWeight(2.0))
+
+	// Salience −2.0: presence marks test code — the demotion complement of the
+	// exported boost. An exported TestXxx lands near neutral (+2.0 − 2.0)
+	// instead of outranking the production symbol it tests; production code
+	// with either boost clears it comfortably. Mirrors the superseded_by
+	// magnitude (tuning knob; adjust only with graded-re-run evidence).
+	vocabulary.Register(CodeTest,
+		vocabulary.WithDescription("Presence marks test code (demoted in NL retrieval, still indexed)"),
+		vocabulary.WithDataType("bool"),
+		vocabulary.WithIRI(CodeNamespace+"test"),
+		vocabulary.WithWeight(-2.0))
 }
 
 func registerStructurePredicates() {

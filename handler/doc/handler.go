@@ -128,6 +128,9 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 				return err
 			}
 			if info.IsDir() {
+				if isDefaultExcludedDocDir(root, path) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 
@@ -217,4 +220,19 @@ func mimeForExt(ext string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// isDefaultExcludedDocDir reports directories the docs corpus skips by
+// default: archived OpenSpec planning artifacts — which outranked canonical
+// docs in the audit's graded retrieval (search-ranking-and-reach D3) — and
+// node_modules. Active proposals, specs, and docs/adr stay indexed.
+func isDefaultExcludedDocDir(root, path string) bool {
+	if filepath.Base(path) == "node_modules" {
+		return true
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return filepath.ToSlash(rel) == "openspec/changes/archive"
 }

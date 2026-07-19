@@ -29,6 +29,12 @@ const (
 	// can't condition on a predicate's VALUE — so boosting public over private
 	// needs a distinct predicate, not the visibility value. See task #38.
 	CodeExported = "code.artifact.exported"
+	// CodeTest is the PRESENCE-only demotion complement of CodeExported:
+	// stamped (object "true") ONLY on entities from test code (IsTestPath),
+	// registered with negative salience so production symbols outrank their
+	// tests in NL retrieval. Tests stay indexed and structurally queryable —
+	// demoted, never hidden (audit 2026-07-19, search-ranking-and-reach).
+	CodeTest = "code.artifact.test"
 
 	// Structure relationships
 	CodeContains  = "code.structure.contains" // parent → child (file → functions)

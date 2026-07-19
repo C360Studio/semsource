@@ -136,6 +136,9 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 				return err
 			}
 			if info.IsDir() {
+				if isDefaultExcludedDocDir(root, path) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 
