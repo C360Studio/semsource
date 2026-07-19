@@ -80,3 +80,63 @@ func TestMVPConfigCoversAllRegisteredLanguages(t *testing.T) {
 		t.Errorf("mvp.json ast languages = %v, registry = %v — default install coverage drifted", declared, registered)
 	}
 }
+
+// TestASTComponentConfig_Version pins version-registration-surface D1: an
+// explicit version reaches the component's watch_paths[].version (the field
+// ast-source already honors); absent stays byte-absent so version-less IDs are
+// unchanged.
+func TestASTComponentConfig_Version(t *testing.T) {
+	_, withV, err := astComponentConfig(config.SourceEntry{Type: "ast", Path: "/w", Version: "v1.9.0"}, "acme")
+	if err != nil {
+		t.Fatalf("astComponentConfig: %v", err)
+	}
+	wps := withV["watch_paths"].([]map[string]any)
+	if got := wps[0]["version"]; got != "v1.9.0" {
+		t.Errorf("version = %v, want v1.9.0", got)
+	}
+
+	_, withoutV, err := astComponentConfig(config.SourceEntry{Type: "ast", Path: "/w"}, "acme")
+	if err != nil {
+		t.Fatalf("astComponentConfig: %v", err)
+	}
+	if _, present := withoutV["watch_paths"].([]map[string]any)[0]["version"]; present {
+		t.Error("version key present for a version-less source (must stay byte-identical)")
+	}
+}
+
+// TestASTComponentConfig_ProjectOverrideAndInstanceUniqueness pins the D1
+// amendment: an explicit project overrides the path-derived slug (supersession
+// corresponds BY project), and versioned registrations of one project get
+// distinct instance names; version-less stays byte-identical to today.
+func TestASTComponentConfig_ProjectOverrideAndInstanceUniqueness(t *testing.T) {
+	n1, c1, err := astComponentConfig(config.SourceEntry{
+		Type: "ast", Path: "/deps/depA-1.9.0", Project: "depA", Version: "v1.9.0"}, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n2, c2, err := astComponentConfig(config.SourceEntry{
+		Type: "ast", Path: "/deps/depA-1.10.0", Project: "depA", Version: "v1.10.0"}, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p1 := c1["watch_paths"].([]map[string]any)[0]["project"]
+	p2 := c2["watch_paths"].([]map[string]any)[0]["project"]
+	if p1 != "depA" || p2 != "depA" {
+		t.Errorf("projects = %v/%v, want shared depA (correspondence key)", p1, p2)
+	}
+	if n1 == n2 {
+		t.Errorf("instance names collide for two versioned registrations: %s", n1)
+	}
+
+	// Version-less, project-less: byte-identical to the historical shape.
+	nBare, cBare, err := astComponentConfig(config.SourceEntry{Type: "ast", Path: "/w/app"}, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nBare != "ast-source-app" {
+		t.Errorf("bare instance name = %s, want ast-source-app", nBare)
+	}
+	if _, present := cBare["watch_paths"].([]map[string]any)[0]["version"]; present {
+		t.Error("bare config gained a version key")
+	}
+}

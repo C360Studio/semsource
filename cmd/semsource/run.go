@@ -1201,6 +1201,8 @@ func publishBranchComponents(
 		Watch:      ref.Watch,
 		Language:   ref.Language,
 		Languages:  ref.Languages,
+		Version:    ref.Version,
+		Project:    ref.Project,
 	}
 	componentConfigs, err := sourcespawn.Build(repoEntry, opts)
 	if err != nil {

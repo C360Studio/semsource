@@ -89,3 +89,28 @@ func TestExpandRepoSources_LanguagesPropagation(t *testing.T) {
 		t.Errorf("ast.Languages = %v, want propagation", ast.Languages)
 	}
 }
+
+// TestExpandRepoSources_VersionPropagation pins D1's expansion half: a repo
+// entry's explicit version reaches the expanded ast entry (never invented —
+// absent stays absent).
+func TestExpandRepoSources_VersionPropagation(t *testing.T) {
+	entries := expandSingleBranch(SourceEntry{
+		Type:    "repo",
+		URL:     "https://github.com/example/app",
+		Branch:  "main",
+		Version: "2024.06",
+	}, t.TempDir())
+	for _, e := range entries {
+		if e.Type == "ast" && e.Version != "2024.06" {
+			t.Errorf("ast entry version = %q, want propagation", e.Version)
+		}
+	}
+	bare := expandSingleBranch(SourceEntry{
+		Type: "repo", URL: "https://github.com/example/app", Branch: "main",
+	}, t.TempDir())
+	for _, e := range bare {
+		if e.Type == "ast" && e.Version != "" {
+			t.Errorf("version invented for version-less repo entry: %q", e.Version)
+		}
+	}
+}

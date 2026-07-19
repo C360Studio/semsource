@@ -48,6 +48,23 @@ type SourceEntry struct {
 	// polyglot workspace must not get a silently partial graph).
 	Languages []string `json:"languages,omitempty"`
 
+	// Version is an optional explicit version for ast (and expanded repo)
+	// sources. Non-empty, it flows to the ast component's version-scoped entity
+	// IDs and code.artifact.version triples — the input the supersession pass
+	// and code_changes relate (version-registration-surface D1). Empty keeps
+	// version-independent IDs byte-for-byte. Never defaulted from a ref: branch
+	// identity already scopes IDs, and an implicit version would re-key
+	// existing multi-branch deployments.
+	Version string `json:"version,omitempty"`
+
+	// Project optionally overrides the path-derived project identity for ast
+	// (and expanded repo) sources. Supersession corresponds entities BY
+	// project, so registering two versions of one dependency at two paths
+	// requires declaring the shared project explicitly — path slugs differ per
+	// version directory (D1 amendment). Slugified for ID-safety; empty keeps
+	// the path-derived project byte-for-byte.
+	Project string `json:"project,omitempty"`
+
 	// URLs is a list of HTTP/S URLs for url sources.
 	URLs []string `json:"urls,omitempty"`
 

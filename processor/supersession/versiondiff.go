@@ -65,6 +65,13 @@ type Change struct {
 	ToID     string `json:"to_id,omitempty"`
 	FromBody string `json:"from_body,omitempty"`
 	ToBody   string `json:"to_body,omitempty"`
+	// FromBodyError/ToBodyError mark a body that EXISTS (an offloaded handle
+	// is stamped) but could not be resolved due to a storage failure —
+	// distinct from "no body was ever offloaded" (both fields absent) and
+	// from a budget skip (counted in OmittedBodies). A consumer can tell an
+	// incomplete answer from a complete one (version-registration-surface D3).
+	FromBodyError bool `json:"from_body_error,omitempty"`
+	ToBodyError   bool `json:"to_body_error,omitempty"`
 }
 
 // DiffCounts tallies every corresponding symbol by status (including the
@@ -92,6 +99,9 @@ type VersionDiffResponse struct {
 	Truncated      bool `json:"truncated,omitempty"`
 	DroppedSymbols int  `json:"dropped_symbols,omitempty"`
 	OmittedBodies  int  `json:"omitted_bodies,omitempty"`
+	// FailedBodies counts bodies that resolve-failed (storage error), each
+	// also marked on its Change via From/ToBodyError.
+	FailedBodies int `json:"failed_bodies,omitempty"`
 }
 
 // diffCandidates corresponds candidates of one project across the from/to

@@ -3,6 +3,8 @@ package supersession
 import (
 	"testing"
 	"time"
+
+	"github.com/c360studio/semstreams/pkg/fusion"
 )
 
 // mkCand builds a candidate for the diff tests. hash/kind default to a bodykey so
@@ -88,6 +90,46 @@ func TestDiffCandidates_Indeterminate(t *testing.T) {
 	for _, ch := range changes {
 		if ch.Status != statusIndeterminate {
 			t.Errorf("%s should be indeterminate, got %s", ch.Name, ch.Status)
+		}
+	}
+}
+
+// TestVersionDiff_BodyErrorVisible pins D3 (version-registration-surface): a
+// stamped body handle that fails to resolve (storage error) is marked
+// body_error on the change and counted in FailedBodies — distinct from a
+// candidate that simply has no offloaded body (no flag, no count).
+func TestVersionDiff_BodyErrorVisible(t *testing.T) {
+	failing := mkCand("p", "1.0", "Edited", "h-old")
+	failing.bodyStore = "no-such-store"
+	failing.bodyKey = "code:old"
+	after := mkCand("p", "2.0", "Edited", "h-new")
+	after.bodyStore = "no-such-store"
+	after.bodyKey = "code:new"
+	// A changed pair with NO offloaded bodies at all: absence, not failure.
+	bare1 := mkCand("p", "1.0", "Bare", "h-b1")
+	bare2 := mkCand("p", "2.0", "Bare", "h-b2")
+
+	changes, _, pairs := diffCandidates([]candidate{failing, after, bare1, bare2}, "p", "1.0", "2.0")
+	if len(changes) != 2 {
+		t.Fatalf("changes = %d, want 2", len(changes))
+	}
+
+	// Empty MapStoreResolver: every stamped handle resolve-fails.
+	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{})
+	omitted, failed := hydrateBodies(t.Context(), resolver, changes, pairs, 1<<20)
+	if omitted != 0 || failed != 2 {
+		t.Fatalf("omitted=%d failed=%d, want 0/2", omitted, failed)
+	}
+	for _, ch := range changes {
+		switch ch.Name {
+		case "Edited":
+			if !ch.FromBodyError || !ch.ToBodyError {
+				t.Errorf("Edited body errors = %v/%v, want true/true", ch.FromBodyError, ch.ToBodyError)
+			}
+		case "Bare":
+			if ch.FromBodyError || ch.ToBodyError {
+				t.Errorf("Bare (no offloaded body) must carry no error flag: %+v", ch)
+			}
 		}
 	}
 }

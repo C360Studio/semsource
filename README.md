@@ -343,12 +343,25 @@ SemSource uses a JSON config file (`semsource.json`). The wizard creates it for 
 {
   "namespace": "myorg",
   "sources": [
-    { "type": "ast", "path": "./", "language": "go", "watch": true },
+    { "type": "ast", "path": "./", "languages": ["go", "typescript"], "watch": true },
     { "type": "docs", "paths": ["docs/", "README.md"], "watch": true },
     { "type": "config", "paths": ["./"], "watch": true }
   ]
 }
 ```
+
+Optional per-source fields on `ast`/`repo` entries: `languages` (list; singular `language` still
+accepted), and the version-intelligence pair — `project` + `version`. Registering the **same
+`project` at two paths with two `version`s** is what lights up supersession lineage and
+`code_changes` ("what changed between 1.9.0 and 1.10.0"); versions correspond by project, so
+declare it explicitly when the paths differ per version:
+
+```json
+{ "type": "ast", "path": "deps/depA-1.9.0", "project": "depA", "version": "1.9.0" },
+{ "type": "ast", "path": "deps/depA-1.10.0", "project": "depA", "version": "1.10.0" }
+```
+
+Omitting both keeps version-independent ingestion (entity IDs unchanged).
 
 Optional top-level fields:
 
