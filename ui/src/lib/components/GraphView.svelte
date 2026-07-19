@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import type { GraphEvidence } from "$lib/contracts/graph";
   import type { CanonicalGraph, CanonicalGraphNode } from "$lib/graph/model";
+  import { groupEntities, unresolvedMarker } from "$lib/graph/drilldown";
   import {
     createSigmaRenderer,
     type GraphRendererFactory,
@@ -13,12 +14,19 @@
     focusedHandles = [],
     selectedHandle = $bindable<string | null>(null),
     rendererFactory = createSigmaRenderer,
+    queriedName = "",
   }: {
     graph: CanonicalGraph;
     focusedHandles?: string[];
     selectedHandle?: string | null;
     rendererFactory?: GraphRendererFactory;
+    queriedName?: string;
   } = $props();
+
+  // D6: resolved entities first (queried symbol front-and-selected, falling
+  // back to the first resolved node); unresolved endpoints grouped and
+  // de-emphasized below, never a default selection.
+  const groups = $derived(groupEntities(graph.nodes, queriedName));
 
   let container = $state<HTMLElement>();
   let renderer: GraphRendererSession | null = null;
@@ -35,9 +43,8 @@
   );
 
   function nodeLabel(node: CanonicalGraphNode): string {
-    return (
-      node.name ?? (node.resolved ? node.handle : `Unresolved: ${node.handle}`)
-    );
+    if (node.name) return node.name;
+    return node.resolved ? node.handle : unresolvedMarker(node.handle).label;
   }
 
   function choose(handle: string): void {
@@ -135,22 +142,41 @@
     <div>
       <h3>Entities</h3>
       <ul aria-label="Graph entities">
-        {#each graph.nodes as node (node.handle)}
-          <li>
-            <button
-              type="button"
-              aria-pressed={selectedHandle === node.handle}
-              onclick={() => choose(node.handle)}
-            >
-              <strong>{nodeLabel(node)}</strong>
-              <small
-                >{node.resolved
-                  ? (node.kind ?? "Type not supplied")
-                  : "Unresolved endpoint"}</small
-              >
-            </button>
+        {#if groups.resolved.length > 0}
+          <li class="group-heading">
+            Resolved entities ({groups.resolved.length})
           </li>
-        {/each}
+          {#each groups.resolved as node (node.handle)}
+            <li>
+              <button
+                type="button"
+                aria-pressed={selectedHandle === node.handle}
+                onclick={() => choose(node.handle)}
+              >
+                <strong>{nodeLabel(node)}</strong>
+                <small>{node.kind ?? "Type not supplied"}</small>
+              </button>
+            </li>
+          {/each}
+        {/if}
+        {#if groups.unresolved.length > 0}
+          <li class="group-heading">
+            Unresolved endpoints ({groups.unresolved.length})
+          </li>
+          {#each groups.unresolved as node (node.handle)}
+            <li>
+              <button
+                type="button"
+                class="unresolved"
+                aria-pressed={selectedHandle === node.handle}
+                onclick={() => choose(node.handle)}
+              >
+                <strong>{nodeLabel(node)}</strong>
+                <small>{unresolvedMarker(node.handle).description}</small>
+              </button>
+            </li>
+          {/each}
+        {/if}
       </ul>
     </div>
 
@@ -285,6 +311,18 @@
   li button[aria-pressed="true"] {
     border-color: var(--accent);
     background: rgb(99 214 199 / 18%);
+  }
+  li.group-heading {
+    padding: 0.15rem 0.2rem 0.1rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  li button.unresolved {
+    border-style: dashed;
+    opacity: 0.75;
   }
   small {
     color: var(--muted);

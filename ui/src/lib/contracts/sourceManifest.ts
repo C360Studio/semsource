@@ -72,3 +72,22 @@ export function parseSourceManifest(value: unknown): SourceManifest {
   });
   return { namespace: item.namespace, timestamp: item.timestamp, sources };
 }
+
+/**
+ * Full-identity key for keyed {#each} rendering. Location alone collides for
+ * two instances of one repo distinguished only by branch or language (D1).
+ */
+export function sourceKey(source: ManifestSource): string {
+  const location =
+    source.path ??
+    source.paths?.join(",") ??
+    source.url ??
+    source.urls?.join(",") ??
+    "";
+  return [
+    source.type,
+    location,
+    source.branch ?? "",
+    source.language ?? "",
+  ].join(":");
+}

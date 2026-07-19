@@ -191,6 +191,13 @@ async function routeWorkbenchBootstrap(page: Page, document = capabilities) {
 
 test("renders the owned SemSource shell truthfully", async ({ page }) => {
   let searchBody: unknown;
+  // D6: the favicon and every other fix in this change must leave the page
+  // free of console/page errors.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") pageErrors.push(message.text());
+  });
   await page.route("**/source-manifest/capabilities", (route) =>
     route.fulfill({ json: capabilities }),
   );
@@ -262,9 +269,16 @@ test("renders the owned SemSource shell truthfully", async ({ page }) => {
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("SemSource");
   await expect(page.getByText("acme-workbench")).toBeVisible();
-  await expect(
-    page.getByRole("status", { name: /overall readiness/i }),
-  ).toContainText("Partial");
+  // All three readiness signals in this fixture are actually ready; the
+  // banner now derives truth from them (D4) rather than trusting the
+  // fixture's stale `readiness.overall: "partial"` field verbatim.
+  const overallReadiness = page.getByRole("status", {
+    name: /overall readiness/i,
+  });
+  await expect(overallReadiness).toContainText("Ready");
+  await expect(overallReadiness).toContainText(
+    "Covers Sources, Structural index, Semantic index",
+  );
   await expect(page.getByText("/workspace/semsource")).toBeVisible();
   await expect(page.getByText(/summary generated/i)).toContainText(
     "2026-07-15T12:01:00Z",
@@ -296,6 +310,134 @@ test("renders the owned SemSource shell truthfully", async ({ page }) => {
     page.getByRole("article", { name: /result detail/i }),
   ).toContainText("ui/src/routes/+page.svelte");
   await expect(page.getByText("opaque-not-an-address")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("renders two sources of one repo differing only by branch without a duplicate-key crash", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.route("**/source-manifest/capabilities", (route) =>
+    route.fulfill({ json: capabilities }),
+  );
+  await page.route("**/source-manifest/sources", (route) =>
+    route.fulfill({
+      json: {
+        namespace: "acme-workbench",
+        timestamp: "2026-07-15T12:00:00Z",
+        sources: [
+          {
+            type: "git",
+            path: "/workspace/semsource",
+            branch: "main",
+            watch: true,
+          },
+          {
+            type: "git",
+            path: "/workspace/semsource",
+            branch: "feature/dup",
+            watch: true,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/source-manifest/summary", (route) =>
+    route.fulfill({
+      json: {
+        namespace: "acme-workbench",
+        phase: "ready",
+        entity_id_format: "org.platform.domain.entity_type.source_id.entity_id",
+        total_entities: 0,
+        domains: [],
+        predicates: [],
+        timestamp: "2026-07-15T12:01:00Z",
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("SemSource");
+  await expect(
+    page.getByRole("region", { name: "Sources" }).locator("li"),
+  ).toHaveCount(2);
+  expect(pageErrors).toEqual([]);
+});
+
+test("stays alive and shows a distinct not-ready state when the index reports reset_required", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const resetRequired = structuredClone(capabilities);
+  resetRequired.readiness.structural_index = {
+    available: true,
+    ready: false,
+    state: "reset_required",
+  };
+  resetRequired.readiness.overall = "partial";
+  await routeWorkbenchBootstrap(page, resetRequired);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("SemSource");
+  await expect(page.getByText(/reset required/i)).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
+test("refreshes a not-ready panel every 10 seconds without a manual reload", async ({
+  page,
+}) => {
+  await page.clock.install();
+  let capabilitiesRequests = 0;
+  const buildingSemantic = structuredClone(capabilities);
+  buildingSemantic.readiness = {
+    overall: "ready",
+    source: { available: true, ready: true, state: "ready" },
+    structural_index: { available: true, ready: true, state: "ready" },
+    semantic_index: { available: true, ready: false, state: "building" },
+  };
+  const readySemantic = structuredClone(capabilities);
+  readySemantic.readiness = {
+    overall: "ready",
+    source: { available: true, ready: true, state: "ready" },
+    structural_index: { available: true, ready: true, state: "ready" },
+    semantic_index: { available: true, ready: true, state: "ready" },
+  };
+  await page.route("**/source-manifest/capabilities", async (route) => {
+    capabilitiesRequests += 1;
+    await route.fulfill({
+      json: capabilitiesRequests === 1 ? buildingSemantic : readySemantic,
+    });
+  });
+  await page.route("**/source-manifest/sources", (route) =>
+    route.fulfill({
+      json: {
+        namespace: "acme-workbench",
+        timestamp: "2026-07-15T12:00:00Z",
+        sources: [],
+      },
+    }),
+  );
+  await page.route("**/source-manifest/summary", (route) =>
+    route.fulfill({
+      json: {
+        namespace: "acme-workbench",
+        phase: "ready",
+        entity_id_format: "org.platform.domain.entity_type.source_id.entity_id",
+        total_entities: 0,
+        domains: [],
+        predicates: [],
+        timestamp: "2026-07-15T12:01:00Z",
+      },
+    }),
+  );
+  await page.goto("/");
+  const semanticIndexCard = page.locator("article", {
+    hasText: "Semantic index",
+  });
+  await expect(semanticIndexCard).toContainText("Building");
+  await page.clock.fastForward("00:11");
+  await expect(semanticIndexCard).toContainText("Ready");
+  expect(capabilitiesRequests).toBeGreaterThanOrEqual(2);
 });
 
 test("@a11y has no axe violations and follows keyboard result focus", async ({

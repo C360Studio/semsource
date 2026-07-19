@@ -10,6 +10,8 @@
   import { WorkbenchClientError } from "$lib/api/http";
   import { searchCode, type CodeSearch } from "$lib/api/search";
   import { createBootstrapController } from "$lib/state/bootstrap";
+  import { createReadinessPoller } from "$lib/state/readinessPoller";
+  import { isFullyReady } from "$lib/state/readiness";
   import WorkbenchShell from "$lib/components/WorkbenchShell.svelte";
   import type { WorkbenchCapabilities } from "$lib/contracts/capabilities";
 
@@ -53,9 +55,21 @@
     void bootstrap.refresh();
   }
 
+  // D4: self-heals a not-ready panel without a manual reload — polls while
+  // any advertised readiness signal is not ready, stops the moment
+  // everything is ready, and restarts automatically if readiness regresses.
+  const notReady = $derived(!isFullyReady(capabilities));
+  const poller = createReadinessPoller(() => void bootstrap.refresh());
+  $effect(() => {
+    poller.sync(notReady);
+  });
+
   onMount(() => {
     refresh();
-    return bootstrap.cancel;
+    return () => {
+      poller.stop();
+      bootstrap.cancel();
+    };
   });
 </script>
 

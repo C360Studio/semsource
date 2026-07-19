@@ -116,8 +116,12 @@ export function syncGraph(
   const nodes = reason
     ? new Map(previous.nodes.map((node) => [node.handle, node]))
     : new Map<string, CanonicalGraphNode>();
-  for (const [handle, node] of incomingNodes(projection, responseNodes))
+  for (const [handle, node] of incomingNodes(projection, responseNodes)) {
+    // An unresolved stub only fills a gap; it must never downgrade a node
+    // already retained from a prior resolved projection (D2).
+    if (!node.resolved && nodes.has(handle)) continue;
     nodes.set(handle, node);
+  }
 
   const edges = reason
     ? new Map(previous.edges.map((edge) => [edge.id, edge]))

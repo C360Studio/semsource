@@ -273,6 +273,89 @@ describe("WorkbenchShell", () => {
     expect(screen.queryByText(/^Snapshot$/)).not.toBeInTheDocument();
   });
 
+  it("renders two sources of one repo differing only by branch without a duplicate-key crash", () => {
+    expect(() =>
+      render(WorkbenchShell, {
+        capabilities,
+        inventory: {
+          status: "ready",
+          data: {
+            namespace: "acme",
+            timestamp: "2026-07-15T12:00:00Z",
+            sources: [
+              {
+                type: "git",
+                path: "/workspace/semsource",
+                branch: "main",
+                watch: true,
+              },
+              {
+                type: "git",
+                path: "/workspace/semsource",
+                branch: "feature/dup",
+                watch: true,
+              },
+            ],
+          },
+        },
+        projectSummary,
+        loading: false,
+        error: null,
+        onRetry: vi.fn(),
+      }),
+    ).not.toThrow();
+    expect(screen.getAllByText("/workspace/semsource")).toHaveLength(2);
+  });
+
+  it("shows a distinct not-ready presentation for reset_required instead of failing to render", () => {
+    const resetRequired = structuredClone(capabilities);
+    resetRequired.readiness.structural_index = {
+      available: true,
+      ready: false,
+      state: "reset_required",
+    };
+    render(WorkbenchShell, {
+      capabilities: resetRequired,
+      inventory,
+      projectSummary,
+      loading: false,
+      error: null,
+      onRetry: vi.fn(),
+    });
+    expect(screen.getByText(/reset required/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "SemSource" }),
+    ).toBeInTheDocument();
+  });
+
+  it("labels the overall banner's readiness coverage and never shows Ready while a tracked signal builds", () => {
+    const buildingSemantic = structuredClone(capabilities);
+    buildingSemantic.readiness = {
+      overall: "ready",
+      source: { available: true, ready: true, state: "ready" },
+      structural_index: { available: true, ready: true, state: "ready" },
+      semantic_index: {
+        available: true,
+        ready: false,
+        state: "building",
+      },
+    };
+    render(WorkbenchShell, {
+      capabilities: buildingSemantic,
+      inventory,
+      projectSummary,
+      loading: false,
+      error: null,
+      onRetry: vi.fn(),
+    });
+    const banner = screen.getByRole("status", { name: /overall readiness/i });
+    expect(banner).toHaveTextContent("Partial");
+    expect(banner).not.toHaveTextContent("Ready");
+    expect(banner).toHaveTextContent(
+      /covers sources, structural index, semantic index/i,
+    );
+  });
+
   it("does not manufacture an unsupported card for an absent capability", () => {
     const without = structuredClone(capabilities);
     delete without.actions.okf_export;

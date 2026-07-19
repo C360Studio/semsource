@@ -209,6 +209,30 @@ describe("parseCapabilities", () => {
     expect(() => parseCapabilities(build())).toThrow();
   });
 
+  it("accepts reset_required as a structural index state", () => {
+    const value = structuredClone(ready);
+    Object.assign(value.readiness.structural_index, {
+      ready: false,
+      state: "reset_required",
+    });
+    value.readiness.overall = "partial";
+    expect(parseCapabilities(value).readiness.structural_index.state).toBe(
+      "reset_required",
+    );
+  });
+
+  it("accepts reset_required as a semantic index state without failing parse", () => {
+    const value = structuredClone(ready);
+    Object.assign(value.readiness.semantic_index, {
+      available: true,
+      ready: false,
+      state: "reset_required",
+    });
+    expect(parseCapabilities(value).readiness.semantic_index.state).toBe(
+      "reset_required",
+    );
+  });
+
   it("accepts matching unsigned decimal revision evidence", () => {
     const value = structuredClone(ready);
     Object.assign(value.readiness.structural_index, {

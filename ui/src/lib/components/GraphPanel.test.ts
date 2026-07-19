@@ -185,6 +185,41 @@ describe("GraphPanel", () => {
     expect(query).toHaveBeenCalledTimes(2);
   });
 
+  it("retries the last errored query after the input is cleared, labeling the retry when it differs", async () => {
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new FusionSearchError(
+          "Graph index timed out",
+          "upstream_timeout",
+          true,
+          504,
+        ),
+      )
+      .mockResolvedValueOnce(parseFusionResponse(completeGraphResponse));
+    render(GraphPanel, {
+      capability: ready,
+      errorContract: "1",
+      graphContract: "1",
+      query,
+      rendererFactory: rendererFactory([]),
+    });
+    await submitGraph();
+    await screen.findByRole("alert");
+    await userEvent.clear(
+      screen.getByRole("searchbox", { name: /graph query/i }),
+    );
+    const retryButton = await screen.findByRole("button", {
+      name: /retry graph query.*alpha/i,
+    });
+    await userEvent.click(retryButton);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1]?.[1]).toBe("Alpha");
+    expect(
+      await screen.findByRole("list", { name: /graph entities/i }),
+    ).toBeInTheDocument();
+  });
+
   it("does not offer retry for a nonretryable classified graph error", async () => {
     render(GraphPanel, {
       capability: ready,
@@ -380,6 +415,97 @@ describe("GraphPanel", () => {
     expect(
       within(navigator).getByText("Unresolved: other-missing-handle"),
     ).toBeVisible();
+  });
+
+  it("groups unresolved endpoints below resolved entities, labels builtin/external markers, and selects the queried symbol", async () => {
+    const value = {
+      ...completeGraphResponse,
+      graph: {
+        ...completeGraphResponse.graph,
+        edges: [
+          ...completeGraphResponse.graph.edges,
+          {
+            id: "handle-b|calls|builtin:len",
+            source: "handle-b",
+            target: "builtin:len",
+            predicate: "calls",
+            direction: "outgoing",
+          },
+        ],
+      },
+    };
+    render(GraphPanel, {
+      capability: ready,
+      errorContract: "1",
+      graphContract: "1",
+      query: vi.fn().mockResolvedValue(parseFusionResponse(value)),
+      rendererFactory: rendererFactory([]),
+    });
+    await submitGraph();
+    const navigator = await screen.findByRole("list", {
+      name: /graph entities/i,
+    });
+    expect(
+      within(navigator).getByText("Resolved entities (2)"),
+    ).toBeInTheDocument();
+    expect(
+      within(navigator).getByText("Unresolved endpoints (2)"),
+    ).toBeInTheDocument();
+    expect(within(navigator).getByText("Builtin: len")).toBeInTheDocument();
+    const buttons = within(navigator).getAllByRole("button");
+    // Within each group, order is the canonical graph's stable handle sort
+    // ("builtin:len" < "missing-handle"), not insertion order.
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining("Alpha"),
+      expect.stringContaining("Beta"),
+      expect.stringContaining("Builtin: len"),
+      expect.stringContaining("Unresolved: missing-handle"),
+    ]);
+    expect(buttons[0]).toHaveAttribute("aria-pressed", "true");
+    expect(buttons[2]).toHaveAttribute("aria-pressed", "false");
+    expect(buttons[3]).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("never auto-selects an unresolved endpoint when no resolved node is present", async () => {
+    const value = {
+      contract_version: "1",
+      index: { ready: true, state: "ready" },
+      provenance: "deterministic",
+      nodes: [],
+      graph: {
+        nodes: [],
+        edges: [
+          {
+            id: "handle-a|calls|builtin:len",
+            source: "handle-a",
+            target: "builtin:len",
+            predicate: "calls",
+            direction: "outgoing",
+          },
+        ],
+        view_revision: { start: 1, end: 1, coherent: true },
+        truncated: false,
+      },
+      truncated: false,
+    };
+    render(GraphPanel, {
+      capability: ready,
+      errorContract: "1",
+      graphContract: "1",
+      query: vi.fn().mockResolvedValue(parseFusionResponse(value)),
+      rendererFactory: rendererFactory([]),
+    });
+    await submitGraph();
+    const navigator = await screen.findByRole("list", {
+      name: /graph entities/i,
+    });
+    for (const button of within(navigator).getAllByRole("button"))
+      expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("region", { name: /selected entity details/i }),
+    ).toHaveTextContent(
+      "Select an entity to inspect its supplied facts and relationships.",
+    );
   });
 
   it("reports renderer initialization failure while preserving the accessible surface", async () => {
