@@ -30,7 +30,7 @@ Results land in `results/<label>.json` with every answer retained, so a verdict 
 be re-examined without re-running the stack.
 
 Knobs: `SEMSOURCE_HTTP_PORT` (default 28080), `SEMSOURCE_HOST`,
-`SCORECARD_READY_TIMEOUT`, `SCORECARD_EMBED_SETTLE`, `SCORECARD_CALL_TIMEOUT`,
+`SCORECARD_READY_TIMEOUT`, `SCORECARD_CALL_TIMEOUT`,
 `SCORECARD_QUESTIONS`.
 
 Always use an isolated `COMPOSE_PROJECT_NAME` and high ports — this machine also

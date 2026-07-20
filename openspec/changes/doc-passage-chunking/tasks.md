@@ -119,8 +119,38 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
       retrieve a phrase that appears only in its tail
 - [x] 9.4 Measure entity count and time-to-ready on this repository before and after; record both in
       this change and treat a large regression as a blocker
-- [ ] 9.5 Choose the chunk ceiling and floor empirically — A/B the graded interrogation, do not guess
-      (the one open question in design.md)
+- [x] 9.5 Choose the chunk ceiling and floor empirically — A/B the graded interrogation, do not guess
+      (the one open question in design.md).
+      Three live runs, questions.json v2, corpus fixed, only the binary varying,
+      `down -v` between each. Full write-up in
+      scripts/scorecard/results/SUMMARY-9.5-bounds.md.
+      **A 4x ceiling range changed NO graded outcome.** 1000/200, 2000/400 and
+      4000/800 all scored 20/22 with identical per-band results. Only evidence
+      size moved: mean total body 11,209 / 15,978 / 25,657 B; entities 5698 /
+      5401 / 5219.
+      **DECISION: keep 2000/400.** Nothing measured justifies moving. Two weak
+      signals favour staying: the offline sweep shows under-floor passages are
+      minimised at 2000/400 (7.0%, vs 10.0% and 12.5%), and it is mid-range on
+      entity cost. Changing a default on evidence that cannot distinguish the
+      options would be motion, not improvement.
+      **Honest limit on this result:** the doc bands are SATURATED (10/10 on
+      every side), so they can show regression but not improvement. This proves
+      no bound in the range breaks anything and that finer bounds cost less
+      evidence per answer; it does NOT prove finer bounds retrieve better, and it
+      cannot see the harm of going too fine. Making bounds genuinely measurable
+      needs questions a saturated doc band cannot already answer — see the
+      summary's "What would actually decide this".
+      **Defect found, NOT fixed (new follow-up):** both discrimination questions
+      failed as `miss`, not `IMPRECISE` — ranking prefers the override section
+      over the default one. X01's top node is README § Quick Start (the
+      port-CONFLICT workaround, 28222) when the query asked for the DEFAULT
+      (8222); § Configuration never surfaces. X02 never surfaces the Tier 2
+      section at all. Identical at all three bounds, so it is independent of
+      passage size — a ranking defect, not a chunking one. Answering "what is the
+      default X" with "how to override X" is a plausible-looking wrong answer.
+      **Grading gap this exposed:** a top node holding the twin but NOT the answer
+      is scored a plain `miss`, but it is worse than absent — it argues for the
+      wrong answer. It deserves its own verdict alongside correct/IMPRECISE.
 - [x] 9.6 Re-run the graded interrogation; confirm Q13/Q17 improve and no previously correct answer
       regresses; record the score
 - [x] 9.7 Verify no reserved-but-unemitted vocabulary remains: every registered predicate has a live
