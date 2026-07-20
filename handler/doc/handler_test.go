@@ -48,6 +48,35 @@ func writeMD(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+// tripleValue returns the string object of the first triple on state carrying
+// predicate, failing the test when the triple is absent or its object is not a
+// string.
+func tripleValue(t *testing.T, state *handler.EntityState, predicate string) string {
+	t.Helper()
+	for _, tr := range state.Triples {
+		if tr.Predicate == predicate {
+			v, ok := tr.Object.(string)
+			if !ok {
+				t.Fatalf("triple %q on %s: object is %T (%v), want string", predicate, state.ID, tr.Object, tr.Object)
+			}
+			return v
+		}
+	}
+	t.Fatalf("no triple with predicate %q on entity %s", predicate, state.ID)
+	return ""
+}
+
+// filePathSet collects the source.DocFilePath value of every state, so a test
+// can assert exactly which files entered the corpus.
+func filePathSet(t *testing.T, states []*handler.EntityState) map[string]bool {
+	t.Helper()
+	seen := make(map[string]bool, len(states))
+	for _, state := range states {
+		seen[tripleValue(t, state, source.DocFilePath)] = true
+	}
+	return seen
+}
+
 // ---------------------------------------------------------------------------
 // SourceType / Supports
 // ---------------------------------------------------------------------------
@@ -80,293 +109,6 @@ func TestDocHandler_Supports(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Ingest — basic entity production
-// ---------------------------------------------------------------------------
-
-func TestDocHandler_Ingest_ProducesEntities(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "readme.md", "# Hello World\n\nSome content here.")
-	writeMD(t, dir, "notes.txt", "Plain text notes.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) != 2 {
-		t.Fatalf("entity count: got %d, want 2", len(entities))
-	}
-}
-
-func TestDocHandler_Ingest_CorrectDomainAndEntityType(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "doc.md", "# Title\nBody.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) == 0 {
-		t.Fatal("no entities returned")
-	}
-
-	e := entities[0]
-	if e.Domain != handler.DomainWeb {
-		t.Errorf("Domain = %q, want %q", e.Domain, handler.DomainWeb)
-	}
-	if e.EntityType != "doc" {
-		t.Errorf("EntityType = %q, want %q", e.EntityType, "doc")
-	}
-	if e.SourceType != handler.SourceTypeDoc {
-		t.Errorf("SourceType = %q, want %q", e.SourceType, handler.SourceTypeDoc)
-	}
-}
-
-// TestDocHandler_Ingest_InstanceIsPathDerived pins the entity-staleness spec
-// D3 identity: the instance is the sanitized relative path, not a content
-// hash — so an edit never mints a new instance (see
-// TestDocHandler_Ingest_ContentChangeKeepsSameInstance below).
-func TestDocHandler_Ingest_InstanceIsPathDerived(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "doc.md", "# Title\nContent.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) == 0 {
-		t.Fatal("no entities")
-	}
-
-	instance := entities[0].Instance
-	if instance != "doc-md" {
-		t.Errorf("Instance = %q, want %q (sanitized relative path)", instance, "doc-md")
-	}
-}
-
-func TestDocHandler_Ingest_TripleContentHash(t *testing.T) {
-	dir := t.TempDir()
-	content := "# Hello\nThis is content."
-	writeMD(t, dir, "doc.md", content)
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) == 0 {
-		t.Fatal("no entities")
-	}
-
-	// Expect a Properties entry for "content_hash".
-	if _, ok := entities[0].Properties["content_hash"]; !ok {
-		t.Error("expected Properties[\"content_hash\"] to be set")
-	}
-}
-
-func TestDocHandler_Ingest_TripleFilePath(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "readme.md", "# Hi\nBody.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) == 0 {
-		t.Fatal("no entities")
-	}
-
-	if _, ok := entities[0].Properties["file_path"]; !ok {
-		t.Error("expected Properties[\"file_path\"] to be set")
-	}
-}
-
-func TestDocHandler_Ingest_TripleTitleFromFirstHeading(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "doc.md", "# My Great Doc\n\nIntro paragraph.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) == 0 {
-		t.Fatal("no entities")
-	}
-
-	titleValue, ok := entities[0].Properties["title"]
-	if !ok {
-		t.Fatal("expected Properties[\"title\"] to be set, got none")
-	}
-	if titleValue != "My Great Doc" {
-		t.Errorf("title = %q, want %q", titleValue, "My Great Doc")
-	}
-}
-
-func TestDocHandler_Ingest_NoTitleFallback(t *testing.T) {
-	dir := t.TempDir()
-	// Plain text file with no markdown heading.
-	writeMD(t, dir, "notes.txt", "Just some notes without a heading.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) == 0 {
-		t.Fatal("no entities")
-	}
-
-	// Properties["title"] should still be present, falling back to filename.
-	if _, ok := entities[0].Properties["title"]; !ok {
-		t.Error("expected Properties[\"title\"] even without markdown heading")
-	}
-}
-
-// TestDocHandler_Ingest_ContentChangeKeepsSameInstanceButUpdatesHash pins the
-// entity-staleness spec D3 contract: editing a document does NOT mint a new
-// entity (the instance is path-derived, stable across edits) — but the
-// content_hash property still reflects the new content, so change detection
-// still works.
-func TestDocHandler_Ingest_ContentChangeKeepsSameInstanceButUpdatesHash(t *testing.T) {
-	dir := t.TempDir()
-	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities1, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() first: %v", err)
-	}
-
-	// Modify the file.
-	if err := os.WriteFile(path, []byte("# Second\nDifferent content entirely."), 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	entities2, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() second: %v", err)
-	}
-
-	if len(entities1) == 0 || len(entities2) == 0 {
-		t.Fatal("expected entities from both ingests")
-	}
-
-	if entities1[0].Instance != entities2[0].Instance {
-		t.Errorf("Instance must stay stable across a content edit (D3): %q vs %q",
-			entities1[0].Instance, entities2[0].Instance)
-	}
-
-	hash1, _ := entities1[0].Properties["content_hash"].(string)
-	hash2, _ := entities2[0].Properties["content_hash"].(string)
-	if hash1 == "" || hash2 == "" || hash1 == hash2 {
-		t.Errorf("content_hash should change when file content changes: %q vs %q", hash1, hash2)
-	}
-}
-
-func TestDocHandler_Ingest_FiltersByExtension(t *testing.T) {
-	dir := t.TempDir()
-	writeMD(t, dir, "valid.md", "# Doc\nContent.")
-	writeMD(t, dir, "guide.mdx", "# MDX Guide\nSome MDX content.")
-	writeMD(t, dir, "spec.adoc", "= AsciiDoc Spec\nSome AsciiDoc content.")
-	// Non-doc file — should be ignored by DocHandler.
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) != 3 {
-		t.Errorf("entity count: got %d, want 3 (.adoc + .md + .mdx)", len(entities))
-	}
-}
-
-func TestDocHandler_Ingest_EmptyDir(t *testing.T) {
-	dir := t.TempDir()
-
-	h := dochandler.New()
-	cfg := sourceConfig{typ: "docs", path: dir}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-	if len(entities) != 0 {
-		t.Errorf("entity count: got %d, want 0 for empty dir", len(entities))
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Ingest — multiple paths
-// ---------------------------------------------------------------------------
-
-func TestDocHandler_Ingest_MultiplePaths(t *testing.T) {
-	dirA := t.TempDir()
-	dirB := t.TempDir()
-
-	writeMD(t, dirA, "alpha.md", "# Alpha\nContent in dirA.")
-	writeMD(t, dirA, "beta.txt", "Plain text in dirA.")
-	writeMD(t, dirB, "gamma.md", "# Gamma\nContent in dirB.")
-
-	h := dochandler.New()
-	// GetPath returns paths[0] when paths is non-empty; GetPaths returns both dirs.
-	cfg := sourceConfig{
-		typ:   "docs",
-		path:  dirA,
-		paths: []string{dirA, dirB},
-	}
-
-	entities, err := h.Ingest(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("Ingest() error: %v", err)
-	}
-
-	// Three files total: two in dirA, one in dirB.
-	if len(entities) != 3 {
-		t.Fatalf("entity count: got %d, want 3", len(entities))
-	}
-
-	// Collect relative file_path values across all entities to confirm both
-	// directories contributed files.
-	seenPaths := make(map[string]bool)
-	for _, e := range entities {
-		if fp, ok := e.Properties["file_path"].(string); ok {
-			seenPaths[fp] = true
-		}
-	}
-
-	for _, want := range []string{"alpha.md", "beta.txt", "gamma.md"} {
-		if !seenPaths[want] {
-			t.Errorf("expected file_path %q in Properties, not found; seen: %v", want, seenPaths)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Watch — disabled returns nil (no fsnotify needed)
 // ---------------------------------------------------------------------------
 
@@ -389,7 +131,7 @@ func TestDocHandler_Watch_WatchDisabledReturnsNil(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// IngestEntityStates — normalizer-free path
+// IngestEntityStates — the live path
 // ---------------------------------------------------------------------------
 
 func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
@@ -612,6 +354,173 @@ func TestDocHandler_IngestEntityStates_IDStableAcrossContentChange(t *testing.T)
 	if states1[0].ID != states2[0].ID {
 		t.Errorf("entity ID must stay stable across a content edit (D3): %q vs %q",
 			states1[0].ID, states2[0].ID)
+	}
+}
+
+// TestDocHandler_IngestEntityStates_TitleFromFirstHeading pins the title
+// extraction: the DcTitle triple carries the text of the document's first
+// markdown H1, not the filename.
+func TestDocHandler_IngestEntityStates_TitleFromFirstHeading(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "doc.md", "# My Great Doc\n\nIntro paragraph.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	if got := tripleValue(t, states[0], source.DcTitle); got != "My Great Doc" {
+		t.Errorf("%s = %q, want %q (text of the first H1)", source.DcTitle, got, "My Great Doc")
+	}
+}
+
+// TestDocHandler_IngestEntityStates_NoTitleFallback pins the fallback: a
+// document with no markdown H1 still gets a DcTitle triple, carrying the
+// filename stem.
+func TestDocHandler_IngestEntityStates_NoTitleFallback(t *testing.T) {
+	dir := t.TempDir()
+	// Plain text file with no markdown heading.
+	writeMD(t, dir, "notes.txt", "Just some notes without a heading.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned")
+	}
+
+	if got := tripleValue(t, states[0], source.DcTitle); got != "notes" {
+		t.Errorf("%s = %q, want %q (filename stem fallback when there is no H1)",
+			source.DcTitle, got, "notes")
+	}
+}
+
+// TestDocHandler_IngestEntityStates_FiltersByExtension pins the corpus
+// boundary: only known document extensions produce entity states — a source
+// file sitting in the same directory never enters the docs corpus.
+func TestDocHandler_IngestEntityStates_FiltersByExtension(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "valid.md", "# Doc\nContent.")
+	writeMD(t, dir, "guide.mdx", "# MDX Guide\nSome MDX content.")
+	writeMD(t, dir, "spec.adoc", "= AsciiDoc Spec\nSome AsciiDoc content.")
+	// Non-doc file — should be ignored by the doc handler.
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) != 3 {
+		t.Fatalf("state count: got %d, want 3 (.adoc + .md + .mdx)", len(states))
+	}
+
+	seen := filePathSet(t, states)
+	for _, want := range []string{"valid.md", "guide.mdx", "spec.adoc"} {
+		if !seen[want] {
+			t.Errorf("expected %s %q among the states, not found; seen: %v", source.DocFilePath, want, seen)
+		}
+	}
+	if seen["main.go"] {
+		t.Errorf("main.go must not enter the docs corpus; seen: %v", seen)
+	}
+}
+
+// TestDocHandler_IngestEntityStates_MultiplePaths pins multi-root ingestion:
+// every configured root is walked and contributes its documents.
+func TestDocHandler_IngestEntityStates_MultiplePaths(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	writeMD(t, dirA, "alpha.md", "# Alpha\nContent in dirA.")
+	writeMD(t, dirA, "beta.txt", "Plain text in dirA.")
+	writeMD(t, dirB, "gamma.md", "# Gamma\nContent in dirB.")
+
+	h := dochandler.New()
+	// GetPath returns paths[0] when paths is non-empty; GetPaths returns both dirs.
+	cfg := sourceConfig{
+		typ:   "docs",
+		path:  dirA,
+		paths: []string{dirA, dirB},
+	}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+
+	// Three files total: two in dirA, one in dirB.
+	if len(states) != 3 {
+		t.Fatalf("state count: got %d, want 3", len(states))
+	}
+
+	// The file paths are root-relative, so both roots having contributed is
+	// what distinguishes a full walk from a single-root one.
+	seen := filePathSet(t, states)
+	for _, want := range []string{"alpha.md", "beta.txt", "gamma.md"} {
+		if !seen[want] {
+			t.Errorf("expected %s %q among the states, not found; seen: %v", source.DocFilePath, want, seen)
+		}
+	}
+}
+
+// TestDocHandler_IngestEntityStates_ContentChangeUpdatesHash is the complement
+// to _IDStableAcrossContentChange: identity holds across an edit, but the
+// DocFileHash triple must still track the new bytes — otherwise a stable ID
+// would mean change detection silently stops working.
+func TestDocHandler_IngestEntityStates_ContentChangeUpdatesHash(t *testing.T) {
+	dir := t.TempDir()
+	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
+
+	h := dochandler.New()
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("first IngestEntityStates() error: %v", err)
+	}
+
+	// Modify the file.
+	if err := os.WriteFile(path, []byte("# Second\nDifferent content entirely."), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	states2, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("second IngestEntityStates() error: %v", err)
+	}
+
+	if len(states1) == 0 || len(states2) == 0 {
+		t.Fatal("expected states from both ingests")
+	}
+
+	if states1[0].ID != states2[0].ID {
+		t.Fatalf("entity ID must stay stable across a content edit (D3): %q vs %q",
+			states1[0].ID, states2[0].ID)
+	}
+
+	hash1 := tripleValue(t, states1[0], source.DocFileHash)
+	hash2 := tripleValue(t, states2[0], source.DocFileHash)
+	if hash1 == "" || hash2 == "" {
+		t.Fatalf("%s must be non-empty on both ingests: %q vs %q", source.DocFileHash, hash1, hash2)
+	}
+	if hash1 == hash2 {
+		t.Errorf("%s must change when the file content changes, got %q both times",
+			source.DocFileHash, hash1)
 	}
 }
 

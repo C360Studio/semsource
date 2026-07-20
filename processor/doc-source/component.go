@@ -208,7 +208,7 @@ func (c *Component) Start(ctx context.Context) error {
 }
 
 // ingestOnce runs a single ingest pass: calls IngestEntityStates on the doc
-// handler (bypassing the normalizer) and publishes each EntityPayload to NATS.
+// handler and publishes each EntityPayload to NATS.
 func (c *Component) ingestOnce(ctx context.Context) error {
 	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.config.Org)
 	if err != nil {
@@ -301,7 +301,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		return
 	}
 
-	// Prefer pre-built EntityStates — no normalizer pass required.
+	// Prefer pre-built EntityStates.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
 			payload, err := entitypub.PayloadFromState(state)

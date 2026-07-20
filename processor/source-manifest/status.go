@@ -296,12 +296,8 @@ var explicitRoles = map[string]string{
 
 	// Content predicates
 	source.DocContent:             RoleContent,
-	source.WebContent:             RoleContent,
 	ast.CodeDocComment:            RoleContent,
 	source.DocSummary:             RoleContent,
-	source.WebSummary:             RoleContent,
-	source.DocRequirements:        RoleContent,
-	source.WebRequirements:        RoleContent,
 	source.MediaVisionDescription: RoleContent,
 	source.MediaVisionText:        RoleContent,
 

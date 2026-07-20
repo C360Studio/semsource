@@ -83,11 +83,7 @@
 //
 //	func (p *Processor) buildDocumentTriples(doc Document) []message.Triple {
 //	    return []message.Triple{
-//	        {Subject: doc.ID, Predicate: source.DocCategory, Object: "sop"},
-//	        {Subject: doc.ID, Predicate: source.DocAppliesTo, Object: "*.go"},
-//	        {Subject: doc.ID, Predicate: source.DocSeverity, Object: "error"},
 //	        {Subject: doc.ID, Predicate: source.DocSummary, Object: doc.Summary},
-//	        {Subject: doc.ID, Predicate: source.DocRequirements, Object: doc.Requirements},
 //	    }
 //	}
 //
@@ -96,7 +92,6 @@
 // The package registers IRI mappings to standard ontologies:
 //   - DocSummary → dc:abstract
 //   - DocMimeType → dc:format
-//   - DocCategory → dc:type
 //   - Parent-chunk relationships use BFO part_of/has_part via code.structure.belongs
 //
 // Semspec-specific predicates use: https://semspec.dev/ontology/source/

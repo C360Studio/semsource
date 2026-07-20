@@ -4,15 +4,12 @@ package doc
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semstreams/storage"
 )
@@ -76,8 +73,8 @@ func NewWithOrg(org string, opts ...Option) *Handler {
 }
 
 // sourceTypeKey is the config source type key for doc sources.
-// The config uses "docs" (plural) while the handler.SourceTypeDoc constant
-// is "doc" (singular) — used for RawEntity.SourceType on emitted entities.
+// The config uses "docs" (plural); the entity ID's type segment is "doc"
+// (singular), built in entities.go.
 const sourceTypeKey = "docs"
 
 // SourceType returns the handler type identifier as used in semsource.yaml.
@@ -103,93 +100,6 @@ func resolvePaths(cfg handler.SourceConfig) ([]string, error) {
 		return nil, fmt.Errorf("doc handler: no paths configured (GetPaths is empty and GetPath is empty)")
 	}
 	return []string{p}, nil
-}
-
-// Ingest walks all configured path(s) in cfg, reads each supported document
-// file, and returns a RawEntity per file. It respects ctx cancellation.
-func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
-	roots, err := resolvePaths(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	var entities []handler.RawEntity
-
-	for _, root := range roots {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if info.IsDir() {
-				if isDefaultExcludedDocDir(root, path) {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-
-			ext := strings.ToLower(filepath.Ext(path))
-			if !docExtensions[ext] {
-				return nil
-			}
-
-			entity, err := ingestFile(path, root)
-			if err != nil {
-				// Non-fatal: log and continue.
-				return nil
-			}
-			entities = append(entities, entity)
-			return nil
-		})
-		if walkErr != nil {
-			return nil, fmt.Errorf("doc handler: walk %q: %w", root, walkErr)
-		}
-	}
-
-	return entities, nil
-}
-
-// ingestFile reads a single document file and constructs its RawEntity.
-func ingestFile(path, root string) (handler.RawEntity, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return handler.RawEntity{}, fmt.Errorf("read %q: %w", path, err)
-	}
-
-	hash := contentHash(content)
-	relPath, _ := filepath.Rel(root, path)
-	// Instance is the sanitized relative path, matching the typed
-	// IngestEntityStates path (entities.go newEntity) so normalizer and
-	// direct paths produce identical IDs — stable across content edits
-	// (entity-staleness spec D3).
-	instance := entityid.SanitizeInstance(relPath)
-
-	title := extractTitle(content, filepath.Base(path))
-	mimeType := mimeForExt(filepath.Ext(path))
-
-	return handler.RawEntity{
-		SourceType: handler.SourceTypeDoc,
-		Domain:     handler.DomainWeb,
-		// System is the relative directory path of the doc root, slugified.
-		// Left to the caller (Normalizer) to further qualify; we set it to
-		// the root path base so the normalizer has something to work with.
-		System:     entityid.SystemSlug(root),
-		EntityType: "doc",
-		Instance:   instance,
-		Properties: map[string]any{
-			"title":        title,
-			"file_path":    relPath,
-			"mime_type":    mimeType,
-			"content_hash": hash,
-			"content":      string(content),
-		},
-	}, nil
 }
 
 // extractTitle returns the text of the first markdown H1 heading in content,

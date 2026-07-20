@@ -10,11 +10,7 @@ func TestPredicatesRegistered(t *testing.T) {
 	// Document predicates
 	docPredicates := []string{
 		DocType,
-		DocCategory,
-		DocAppliesTo,
-		DocSeverity,
 		DocSummary,
-		DocRequirements,
 		DocContent,
 		DocSection,
 		DocChunkIndex,
@@ -39,15 +35,6 @@ func TestPredicatesRegistered(t *testing.T) {
 	repoPredicates := []string{
 		RepoType,
 		RepoURL,
-		RepoBranch,
-		RepoStatus,
-		RepoLanguages,
-		RepoEntityCount,
-		RepoLastIndexed,
-		RepoAutoPull,
-		RepoPullInterval,
-		RepoLastCommit,
-		RepoError,
 	}
 
 	for _, pred := range repoPredicates {
@@ -62,11 +49,7 @@ func TestPredicatesRegistered(t *testing.T) {
 	// Generic source predicates
 	sourcePredicates := []string{
 		SourceType,
-		SourceName,
 		SourceStatus,
-		SourceProject,
-		SourceAddedBy,
-		SourceAddedAt,
 		SourceError,
 	}
 
@@ -85,12 +68,8 @@ func TestPredicateIRIMappings(t *testing.T) {
 		predicate   string
 		expectedIRI string
 	}{
-		{DocCategory, DcType},
 		{DocSummary, DcAbstract},
 		{DocMimeType, DcFormat},
-		{SourceName, vocabulary.DcTitle},
-		{SourceAddedBy, vocabulary.ProvWasAttributedTo},
-		{SourceAddedAt, vocabulary.ProvGeneratedAtTime},
 	}
 
 	for _, tt := range tests {
@@ -111,19 +90,10 @@ func TestPredicateDataTypes(t *testing.T) {
 		predicate    string
 		expectedType string
 	}{
-		{DocCategory, "string"},
-		{DocSeverity, "string"},
-		{DocAppliesTo, "array"},
-		{DocRequirements, "array"},
 		{DocChunkIndex, "int"},
 		{DocChunkCount, "int"},
 		{DocBodyStore, "string"},
 		{DocBodyKey, "string"},
-		{RepoEntityCount, "int"},
-		{RepoAutoPull, "bool"},
-		{RepoLastIndexed, "datetime"},
-		{SourceAddedAt, "datetime"},
-		{SourceAddedBy, "entity_id"},
 	}
 
 	for _, tt := range tests {
@@ -136,44 +106,19 @@ func TestPredicateDataTypes(t *testing.T) {
 	}
 }
 
-func TestEnumValues(t *testing.T) {
-	// Verify enum constants have expected string values
-	t.Run("DocCategoryTypes", func(t *testing.T) {
-		if DocCategorySOP != "sop" {
-			t.Error("DocCategorySOP should be 'sop'")
+func TestMediaTypeValues(t *testing.T) {
+	// The media handlers emit these as string literals; pin the typed constants
+	// so the two cannot drift apart silently.
+	cases := map[MediaTypeValue]string{
+		MediaTypeImage:    "image",
+		MediaTypeVideo:    "video",
+		MediaTypeKeyframe: "keyframe",
+		MediaTypeAudio:    "audio",
+		MediaTypeBinary:   "binary",
+	}
+	for got, want := range cases {
+		if string(got) != want {
+			t.Errorf("media type constant = %q, want %q", got, want)
 		}
-		if DocCategorySpec != "spec" {
-			t.Error("DocCategorySpec should be 'spec'")
-		}
-	})
-
-	t.Run("DocSeverityTypes", func(t *testing.T) {
-		if DocSeverityError != "error" {
-			t.Error("DocSeverityError should be 'error'")
-		}
-		if DocSeverityWarning != "warning" {
-			t.Error("DocSeverityWarning should be 'warning'")
-		}
-		if DocSeverityInfo != "info" {
-			t.Error("DocSeverityInfo should be 'info'")
-		}
-	})
-
-	t.Run("SourceStatusTypes", func(t *testing.T) {
-		if SourceStatusPending != "pending" {
-			t.Error("SourceStatusPending should be 'pending'")
-		}
-		if SourceStatusReady != "ready" {
-			t.Error("SourceStatusReady should be 'ready'")
-		}
-	})
-
-	t.Run("SourceTypeValues", func(t *testing.T) {
-		if SourceTypeRepository != "repository" {
-			t.Error("SourceTypeRepository should be 'repository'")
-		}
-		if SourceTypeDocument != "document" {
-			t.Error("SourceTypeDocument should be 'document'")
-		}
-	})
+	}
 }

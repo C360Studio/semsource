@@ -19,7 +19,7 @@ import (
 )
 
 // Entity is a fully-typed document entity that builds triples directly
-// using canonical vocabulary predicates, bypassing the normalizer.
+// using canonical vocabulary predicates.
 type Entity struct {
 	ID          string
 	Title       string
@@ -27,8 +27,6 @@ type Entity struct {
 	MimeType    string
 	ContentHash string
 	Content     string
-	System      string
-	Org         string
 	IndexedAt   time.Time
 
 	// storageRef is set when content is stored in ObjectStore rather than
@@ -46,14 +44,11 @@ type Entity struct {
 // newEntity constructs a Entity with a deterministic 6-part ID. The instance
 // is the sanitized relative file path (entity-staleness spec D3 — mirrors the
 // code-file convention: source/ast.BuildInstanceID uses the path, not a
-// content hash), matching the ingestFile/RawEntity path so normalizer and
-// direct paths produce identical IDs. This makes doc identity STABLE across
-// edits: an edit re-ingests the SAME entity ID, so the substrate's
-// per-predicate replace updates content triples in place instead of minting
-// an orphaned sibling entity every save. The content hash still travels as
-// the DocFileHash triple for change detection — it just no longer feeds
-// identity. BREAKING for existing doc entity IDs (which were content-hash
-// derived); migration is a reindex.
+// content hash). This makes doc identity STABLE across edits: an edit
+// re-ingests the SAME entity ID, so the substrate's per-predicate replace
+// updates content triples in place instead of minting an orphaned sibling
+// entity every save. The content hash still travels as the DocFileHash triple
+// for change detection — it just no longer feeds identity.
 func newEntity(org, title, filePath, mimeType, contentHash, content, system string, indexedAt time.Time) *Entity {
 	instance := entityid.SanitizeInstance(filePath)
 	return &Entity{
@@ -63,8 +58,6 @@ func newEntity(org, title, filePath, mimeType, contentHash, content, system stri
 		MimeType:    mimeType,
 		ContentHash: contentHash,
 		Content:     content,
-		System:      system,
-		Org:         org,
 		IndexedAt:   indexedAt,
 	}
 }
@@ -114,9 +107,8 @@ func (e *Entity) EntityState() *handler.EntityState {
 }
 
 // IngestEntityStates walks all configured paths and returns fully-typed entity
-// states that embed vocabulary-predicate triples directly, bypassing the
-// normalizer entirely. org is the organisation namespace (e.g. "acme") used
-// in the 6-part entity ID.
+// states that embed vocabulary-predicate triples directly. org is the
+// organisation namespace (e.g. "acme") used in the 6-part entity ID.
 func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
 	roots, err := resolvePaths(cfg)
 	if err != nil {
