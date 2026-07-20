@@ -97,14 +97,14 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 8. Documentation and vocabulary prose
 
-- [ ] 8.1 Rewrite `source/vocabulary/doc.go` from scratch to describe the model actually shipped
+- [x] 8.1 Rewrite `source/vocabulary/doc.go` from scratch to describe the model actually shipped
       (delete the "Parent-Chunk Model" block and the wrong ID schemes)
-- [ ] 8.2 Reconcile the `docs.go` package comment with `predicates.go` (they currently contradict)
-- [ ] 8.3 Fix the lens/handler extension mismatch (`.rst` listed but never ingested; `.mdx` ingested but
+- [x] 8.2 Reconcile the `docs.go` package comment with `predicates.go` (they currently contradict)
+- [x] 8.3 Fix the lens/handler extension mismatch (`.rst` listed but never ingested; `.mdx` ingested but
       not listed)
-- [ ] 8.4 Document the rebuild-from-empty migration and why in-place reindex is insufficient (gh#260)
-- [ ] 8.5 Update `ROADMAP.md` — passage chunking moves out of the dilution limitation
-- [ ] 8.6 File the two framework asks in `docs/upstream/semstreams-asks.md` (offloaded entities never
+- [x] 8.4 Document the rebuild-from-empty migration and why in-place reindex is insufficient (gh#260)
+- [x] 8.5 Update `ROADMAP.md` — passage chunking moves out of the dilution limitation
+- [x] 8.6 File the two framework asks in `docs/upstream/semstreams-asks.md` (offloaded entities never
       embed their title; the 8000-character cap is not configurable) and open the GitHub issues
 - [x] 8.7 File ask #20: `CONTENT` ObjectStore's hard-coded 24h TTL silently expires verbatim bodies,
       coupled to the missing orphan sweep (track only — folds into the on-hold retention ADR)

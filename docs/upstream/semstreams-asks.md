@@ -582,3 +582,49 @@ ADR-0008 open item #5 (per-source retention depth, designed but unimplemented) a
 passages tile the source file exactly, so total stored body bytes are unchanged and per-edit blob
 churn drops from O(file) to O(changed passage) — but it is a live production correctness bug on
 its own.
+
+### 21. Offloaded entities never embed their title — framework-shaped — not yet filed
+
+`graph-embedding` has two lanes for producing embedding text. The StorageRef lane returns
+immediately once it has queued the offloaded body (`processor/graph-embedding/component.go:1150-1153`),
+so the inline-triple lane below it is unreachable for any entity carrying a `StorageRef`.
+
+**Consequence.** For every body-bearing entity — every code symbol and every doc passage SemSource
+produces — `dc.terms.title` and every other short identifying fact is **excluded from the embedding
+vector**. Only body bytes are embedded. A passage titled "Retry Policy § Exponential Backoff" whose
+body never repeats those words is unreachable by a query naming them.
+
+It also makes the `text_suffixes` configuration silently inert for exactly the entities it was tuned
+for. SemSource restates the defaults and adds `.signature`/`.comment`
+(`cmd/semsource/run.go:830-833`) specifically so code signatures and docstrings enter the semantic
+index — but those predicates live on entities that also carry a `StorageRef`, so the setting has no
+effect on them. The config appears to work and does nothing.
+
+**Ask:** embed the title/identity triples alongside the offloaded body (concatenate, or embed both
+and keep the better score), rather than letting the StorageRef lane short-circuit them away. At
+minimum, make the exclusion visible — the current behaviour is indistinguishable from working.
+
+**Surfaced by:** doc-passage-chunking design review, 2026-07-20. Independent of chunking; it applies
+to every offloaded entity SemSource has ever produced.
+
+### 22. The embedding text cap is hard-coded at 8000 characters — framework-shaped — not yet filed
+
+`maxTextLen` is a literal in `processor/graph-embedding/component.go:786-790` (8000, or 4000 for
+bm25), passed to `WithMaxSourceTextLen`; `graph/embedding/worker.go:23` carries the same default.
+There is no config field, so a producer cannot raise it, lower it, or discover it.
+
+**Consequence.** Any entity whose body exceeds the cap is truncated at a word boundary and the
+remainder is **silently dropped from the semantic index** — no error, no metric, no log at
+producer level. Measured on the SemSource repository before passage chunking: 47 of 218 Markdown
+files exceeded it, and ~252 KB of prose was unindexed, including roughly three quarters of the
+project README.
+
+**Ask:** expose the cap as component config (keeping today's value as the default), and count
+truncations so the loss is observable rather than silent.
+
+**Not blocking us.** SemSource now splits documents into passages sized well under the cap, so this
+is no longer a correctness issue for docs — the split is bounded by a hard maximum precisely because
+the framework's cap cannot be configured or detected. It still applies to any producer with
+legitimately large single bodies, and the silence is the part worth fixing regardless.
+
+**Surfaced by:** doc-passage-chunking, 2026-07-20.

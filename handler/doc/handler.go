@@ -14,14 +14,6 @@ import (
 	"github.com/c360studio/semstreams/storage"
 )
 
-// docExtensions lists the file extensions Handler will process.
-var docExtensions = map[string]bool{
-	".adoc": true,
-	".md":   true,
-	".mdx":  true,
-	".txt":  true,
-}
-
 // Handler handles document sources (markdown, plain text).
 // It implements handler.SourceHandler.
 type Handler struct {

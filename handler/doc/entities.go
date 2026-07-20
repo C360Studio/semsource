@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/c360studio/semsource/entityid"
@@ -228,8 +227,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 				return nil
 			}
 
-			ext := strings.ToLower(filepath.Ext(path))
-			if !docExtensions[ext] {
+			if !source.IsDocExtension(filepath.Ext(path)) {
 				return nil
 			}
 

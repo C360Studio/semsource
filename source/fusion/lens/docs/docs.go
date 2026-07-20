@@ -1,14 +1,23 @@
 // Package docs is the fusion docs lens: it serves documents through the same
 // pkg/fusion engine as code, proving fusion is a domain-general primitive
-// (ADR-0004). doc-source emits flat documents today (no section/link edges), so
-// Edges is empty; section/link edges plug in unchanged when doc-source emits them.
+// (ADR-0004).
 //
-// Since ADR-062 increment 4, Hydrate returns a StorageReference HANDLE (read from
-// body triples), not inline content — the doc analogue of the code lens. The doc
-// body producer HAS landed: handler/doc.offloadDocBody offloads each passage to the
-// shared CONTENT store (key "doc:<sha256>") and stamps the DocBodyStore/DocBodyKey
-// handle triples (doc-source wires it via WithBodyStore), so Hydrate returns the
-// verbatim passage. Verified live and unit-covered (handler/doc/handler_test.go).
+// The unit of retrieval is a PASSAGE, not a file. doc-source emits a parent
+// document entity plus one passage entity per structural section, so a hit
+// returns the passage that answers the question rather than an averaged
+// whole-file body. Edges declares passage containment, so a passage resolves to
+// its parent document and a document resolves to its passages.
+//
+// Hydrate returns a StorageReference HANDLE read from the body triples, not
+// inline content — the doc analogue of the code lens. handler/doc offloads each
+// PASSAGE to the shared CONTENT store (key "doc:<sha256-of-passage>") and stamps
+// the DocBodyStore/DocBodyKey handle triples; doc-source wires the store via
+// WithBodyStore. Because the key hashes the passage rather than the file,
+// editing one section rewrites one blob and leaves the rest untouched.
+//
+// The parent document carries no body at all: a whole-file body would restore
+// the diluted, truncated vector passages exist to replace, and would return the
+// same prose twice.
 //
 // Retrieval SCOPE is handled too (ask #16 / ADR-071, semstreams beta.141): the
 // code-context gateway defaults each lens's NL seed resolution to its own domain
@@ -38,9 +47,6 @@ func New() *Lens { return &Lens{} }
 // Name identifies the lens.
 func (*Lens) Name() string { return "docs" }
 
-// docExtensions mark a single-token query as a document path.
-var docExtensions = map[string]bool{".md": true, ".txt": true, ".rst": true, ".adoc": true}
-
 // ResolveMode routes a path-like query (slash, or a bare doc filename) to prefix
 // and everything else to nl (semantic) — documents are found by meaning over
 // their content, not by symbol name.
@@ -49,7 +55,7 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	if strings.ContainsAny(q, " \t\n") {
 		return fusion.ResolveModeNL
 	}
-	if strings.ContainsAny(q, "/\\") || docExtensions[strings.ToLower(path.Ext(q))] {
+	if strings.ContainsAny(q, "/\\") || source.IsDocExtension(path.Ext(q)) {
 		return fusion.ResolveModePrefix
 	}
 	return fusion.ResolveModeNL
