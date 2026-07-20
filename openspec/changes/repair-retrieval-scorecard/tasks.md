@@ -37,7 +37,7 @@ used throughout the diagnosis (`git archive d554bcc`, `scripts/scorecard/` exclu
 - [x] 3.3 Add a Go test covering a body-less non-document entity (the
       `{org}.semsource.config.…dependency.*` case actually observed), not only the parent-document
       case already covered
-- [ ] 3.4 Run the doc bands as the regression check — they are saturated at 10/10 and are what
+- [x] 3.4 Run the doc bands as the regression check — they are saturated at 10/10 and are what
       would detect over-filtering
 
 ## 4. Measure the instability rather than hide it
@@ -57,10 +57,10 @@ used throughout the diagnosis (`git archive d554bcc`, `scripts/scorecard/` exclu
 - [x] 5.1 Bump `questions.json` to version 3
 - [x] 5.2 Add a README comparability note naming the two reasons v2 results do not carry across
       (matcher fix, `MISLEADING` verdict), so a future reader understands why numbers moved
-- [ ] 5.3 Stand up the fixed corpus and record the v3 baseline. Expected: X02 `correct`, X01
+- [x] 5.3 Stand up the fixed corpus and record the v3 baseline. Expected: X02 `correct`, X01
       `MISLEADING`, discrimination 1/2 — **record what happens; if it differs, the difference is
       the finding, not an error to correct**
-- [ ] 5.4 Write `results/SUMMARY-v3-baseline.md` and cross-link it from
+- [x] 5.4 Write `results/SUMMARY-v3-baseline.md` and cross-link it from
       `SUMMARY-instrument-diagnosis.md`
 
 ## 6. File the substrate defect
@@ -82,4 +82,4 @@ used throughout the diagnosis (`git archive d554bcc`, `scripts/scorecard/` exclu
 - [x] 7.2 `go test ./...` and `go test -race ./...` for the group-3 product change
 - [x] 7.3 `shellcheck` or equivalent review of the `run.sh` changes, since the defect this change
       exists to fix was a shell quoting bug that no test would have caught
-- [ ] 7.4 `openspec validate --all` before finalising
+- [x] 7.4 `openspec validate --all` before finalising

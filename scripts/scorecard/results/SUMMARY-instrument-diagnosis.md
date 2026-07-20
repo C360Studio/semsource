@@ -121,6 +121,14 @@ docker run --rm --network <project>_c360 natsio/nats-box:latest \
 Position dependence: run the full set with X02 last, then reorder it first, changing nothing
 else.
 
+## Outcome
+
+Both defects are fixed and the instrument was re-baselined on version 3 — see
+[`SUMMARY-v3-baseline.md`](SUMMARY-v3-baseline.md). The matcher fix alone did not make X02
+scoreable: it retrieves correctly on two calls in three, so it now reports `UNSTABLE` rather than
+`correct`, and stays that way until upstream ask #24 is resolved. X01 reports `MISLEADING`, the
+verdict that did not previously exist.
+
 ## Follow-up: localising the order-dependent drop
 
 Three further probes, same stack and corpus.
