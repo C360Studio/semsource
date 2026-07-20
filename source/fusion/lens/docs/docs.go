@@ -55,9 +55,30 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	return fusion.ResolveModeNL
 }
 
-// Edges is empty: doc-source emits flat documents today. Section (source.doc.section)
-// and cross-doc link edges plug in here, unchanged, once doc-source emits them.
-func (*Lens) Edges() []fusion.EdgeSpec { return nil }
+// Edges declares passage containment, so a passage hit resolves to the document
+// it came from and a document resolves to its passages.
+//
+// Restricted to the relations facet deliberately, mirroring how the code lens
+// restricts CodeContains: containment belongs in the relations map, not in the
+// impact or paths walks. A passage-to-parent edge inside the impact BFS would
+// flood every doc-adjacent query with the parent's entire passage set, which is
+// noise, not blast radius.
+//
+// Sibling expansion is one hop short of what the engine does for you: a passage
+// seed yields its parent, but reaching that parent's other passages needs an
+// outgoing hop then an incoming one, which no built-in walk performs. Callers
+// re-seed on the returned parent handle. Emitting explicit sibling predicates
+// would mint O(n²) triples per document to save a round trip.
+func (*Lens) Edges() []fusion.EdgeSpec {
+	return []fusion.EdgeSpec{
+		{
+			Predicate:    source.CodeBelongs,
+			OutgoingRole: "parent_document",
+			IncomingRole: "passage",
+			Facets:       []fusion.Facet{fusion.FacetRelations},
+		},
+	}
+}
 
 // Label is the document title, read from the canonical dc.terms.title; it falls
 // back to the summary slot for entities emitted before doc-source carried a
@@ -72,10 +93,15 @@ func (*Lens) Label(e *fusion.Entity) string {
 // Kind is the document type ("document").
 func (*Lens) Kind(e *fusion.Entity) string { return e.First(source.DocType) }
 
-// Location is the document's file path (no line range — Fragment carries a
-// section anchor once sections are emitted).
+// Location is the file path, plus a section anchor when the entity is a passage
+// derived from a headed section, so a citation deep-links to the section rather
+// than the top of the file. No line range: the body comes pre-sliced through the
+// handle, and the locator is for display only.
 func (*Lens) Location(e *fusion.Entity) fusion.Locator {
-	return fusion.Locator{Path: e.First(source.DocFilePath)}
+	return fusion.Locator{
+		Path:     e.First(source.DocFilePath),
+		Fragment: source.SectionAnchor(e.First(source.DocSection)),
+	}
 }
 
 // Hydrate returns the handle to the document body, read from the body triples a

@@ -117,7 +117,6 @@ type PassageEntity struct {
 	ParentID  string
 	Title     string
 	Section   string
-	Anchor    string
 	Ordinal   int
 	FilePath  string
 	MimeType  string
@@ -154,7 +153,6 @@ func newPassageEntity(org, system, parentID, parentTitle, filePath, mimeType str
 		ParentID:  parentID,
 		Title:     passageTitle(parentTitle, p.Heading, p.Ordinal),
 		Section:   p.Heading,
-		Anchor:    p.Anchor,
 		Ordinal:   p.Ordinal,
 		FilePath:  filePath,
 		MimeType:  mimeType,

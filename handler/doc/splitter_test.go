@@ -232,22 +232,6 @@ func TestSplitPassages_HeadingInFenceIsNotAHeading(t *testing.T) {
 	}
 }
 
-// TestSplitPassages_AnchorSlug pins the locator fragment used for deep-linking
-// a citation to its section.
-func TestSplitPassages_AnchorSlug(t *testing.T) {
-	cases := map[string]string{
-		"Build & Test Commands": "build--test-commands",
-		"Simple":                "simple",
-		"With-Dash":             "with-dash",
-		"":                      "",
-	}
-	for heading, want := range cases {
-		if got := anchorFor(heading); got != want {
-			t.Errorf("anchorFor(%q) = %q, want %q", heading, got, want)
-		}
-	}
-}
-
 // TestSplitPassages_EmptyInput pins the degenerate case.
 func TestSplitPassages_EmptyInput(t *testing.T) {
 	if got := splitPassages(nil); got != nil {

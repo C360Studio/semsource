@@ -36,7 +36,6 @@ const (
 type passage struct {
 	Ordinal int
 	Heading string
-	Anchor  string
 	Start   int
 	End     int
 	Body    string
@@ -69,7 +68,6 @@ func splitPassages(content []byte) []passage {
 			out = append(out, passage{
 				Ordinal: len(out),
 				Heading: s.heading,
-				Anchor:  anchorFor(s.heading),
 				Start:   span[0],
 				End:     span[1],
 				Body:    string(content[span[0]:span[1]]),
@@ -415,22 +413,4 @@ func runeBoundary(content []byte, i int) int {
 		i--
 	}
 	return i
-}
-
-// anchorFor builds a GitHub-style section anchor from a heading, used as the
-// passage's locator fragment so a citation deep-links to the section.
-func anchorFor(heading string) string {
-	if heading == "" {
-		return ""
-	}
-	var b strings.Builder
-	for _, r := range strings.ToLower(heading) {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			b.WriteRune(r)
-		case r == ' ' || r == '-' || r == '_':
-			b.WriteRune('-')
-		}
-	}
-	return strings.Trim(b.String(), "-")
 }

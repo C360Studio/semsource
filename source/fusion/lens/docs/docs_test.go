@@ -93,3 +93,94 @@ func TestDocsLensViaEngine(t *testing.T) {
 		t.Fatalf("expected embedding provenance for NL doc query, got %q", resp.Provenance)
 	}
 }
+
+// TestEdgesDeclarePassageContainment pins the edge the engine walks to get from
+// a passage to the document it came from, and back the other way.
+func TestEdgesDeclarePassageContainment(t *testing.T) {
+	edges := New().Edges()
+	if len(edges) != 1 {
+		t.Fatalf("Edges() returned %d specs, want exactly the containment edge", len(edges))
+	}
+	e := edges[0]
+	if e.Predicate != source.CodeBelongs {
+		t.Errorf("predicate = %q, want %q", e.Predicate, source.CodeBelongs)
+	}
+	if e.OutgoingRole == "" {
+		t.Error("outgoing role is empty: a passage could not resolve to its parent document")
+	}
+	if e.IncomingRole == "" {
+		t.Error("incoming role is empty: a document could not resolve to its passages")
+	}
+}
+
+// TestEdgesKeepContainmentOutOfImpactAndPaths pins the facet restriction. A
+// passage-to-parent edge inside the impact BFS would flood every doc-adjacent
+// query with the parent's entire passage set — noise, not blast radius. The code
+// lens restricts CodeContains for the same reason.
+func TestEdgesKeepContainmentOutOfImpactAndPaths(t *testing.T) {
+	edges := New().Edges()
+	if len(edges) == 0 {
+		t.Fatal("no edges declared")
+	}
+	for _, e := range edges {
+		if len(e.Facets) == 0 {
+			t.Fatalf("edge %q declares no facets; an empty facet set means ALL facets, "+
+				"so containment would join the impact and paths walks", e.Predicate)
+		}
+		for _, f := range e.Facets {
+			if f == fusion.FacetImpact {
+				t.Errorf("edge %q participates in the impact walk", e.Predicate)
+			}
+			if f == fusion.FacetPaths {
+				t.Errorf("edge %q participates in the paths walk", e.Predicate)
+			}
+		}
+	}
+}
+
+// TestLocationCarriesSectionAnchor pins that a passage from a headed section
+// cites its section rather than the top of the file, and that a parent document
+// (no section) carries no fragment.
+func TestLocationCarriesSectionAnchor(t *testing.T) {
+	l := New()
+
+	passage := &fusion.Entity{Triples: []message.Triple{
+		{Predicate: source.DocType, Object: "passage"},
+		{Predicate: source.DocFilePath, Object: "docs/retry.md"},
+		{Predicate: source.DocSection, Object: "Build & Test Commands"},
+	}}
+	loc := l.Location(passage)
+	if loc.Path != "docs/retry.md" {
+		t.Errorf("path = %q, want docs/retry.md", loc.Path)
+	}
+	if loc.Fragment != "build--test-commands" {
+		t.Errorf("fragment = %q, want the section anchor build--test-commands", loc.Fragment)
+	}
+
+	parent := &fusion.Entity{Triples: []message.Triple{
+		{Predicate: source.DocType, Object: "document"},
+		{Predicate: source.DocFilePath, Object: "docs/retry.md"},
+	}}
+	if got := l.Location(parent).Fragment; got != "" {
+		t.Errorf("parent document fragment = %q, want empty", got)
+	}
+}
+
+// TestLabelAndKindForPassages pins that a passage renders usefully as a
+// neighbour reference: the engine builds every Ref from Label and Location, so a
+// passage that labelled blank would degrade every relations listing that
+// mentions it.
+func TestLabelAndKindForPassages(t *testing.T) {
+	l := New()
+	p := &fusion.Entity{Triples: []message.Triple{
+		{Predicate: source.DocType, Object: "passage"},
+		{Predicate: source.DcTitle, Object: "Retry Policy § Backoff"},
+		{Predicate: source.DocFilePath, Object: "docs/retry.md"},
+	}}
+	if got := l.Label(p); got != "Retry Policy § Backoff" {
+		t.Errorf("label = %q, want the qualified passage title", got)
+	}
+	if got := l.Kind(p); got != "passage" {
+		t.Errorf("kind = %q, want passage", got)
+	}
+}

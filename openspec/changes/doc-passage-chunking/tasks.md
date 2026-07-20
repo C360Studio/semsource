@@ -69,12 +69,12 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 5. Expand passages through the docs lens (D5)
 
-- [ ] 5.1 Implement `Edges()` in `source/fusion/lens/docs/docs.go` declaring `source.CodeBelongs`
+- [x] 5.1 Implement `Edges()` in `source/fusion/lens/docs/docs.go` declaring `source.CodeBelongs`
       with parent/chunk roles, restricted to `FacetRelations`
-- [ ] 5.2 Set `Locator.Fragment` to the section anchor for headed passages
-- [ ] 5.3 Verify `Label()` and `Location()` produce usable references for passage entities
-- [ ] 5.4 Test: passage seed resolves to parent; document seed resolves to passages
-- [ ] 5.5 Test: containment contributes no edges to impact or paths walks
+- [x] 5.2 Set `Locator.Fragment` to the section anchor for headed passages
+- [x] 5.3 Verify `Label()` and `Location()` produce usable references for passage entities
+- [x] 5.4 Test: passage seed resolves to parent; document seed resolves to passages
+- [x] 5.5 Test: containment contributes no edges to impact or paths walks
 
 ## 6. Breaking cut (D10, D11, D12)
 
