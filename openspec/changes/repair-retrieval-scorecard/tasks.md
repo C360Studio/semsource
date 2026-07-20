@@ -72,7 +72,7 @@ used throughout the diagnosis (`git archive d554bcc`, `scripts/scorecard/` exclu
       tie-sorting) so the reader does not repeat them
 - [x] 6.3 Include the second and more valuable half of the ask: fusion exposes no score, rank or
       reason, and `fusionnats.resolveSemantic` discards the `Similarity` it receives
-- [ ] 6.4 Open the GitHub issue on semstreams — issue only, never a PR (Product Boundary)
+- [x] 6.4 Open the GitHub issue on semstreams — issue only, never a PR (Product Boundary)
 - [x] 6.5 State the blast radius accurately: reproduced on `doc_context`; `code_search` was
       stable across 4 consecutive calls after the same burst, which is not proof of immunity
 

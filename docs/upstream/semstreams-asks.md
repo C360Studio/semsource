@@ -683,7 +683,7 @@ more entities made it reliably so.
 **Position:** no ask of our own beyond the bounded-staleness tolerance already proposed in #590.
 Evidence contributed; the decision is theirs.
 
-### 24. Fusion silently drops the top-ranked entity from the first call after a query burst — framework-shaped — not yet filed
+### 24. Fusion silently drops the top-ranked entity from the first call after a query burst — framework-shaped — filed [semstreams#597](https://github.com/C360Studio/semstreams/issues/597)
 
 `Fuse` can return an answer that omits the highest-scoring candidate entirely, with no error, no
 log, and nothing in the response indicating anything was lost.
