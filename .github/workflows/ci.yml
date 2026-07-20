@@ -13,6 +13,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -23,8 +24,26 @@ jobs:
       - name: Unit tests
         run: go test -race ./...
 
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # The critical-path integration suites (MCP answers, fusion pipeline,
+      # versionDiff, readiness, staleness lifecycle) self-provision NATS via
+      # testcontainers; ubuntu-latest runners ship Docker, so no service-
+      # container choreography is needed here.
+      - name: Integration tests
+        run: go test -tags=integration ./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/
+
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
 
@@ -49,6 +68,7 @@ jobs:
 
   ui-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -113,8 +133,9 @@ jobs:
   # cuts until we deliberately promote it into CI.
 
   build-and-push:
-    needs: [test, lint]
+    needs: [test, lint, test-integration]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -160,6 +181,7 @@ jobs:
   publish-ui:
     needs: [test, lint, ui-quality]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -219,6 +241,7 @@ jobs:
   ui-release-smoke:
     needs: publish-ui
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: read

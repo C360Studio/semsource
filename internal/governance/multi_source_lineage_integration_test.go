@@ -23,6 +23,7 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
+	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
 )
 
 // TestIntegration_MultiSourceVersionedLineage is the Tier-B multi-source live
@@ -192,7 +193,12 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 
 	// (4) Differentiator ranks live: the current (v1.10.0) run outranks the demoted
 	// historical (v1.9.0) one, and both are retained (demotion is a reorder).
-	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	// WithSignals attaches predicate-salience ranking (matching production
+	// code-context wiring); without it, ranking is pure resolve-order +
+	// lexical and never actually exercises the code.lineage.superseded_by
+	// weight this test claims to prove (ci-proof-chain D5).
+	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{})).
+		WithSignals(fusionvocab.New())
 	lens := prefixLens{code.New()}
 	prefix := commonPrefix(runOld.ID, runNew.ID)
 	var newRank, oldRank int

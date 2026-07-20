@@ -358,6 +358,95 @@ if ! printf '%s' "$unknown_reply" | grep -q 'NOT_FOUND'; then
 fi
 echo "remove_source rejects unknown handles with NOT_FOUND"
 
+# --- MCP answer-content coverage (ci-proof-chain D2) ---
+# tools/list name-matching alone is not MCP coverage: one real, content-
+# asserting tools/call per remaining tool, against the fixture workspace
+# (src/main.go's `main`, docs/README.md's body).
+
+# wait_for_status_readiness polls source-manifest/status until it contains the
+# given substring (e.g. an "<facet>":{"available":true,"ready":true nesting),
+# or fails after timeout_seconds. source-manifest's own phase:ready means every
+# source finished its initial seed — it does NOT mean the structural graph-index
+# or the semantic embedding index have caught up to that write (mcp-gateway's
+# own tool descriptions document this: gate structural queries on phase ready
+# AND index.ready; code_search reliability tracks embedding.ready).
+wait_for_status_readiness() {
+	label=$1
+	pattern=$2
+	deadline=$(( $(date +%s) + timeout_seconds ))
+	while [ "$(date +%s)" -le "$deadline" ]; do
+		body=$(curl -fsS --max-time 5 "$status_url" 2>/dev/null) || { sleep "$poll_seconds"; continue; }
+		if printf '%s' "$body" | grep -q "$pattern"; then
+			return 0
+		fi
+		sleep "$poll_seconds"
+	done
+	echo "Timed out waiting for $label" >&2
+	echo "Last status: ${body:-no response}" >&2
+	return 1
+}
+
+echo "Waiting for index.ready before checking structural queries (code_context/code_impact)"
+wait_for_status_readiness 'index.ready' '"index":{"available":true,"ready":true' || exit 1
+
+echo "Checking code_context content for the known fixture symbol"
+context_body=$(mcp_call code_context '{"query":"main"}')
+if ! printf '%s' "$context_body" | grep -q '"name":"main"'; then
+	echo "code_context did not resolve the known fixture symbol: $context_body" >&2
+	exit 1
+fi
+if ! printf '%s' "$context_body" | grep -q 'semsource core smoke'; then
+	echo "code_context did not return the verbatim body fragment: $context_body" >&2
+	exit 1
+fi
+echo "code_context returns the known symbol with its verbatim body"
+
+echo "Checking code_context honest-miss for a nonexistent symbol"
+miss_body=$(mcp_call code_context '{"query":"totallyNonexistentSymbolXYZ123"}')
+if printf '%s' "$miss_body" | grep -q '"name":"totallyNonexistentSymbolXYZ123"'; then
+	echo "code_context fabricated a node for a nonexistent symbol: $miss_body" >&2
+	exit 1
+fi
+if ! printf '%s' "$miss_body" | grep -q '"misses"'; then
+	echo "code_context did not report an honest miss for a nonexistent symbol: $miss_body" >&2
+	exit 1
+fi
+echo "code_context reports an honest miss for a nonexistent symbol (no fabricated node)"
+
+echo "Checking code_impact relations/impact shape"
+impact_body=$(mcp_call code_impact '{"query":"main"}')
+if ! printf '%s' "$impact_body" | grep -q '"impact"'; then
+	echo "code_impact response is missing the impact facet: $impact_body" >&2
+	exit 1
+fi
+echo "code_impact returns the impact facet"
+
+echo "Checking doc_context fixture README content"
+doc_body=$(mcp_call doc_context '{"query":"core smoke"}')
+if ! printf '%s' "$doc_body" | grep -q 'disposable workspace'; then
+	echo "doc_context did not return the fixture README content: $doc_body" >&2
+	exit 1
+fi
+echo "doc_context returns the fixture README content"
+
+echo "Waiting for embedding.ready before checking code_search"
+wait_for_status_readiness 'embedding.ready' '"embedding":{"available":true,"ready":true' || exit 1
+
+search_body=$(mcp_call code_search '{"query":"core smoke"}')
+if ! printf '%s' "$search_body" | grep -q 'semsource core smoke'; then
+	echo "code_search (embedding-gated) did not return the fixture hit: $search_body" >&2
+	exit 1
+fi
+echo "code_search (embedding-gated) returns the fixture hit"
+
+echo "Checking code_changes honest no-versions note"
+changes_body=$(mcp_call code_changes '{"project":"core-smoke-unregistered-project","from":"1.0.0","to":"2.0.0"}')
+if ! printf '%s' "$changes_body" | grep -q 'no indexed entities for project'; then
+	echo "code_changes did not return the honest no-versions note: $changes_body" >&2
+	exit 1
+fi
+echo "code_changes returns the honest no-versions note"
+
 # --- compose-packaging-hardening assertions ---
 
 # D5: the compose-built image must identify its build, not report "dev".
