@@ -1,5 +1,12 @@
 # Scorecard A/B — doc passage chunking
 
+> **These runs are questions.json version 1. The set is now version 2** (adds the
+> `discrimination` band, X01–X03). Version 2 results are not comparable with the
+> numbers below — re-run both sides to compare. The discrimination band exists
+> precisely because of the weakness this summary documents under "Reading it":
+> fact-presence grading could not separate whole-file from passage retrieval, so
+> the real result had to be carried by bytes-per-answer, which is a proxy.
+
 Corpus held fixed (`git archive` of 253f9fd: 206 md, 326 go, no node_modules, no
 .git); only the semsource binary varies. questions.json version 1.
 

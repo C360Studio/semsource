@@ -119,8 +119,38 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
       retrieve a phrase that appears only in its tail
 - [x] 9.4 Measure entity count and time-to-ready on this repository before and after; record both in
       this change and treat a large regression as a blocker
-- [ ] 9.5 Choose the chunk ceiling and floor empirically — A/B the graded interrogation, do not guess
-      (the one open question in design.md)
+- [x] 9.5 Choose the chunk ceiling and floor empirically — A/B the graded interrogation, do not guess
+      (the one open question in design.md).
+      Three live runs, questions.json v2, corpus fixed, only the binary varying,
+      `down -v` between each. Full write-up in
+      scripts/scorecard/results/SUMMARY-9.5-bounds.md.
+      **A 4x ceiling range changed NO graded outcome.** 1000/200, 2000/400 and
+      4000/800 all scored 20/22 with identical per-band results. Only evidence
+      size moved: mean total body 11,209 / 15,978 / 25,657 B; entities 5698 /
+      5401 / 5219.
+      **DECISION: keep 2000/400.** Nothing measured justifies moving. Two weak
+      signals favour staying: the offline sweep shows under-floor passages are
+      minimised at 2000/400 (7.0%, vs 10.0% and 12.5%), and it is mid-range on
+      entity cost. Changing a default on evidence that cannot distinguish the
+      options would be motion, not improvement.
+      **Honest limit on this result:** the doc bands are SATURATED (10/10 on
+      every side), so they can show regression but not improvement. This proves
+      no bound in the range breaks anything and that finer bounds cost less
+      evidence per answer; it does NOT prove finer bounds retrieve better, and it
+      cannot see the harm of going too fine. Making bounds genuinely measurable
+      needs questions a saturated doc band cannot already answer — see the
+      summary's "What would actually decide this".
+      **Defect found, NOT fixed (new follow-up):** both discrimination questions
+      failed as `miss`, not `IMPRECISE` — ranking prefers the override section
+      over the default one. X01's top node is README § Quick Start (the
+      port-CONFLICT workaround, 28222) when the query asked for the DEFAULT
+      (8222); § Configuration never surfaces. X02 never surfaces the Tier 2
+      section at all. Identical at all three bounds, so it is independent of
+      passage size — a ranking defect, not a chunking one. Answering "what is the
+      default X" with "how to override X" is a plausible-looking wrong answer.
+      **Grading gap this exposed:** a top node holding the twin but NOT the answer
+      is scored a plain `miss`, but it is worse than absent — it argues for the
+      wrong answer. It deserves its own verdict alongside correct/IMPRECISE.
 - [x] 9.6 Re-run the graded interrogation; confirm Q13/Q17 improve and no previously correct answer
       regresses; record the score
 - [x] 9.7 Verify no reserved-but-unemitted vocabulary remains: every registered predicate has a live
@@ -137,5 +167,40 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
       demotion (5->3) plus dropping body-less document nodes (3->0). Re-measured 0/11
 - [ ] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
       ("CLAUDE.md § CLAUDE.md")
-- [ ] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
-      add discrimination questions where a whole-file match cannot answer
+- [x] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
+      add discrimination questions where a whole-file match cannot answer.
+      Added the `discrimination` band (X01-X03) plus `expect_top_all` /
+      `expect_top_none`, which grade the TOP node alone. Grading the union of an
+      answer's ~20 nodes cannot discriminate: a confusable value elsewhere in the
+      same document rides along even when the right passage ranked first. New
+      `IMPRECISE` verdict, kept distinct from `FABRICATED` — a whole-file body
+      carrying both an answer and its twin is imprecise, not dishonest, and
+      merging them would destroy the fabrication signal.
+      Two questions shipped, with deliberately different sensitivities: X01 NATS
+      monitor port (default 8222 at ~15.5KB vs conflict-workaround 28222 at
+      ~1.8KB, 260 lines apart — separates under any ceiling, so it asks whether
+      chunking happened at all; and its distractor sits INSIDE the old 8000-char
+      window while its answer sits past it). X02 seminstruct 8083 vs semembed
+      8081 in configs/tiers/README.md, 42 lines / ~3.1KB apart in an 8257 B file
+      — separation depends on the ceiling, so this is the one that responds to
+      tuning.
+      Added `check-discrimination.py`, which gates on the two ways these
+      questions rot, and **found real defects rather than confirming a design**:
+      (a) a pair that is a substring of the other — bare `8222` matches inside
+      `28222`, which would have passed on every system while measuring nothing;
+      (b) close co-occurrence in ANY ingested doc. (b) killed a third question
+      (ui-dev vs released image: clean in README.md, but ROADMAP.md names both
+      TWO lines apart) and also killed the survey's second-ranked candidate (a
+      SemStreams version pair, two lines apart in
+      docs/testing/readme-surface-coverage.md). Both had survived a careful
+      manual read. They would have reported IMPRECISE on every system forever,
+      hiding real regressions behind a constant failure.
+      **The corpus must exclude `scripts/scorecard/`** — it quotes both literals
+      of every question side by side, so ingesting it plants a
+      guaranteed-IMPRECISE passage: the measuring apparatus corrupting the
+      measurement.
+      An automated sweep of every `KEY=VALUE` literal in the corpus found only
+      one usable pair beyond these two, so the band is small because this
+      corpus supports a small band.
+      questions.json version 1 -> 2, so prior results are NOT comparable; the
+      band's first live run is 9.5's A/B.

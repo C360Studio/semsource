@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "corpus": "the semsource repository itself",
   "grading": "deterministic substring matching, case-insensitive; see README.md",
   "questions": [
@@ -163,6 +163,24 @@
       "args": { "query": "what is the SemSource quantum entanglement subsystem" },
       "expect_none": ["quantum entanglement subsystem is"],
       "why": "MUST MISS. Fabrication check on the doc side."
+    },
+    {
+      "id": "X01",
+      "band": "discrimination",
+      "tool": "doc_context",
+      "args": { "query": "what is the default host port for the NATS monitor in docker compose" },
+      "expect_top_all": ["NATS_MONITOR_HOST_PORT=8222"],
+      "expect_top_none": ["NATS_MONITOR_HOST_PORT=28222"],
+      "why": "README Configuration (~15.5KB in) gives the default 8222; README Quick Start (~1.8KB in) gives 28222 as the port-conflict workaround. Same env var, different values, 13.7KB apart. Strongest polarity in the set: the DISTRACTOR sits inside the old 8000-char embedding window and the ANSWER sits past it, so whole-file retrieval is pulled toward the wrong one. A whole-file top node carries both and cannot answer."
+    },
+    {
+      "id": "X02",
+      "band": "discrimination",
+      "tool": "doc_context",
+      "args": { "query": "what port does the seminstruct inference container publish" },
+      "expect_top_all": ["-p 8083:8083"],
+      "expect_top_none": ["-p 8081:8081"],
+      "why": "configs/tiers/README.md runs semembed on 8081 (Tier 1, ~4.2KB in) and seminstruct on 8083 (Tier 2, ~7.3KB in) via near-identical `docker run -d -p NNNN:NNNN ghcr.io/c360studio/... # OpenAI-compatible ...` lines differing only in the digit and the service, 42 lines / ~3.1KB apart in an 8257 B file. The tighter-separated of the two, so it covers a shorter-range confusion than X01. NOTE: it was expected to be ceiling-sensitive and is NOT — TestBoundsSweep shows both literals separate at every ceiling from 1000 to 6000, because the two commands sit under different headings and section structure splits before size does. Verified by check-discrimination.py."
     }
   ]
 }

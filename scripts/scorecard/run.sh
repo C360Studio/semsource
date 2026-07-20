@@ -112,6 +112,8 @@ for i in $(seq 0 $((n - 1))); do
 	nodes=$(printf '%s' "$answer" | jq '(.nodes // []) | length' 2>/dev/null || echo 0)
 	bodybytes=$(printf '%s' "$answer" | jq '[(.nodes // [])[] | (.body // "") | length] | add // 0' 2>/dev/null || echo 0)
 	topbytes=$(printf '%s' "$answer" | jq '((.nodes // [])[0].body // "") | length' 2>/dev/null || echo 0)
+	topbody=$(printf '%s' "$answer" | jq -r '((.nodes // [])[0].body // "")' 2>/dev/null || echo "")
+	toplower=$(printf '%s' "$topbody" | tr '[:upper:]' '[:lower:]')
 
 	verdict="correct"; reason=""
 	# isError is a failed call, never a graded answer.
@@ -131,6 +133,29 @@ for i in $(seq 0 $((n - 1))); do
 			printf '%s' "$lower" | grep -qF "$w" && { hit=1; break; }
 		done
 		[ "$hit" = 1 ] || { verdict="miss"; reason="none of expect_any present"; }
+	fi
+	# Discrimination questions grade the TOP node alone, not the union of every
+	# node returned. Grading the union cannot separate the two systems: an answer
+	# carries up to 20 passages, so a confusable value elsewhere in the same
+	# document rides along even when retrieval ranked the right passage first.
+	# The claim being tested is narrower and is the one that matters to an agent:
+	# the single best piece of evidence answers the question on its own.
+	if [ "$verdict" = "correct" ]; then
+		for want in $(jq -r '(.expect_top_all // [])[]' <<<"$q" | tr ' ' '\001'); do
+			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
+			printf '%s' "$toplower" | grep -qF "$w" || { verdict="miss"; reason="top node missing: $w"; break; }
+		done
+	fi
+	# IMPRECISE is deliberately NOT folded into FABRICATED. A whole-file body that
+	# carries both the answer and its confusable twin has invented nothing — it is
+	# imprecise, not dishonest. Conflating them would destroy the fabrication
+	# signal, which is the one result that outranks everything else here.
+	if [ "$verdict" = "correct" ]; then
+		for bad in $(jq -r '(.expect_top_none // [])[]' <<<"$q" | tr ' ' '\001'); do
+			b=$(printf '%s' "$bad" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
+			printf '%s' "$toplower" | grep -qF "$b" &&
+				{ verdict="IMPRECISE"; reason="top node also carries the confusable: $b"; break; }
+		done
 	fi
 	# A fabrication is graded separately from a miss: they are different failures
 	# and conflating them hides the one that actually matters.
@@ -166,6 +191,13 @@ jq -r '[.results[] | select(.band|startswith("doc"))] |
        "median top-node body: \(( [.[].top_body_bytes] | sort | .[length/2|floor] )) bytes",
        "mean  total body:     \(( [.[].body_bytes] | add / length | floor )) bytes",
        "mean  nodes/answer:   \(( [.[].nodes] | add / length ))"' "$out"
+if [ "$(jq '[.results[] | select(.band=="discrimination")] | length' "$out")" -gt 0 ]; then
+	echo
+	echo "--- discrimination (top node answers on its own) ---"
+	jq -r '[.results[] | select(.band=="discrimination")] |
+	       "passed:    \([.[] | select(.verdict=="correct")] | length)/\(length)",
+	       "imprecise: \([.[] | select(.verdict=="IMPRECISE")] | length) (top node carried the confusable value too)"' "$out"
+fi
 fab=$(jq '[.results[] | select(.verdict=="FABRICATED")] | length' "$out")
 [ "$fab" = "0" ] || echo "!!! $fab FABRICATION(S) — this outranks every other result"
 echo "written: $out"

@@ -6,13 +6,14 @@ import (
 	"unicode/utf8"
 )
 
-// Passage size bounds, in bytes.
+// passageBounds is the set of passage size bounds, in bytes, that govern how
+// sections are merged and split into passages.
 //
-// passageCeiling is the structural target: a section larger than this is
-// subdivided on paragraph, then sentence, boundaries. passageFloor is the
-// merge threshold: consecutive sections smaller than this share a passage, so a
-// run of one-line headings does not mint a passage each. passageHardMax is the
-// only bound that is never exceeded — it exists because the substrate truncates
+// ceiling is the structural target: a section larger than this is subdivided
+// on paragraph, then sentence, boundaries. floor is the merge threshold:
+// consecutive sections smaller than this share a passage, so a run of
+// one-line headings does not mint a passage each. hardMax is the only bound
+// that is never exceeded — it exists because the substrate truncates
 // embedding text at 8000 characters with no way to configure it
 // (graph-embedding/component.go), so a passage above that limit would be
 // silently unindexed past the cut. The gap between ceiling and hard max is
@@ -21,13 +22,18 @@ import (
 //
 // These three numbers are the open question in the change's design: the
 // architecture is settled but the values are not, and they should be chosen by
-// A/B over the graded interrogation rather than guessed. They are deliberately
-// consts in one place so that tuning is a one-line change.
-const (
-	passageCeiling = 2000
-	passageFloor   = 400
-	passageHardMax = 6000
-)
+// A/B over the graded interrogation rather than guessed. They live in one
+// struct so that tuning is a one-line change, and splitPassagesBounded takes
+// one explicitly so an A/B harness (or a test) can vary them without touching
+// the shipped defaults.
+type passageBounds struct {
+	ceiling, floor, hardMax int
+}
+
+// defaultBounds are the passage size bounds used by splitPassages, and so by
+// every production caller. This is the single place today's shipped values —
+// 2000/400/6000 — are recorded.
+var defaultBounds = passageBounds{ceiling: 2000, floor: 400, hardMax: 6000}
 
 // passage is one retrievable slice of a document. Start and End are byte
 // offsets into the original content, and Body is exactly content[Start:End] —
@@ -50,21 +56,28 @@ type line struct {
 	protected  bool
 }
 
-// splitPassages divides content into passages on structural boundaries. It is a
-// pure function of the input bytes: the same content always yields the same
-// boundaries, independent of machine, run order, or wall clock.
+// splitPassages divides content into passages on structural boundaries, using
+// the shipped default bounds. It is a pure function of the input bytes: the
+// same content always yields the same boundaries, independent of machine, run
+// order, or wall clock.
 func splitPassages(content []byte) []passage {
+	return splitPassagesBounded(content, defaultBounds)
+}
+
+// splitPassagesBounded is splitPassages parameterized on passageBounds, so a
+// caller can vary the size bounds without touching the shipped defaults.
+func splitPassagesBounded(content []byte, b passageBounds) []passage {
 	if len(content) == 0 {
 		return nil
 	}
 
 	lines := scanLines(content)
 	sections := sectionsOf(lines, len(content))
-	sections = mergeSmallSections(sections)
+	sections = mergeSmallSections(sections, b)
 
 	var out []passage
 	for _, s := range sections {
-		for _, span := range subdivide(content, lines, s) {
+		for _, span := range subdivide(content, lines, s, b) {
 			out = append(out, passage{
 				Ordinal: len(out),
 				Heading: s.heading,
@@ -216,7 +229,7 @@ func setextHeading(lines []line, i int) (string, bool) {
 // mergeSmallSections folds consecutive below-floor sections together so a run of
 // terse headings does not mint a passage each. The merged span keeps the first
 // section's heading, and a merge never pushes a passage past the ceiling.
-func mergeSmallSections(in []section) []section {
+func mergeSmallSections(in []section, b passageBounds) []section {
 	if len(in) == 0 {
 		return in
 	}
@@ -224,7 +237,7 @@ func mergeSmallSections(in []section) []section {
 	for _, s := range in[1:] {
 		prev := &out[len(out)-1]
 		prevSize := prev.end - prev.start
-		if prevSize < passageFloor && (s.end-prev.start) <= passageCeiling {
+		if prevSize < b.floor && (s.end-prev.start) <= b.ceiling {
 			prev.end = s.end
 			continue
 		}
@@ -236,8 +249,8 @@ func mergeSmallSections(in []section) []section {
 // subdivide breaks one section into byte spans no larger than the ceiling,
 // cutting on paragraph boundaries first and sentence boundaries second. It
 // returns [start,end) pairs that exactly tile the section.
-func subdivide(content []byte, lines []line, s section) [][2]int {
-	if s.end-s.start <= passageCeiling {
+func subdivide(content []byte, lines []line, s section, b passageBounds) [][2]int {
+	if s.end-s.start <= b.ceiling {
 		return [][2]int{{s.start, s.end}}
 	}
 
@@ -250,13 +263,13 @@ func subdivide(content []byte, lines []line, s section) [][2]int {
 	}
 	for _, blk := range blocksOf(lines, s) {
 		size := blk[1] - blk[0]
-		if cur[1] > cur[0] && (cur[1]-cur[0])+size > passageCeiling {
+		if cur[1] > cur[0] && (cur[1]-cur[0])+size > b.ceiling {
 			flush()
 			cur = [2]int{blk[0], blk[0]}
 		}
-		if size > passageCeiling {
+		if size > b.ceiling {
 			flush()
-			for _, piece := range splitOversized(content, lines, blk) {
+			for _, piece := range splitOversized(content, lines, blk, b) {
 				out = append(out, piece)
 			}
 			cur = [2]int{blk[1], blk[1]}
@@ -315,14 +328,14 @@ func blocksOf(lines []line, s section) [][2]int {
 // retrieval more than an oversized passage does; past the hard max it is cut on
 // line boundaries so nothing is ever silently truncated by the substrate.
 // Ordinary prose is cut on sentence boundaries, then hard-cut as a last resort.
-func splitOversized(content []byte, lines []line, blk [2]int) [][2]int {
+func splitOversized(content []byte, lines []line, blk [2]int, b passageBounds) [][2]int {
 	if blockIsFenced(lines, blk) {
-		if blk[1]-blk[0] <= passageHardMax {
+		if blk[1]-blk[0] <= b.hardMax {
 			return [][2]int{blk}
 		}
-		return cutOnLines(lines, blk)
+		return cutOnLines(lines, blk, b)
 	}
-	return cutOnSentences(content, blk)
+	return cutOnSentences(content, blk, b)
 }
 
 func blockIsFenced(lines []line, blk [2]int) bool {
@@ -334,7 +347,7 @@ func blockIsFenced(lines []line, blk [2]int) bool {
 	return false
 }
 
-func cutOnLines(lines []line, blk [2]int) [][2]int {
+func cutOnLines(lines []line, blk [2]int, b passageBounds) [][2]int {
 	var out [][2]int
 	cur := [2]int{blk[0], blk[0]}
 	for i := range lines {
@@ -342,7 +355,7 @@ func cutOnLines(lines []line, blk [2]int) [][2]int {
 		if ln.start < blk[0] || ln.end > blk[1] {
 			continue
 		}
-		if cur[1] > cur[0] && (ln.end-cur[0]) > passageHardMax {
+		if cur[1] > cur[0] && (ln.end-cur[0]) > b.hardMax {
 			out = append(out, cur)
 			cur = [2]int{ln.start, ln.end}
 			continue
@@ -357,25 +370,25 @@ func cutOnLines(lines []line, blk [2]int) [][2]int {
 
 // cutOnSentences accumulates sentences up to the ceiling. A single sentence
 // longer than the hard max is cut at a rune boundary — never mid-rune.
-func cutOnSentences(content []byte, blk [2]int) [][2]int {
+func cutOnSentences(content []byte, blk [2]int, b passageBounds) [][2]int {
 	var out [][2]int
 	start := blk[0]
 	last := blk[0]
 	for _, end := range sentenceEnds(content, blk) {
-		if end-start > passageCeiling && last > start {
+		if end-start > b.ceiling && last > start {
 			out = append(out, [2]int{start, last})
 			start = last
 		}
-		for end-start > passageHardMax {
-			cut := runeBoundary(content, start+passageHardMax)
+		for end-start > b.hardMax {
+			cut := runeBoundary(content, start+b.hardMax)
 			out = append(out, [2]int{start, cut})
 			start = cut
 		}
 		last = end
 	}
 	if blk[1] > start {
-		for blk[1]-start > passageHardMax {
-			cut := runeBoundary(content, start+passageHardMax)
+		for blk[1]-start > b.hardMax {
+			cut := runeBoundary(content, start+b.hardMax)
 			out = append(out, [2]int{start, cut})
 			start = cut
 		}

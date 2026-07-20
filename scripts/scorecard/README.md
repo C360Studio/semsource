@@ -30,7 +30,7 @@ Results land in `results/<label>.json` with every answer retained, so a verdict 
 be re-examined without re-running the stack.
 
 Knobs: `SEMSOURCE_HTTP_PORT` (default 28080), `SEMSOURCE_HOST`,
-`SCORECARD_READY_TIMEOUT`, `SCORECARD_EMBED_SETTLE`, `SCORECARD_CALL_TIMEOUT`,
+`SCORECARD_READY_TIMEOUT`, `SCORECARD_CALL_TIMEOUT`,
 `SCORECARD_QUESTIONS`.
 
 Always use an isolated `COMPOSE_PROJECT_NAME` and high ports — this machine also
@@ -64,16 +64,31 @@ indistinguishable from a judge change. The trade is that matchers are coarse: th
 verify the answer *contains* the load-bearing fact, not that the prose around it is
 good.
 
-Three verdicts, deliberately distinct:
+Four verdicts, deliberately distinct:
 
 - **correct** — required content present.
 - **miss** — the answer did not contain it. An honest failure.
+- **IMPRECISE** — the top-ranked evidence carried the answer *and* a confusable
+  value it could be mistaken for, so the evidence does not settle the question.
+  Only discrimination questions can produce this.
 - **FABRICATED** — the answer asserted something known to be false. This is not a
   worse miss, it is a different failure, and it outranks every other result in the
   summary. Zero fabrication is this product's actual moat; a set that scores well
   while inventing one answer has failed.
 
+**IMPRECISE is deliberately not folded into FABRICATED.** A whole-file body that
+happens to contain both the answer and its twin has invented nothing — it is
+imprecise, not dishonest. Merging the two would destroy the fabrication signal,
+which is the single result that outranks everything else here.
+
 An `isError` result is recorded as `error`, never graded as an answer.
+
+### Matchers
+
+`expect_all`, `expect_any` and `expect_none` match against the **whole answer**.
+`expect_top_all` and `expect_top_none` match against the **top-ranked node's body
+only** — see the discrimination band below for why that distinction is the whole
+point.
 
 ## Question bands
 
@@ -84,6 +99,7 @@ Bands exist so a score can be read rather than just totalled.
 - **code** — symbol and concept retrieval on the code side.
 - **impact** — dependents named, not merely counted.
 - **negative** — must miss.
+- **discrimination** — the top node must answer on its own.
 
 `doc-early` versus `doc-late` is the load-bearing split for passage chunking. The
 substrate truncates embedding text at 8000 characters, so before chunking a
@@ -97,6 +113,72 @@ Fusion API sit after.
 The early band is what detects a regression: if chunking breaks something that
 already worked, it shows up there, and a `doc-late` gain bought with a `doc-early`
 loss is not a win.
+
+## The discrimination band — what fact-presence cannot measure
+
+Fact-presence grading cannot separate whole-file retrieval from passage retrieval.
+A 31 KB README body trivially contains every fact in it, so a substring matcher
+passes whether the system found the right paragraph or dumped the document. The
+first A/B run said so in its own summary and had to fall back on bytes-per-answer
+as the real result. Bytes are a proxy: they show the evidence got smaller without
+showing that anything became answerable that was not answerable before.
+
+A discrimination question closes that gap. It targets a fact whose document also
+contains a **confusable twin** in a different section — the same env var with a
+different value, the same command shape with a different port. The question then
+asserts both directions against the top-ranked node:
+
+```json
+"expect_top_all":  ["NATS_MONITOR_HOST_PORT=8222"],
+"expect_top_none": ["NATS_MONITOR_HOST_PORT=28222"]
+```
+
+Whole-file retrieval puts both strings in one body, so the evidence cannot settle
+which is the default — `IMPRECISE`. Passage retrieval returns the section holding
+one of them, so the evidence answers on its own — `correct`. That is a capability
+difference, not a size difference.
+
+**Why the top node and not the whole answer.** An answer carries up to 20 passages.
+Grading the union would let a confusable value elsewhere in the same document ride
+along even when retrieval ranked the right passage first, so both systems would
+fail and the question would measure nothing. The narrower claim — the single best
+piece of evidence stands alone — is also the one an agent actually depends on.
+
+**The two questions have different sensitivities, on purpose.** X01's pair is 260
+lines (~13.7 KB) apart, so it separates under any plausible ceiling — it asks
+whether chunking happened at all. X02's pair is 42 lines (~3.1 KB) apart in an
+8257 B file, so whether it separates depends on the ceiling — it is the one that
+responds to tuning.
+
+### Validating a discrimination question — do not skip this
+
+Run the checker before scoring; it gates on the two ways these questions rot:
+
+```bash
+scripts/scorecard/check-discrimination.py <corpus-dir>
+```
+
+**The pair must not be a substring of one another.** Bare `8222` matches inside
+`28222`, so the twin would satisfy the answer check and the question would pass on
+every system while measuring nothing. X01 matches on `NATS_MONITOR_HOST_PORT=8222`
+for exactly this reason.
+
+**The pair must not co-occur closely in ANY ingested doc** — not just the document
+you designed against. Two candidates died here after surviving a careful read: a
+ui-dev-overlay/released-image pair (clean in README.md, but ROADMAP.md names both
+two lines apart) and a SemStreams version pair (two lines apart in
+docs/testing/readme-surface-coverage.md). Both would have reported IMPRECISE on
+every system forever, hiding real regressions behind a constant failure.
+
+**Exclude `scripts/scorecard/` from the ingested corpus.** This directory quotes
+both literals of every question side by side, so ingesting it plants a
+guaranteed-IMPRECISE passage in the corpus — the measuring apparatus corrupting
+the measurement. The checker excludes it; your corpus build must too.
+
+A consequence worth stating plainly: this repository's docs contain very few
+well-separated confusable pairs. An automated sweep of every `KEY=VALUE` literal
+found exactly one usable pair beyond the two shipped here. The band is small
+because the corpus supports a small band, not because two questions is a target.
 
 ## Adding questions
 
