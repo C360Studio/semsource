@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/entityid"
+	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // entityIDSegmentRegex mirrors the per-segment rule enforced by
@@ -323,6 +324,65 @@ func TestSanitizeInstance_LengthCapPreservesUniqueness(t *testing.T) {
 	}
 	if len(a) > 60 || len(b) > 60 {
 		t.Errorf("length cap exceeded: %d / %d", len(a), len(b))
+	}
+}
+
+// TestBuild_BoundsTotalIDLength pins the guarantee that closes the
+// over-length entity-ID class: Build never returns an ID that graph-ingest
+// will reject for size. The AST path composes an instance segment from a path
+// slug plus every enclosing scope plus the symbol name, so a single deeply
+// nested symbol (or one long JS destructuring pattern) can push the assembled
+// ID past MaxEntityIDBytes. Every producer funnels through Build, so bounding
+// it here is what makes the class unreachable rather than merely unlikely.
+func TestBuild_BoundsTotalIDLength(t *testing.T) {
+	// Faithful to the shape observed in the field: a JS destructuring const
+	// whose name is the entire pattern, under a deep node_modules path.
+	instance := "ui-node_modules--eslint-eslintrc-lib-config-array-" +
+		strings.Repeat("configArrayFactory--------------", 8) + "finalizeCache"
+
+	id := entityid.Build("c360", entityid.PlatformSemsource, "javascript",
+		"workspace", "const", instance)
+
+	if err := semtypes.ValidateEntityID(id); err != nil {
+		t.Errorf("Build produced an ID the graph will reject (%d bytes): %v", len(id), err)
+	}
+}
+
+// TestBuild_LengthBoundIsDeterministicAndUnique guards the two properties a
+// truncating bound can silently break: stable identity across runs, and
+// distinct entities keeping distinct IDs when they share a long prefix.
+func TestBuild_LengthBoundIsDeterministicAndUnique(t *testing.T) {
+	prefix := strings.Repeat("deeplyNestedScope-", 20)
+	build := func(instance string) string {
+		return entityid.Build("c360", entityid.PlatformSemsource, "javascript",
+			"workspace", "const", instance)
+	}
+
+	a, b := build(prefix+"handlerAlpha"), build(prefix+"handlerBeta")
+
+	if a != build(prefix+"handlerAlpha") {
+		t.Error("Build is not deterministic for the same over-length input")
+	}
+	if a == b {
+		t.Errorf("distinct symbols collided after bounding: both are %q", a)
+	}
+	for _, id := range []string{a, b} {
+		if err := semtypes.ValidateEntityID(id); err != nil {
+			t.Errorf("bounded ID %q is invalid: %v", id, err)
+		}
+	}
+}
+
+// TestBuild_UnderBudgetIDsAreUnchanged is the stability half of the contract.
+// Bounding must be invisible to every ID that already fits: rewriting those
+// would re-key existing graph entities and orphan their triples.
+func TestBuild_UnderBudgetIDsAreUnchanged(t *testing.T) {
+	instance := strings.Repeat("a", 200)
+	id := entityid.Build("acme", entityid.PlatformSemsource, "golang",
+		"github.com-acme-gcs", "function", instance)
+
+	if want := "acme.semsource.golang.github.com-acme-gcs.function." + instance; id != want {
+		t.Errorf("an ID that fits the budget was rewritten:\n got %q\nwant %q", id, want)
 	}
 }
 
