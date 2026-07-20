@@ -79,10 +79,10 @@ func TestSplitPassages_NeverExceedsHardMax(t *testing.T) {
 			return nil
 		}
 		for _, p := range splitPassages(content) {
-			if size := p.End - p.Start; size > passageHardMax {
+			if size := p.End - p.Start; size > defaultBounds.hardMax {
 				rel, _ := filepath.Rel(root, path)
 				t.Errorf("%s passage %d is %d bytes, above the hard max %d — it would be silently truncated",
-					rel, p.Ordinal, size, passageHardMax)
+					rel, p.Ordinal, size, defaultBounds.hardMax)
 			}
 		}
 		return nil
@@ -178,7 +178,7 @@ func TestSplitPassages_SubdividesOversizedSection(t *testing.T) {
 		if p.Heading != "Big" {
 			t.Errorf("subdivided passage %d lost its heading: %q", p.Ordinal, p.Heading)
 		}
-		if size := p.End - p.Start; size > passageHardMax {
+		if size := p.End - p.Start; size > defaultBounds.hardMax {
 			t.Errorf("passage %d is %d bytes, above hard max", p.Ordinal, size)
 		}
 	}

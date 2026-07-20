@@ -144,12 +144,41 @@ along even when retrieval ranked the right passage first, so both systems would
 fail and the question would measure nothing. The narrower claim — the single best
 piece of evidence stands alone — is also the one an agent actually depends on.
 
-**Picking a distractor.** It must be a literal that does not appear near the
-answer, and must not be a substring of the answer or vice versa. `8222` and `28222`
-overlap as bare numbers, which is why X01 matches on `NATS_MONITOR_HOST_PORT=8222`
-— the prefixed form is unambiguous in both directions. Verify placement by reading
-the file, not by assuming: a "two meanings" candidate that turns out to be
-self-disambiguating inside one sentence discriminates nothing.
+**The two questions have different sensitivities, on purpose.** X01's pair is 260
+lines (~13.7 KB) apart, so it separates under any plausible ceiling — it asks
+whether chunking happened at all. X02's pair is 42 lines (~3.1 KB) apart in an
+8257 B file, so whether it separates depends on the ceiling — it is the one that
+responds to tuning.
+
+### Validating a discrimination question — do not skip this
+
+Run the checker before scoring; it gates on the two ways these questions rot:
+
+```bash
+scripts/scorecard/check-discrimination.py <corpus-dir>
+```
+
+**The pair must not be a substring of one another.** Bare `8222` matches inside
+`28222`, so the twin would satisfy the answer check and the question would pass on
+every system while measuring nothing. X01 matches on `NATS_MONITOR_HOST_PORT=8222`
+for exactly this reason.
+
+**The pair must not co-occur closely in ANY ingested doc** — not just the document
+you designed against. Two candidates died here after surviving a careful read: a
+ui-dev-overlay/released-image pair (clean in README.md, but ROADMAP.md names both
+two lines apart) and a SemStreams version pair (two lines apart in
+docs/testing/readme-surface-coverage.md). Both would have reported IMPRECISE on
+every system forever, hiding real regressions behind a constant failure.
+
+**Exclude `scripts/scorecard/` from the ingested corpus.** This directory quotes
+both literals of every question side by side, so ingesting it plants a
+guaranteed-IMPRECISE passage in the corpus — the measuring apparatus corrupting
+the measurement. The checker excludes it; your corpus build must too.
+
+A consequence worth stating plainly: this repository's docs contain very few
+well-separated confusable pairs. An automated sweep of every `KEY=VALUE` literal
+found exactly one usable pair beyond the two shipped here. The band is small
+because the corpus supports a small band, not because two questions is a target.
 
 ## Adding questions
 

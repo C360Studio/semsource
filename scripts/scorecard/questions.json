@@ -180,16 +180,7 @@
       "args": { "query": "what port does the seminstruct inference container publish" },
       "expect_top_all": ["-p 8083:8083"],
       "expect_top_none": ["-p 8081:8081"],
-      "why": "configs/tiers/README.md runs semembed on 8081 (Tier 1, ~4.2KB in) and seminstruct on 8083 (Tier 2, ~7.3KB in) via near-identical `docker run -d -p NNNN:NNNN ghcr.io/c360studio/... # OpenAI-compatible ...` lines differing only in the digit and the service. The file is 8257 B, so a whole-file body is one blob holding both commands."
-    },
-    {
-      "id": "X03",
-      "band": "discrimination",
-      "tool": "doc_context",
-      "args": { "query": "how do I start the workbench from local ui source instead of a released image" },
-      "expect_top_all": ["docker-compose.ui-dev.yml"],
-      "expect_top_none": ["ghcr.io/c360studio/semsource-ui"],
-      "why": "README local-development start (~13.7KB in) uses the ui-dev overlay. The released-image path (~8.4KB in, plus the publish section above it) names the ghcr image and is the wrong answer here. Command-shaped rather than number-shaped, so it exercises a different failure mode than X01/X02."
+      "why": "configs/tiers/README.md runs semembed on 8081 (Tier 1, ~4.2KB in) and seminstruct on 8083 (Tier 2, ~7.3KB in) via near-identical `docker run -d -p NNNN:NNNN ghcr.io/c360studio/... # OpenAI-compatible ...` lines differing only in the digit and the service, 42 lines / ~3.1KB apart in an 8257 B file. The tighter-separated of the two, so it covers a shorter-range confusion than X01. NOTE: it was expected to be ceiling-sensitive and is NOT — TestBoundsSweep shows both literals separate at every ceiling from 1000 to 6000, because the two commands sit under different headings and section structure splits before size does. Verified by check-discrimination.py."
     }
   ]
 }

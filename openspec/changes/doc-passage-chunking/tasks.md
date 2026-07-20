@@ -146,13 +146,31 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
       `IMPRECISE` verdict, kept distinct from `FABRICATED` — a whole-file body
       carrying both an answer and its twin is imprecise, not dishonest, and
       merging them would destroy the fabrication signal.
-      Each question pairs a fact with a confusable twin elsewhere in the SAME
-      document, all three verified by reading the corpus: X01 NATS monitor port
-      (default 8222 at ~15.5KB vs conflict-workaround 28222 at ~1.8KB — the
-      distractor is inside the old 8000-char window and the answer is past it);
-      X02 seminstruct 8083 vs semembed 8081 in configs/tiers/README.md (8257 B,
-      near-identical `docker run -d -p` lines); X03 ui-dev overlay vs released
-      ghcr image. Matchers use prefixed literals because bare `8222` matches
-      inside `28222` — verified, and it would have made X01 silently useless.
+      Two questions shipped, with deliberately different sensitivities: X01 NATS
+      monitor port (default 8222 at ~15.5KB vs conflict-workaround 28222 at
+      ~1.8KB, 260 lines apart — separates under any ceiling, so it asks whether
+      chunking happened at all; and its distractor sits INSIDE the old 8000-char
+      window while its answer sits past it). X02 seminstruct 8083 vs semembed
+      8081 in configs/tiers/README.md, 42 lines / ~3.1KB apart in an 8257 B file
+      — separation depends on the ceiling, so this is the one that responds to
+      tuning.
+      Added `check-discrimination.py`, which gates on the two ways these
+      questions rot, and **found real defects rather than confirming a design**:
+      (a) a pair that is a substring of the other — bare `8222` matches inside
+      `28222`, which would have passed on every system while measuring nothing;
+      (b) close co-occurrence in ANY ingested doc. (b) killed a third question
+      (ui-dev vs released image: clean in README.md, but ROADMAP.md names both
+      TWO lines apart) and also killed the survey's second-ranked candidate (a
+      SemStreams version pair, two lines apart in
+      docs/testing/readme-surface-coverage.md). Both had survived a careful
+      manual read. They would have reported IMPRECISE on every system forever,
+      hiding real regressions behind a constant failure.
+      **The corpus must exclude `scripts/scorecard/`** — it quotes both literals
+      of every question side by side, so ingesting it plants a
+      guaranteed-IMPRECISE passage: the measuring apparatus corrupting the
+      measurement.
+      An automated sweep of every `KEY=VALUE` literal in the corpus found only
+      one usable pair beyond these two, so the band is small because this
+      corpus supports a small band.
       questions.json version 1 -> 2, so prior results are NOT comparable; the
       band's first live run is 9.5's A/B.
