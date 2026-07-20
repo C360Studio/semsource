@@ -80,3 +80,54 @@ func RenderTSArrowSignature(name string, valueNode *sitter.Node, source []byte) 
 	}
 	return strings.Join(strings.Fields(strings.Join(parts, "")), " ")
 }
+
+// IsDestructuringPattern reports whether a declarator's name position holds a
+// binding pattern rather than a plain identifier.
+func IsDestructuringPattern(nameNode *sitter.Node) bool {
+	switch nameNode.Type() {
+	case "object_pattern", "array_pattern":
+		return true
+	default:
+		return false
+	}
+}
+
+// CollectPatternBindings walks a JS/TS destructuring pattern and appends the
+// nodes that actually introduce names into scope. Shared by the ts and svelte
+// parsers, which both reach this grammar.
+//
+// Only binding positions are descended into, which is what separates a name
+// from the syntax around it:
+//   - pair_pattern descends into `value` only — in `{key: local}` the key names
+//     a field on the source object, while `local` is what gets declared;
+//   - assignment patterns descend into `left` only, so a default value's
+//     expression (`{a = someCall()}`) contributes no spurious entities;
+//   - object_pattern/array_pattern iterate NAMED children, which skips
+//     punctuation and array holes for free.
+func CollectPatternBindings(node *sitter.Node, out *[]*sitter.Node) {
+	switch node.Type() {
+	case "identifier", "shorthand_property_identifier_pattern":
+		*out = append(*out, node)
+	case "pair_pattern":
+		descendPatternField(node, "value", out)
+	case "object_assignment_pattern", "assignment_pattern":
+		descendPatternField(node, "left", out)
+	case "object_pattern", "array_pattern", "rest_pattern":
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			CollectPatternBindings(node.NamedChild(i), out)
+		}
+	}
+}
+
+// descendPatternField recurses into a named field, falling back to the first
+// named child so a grammar revision that drops the field name degrades to
+// skipping the odd binding rather than dropping every symbol in the file.
+func descendPatternField(node *sitter.Node, field string, out *[]*sitter.Node) {
+	if child := node.ChildByFieldName(field); child != nil {
+		CollectPatternBindings(child, out)
+		return
+	}
+	if node.NamedChildCount() > 0 {
+		CollectPatternBindings(node.NamedChild(0), out)
+	}
+}
