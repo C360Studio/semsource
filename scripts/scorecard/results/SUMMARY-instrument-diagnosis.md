@@ -154,3 +154,21 @@ about.)
 **It is `doc_context`-only, so far.** After the same burst, `code_search` (C04/C05/C06 — the
 embedding-backed code lens) returned an identical top node across 4 consecutive calls each. Not
 proof of immunity, but the reproduction should not be generalised across lenses.
+
+**It is not a mixed vector population.** A natural second suspicion is that entities are first
+embedded statistically and progressively replaced with neural vectors, so a candidate set would
+depend on which entities had been upgraded yet. That is not how this works: `embedder_type` is
+a single config value resolved once at startup (`createEmbedder`,
+`processor/graph-embedding/component.go:674`), a hard switch on `bm25` vs `http` with no
+runtime escalation and no replacement pass. A failure to resolve the HTTP endpoint errors the
+component out rather than silently downgrading; the "BM25 as a fallback" note in
+`graph/embedding/doc.go` refers to selecting BM25 *by configuration* (tier 0), not at runtime.
+
+Confirmed on the stack: every probe reports `embedder=http`, and the similarity distribution
+over 100 scoped results is tight and unimodal (0.5741–0.7322) with no near-zero cluster — a
+mixed population would be bimodal. A dimensionality check would not have caught it either;
+BM25 here is also 384-dimensional.
+
+What *does* progress over time is embedding **coverage**, as `indexed_revision` climbs toward
+`target_revision` — which is why `embedding.ready` exists and why `run.sh` gates on it. Every
+measurement here was taken at a stable 10038/10038.
