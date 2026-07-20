@@ -630,7 +630,28 @@ legitimately large single bodies, and the silence is the part worth fixing regar
 **Surfaced by:** doc-passage-chunking, 2026-07-20.
 
 
-### 23. Strict catch-up readiness is reachable after any finite write burst — framework-shaped — evidence added to [semstreams#590](https://github.com/C360Studio/semstreams/issues/590)
+### 23. Strict catch-up readiness is reachable after any finite write burst — framework-shaped — RESOLVED in beta.156 ([#592](https://github.com/C360Studio/semstreams/issues/592) / [PR #593](https://github.com/C360Studio/semstreams/pull/593)) — ADOPTED
+
+**Status:** Shipped. Our evidence on [#590](https://github.com/C360Studio/semstreams/issues/590) was split
+out as #592 (read path) from #591/ADR-082 (community detection). The research **rejected** the
+bounded-stale read we proposed — retry-the-transient is the correct contract for exact consumers,
+because a bounded-stale fusion resolve can return a just-written symbol as an authoritative MISS, the
+false-negative ADR-066 exists to prevent. It found a real bug instead: `Fuse` handled
+`ErrorCodeIndexNotReady` INCONSISTENTLY — the top gate degraded to an empty-honest envelope,
+`collectEdges` swallowed it, but `Resolve`/`Entities` propagated it as a hard error. That is exactly
+the "passes 5/5 alone, fails under full-suite load" shape we reported. beta.156 makes the degrade
+consistent.
+
+**Correction adopted locally:** PR #593 classifies on the stable code
+(`errors.As` + `Code == graph.ErrorCodeIndexNotReady`), explicitly NOT `errs.IsTransient`, because a
+real connection timeout is also transient and must propagate as a hard error rather than be silently
+degraded. Our first fix used `errs.IsTransient` and was too broad — it would have retried a genuine
+outage until the deadline, converting a reportable failure into a mute timeout.
+`internal/governance/fuse_retry_integration_test.go` now matches their classification.
+
+Original report retained below.
+
+### 23a. Original report
 
 `ComputeIndexStatus` gates on `ready := target > 0 && indexed >= target`
 (`graph/index_status.go`), and `graph-index` answers queries below that bar with a classified

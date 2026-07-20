@@ -5,7 +5,7 @@ go 1.26.3
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
-	github.com/c360studio/semstreams v1.0.0-beta.153
+	github.com/c360studio/semstreams v1.0.0-beta.156
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/nats-io/nats.go v1.48.0
