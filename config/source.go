@@ -76,7 +76,11 @@ type SourceEntry struct {
 
 	// IndexInterval controls how often ast sources perform a full reindex
 	// sweep on top of fsnotify. Must be parseable as a Go time.Duration.
-	// Default "60s". Empty string or "0s" disables periodic reindex.
+	// Default "60s" when Watch is true; empty when Watch is false (a true
+	// freeze — no watcher AND no periodic reindex, matching the documented
+	// one-shot snapshot semantics). An explicit value is always honored
+	// regardless of Watch — that is the opt-back-in to periodic tracking for
+	// an otherwise-frozen source. "0s" also disables periodic reindex.
 	// Only applicable to "ast" source type.
 	IndexInterval string `json:"index_interval,omitempty"`
 

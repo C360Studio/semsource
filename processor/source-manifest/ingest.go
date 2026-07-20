@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semstreams/natsclient"
 )
@@ -25,6 +26,12 @@ const (
 	// AddReply.ReadyWhen. Callers wait until the matching SourceStatus on
 	// graph.ingest.status reports a phase in this set.
 	ingestReadyWhen = "source_status.phase in ['watching', 'idle']"
+
+	// lifecycleTriggerTimeout bounds the background NATS round trip
+	// triggering a staleness lifecycle pass after remove_source. Fire-and-
+	// forget from the caller's perspective — a missing or slow responder
+	// degrades staleness marking, it never blocks or fails removal.
+	lifecycleTriggerTimeout = 30 * time.Second
 )
 
 // IngestHandlerConfig wires the ingest add/remove subscriptions on
@@ -348,7 +355,13 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 // RemoveReply. Shared by the NATS ingest handler and the HTTP façade. Removal
 // stops ingestion but does NOT retract entities — eager retraction is parked
 // behind the fact-layer provenance model (ADR-0007 sequencing guardrail).
+// Retained entities instead get a source_removed staleness marker
+// (entity-staleness spec D4), completing the removal-integrity deferral.
 func (c *Component) removeSource(ctx context.Context, instanceName, actor string, cfg IngestHandlerConfig) *RemoveReply {
+	// Captured BEFORE the KV delete below removes the component config —
+	// systemsForRemovedInstance reads it back to scope the lifecycle trigger.
+	systems := systemsForRemovedInstance(instanceName, cfg.Store)
+
 	if err := sourcespawn.Remove(ctx, instanceName, cfg.Store); err != nil {
 		return &RemoveReply{
 			InstanceName: instanceName,
@@ -373,11 +386,39 @@ func (c *Component) removeSource(ctx context.Context, instanceName, actor string
 		}
 	}
 
+	// Async, best-effort: retro-mark the removed source's retained entities.
+	// No root_path — the source itself is gone, so every in-scope entity is
+	// unconditionally marked, not just entities whose file happens to be
+	// missing (design D4). A resolution miss (unrecognized factory type, no
+	// client) degrades staleness marking; it never fails the removal itself.
+	if len(systems) > 0 {
+		c.triggerRemovalLifecycleRun(ctx, cfg.Spawn.Org, systems)
+	}
+
 	return &RemoveReply{
 		InstanceName: instanceName,
 		Removed:      true,
 		Timestamp:    time.Now(),
 	}
+}
+
+// triggerRemovalLifecycleRun announces the removed source's scope to the
+// staleness lifecycle pass (processor/supersession), fired in the background
+// so remove_source's caller is never blocked on a full graph pass.
+func (c *Component) triggerRemovalLifecycleRun(ctx context.Context, org string, systems []string) {
+	req := graph.LifecycleRunRequest{
+		Org:     org,
+		Systems: systems,
+		Reason:  graph.LifecycleReasonSourceRemoved,
+	}
+	go func() {
+		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
+		defer cancel()
+		if _, err := graph.PublishLifecycleTrigger(runCtx, c.client, req); err != nil {
+			c.logger.Debug("lifecycle trigger failed (staleness marking degraded, not fatal)",
+				"org", org, "systems", systems, "error", err)
+		}
+	}()
 }
 
 // mapSpawnError maps a sourcespawn.Error code onto the wire IngestErrorCode.

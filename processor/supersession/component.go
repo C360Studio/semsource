@@ -38,6 +38,7 @@ type Component struct {
 	queryClient  graphquery.Client
 	triggerSub   *natsclient.Subscription
 	diffSub      *natsclient.Subscription
+	lifecycleSub *natsclient.Subscription
 	bodyResolver *fusion.BodyResolver
 	cancel       context.CancelFunc
 	lastRun      time.Time
@@ -90,37 +91,16 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("create query client: %w", err)
 	}
 
-	subject := c.config.triggerSubject()
-	sub, err := c.client.SubscribeForRequests(ctx, subject, func(reqCtx context.Context, _ []byte) ([]byte, error) {
-		stats, runErr := c.runPass(reqCtx)
-		if runErr != nil {
-			return nil, runErr
-		}
-		return json.Marshal(stats)
-	})
-	if err != nil {
-		pub.Stop()
-		_ = q.Close()
-		return fmt.Errorf("subscribe %s: %w", subject, err)
-	}
-
 	resolver, err := c.buildBodyResolver(ctx)
 	if err != nil {
 		pub.Stop()
 		_ = q.Close()
-		_ = sub.Unsubscribe()
 		return fmt.Errorf("build body resolver: %w", err)
 	}
 
-	diffSub, err := c.client.SubscribeForRequests(ctx, versionDiffSubject,
-		func(reqCtx context.Context, body []byte) ([]byte, error) {
-			return c.serveDiff(reqCtx, body)
-		})
+	sub, diffSub, lifecycleSub, err := c.subscribeHandlers(ctx, pub, q)
 	if err != nil {
-		pub.Stop()
-		_ = q.Close()
-		_ = sub.Unsubscribe()
-		return fmt.Errorf("subscribe %s: %w", versionDiffSubject, err)
+		return err
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -130,20 +110,68 @@ func (c *Component) Start(ctx context.Context) error {
 	c.queryClient = q
 	c.triggerSub = sub
 	c.diffSub = diffSub
+	c.lifecycleSub = lifecycleSub
 	c.bodyResolver = resolver
 	c.cancel = cancel
 	c.running = true
 	c.startTime = time.Now()
 	c.mu.Unlock()
 
-	c.logger.Info("supersession listening for run requests", "subject", subject)
+	c.logger.Info("supersession listening for run requests", "subject", c.config.triggerSubject())
 	c.logger.Info("supersession listening for version-diff queries", "subject", versionDiffSubject)
+	c.logger.Info("supersession listening for lifecycle-run requests", "subject", graph.LifecycleTriggerSubject)
 
 	if d := c.config.intervalDuration(); d > 0 {
 		go c.periodic(runCtx, d)
 		c.logger.Info("supersession periodic pass enabled", "interval", d.String())
 	}
 	return nil
+}
+
+// subscribeHandlers registers the three request/reply subscriptions Start
+// needs (the correspondence-pass trigger, the version-diff query, and the
+// staleness lifecycle-run trigger), rolling back pub/q and any subscription
+// already registered on the first failure. Extracted from Start to keep it
+// under revive's function-length limit.
+func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publisher, q graphquery.Client) (sub, diffSub, lifecycleSub *natsclient.Subscription, err error) {
+	subject := c.config.triggerSubject()
+	sub, err = c.client.SubscribeForRequests(ctx, subject, func(reqCtx context.Context, _ []byte) ([]byte, error) {
+		stats, runErr := c.runPass(reqCtx)
+		if runErr != nil {
+			return nil, runErr
+		}
+		return json.Marshal(stats)
+	})
+	if err != nil {
+		pub.Stop()
+		_ = q.Close()
+		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", subject, err)
+	}
+
+	diffSub, err = c.client.SubscribeForRequests(ctx, versionDiffSubject,
+		func(reqCtx context.Context, body []byte) ([]byte, error) {
+			return c.serveDiff(reqCtx, body)
+		})
+	if err != nil {
+		pub.Stop()
+		_ = q.Close()
+		_ = sub.Unsubscribe()
+		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", versionDiffSubject, err)
+	}
+
+	lifecycleSub, err = c.client.SubscribeForRequests(ctx, graph.LifecycleTriggerSubject,
+		func(reqCtx context.Context, body []byte) ([]byte, error) {
+			return c.handleLifecycleRun(reqCtx, body)
+		})
+	if err != nil {
+		pub.Stop()
+		_ = q.Close()
+		_ = sub.Unsubscribe()
+		_ = diffSub.Unsubscribe()
+		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", graph.LifecycleTriggerSubject, err)
+	}
+
+	return sub, diffSub, lifecycleSub, nil
 }
 
 // periodic runs the pass on a fixed interval until the context is cancelled.
@@ -272,6 +300,12 @@ func (c *Component) Stop(_ time.Duration) error {
 			c.logger.Warn("failed to unsubscribe version-diff", "error", err)
 		}
 		c.diffSub = nil
+	}
+	if c.lifecycleSub != nil {
+		if err := c.lifecycleSub.Unsubscribe(); err != nil {
+			c.logger.Warn("failed to unsubscribe lifecycle-run", "error", err)
+		}
+		c.lifecycleSub = nil
 	}
 	if c.triggerSub != nil {
 		if err := c.triggerSub.Unsubscribe(); err != nil {

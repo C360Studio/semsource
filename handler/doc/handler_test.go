@@ -127,7 +127,11 @@ func TestDocHandler_Ingest_CorrectDomainAndEntityType(t *testing.T) {
 	}
 }
 
-func TestDocHandler_Ingest_InstanceIsSHA256Prefix(t *testing.T) {
+// TestDocHandler_Ingest_InstanceIsPathDerived pins the entity-staleness spec
+// D3 identity: the instance is the sanitized relative path, not a content
+// hash — so an edit never mints a new instance (see
+// TestDocHandler_Ingest_ContentChangeKeepsSameInstance below).
+func TestDocHandler_Ingest_InstanceIsPathDerived(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Title\nContent.")
 
@@ -143,14 +147,8 @@ func TestDocHandler_Ingest_InstanceIsSHA256Prefix(t *testing.T) {
 	}
 
 	instance := entities[0].Instance
-	if len(instance) != 6 {
-		t.Errorf("Instance length = %d, want 6 (sha256[:6]): %q", len(instance), instance)
-	}
-	// Must be hex characters only.
-	for _, ch := range instance {
-		if !strings.ContainsRune("0123456789abcdef", ch) {
-			t.Errorf("Instance %q contains non-hex character %q", instance, ch)
-		}
+	if instance != "doc-md" {
+		t.Errorf("Instance = %q, want %q (sanitized relative path)", instance, "doc-md")
 	}
 }
 
@@ -242,7 +240,12 @@ func TestDocHandler_Ingest_NoTitleFallback(t *testing.T) {
 	}
 }
 
-func TestDocHandler_Ingest_ContentHashChangesOnModify(t *testing.T) {
+// TestDocHandler_Ingest_ContentChangeKeepsSameInstanceButUpdatesHash pins the
+// entity-staleness spec D3 contract: editing a document does NOT mint a new
+// entity (the instance is path-derived, stable across edits) — but the
+// content_hash property still reflects the new content, so change detection
+// still works.
+func TestDocHandler_Ingest_ContentChangeKeepsSameInstanceButUpdatesHash(t *testing.T) {
 	dir := t.TempDir()
 	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
 
@@ -268,9 +271,15 @@ func TestDocHandler_Ingest_ContentHashChangesOnModify(t *testing.T) {
 		t.Fatal("expected entities from both ingests")
 	}
 
-	// Instance (sha256 prefix) must differ after content change.
-	if entities1[0].Instance == entities2[0].Instance {
-		t.Error("Instance should change when file content changes")
+	if entities1[0].Instance != entities2[0].Instance {
+		t.Errorf("Instance must stay stable across a content edit (D3): %q vs %q",
+			entities1[0].Instance, entities2[0].Instance)
+	}
+
+	hash1, _ := entities1[0].Properties["content_hash"].(string)
+	hash2, _ := entities2[0].Properties["content_hash"].(string)
+	if hash1 == "" || hash2 == "" || hash1 == hash2 {
+		t.Errorf("content_hash should change when file content changes: %q vs %q", hash1, hash2)
 	}
 }
 
@@ -577,7 +586,12 @@ func TestDocHandler_IngestEntityStates_DeterministicID(t *testing.T) {
 	}
 }
 
-func TestDocHandler_IngestEntityStates_IDChangesOnContentChange(t *testing.T) {
+// TestDocHandler_IngestEntityStates_IDStableAcrossContentChange pins the
+// entity-staleness spec D3 contract at the typed-EntityState path: an edit
+// re-ingests the SAME entity (in-place replace), never orphaning the prior
+// version under a new ID — the collision-prone content-hash-prefix instance
+// is retired.
+func TestDocHandler_IngestEntityStates_IDStableAcrossContentChange(t *testing.T) {
 	dir := t.TempDir()
 	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
 
@@ -595,9 +609,9 @@ func TestDocHandler_IngestEntityStates_IDChangesOnContentChange(t *testing.T) {
 	if len(states1) == 0 || len(states2) == 0 {
 		t.Fatal("expected states from both ingests")
 	}
-	// Instance (sha256 prefix in ID) must change when content changes.
-	if states1[0].ID == states2[0].ID {
-		t.Error("entity ID should change when file content changes")
+	if states1[0].ID != states2[0].ID {
+		t.Errorf("entity ID must stay stable across a content edit (D3): %q vs %q",
+			states1[0].ID, states2[0].ID)
 	}
 }
 
