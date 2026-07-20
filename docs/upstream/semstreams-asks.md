@@ -682,3 +682,76 @@ more entities made it reliably so.
 
 **Position:** no ask of our own beyond the bounded-staleness tolerance already proposed in #590.
 Evidence contributed; the decision is theirs.
+
+### 24. Fusion silently drops the top-ranked entity from the first call after a query burst — framework-shaped — not yet filed
+
+`Fuse` can return an answer that omits the highest-scoring candidate entirely, with no error, no
+log, and nothing in the response indicating anything was lost.
+
+**Reproduction.** `scripts/scorecard/repro-order-dependence.sh` in semsource. In one MCP session:
+21 diverse `doc_context` queries, then the target query four times.
+
+```
+call 1: ABSENT
+call 2: rank 1
+call 3: rank 1
+call 4: rank 1
+```
+
+Only the first call after the burst fails, and it self-heals on the very next identical call.
+Other passages of the same document survive the failing call (ranks 9 and 18) — it is specifically
+the top-ranked entity that vanishes.
+
+**Recall is intact.** At the same instant, `graph.query.semantic` — bypassing fusion — returns that
+passage at rank 1, similarity unchanged. Running the burst and then making `graph.query.semantic`
+the FIRST call after it also returns a pristine list: identical similarities in identical order.
+So query embedding, cosine scoring and candidate selection are all fine, and the entity is lost
+downstream of recall.
+
+**Eliminated, so the investigation need not repeat them:**
+
+- *Embedding service degrading under load* — see the pristine-recall test above; zero errors in the
+  embedder log for the whole session.
+- *Mixed statistical/neural vector population* — `embedder_type` resolves once at startup
+  (`createEmbedder` is a hard `bm25`/`http` switch with no escalation and no replacement pass).
+  Sampled stored vectors are 384-d, 0% zero components, ~50% negative; a BM25 vector from
+  `computeBM25Vector` is sparse and non-negative (IDF clamped to +0.01, unhashed dimensions left at
+  zero).
+- *Unstable sorting over tied cosines* — repeated recall is byte-identical including at exact ties
+  (two entities at 0.6124 keep their order across five runs).
+
+**Most plausible remaining mechanism**, offered as a hypothesis and not a finding: seed hydration.
+`fusionnats.Entities` calls `graph.query.batch`, whose contract silently omits IDs it cannot
+return, under a 5 s per-graph-call timeout (`fusionnats.New(client, 0)`). A cold or slow first read
+after a burst would drop the ID with no trace.
+
+**Blast radius, stated precisely.** Reproduced on `doc_context`. `code_search` — also
+embedding-backed — returned an identical top node across four consecutive calls after the same
+burst. That is not proof the code lens is immune, only that the burst did not perturb it; the
+lenses differ in how they seed (`ResolveModeNL` vs `exactSeedClient`), which is where to look if it
+ever does.
+
+**Ask, part 1:** seed hydration must not silently drop an ID. Either surface the omission in the
+response envelope or fail the call. A caller cannot currently distinguish "this entity does not
+match" from "this entity was dropped".
+
+**Ask, part 2 — the more valuable half: fusion has no score observability at all.** Diagnosing this
+required bypassing the product surface entirely and calling `graph.query.semantic` over raw NATS,
+because:
+
+- `fusion.Node` carries no score, rank, or similarity field.
+- `pkg/fusion/engine_lens.go` has no logger and emits nothing; the `scored` struct is
+  function-local and discarded.
+- `fusionnats.resolveSemantic` receives `SearchResult.Similarity` and **decodes only `entity_id`**,
+  throwing the similarity away (`pkg/fusion/fusionnats/client.go:153-168`).
+
+Any consumer hitting a ranking surprise has no recourse. Even an opt-in debug field carrying the
+resolve rank and the score contributions would have turned this investigation from a day into
+minutes.
+
+**Consumer impact.** This is not only a test-harness concern: an agent's first `doc_context` call
+after a busy period can silently lose the single best piece of evidence and cite the second-best as
+though it were the top result.
+
+**Surfaced by:** semsource `repair-retrieval-scorecard`, 2026-07-20. Full measurement in
+`scripts/scorecard/results/SUMMARY-instrument-diagnosis.md`.

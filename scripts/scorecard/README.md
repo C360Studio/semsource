@@ -17,6 +17,20 @@ In particular, **these numbers do not continue the audit's 13/19 → 16/19 → 1
 series.** That series used a different, now-lost set. Quoting a score here as if it
 extended that line would be inventing a trend.
 
+**Version 3 does not compare to version 2**, for two reasons — both grader changes,
+neither a product change, so numbers moved without retrieval moving:
+
+1. **The matchers were broken for one question.** `grep -qF "$w"` had no `--`, so
+   X02's `-p 8083:8083` was parsed as options; grep exited 2 and the loop read that
+   as "not found". X02 graded `miss` on every system, forever, while retrieval was
+   correct.
+2. **`MISLEADING` was added**, and it takes results that v2 scored as plain `miss`.
+
+Consequently the `discrimination 0/2` recorded in
+[`results/SUMMARY-9.5-bounds.md`](results/SUMMARY-9.5-bounds.md) was never a
+retrieval result and must not be quoted as one. That summary's *bounds* conclusion
+is unaffected and stands.
+
 ## Running it
 
 The harness does not provision anything, so the same script can be pointed at two
