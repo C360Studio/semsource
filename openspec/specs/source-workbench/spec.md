@@ -1,7 +1,26 @@
 # source-workbench Specification
 
 ## Purpose
-TBD - created by archiving change add-opt-in-source-workbench. Update Purpose after archive.
+The SemSource workbench is the project-owned, opt-in operator UI for the ingestion service: a
+SvelteKit app committed under `ui/`, built and released from this repository, and wired into the
+Docker Compose stack only under the opt-in `ui` profile (`docker-compose.yml`), sitting behind
+Caddy alongside the always-on `semsource` and `semembed` core services. It may port audited
+behavior from sibling sem* UIs but owns it locally rather than depending on their source trees,
+packages, or release process — `docker-compose.ui-dev.yml` and a pinned `SEMSOURCE_UI_IMAGE`
+release digest are the only two ways to run it. `processor/source-manifest` serves the workbench's
+versioned bootstrap contract at `GET /source-manifest/capabilities` (`workbench_capabilities.go`):
+product/project identity, source and structural/semantic index readiness collected over NATS
+request/reply, and a map of query and action capabilities each marked `ready`, `not_ready`, or
+`unsupported` with a machine-readable reason, so the browser never has to discover a missing route
+by trial and error.
+
+The workbench itself (`ui/src`) leads with project identity, readiness, and source inventory
+(`WorkbenchShell.svelte`) before offering the whole-graph drill-down as an investigation surface
+rather than the primary explanation of a project. Every state-changing action it exposes calls the
+same SemSource HTTP contract available to headless clients, and the graph view consumes the
+existing `POST /code-context/context` contract with `want: ["graph"]` rather than a UI-only
+projection endpoint, tolerating truncated or incoherent-revision responses by retaining previously
+resolved nodes and facts instead of discarding them.
 ## Requirements
 ### Requirement: SemSource owns the reference workbench
 

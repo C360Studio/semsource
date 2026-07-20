@@ -1,7 +1,18 @@
 # runtime-configuration Specification
 
 ## Purpose
-TBD - created by archiving change remove-legacy-ingest-adapters. Update Purpose after archive.
+SemSource runs as a single external service with no runtime-mode selector: `config.Config`
+(`config/config.go`) has no `mode`, `ModeStandalone`, or `SEMSOURCE_MODE` field, and
+`config.LoadConfig`/`LoadConfigFromReader` (`config/loader.go`) decode `semsource.json` with
+`DisallowUnknownFields`, so a supplied `mode` key fails with the ordinary unknown-field error
+instead of being translated by a removed compatibility path — and `semsource validate` and
+`semsource run` both load configuration through this same function, so the same guardrails apply
+at both surfaces. The package is also the one place a configuration value that becomes an
+entity-ID segment is checked against the substrate's charset before any component starts:
+`config.ValidateNamespace` validates the configured `Namespace` against `semstreams`'s entity-ID
+alphabet and an org-length ceiling (`entityid.MaxOrgLen`), rejecting a bad value by field, value,
+and allowed alphabet rather than rewriting it, so a namespace that passes `semsource validate` can
+never later be rejected purely for ID shape at publish time.
 ## Requirements
 ### Requirement: SemSource has one runtime configuration
 

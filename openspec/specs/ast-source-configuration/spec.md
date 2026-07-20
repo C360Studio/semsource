@@ -1,7 +1,15 @@
 # ast-source-configuration Specification
 
 ## Purpose
-TBD - created by archiving change remove-legacy-ingest-adapters. Update Purpose after archive.
+The ast-source processor (`processor/ast-source`) configures every code-parsing repository
+through one or more complete `watch_paths` entries (`WatchPathConfig` in `config.go`): path, org,
+project, optional version, languages, and excludes. `NewComponent` (`component.go`) decodes that
+JSON with `DisallowUnknownFields`, so a top-level `repo_path`, `org`, `project`, `version`,
+`languages`, or `exclude_patterns` key — the six fields the legacy single-repo shape used — fails
+component creation outright instead of being read through a compatibility accessor, and
+`Config.Validate` refuses to start with zero watch paths. Startup, file-watch handling, and every
+periodic reindex sweep walk only the configured, resolved watch paths (`ResolveWatchPaths` in
+`paths.go`); no directory-index entry point outside that path remains in the component.
 ## Requirements
 ### Requirement: AST sources use only watch paths
 
