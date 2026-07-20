@@ -27,17 +27,17 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 2. Build the splitter (D4)
 
-- [ ] 2.1 Write the splitter in `handler/doc/` as a pure function of document bytes → ordered passages
+- [x] 2.1 Write the splitter in `handler/doc/` as a pure function of document bytes → ordered passages
       carrying (ordinal, heading, anchor, body)
-- [ ] 2.2 Implement heading splitting (ATX + setext), then paragraph subdivision above the ceiling,
+- [x] 2.2 Implement heading splitting (ATX + setext), then paragraph subdivision above the ceiling,
       then sentence split, then hard cut as last resort
-- [ ] 2.3 Implement the floor-merge so consecutive trivial sections share a passage
-- [ ] 2.4 Guarantee fenced code blocks are never split across passages
-- [ ] 2.5 Handle content before the first heading as a passage
-- [ ] 2.6 Test: determinism property — same bytes yield byte-identical boundaries across runs
-- [ ] 2.7 Test: no passage exceeds the ceiling, for every document in this repository
-- [ ] 2.8 Test: golden-file boundaries over real repository documents (README, an ADR, a spec)
-- [ ] 2.9 Test: reconstruction — concatenating passages in ordinal order reproduces indexed content
+- [x] 2.3 Implement the floor-merge so consecutive trivial sections share a passage
+- [x] 2.4 Guarantee fenced code blocks are never split across passages
+- [x] 2.5 Handle content before the first heading as a passage
+- [x] 2.6 Test: determinism property — same bytes yield byte-identical boundaries across runs
+- [x] 2.7 Test: no passage exceeds the ceiling, for every document in this repository
+- [x] 2.8 Test: golden-file boundaries over real repository documents (README, an ADR, a spec)
+- [x] 2.9 Test: reconstruction — concatenating passages in ordinal order reproduces indexed content
 
 ## 3. Emit passage entities (D1, D2, D6, D7)
 
