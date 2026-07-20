@@ -164,10 +164,22 @@ runtime escalation and no replacement pass. A failure to resolve the HTTP endpoi
 component out rather than silently downgrading; the "BM25 as a fallback" note in
 `graph/embedding/doc.go` refers to selecting BM25 *by configuration* (tier 0), not at runtime.
 
-Confirmed on the stack: every probe reports `embedder=http`, and the similarity distribution
-over 100 scoped results is tight and unimodal (0.5741–0.7322) with no near-zero cluster — a
-mixed population would be bimodal. A dimensionality check would not have caught it either;
-BM25 here is also 384-dimensional.
+Confirmed in the stored data, not just the code. Vectors live content-addressed in
+`EMBEDDING_DEDUP` (4,998 records; `EMBEDDINGS_CACHE` is empty). Sampling 40 of them: every one
+is 384-dimensional with **0% zero components and ~50% negative components**.
+
+That discriminator was validated against the BM25 implementation rather than assumed:
+`computeBM25Vector` (`graph/embedding/bm25_embedder.go`) hashes each term to a dimension and
+accumulates a BM25 score whose IDF is clamped to a minimum of **+0.01**, so every contribution
+is non-negative and any dimension no term hashed to stays exactly zero. **A BM25 vector here is
+sparse and non-negative; the stored population is dense and signed.** No statistical vectors are
+present. Note a dimensionality check alone would not have discriminated — BM25 here is also
+384-dimensional — and the dedup records carry no per-record `model` field, so the sparsity/sign
+signature is the available evidence.
+
+Supporting: `embedder=http` on every probe, the 100-result similarity distribution is unimodal
+(0.5741–0.7322) where a mix would be bimodal, and LPA is not running at all in this stack
+(`enableClustering := false`, `cmd/semsource/run.go:744`; `mvp.json` does not enable it).
 
 What *does* progress over time is embedding **coverage**, as `indexed_revision` climbs toward
 `target_revision` — which is why `embedding.ready` exists and why `run.sh` gates on it. Every
