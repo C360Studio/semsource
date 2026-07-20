@@ -27,7 +27,7 @@ fabrication throughout.
 
 Corpus cost: +526 entities (+11%).
 
-## Defect this measurement found
+## Defect this measurement found — FIXED, and re-measured
 
 **Body-less parent documents rank above their own passages.** 5 of 11 doc answers now
 lead with a `kind: document` node whose body is empty — a citation with nothing in it —
@@ -48,3 +48,32 @@ this; it is unmet.
 
 Secondary, cosmetic: when a document's H1 equals its title, the qualified passage title
 duplicates it ("CLAUDE.md § CLAUDE.md").
+
+
+## The fix, and why it took two levers
+
+| run | score | median top-node body | doc answers led by an empty node |
+|---|---|---|---|
+| pre-chunking | 19/20 | 12,142 B | 0/11 |
+| post-chunking | 20/20 | 1,102 B | **5/11** |
+| + `entity.role.navigational` at -2.0 | 20/20 | 1,102 B | 3/11 |
+| + drop body-less document nodes | 20/20 | 1,228 B | **0/11** |
+
+**Signed salience alone was not enough.** Marking the parent
+`entity.role.navigational` at -2.0 — the same demotion tier as
+`code.artifact.test`, and deliberately above `entity.lifecycle.stale`'s -3.0
+because a navigational node is live and correct — moved it from 5 of 11 answers
+to 3. Title similarity still outweighs the penalty for some queries. That was
+worth keeping regardless: it is the governed mechanism and it applies to every
+consumer, not only this gateway.
+
+But ranking a node that cannot be read 8th instead of 1st is an improvement, not
+a fix. **A node with no body is not evidence at any position**, so the docs
+gateway now drops body-less document nodes from answers outright.
+
+The filter keys on the DECLARED kind rather than on emptiness, so a body-less
+*passage* — which would be a real fault — still surfaces instead of being quietly
+swallowed. And it never filters to empty: if nothing has a body the original set
+is returned, because an honest thin answer beats a silent nothing.
+
+No band regressed at any step. Evidence is still ~10x tighter than baseline.

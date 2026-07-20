@@ -91,9 +91,10 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 7. Ranking behaviour (retrieval-ranking delta)
 
-- [ ] 7.1 Verify a body-less parent does not outrank passages carrying content
-- [ ] 7.2 Ensure a result set never returns both a parent and its own passages as competing evidence
-- [ ] 7.3 Test both as integration assertions against a real graph stack, not unit mocks
+- [x] 7.1 Verify a body-less parent does not outrank passages carrying content
+- [x] 7.2 Ensure a result set never returns both a parent and its own passages as competing evidence
+- [x] 7.3 Test both as integration assertions against a real graph stack, not unit mocks
+      (measured on a live stack: 5/11 -> 0/11 empty-led doc answers; see scorecard SUMMARY.md)
 
 ## 8. Documentation and vocabulary prose
 
@@ -131,9 +132,9 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 - [x] 10.1 A/B run on a fixed corpus, only the binary varying: median top-ranked doc
       body 12,142 B -> 1,102 B; mean total body 45,860 B -> 15,780 B; +526 entities (+11%)
 - [x] 10.2 No band regressed; doc-early control held 3/3; zero fabrication both sides
-- [ ] 10.3 **DEFECT: body-less parents rank above their own passages** (5/11 doc answers
-      lead with an empty-bodied node, was 0/11). Violates this change's own
-      retrieval-ranking requirement; task 7.1 is unmet, not passed
+- [x] 10.3 **DEFECT FIXED: body-less parents ranked above their own passages** (5/11 doc answers
+      led with an empty-bodied node, was 0/11). Fixed with two levers — salience
+      demotion (5->3) plus dropping body-less document nodes (3->0). Re-measured 0/11
 - [ ] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
       ("CLAUDE.md § CLAUDE.md")
 - [ ] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —

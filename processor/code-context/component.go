@@ -287,7 +287,46 @@ func (c *Component) fuse(ctx context.Context, verb string, req fusion.Request) (
 	if err != nil {
 		return fusion.Response{}, err
 	}
+	if c.lensKind == "docs" {
+		resp.Nodes = dropNavigationalNodes(resp.Nodes)
+	}
 	return resp, nil
+}
+
+// dropNavigationalNodes removes parent-document nodes that carry no body from a
+// docs answer.
+//
+// Since passage chunking, a document's bodies live on its passages and the parent
+// is a navigational node: identity, path, provenance, edges, no text. It is still
+// embedded from its title — a producer cannot opt an entity out of embedding
+// (graph-embedding's text_suffixes include ".title" and its indexingEligible is
+// lenient by design, ADR-054 Phase 1) — so a query phrased like a document's title
+// can score the empty parent above the passage that actually answers it. The
+// caller's first citation then contains nothing.
+//
+// Demotion alone does not close this. Marking the parent entity.role.navigational
+// at -2.0 took it from 5 of 11 doc answers leading with an empty node down to 3;
+// title similarity still outweighs the penalty for some queries. Ranking a node
+// that cannot be read 8th instead of 1st is an improvement, not a fix — a node
+// with no body is not evidence at any position.
+//
+// Filtering on the DECLARED kind, not on emptiness: the producer says which
+// entities are documents and which are passages, so a body-less passage (a real
+// fault) still surfaces instead of being quietly swallowed. And never to empty:
+// if nothing has a body, the original set is returned so an honest thin answer is
+// not turned into a silent nothing.
+func dropNavigationalNodes(nodes []fusion.Node) []fusion.Node {
+	kept := make([]fusion.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Kind == "document" && n.Body == "" {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	if len(kept) == 0 {
+		return nodes
+	}
+	return kept
 }
 
 // engineFor selects the engine per verb (D4): the answer verbs — context,
