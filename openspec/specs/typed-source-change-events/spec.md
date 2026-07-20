@@ -1,7 +1,20 @@
 # typed-source-change-events Specification
 
 ## Purpose
-TBD - created by archiving change remove-legacy-ingest-adapters. Update Purpose after archive.
+Typed source change events are the contract between a source handler's `Watch` channel and its
+owning processor for deciding what may reach the graph on a file-system change. The doc and URL
+handlers (`handler/doc`, `handler/url`) populate `handler.ChangeEvent.EntityStates` — fully-typed
+entities carrying vocabulary-predicate triples — for every create/modify watch event, and their
+processors' initial ingest pass (`doc-source`, `url-source`) calls the same `IngestEntityStates`
+method rather than the package's older `RawEntity`-returning `Ingest`, which the ast, cfgfile,
+image, video, and audio handlers still use for their own ingest. A delete event carries only the
+changed path and `OperationDelete`, with `EntityStates` intentionally empty. A non-delete watch
+event that reaches a doc-source or url-source processor without valid `EntityStates` is a contract
+violation: the processor must refuse to publish and must surface the failure through its existing
+error/health counters rather than accept the event or fall back to `RawEntity`. Watch and
+periodic-reindex loops (ast-source's `handleWatchEvent`/`performFullIndex`, doc-source's watch
+path) additionally treat a detected deletion or rename as a first-class event that triggers the
+staleness-lifecycle pass (`graph.PublishLifecycleTrigger`) instead of one silently dropped.
 ## Requirements
 ### Requirement: Doc and URL watch changes publish typed entity state
 
