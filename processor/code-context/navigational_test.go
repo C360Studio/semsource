@@ -48,12 +48,40 @@ func TestDropNavigationalNodes(t *testing.T) {
 			why:  "swallowing it would hide an unhydratable passage",
 		},
 		{
+			name: "a body-less node with NO declared kind is dropped",
+			in: []fusion.Node{
+				{Name: "github.com/containerd/platforms", Body: ""},
+				{Name: "Tiers § Tier 2", Kind: "passage", Body: "docker run -d -p 8083:8083"},
+			},
+			want: []string{"Tiers § Tier 2"},
+			why: "measured leading a docs answer: a Go module dependency entity has a name, " +
+				"an ontology class and edges, but no kind and no body, and docs scope covers " +
+				"{org}.semsource.config — so it competed on every doc query and won one",
+		},
+		{
+			name: "a body-BEARING node with no declared kind survives",
+			in: []fusion.Node{
+				{Name: "unknown-but-readable", Body: "has content"},
+			},
+			want: []string{"unknown-but-readable"},
+			why:  "the filter keys on unreadable, not on unfamiliar",
+		},
+		{
 			name: "never filters to empty",
 			in: []fusion.Node{
 				{Name: "only", Kind: "document", Body: ""},
 			},
 			want: []string{"only"},
 			why:  "an honest thin answer beats a silent nothing",
+		},
+		{
+			name: "never filters to empty, with no declared kind either",
+			in: []fusion.Node{
+				{Name: "dep-a", Body: ""},
+				{Name: "dep-b", Body: ""},
+			},
+			want: []string{"dep-a", "dep-b"},
+			why:  "widening the rule must not turn a thin answer into a silent nothing",
 		},
 		{name: "empty input", in: nil, want: nil},
 	}

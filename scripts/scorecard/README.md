@@ -17,6 +17,20 @@ In particular, **these numbers do not continue the audit's 13/19 → 16/19 → 1
 series.** That series used a different, now-lost set. Quoting a score here as if it
 extended that line would be inventing a trend.
 
+**Version 3 does not compare to version 2**, for two reasons — both grader changes,
+neither a product change, so numbers moved without retrieval moving:
+
+1. **The matchers were broken for one question.** `grep -qF "$w"` had no `--`, so
+   X02's `-p 8083:8083` was parsed as options; grep exited 2 and the loop read that
+   as "not found". X02 graded `miss` on every system, forever, while retrieval was
+   correct.
+2. **`MISLEADING` was added**, and it takes results that v2 scored as plain `miss`.
+
+Consequently the `discrimination 0/2` recorded in
+[`results/SUMMARY-9.5-bounds.md`](results/SUMMARY-9.5-bounds.md) was never a
+retrieval result and must not be quoted as one. That summary's *bounds* conclusion
+is unaffected and stands.
+
 ## Running it
 
 The harness does not provision anything, so the same script can be pointed at two
@@ -31,7 +45,16 @@ be re-examined without re-running the stack.
 
 Knobs: `SEMSOURCE_HTTP_PORT` (default 28080), `SEMSOURCE_HOST`,
 `SCORECARD_READY_TIMEOUT`, `SCORECARD_CALL_TIMEOUT`,
-`SCORECARD_QUESTIONS`.
+`SCORECARD_QUESTIONS`, `SCORECARD_REPEATS` (default 3 — see *Repeats* below).
+
+Before scoring, validate the question set. This gates both ways a question rots —
+the corpus relationship between a confusable pair, and whether the grader can
+evaluate the literals at all:
+
+```bash
+scripts/scorecard/check-discrimination.py <corpus-dir>
+scripts/scorecard/test-matcher.sh              # no stack needed
+```
 
 Always use an isolated `COMPOSE_PROJECT_NAME` and high ports — this machine also
 runs other stacks, and `nats` on 4222 is generally not ours.
@@ -64,13 +87,17 @@ indistinguishable from a judge change. The trade is that matchers are coarse: th
 verify the answer *contains* the load-bearing fact, not that the prose around it is
 good.
 
-Four verdicts, deliberately distinct:
+Six verdicts, deliberately distinct:
 
 - **correct** — required content present.
 - **miss** — the answer did not contain it. An honest failure.
 - **IMPRECISE** — the top-ranked evidence carried the answer *and* a confusable
   value it could be mistaken for, so the evidence does not settle the question.
   Only discrimination questions can produce this.
+- **MISLEADING** — the top-ranked evidence carried the confusable value **instead
+  of** the answer. Only discrimination questions can produce this.
+- **UNSTABLE** — the same question returned different verdicts across repeated
+  calls, so it has no defensible verdict at all. See *Repeats* below.
 - **FABRICATED** — the answer asserted something known to be false. This is not a
   worse miss, it is a different failure, and it outranks every other result in the
   summary. Zero fabrication is this product's actual moat; a set that scores well
@@ -81,7 +108,34 @@ happens to contain both the answer and its twin has invented nothing — it is
 imprecise, not dishonest. Merging the two would destroy the fabrication signal,
 which is the single result that outranks everything else here.
 
+**MISLEADING is deliberately not folded into `miss`,** for the same reason. A miss
+returns nothing useful; a MISLEADING top node argues for the *wrong* answer, and an
+agent citing the first result will state it as fact. Until version 3 this state was
+unreachable: the answer-side check short-circuited to `miss` before the confusable
+check ever ran, so the most damaging outcome was scored as the most innocuous one.
+
 An `isError` result is recorded as `error`, never graded as an answer.
+
+### Repeats — why a question is asked more than once
+
+Each question is asked `SCORECARD_REPEATS` times (default 3) and the verdicts
+compared. If they disagree the verdict is **UNSTABLE**, recording every distinct
+outcome; it is counted separately and never resolved to either the passing or the
+failing result.
+
+This is not defensive coding. A verdict was measured to depend on a question's
+**position in the run**: the same question against an unchanged stack returned the
+correct passage when asked first and lost it from the entire response when asked
+last — transiently, self-healing on the very next call, with nothing logged. That
+is a live platform defect, reproduced and filed upstream, not an instrument
+artifact. See [`results/SUMMARY-instrument-diagnosis.md`](results/SUMMARY-instrument-diagnosis.md).
+
+A warm-up call or a retry-until-pass would produce a cleaner number by concealing a
+defect a real caller hits on their first request. A scorecard that protects its own
+score is worse than one that admits it cannot measure.
+
+**`SCORECARD_REPEATS=1` cannot detect instability**, so a one-repeat run must not be
+quoted as evidence that anything is stable. The run prints that caveat itself.
 
 ### Matchers
 

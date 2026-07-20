@@ -315,10 +315,23 @@ func (c *Component) fuse(ctx context.Context, verb string, req fusion.Request) (
 // fault) still surfaces instead of being quietly swallowed. And never to empty:
 // if nothing has a body, the original set is returned so an honest thin answer is
 // not turned into a silent nothing.
+//
+// An UNDECLARED kind is covered too, which the original rule missed. A docs
+// answer is scoped over {org}.semsource.web AND {org}.semsource.config, so Go
+// module dependency entities compete on every doc query — and they carry a name,
+// an ontology class and edges, but no kind and no body. One was measured leading
+// a docs answer outright: `github.com/containerd/platforms` ranked first for a
+// question about which port a container publishes, so the caller's first citation
+// was empty (results/SUMMARY-instrument-diagnosis.md).
+//
+// The distinction that matters is DECLARED-but-empty versus NOT-DECLARED. A
+// passage with no body is a producer fault and must stay visible. An entity that
+// never claimed to be evidence at all, and has no body, is not evidence at any
+// position — the same argument that justified this filter over demotion.
 func dropNavigationalNodes(nodes []fusion.Node) []fusion.Node {
 	kept := make([]fusion.Node, 0, len(nodes))
 	for _, n := range nodes {
-		if n.Kind == "document" && n.Body == "" {
+		if n.Body == "" && (n.Kind == "document" || n.Kind == "") {
 			continue
 		}
 		kept = append(kept, n)

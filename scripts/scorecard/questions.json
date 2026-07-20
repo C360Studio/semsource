@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "corpus": "the semsource repository itself",
   "grading": "deterministic substring matching, case-insensitive; see README.md",
   "questions": [
@@ -7,179 +7,295 @@
       "id": "D01",
       "band": "doc-early",
       "tool": "doc_context",
-      "args": { "query": "what source types can SemSource ingest" },
-      "expect_all": ["ast"],
-      "expect_any": ["docs", "document"],
+      "args": {
+        "query": "what source types can SemSource ingest"
+      },
+      "expect_all": [
+        "ast"
+      ],
+      "expect_any": [
+        "docs",
+        "document"
+      ],
       "why": "README Source Types, ~3.8KB in — inside the old 8000-char window. Control: must pass on BOTH sides. A regression here means chunking broke something that already worked."
     },
     {
       "id": "D02",
       "band": "doc-early",
       "tool": "doc_context",
-      "args": { "query": "how do I start SemSource with docker compose" },
-      "expect_any": ["docker compose up", "docker-compose up"],
+      "args": {
+        "query": "how do I start SemSource with docker compose"
+      },
+      "expect_any": [
+        "docker compose up",
+        "docker-compose up"
+      ],
       "why": "README Quick Start, ~1.5KB in. Control."
     },
     {
       "id": "D03",
       "band": "doc-early",
       "tool": "doc_context",
-      "args": { "query": "which command lists the sources that are configured" },
-      "expect_any": ["semsource sources", "sources"],
+      "args": {
+        "query": "which command lists the sources that are configured"
+      },
+      "expect_any": [
+        "semsource sources",
+        "sources"
+      ],
       "why": "README CLI Reference, ~5.4KB in. Control."
     },
     {
       "id": "D04",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "which port does semembed listen on" },
-      "expect_all": ["8081"],
+      "args": {
+        "query": "which port does semembed listen on"
+      },
+      "expect_all": [
+        "8081"
+      ],
       "why": "README Port Map table, ~16.3KB in — PAST the old 8000-char truncation. A table row: the exact shape the audit recorded as diluted by whole-file embeddings."
     },
     {
       "id": "D05",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "what port is the SemSource WebSocket raw graph stream on" },
-      "expect_all": ["7890"],
+      "args": {
+        "query": "what port is the SemSource WebSocket raw graph stream on"
+      },
+      "expect_all": [
+        "7890"
+      ],
       "why": "Port Map table, past the cut."
     },
     {
       "id": "D06",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "what does the degraded status phase mean" },
-      "expect_any": ["seed timeout", "timeout fired"],
+      "args": {
+        "query": "what does the degraded status phase mean"
+      },
+      "expect_any": [
+        "seed timeout",
+        "timeout fired"
+      ],
       "why": "README Status Phases table, ~26.3KB in — deep past the cut."
     },
     {
       "id": "D07",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "what does the watching source phase mean" },
-      "expect_any": ["watching for changes", "watching"],
+      "args": {
+        "query": "what does the watching source phase mean"
+      },
+      "expect_any": [
+        "watching for changes",
+        "watching"
+      ],
       "why": "Status Phases table, past the cut."
     },
     {
       "id": "D08",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "how does an agent connect to SemSource over MCP" },
-      "expect_any": ["mcp", "/mcp-gateway/mcp"],
+      "args": {
+        "query": "how does an agent connect to SemSource over MCP"
+      },
+      "expect_any": [
+        "mcp",
+        "/mcp-gateway/mcp"
+      ],
       "why": "README 'Connect an agent (MCP)', ~17.9KB in — past the cut."
     },
     {
       "id": "D09",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "what HTTP status does a fusion query return when the index is not ready" },
-      "expect_any": ["200", "not ready", "index"],
+      "args": {
+        "query": "what HTTP status does a fusion query return when the index is not ready"
+      },
+      "expect_any": [
+        "200",
+        "not ready",
+        "index"
+      ],
       "why": "README Fusion HTTP errors, ~28.9KB in — the deepest section of the largest doc."
     },
     {
       "id": "D10",
       "band": "doc-late",
       "tool": "doc_context",
-      "args": { "query": "what version of semstreams does semsource target" },
-      "expect_any": ["beta.15", "v1.0.0-beta"],
+      "args": {
+        "query": "what version of semstreams does semsource target"
+      },
+      "expect_any": [
+        "beta.15",
+        "v1.0.0-beta"
+      ],
       "why": "ROADMAP/config-domain reach. The audit's Q16/Q19 class — config-domain reachability through doc_context."
     },
     {
       "id": "C01",
       "band": "code",
       "tool": "code_context",
-      "args": { "query": "SanitizeInstance" },
-      "expect_any": ["SanitizeInstance"],
+      "args": {
+        "query": "SanitizeInstance"
+      },
+      "expect_any": [
+        "SanitizeInstance"
+      ],
       "why": "Code path is per-symbol already and untouched by this change. Regression detector."
     },
     {
       "id": "C02",
       "band": "code",
       "tool": "code_context",
-      "args": { "query": "splitPassages" },
-      "expect_any": ["splitPassages", "passage"],
+      "args": {
+        "query": "splitPassages"
+      },
+      "expect_any": [
+        "splitPassages",
+        "passage"
+      ],
       "why": "New code introduced by this change; should be reachable post-chunking."
     },
     {
       "id": "C03",
       "band": "code",
       "tool": "code_context",
-      "args": { "query": "decideLifecycleActions" },
-      "expect_any": ["decideLifecycleActions", "lifecycle"],
+      "args": {
+        "query": "decideLifecycleActions"
+      },
+      "expect_any": [
+        "decideLifecycleActions",
+        "lifecycle"
+      ],
       "why": "Code retrieval of a real symbol. Regression detector."
     },
     {
       "id": "C04",
       "band": "code",
       "tool": "code_search",
-      "args": { "query": "how are entity IDs constructed" },
-      "expect_any": ["entityid", "Build", "6-part", "six-part"],
+      "args": {
+        "query": "how are entity IDs constructed"
+      },
+      "expect_any": [
+        "entityid",
+        "Build",
+        "6-part",
+        "six-part"
+      ],
       "why": "Conceptual code search — paraphrase, not symbol name. Tests semantic reach on the code side."
     },
     {
       "id": "C05",
       "band": "code",
       "tool": "code_search",
-      "args": { "query": "where is the staleness marker applied" },
-      "expect_any": ["stale", "lifecycle"],
+      "args": {
+        "query": "where is the staleness marker applied"
+      },
+      "expect_any": [
+        "stale",
+        "lifecycle"
+      ],
       "why": "Conceptual code search."
     },
     {
       "id": "C06",
       "band": "code",
       "tool": "code_search",
-      "args": { "query": "content addressed body storage" },
-      "expect_any": ["body", "store", "sha256", "objectstore"],
+      "args": {
+        "query": "content addressed body storage"
+      },
+      "expect_any": [
+        "body",
+        "store",
+        "sha256",
+        "objectstore"
+      ],
       "why": "Conceptual code search over the body-store path."
     },
     {
       "id": "I01",
       "band": "impact",
       "tool": "code_impact",
-      "args": { "query": "SanitizeInstance" },
-      "expect_any": ["entityid", "chunkInstance", "newEntity"],
+      "args": {
+        "query": "SanitizeInstance"
+      },
+      "expect_any": [
+        "entityid",
+        "chunkInstance",
+        "newEntity"
+      ],
       "why": "Impact must NAME dependents (audit Q7 class), not just count them."
     },
     {
       "id": "I02",
       "band": "impact",
       "tool": "code_impact",
-      "args": { "query": "splitPassages" },
-      "expect_any": ["ingestFileEntityStates", "entities", "doc"],
+      "args": {
+        "query": "splitPassages"
+      },
+      "expect_any": [
+        "ingestFileEntityStates",
+        "entities",
+        "doc"
+      ],
       "why": "Impact on new code."
     },
     {
       "id": "N01",
       "band": "negative",
       "tool": "code_context",
-      "args": { "query": "ZzQuuxFrobnicatorThatDoesNotExist" },
-      "expect_none": ["ZzQuuxFrobnicatorThatDoesNotExist ("],
+      "args": {
+        "query": "ZzQuuxFrobnicatorThatDoesNotExist"
+      },
+      "expect_none": [
+        "ZzQuuxFrobnicatorThatDoesNotExist ("
+      ],
       "why": "MUST MISS. Zero fabrication is this product's moat — the audit's headline was 0 hallucinations across 19 questions. A confident answer here is worse than every miss combined."
     },
     {
       "id": "N02",
       "band": "negative",
       "tool": "doc_context",
-      "args": { "query": "what is the SemSource quantum entanglement subsystem" },
-      "expect_none": ["quantum entanglement subsystem is"],
+      "args": {
+        "query": "what is the SemSource quantum entanglement subsystem"
+      },
+      "expect_none": [
+        "quantum entanglement subsystem is"
+      ],
       "why": "MUST MISS. Fabrication check on the doc side."
     },
     {
       "id": "X01",
       "band": "discrimination",
       "tool": "doc_context",
-      "args": { "query": "what is the default host port for the NATS monitor in docker compose" },
-      "expect_top_all": ["NATS_MONITOR_HOST_PORT=8222"],
-      "expect_top_none": ["NATS_MONITOR_HOST_PORT=28222"],
+      "args": {
+        "query": "what is the default host port for the NATS monitor in docker compose"
+      },
+      "expect_top_all": [
+        "NATS_MONITOR_HOST_PORT=8222"
+      ],
+      "expect_top_none": [
+        "NATS_MONITOR_HOST_PORT=28222"
+      ],
       "why": "README Configuration (~15.5KB in) gives the default 8222; README Quick Start (~1.8KB in) gives 28222 as the port-conflict workaround. Same env var, different values, 13.7KB apart. Strongest polarity in the set: the DISTRACTOR sits inside the old 8000-char embedding window and the ANSWER sits past it, so whole-file retrieval is pulled toward the wrong one. A whole-file top node carries both and cannot answer."
     },
     {
       "id": "X02",
       "band": "discrimination",
       "tool": "doc_context",
-      "args": { "query": "what port does the seminstruct inference container publish" },
-      "expect_top_all": ["-p 8083:8083"],
-      "expect_top_none": ["-p 8081:8081"],
+      "args": {
+        "query": "what port does the seminstruct inference container publish"
+      },
+      "expect_top_all": [
+        "-p 8083:8083"
+      ],
+      "expect_top_none": [
+        "-p 8081:8081"
+      ],
       "why": "configs/tiers/README.md runs semembed on 8081 (Tier 1, ~4.2KB in) and seminstruct on 8083 (Tier 2, ~7.3KB in) via near-identical `docker run -d -p NNNN:NNNN ghcr.io/c360studio/... # OpenAI-compatible ...` lines differing only in the digit and the service, 42 lines / ~3.1KB apart in an 8257 B file. The tighter-separated of the two, so it covers a shorter-range confusion than X01. NOTE: it was expected to be ceiling-sensitive and is NOT — TestBoundsSweep shows both literals separate at every ceiling from 1000 to 6000, because the two commands sit under different headings and section structure splits before size does. Verified by check-discrimination.py."
     }
   ]
