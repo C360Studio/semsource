@@ -161,7 +161,10 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	for time.Now().Before(rankDeadline) {
 		resp, ferr := engine.Fuse(ctx, fusion.Request{Query: prefix, Want: []fusion.Want{fusion.WantRelations}}, lens)
 		if ferr != nil {
-			t.Fatalf("Fuse: %v", ferr)
+			if fuseErrIsRetryable(t, ferr) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		liveRank = rankByHandle(resp.Nodes, liveEntity.ID)
 		deletedRank = rankByHandle(resp.Nodes, deletedEntity.ID)

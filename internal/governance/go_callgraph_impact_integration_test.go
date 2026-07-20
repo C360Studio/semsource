@@ -155,7 +155,10 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 			Want:  []fusion.Want{fusion.WantImpact, fusion.WantRelations},
 		}, lens)
 		if err != nil {
-			t.Fatalf("Fuse: %v", err)
+			if fuseErrIsRetryable(t, err) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		resp = r
 		if resp.Index.Ready && len(resp.Nodes) > 0 && resp.Impact != nil && resp.Impact.Nodes > 0 {

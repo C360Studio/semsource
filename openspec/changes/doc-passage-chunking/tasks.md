@@ -112,8 +112,8 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 9. Proof
 
-- [ ] 9.1 `task lint` clean at revive v1.15.0 (warnings fail), `gofmt`, `go vet`
-- [ ] 9.2 `go test ./...` and `go test -race -tags=integration ./...` green
+- [x] 9.1 `task lint` clean at revive v1.15.0 (warnings fail), `gofmt`, `go vet`
+- [x] 9.2 `go test ./...` and `go test -race -tags=integration ./...` green
 - [ ] 9.3 Integration test on a real stack: ingest a document larger than the truncation limit, then
       retrieve a phrase that appears only in its tail
 - [ ] 9.4 Measure entity count and time-to-ready on this repository before and after; record both in
@@ -122,5 +122,5 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
       (the one open question in design.md)
 - [ ] 9.6 Re-run the graded interrogation; confirm Q13/Q17 improve and no previously correct answer
       regresses; record the score
-- [ ] 9.7 Verify no reserved-but-unemitted vocabulary remains: every registered predicate has a live
+- [x] 9.7 Verify no reserved-but-unemitted vocabulary remains: every registered predicate has a live
       emitter or is gone

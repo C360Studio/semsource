@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,8 +19,10 @@ import (
 	"github.com/c360studio/semstreams/storage/storeregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry proves the ADR-063
@@ -80,9 +83,13 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 		t.Fatalf("register store: %v", err)
 	}
 
-	// Drive the REAL doc producer over the same store: it offloads the passage to
-	// CONTENT and sets BOTH the StorageRef and the body-handle triples.
-	const docContent = "# Retry Policy\n\nUse exponential backoff with jitter.\n"
+	// Drive the REAL doc producer over the same store. It emits a parent document
+	// plus one entity per passage; each PASSAGE is offloaded to CONTENT and gets
+	// both a StorageRef and the body-handle triples. The document is deliberately
+	// large enough to split — with a single passage you cannot tell "the parent
+	// holds no body" from "the parent's body happens to equal the only passage".
+	docContent := "# Retry Policy\n\n" + strings.Repeat("Use exponential backoff with jitter. ", 20) +
+		"\n\n## Deadlines\n\n" + strings.Repeat("Every call carries a deadline from its caller. ", 20) + "\n"
 	docDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(docDir, "retry.md"), []byte(docContent), 0o644); err != nil {
 		t.Fatal(err)
@@ -92,29 +99,65 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
-	if len(states) != 1 {
-		t.Fatalf("state count: got %d, want 1", len(states))
+
+	var parent *handler.EntityState
+	var passages []*handler.EntityState
+	for _, st := range states {
+		if docTypeOfState(st) == "passage" {
+			passages = append(passages, st)
+			continue
+		}
+		parent = st
 	}
-	state := states[0]
+	if parent == nil {
+		t.Fatal("no parent document entity emitted")
+	}
+	if len(passages) < 2 {
+		t.Fatalf("want a multi-passage document, got %d passages from %d states", len(passages), len(states))
+	}
 
 	// ---- Assertion A: the graph-embedding StorageRef→registry fetch contract. ----
-	if state.StorageRef == nil {
-		t.Fatal("doc producer did not set EntityState.StorageRef")
+	// Every passage must resolve; a passage whose ref the registry cannot resolve
+	// is exactly the content_unresolved case graph-embedding reports loudly, so a
+	// pass here means that metric stays 0 for offloaded doc bodies.
+	var rebuilt string
+	for _, p := range passages {
+		if p.StorageRef == nil {
+			t.Fatalf("passage %s carries no StorageRef — it would never be embedded", p.ID)
+		}
+		resolved, ok := storeReg.Store(p.StorageRef.StorageInstance)
+		if !ok {
+			t.Fatalf("registry does not resolve StorageInstance %q for %s", p.StorageRef.StorageInstance, p.ID)
+		}
+		body, gErr := resolved.Get(ctx, p.StorageRef.Key)
+		if gErr != nil {
+			t.Fatalf("registry fetch for %s: %v", p.ID, gErr)
+		}
+		rebuilt += string(body)
 	}
-	resolved, ok := storeReg.Store(state.StorageRef.StorageInstance)
-	if !ok {
-		t.Fatalf("registry does not resolve StorageInstance %q — graph-embedding would report content_unresolved",
-			state.StorageRef.StorageInstance)
-	}
-	body, err := resolved.Get(ctx, state.StorageRef.Key)
-	if err != nil || string(body) != docContent {
-		t.Fatalf("registry fetch of offloaded body = %q (err %v); want %q", body, err, docContent)
+	// The stored passages must account for the whole document: anything missing
+	// here is document text that no query can ever reach.
+	if rebuilt != docContent {
+		t.Fatalf("passage bodies do not reconstruct the document (%d bytes stored vs %d on disk)",
+			len(rebuilt), len(docContent))
 	}
 
-	// Publish the produced entity (triples + StorageRef) into the live graph.
-	publishSemsourceEntity(t, ctx, tc.Client, state.ID,
-		semsourcegraph.IndexingProfileContent, state.Triples, state.StorageRef)
-	waitForEntityState(t, ctx, tc.Client, state.ID, 5*time.Second)
+	// The parent holds no body, so it cannot reintroduce the diluted whole-file
+	// vector or return the same prose a second time.
+	if parent.StorageRef != nil {
+		t.Fatalf("parent %s still carries a StorageRef %+v; the parent holds no body", parent.ID, parent.StorageRef)
+	}
+
+	// Publish parent and passages (triples + StorageRefs) into the live graph.
+	for _, st := range states {
+		publishSemsourceEntity(t, ctx, tc.Client, st.ID,
+			semsourcegraph.IndexingProfileContent, st.Triples, st.StorageRef)
+	}
+	for _, st := range states {
+		waitForEntityState(t, ctx, tc.Client, st.ID, 5*time.Second)
+	}
+	state := passages[0]
+	passageLabel := labelOfState(state)
 
 	// ---- Assertion B: the fusion docs lens hydrates via the registry resolver. ----
 	engine := fusion.NewEngine(
@@ -131,10 +174,13 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 			Query: state.ID, Want: []fusion.Want{fusion.WantBody},
 		}, lens)
 		if ferr != nil {
-			t.Fatalf("Fuse: %v", ferr)
+			if fuseErrIsRetryable(t, ferr) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		last = resp
-		if n := findNode(resp.Nodes, "Retry Policy"); n != nil && n.Body != "" {
+		if n := findNode(resp.Nodes, passageLabel); n != nil && n.Body != "" {
 			node = n
 			break
 		}
@@ -144,9 +190,40 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 		t.Fatalf("doc node with a hydrated body never appeared — ready=%v state=%s nodes=%+v",
 			last.Index.Ready, last.Index.State, last.Nodes)
 	}
-	if node.Body != docContent {
-		t.Fatalf("hydrated doc body via registry resolver = %q; want %q", node.Body, docContent)
+	wantBody, gErr := store.Get(ctx, state.StorageRef.Key)
+	if gErr != nil {
+		t.Fatalf("read expected passage body: %v", gErr)
 	}
+	if node.Body != string(wantBody) {
+		t.Fatalf("hydrated passage body via registry resolver = %q; want %q", node.Body, wantBody)
+	}
+	// The passage, not the file: a hydrated body equal to the whole document
+	// would mean the split never reached the retrieval path.
+	if node.Body == docContent {
+		t.Fatal("hydrated body is the entire document; retrieval is still whole-file")
+	}
+}
+
+// docTypeOfState reads the emitted DocType fact off a produced entity state.
+func docTypeOfState(st *handler.EntityState) string {
+	for i := range st.Triples {
+		if st.Triples[i].Predicate == source.DocType {
+			v, _ := st.Triples[i].Object.(string)
+			return v
+		}
+	}
+	return ""
+}
+
+// labelOfState reads the emitted title, which is what the lens uses as a node label.
+func labelOfState(st *handler.EntityState) string {
+	for i := range st.Triples {
+		if st.Triples[i].Predicate == source.DcTitle {
+			v, _ := st.Triples[i].Object.(string)
+			return v
+		}
+	}
+	return ""
 }
 
 // docsPrefixLens wraps the real docs lens but forces prefix resolution so the

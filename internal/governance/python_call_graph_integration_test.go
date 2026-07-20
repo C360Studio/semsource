@@ -103,7 +103,10 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 			Want:  []fusion.Want{fusion.WantRelations},
 		}, lens)
 		if ferr != nil {
-			t.Fatalf("Fuse: %v", ferr)
+			if fuseErrIsRetryable(t, ferr) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		if resp.Index.Ready {
 			if helper := findNode(resp.Nodes, "helper"); helper != nil {

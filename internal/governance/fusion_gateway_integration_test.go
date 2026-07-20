@@ -233,7 +233,10 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 			Want:  []fusion.Want{fusion.WantBody, fusion.WantRelations},
 		}, lens)
 		if err != nil {
-			t.Fatalf("Fuse: %v", err)
+			if fuseErrIsRetryable(t, err) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		resp = r
 		dispatch = findNode(resp.Nodes, "Dispatch")

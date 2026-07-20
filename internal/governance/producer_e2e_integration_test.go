@@ -120,7 +120,10 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 			Query: "Dispatch", Want: []fusion.Want{fusion.WantBody},
 		}, lens)
 		if ferr != nil {
-			t.Fatalf("Fuse: %v", ferr)
+			if fuseErrIsRetryable(t, ferr) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		last = resp
 		if d := findNode(resp.Nodes, "Dispatch"); d != nil && d.Body != "" {

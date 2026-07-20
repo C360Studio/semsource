@@ -628,3 +628,36 @@ the framework's cap cannot be configured or detected. It still applies to any pr
 legitimately large single bodies, and the silence is the part worth fixing regardless.
 
 **Surfaced by:** doc-passage-chunking, 2026-07-20.
+
+
+### 23. Strict catch-up readiness is reachable after any finite write burst — framework-shaped — evidence added to [semstreams#590](https://github.com/C360Studio/semstreams/issues/590)
+
+`ComputeIndexStatus` gates on `ready := target > 0 && indexed >= target`
+(`graph/index_status.go`), and `graph-index` answers queries below that bar with a classified
+transient `ErrorCodeIndexNotReady` (`processor/graph-index/query.go:183`).
+
+#590 reports this from a continuous-write load (semboids), where readiness never flips at all, and
+carries a caveat: 8.5 minutes may not be enough to distinguish "the gate is unreachable by
+construction" from "this load simply outruns graph-index."
+
+**SemSource is the control case for that caveat.** Our integration suite writes a FINITE burst —
+ingest a few entities, writes stop, then query — so lag cannot climb without limit. The gate still
+returns not-ready to a query arriving right after the burst. The reachability problem therefore is
+not only a firehose phenomenon; it opens a window after any ordinary write burst, independent of how
+semboids' lag behaves over a longer soak.
+
+Milder here than in semboids, in a way that isolates the mechanism: `indexBootstrapped` is sticky, so
+we flip once and then run clean, and the failure is load-dependent (the failing test passes 5/5 alone
+and fails only under full-suite load).
+
+**Local impact, already fixed:** nine fusion poll loops in `internal/governance` called `t.Fatalf` on
+this transient inside loops written to wait for exactly that condition, so a benign self-resolving lag
+read as a red build. They now retry on `errs.IsTransient` — detection by classification, never message
+text. See `internal/governance/fuse_retry_integration_test.go`.
+
+**Why it surfaced now:** doc passage chunking multiplies doc entity count ~7x (218 files → 1497
+entities on this repo), widening the catch-up window on every ingest. The gate was always reachable;
+more entities made it reliably so.
+
+**Position:** no ask of our own beyond the bounded-staleness tolerance already proposed in #590.
+Evidence contributed; the decision is theirs.
