@@ -286,10 +286,13 @@ type prefixLens struct{ *code.Lens }
 func (prefixLens) ResolveMode(string) fusion.ResolveMode { return fusion.ResolveModePrefix }
 
 // pollNeighbors retries Neighbors until it returns edges or the deadline passes
-// (graph-index builds the OUTGOING/INCOMING indexes asynchronously).
+// (graph-index builds the OUTGOING/INCOMING indexes asynchronously). The
+// deadline is sized for a cold CI runner, not a warm laptop: the 5s original
+// flaked once in four runs on the first day test-integration gated CI (PR #98,
+// same code green on the surrounding three runs).
 func pollNeighbors(t *testing.T, ctx context.Context, gc *fusionnats.Client, id string, preds []string, dir fusion.Direction) []fusion.Edge {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		edges, err := gc.Neighbors(ctx, id, preds, dir)
 		if err != nil {
