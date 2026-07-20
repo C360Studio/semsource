@@ -81,6 +81,12 @@ func (e *Entity) Triples() []message.Triple {
 		{Subject: e.ID, Predicate: source.DocFileHash, Object: e.ContentHash, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DocChunkCount, Object: e.ChunkCount, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		// The parent is navigable, not readable: it holds no body, so it must not
+		// outrank the passages that do. Without this it does — a title-only vector
+		// scores well on a title-shaped query and the caller's first citation is
+		// empty. Measured before this marker: 5 of 11 doc answers led with an
+		// empty-bodied node.
+		{Subject: e.ID, Predicate: source.EntityRoleNavigational, Object: source.NavigationalDocument, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
 	return triples
 }
