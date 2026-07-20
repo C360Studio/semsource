@@ -47,15 +47,15 @@ only the binary.
 
 ## 5. The A/B
 
-- [ ] 5.1 Rebuild the stack on the candidate binary with `docker compose down -v` (rebuild, not
+- [x] 5.1 Rebuild the stack on the candidate binary with `docker compose down -v` (rebuild, not
       reindex — design D7), same corpus, wait for `phase` + `index.ready` + `embedding.ready`
-- [ ] 5.2 Run `scripts/scorecard/run.sh v3-candidate` at the default `SCORECARD_REPEATS=3`
-- [ ] 5.3 **The signal:** X01 moves `MISLEADING` → `correct`
-- [ ] 5.4 **The regression detector:** doc bands stay 10/10. A drop there kills the change
+- [x] 5.2 Run `scripts/scorecard/run.sh v3-candidate` at the default `SCORECARD_REPEATS=3`
+- [x] 5.3 **The signal:** X01 moves `MISLEADING` → `correct`
+- [x] 5.4 **The regression detector:** doc bands stay 10/10. A drop there kills the change
       regardless of X01
-- [ ] 5.5 Record entity count and time-to-ready against the v3 baseline — the existing
+- [x] 5.5 Record entity count and time-to-ready against the v3 baseline — the existing
       `retrieval-ranking` requirement obliges corpus growth to be measured, not assumed
-- [ ] 5.6 Do NOT read X02 either way: it may move as a side effect of re-chunking and may stay
+- [x] 5.6 Do NOT read X02 either way: it may move as a side effect of re-chunking and may stay
       `UNSTABLE` while semstreams#597 is open
 
 ## 6. The spec correction (independent of the above)
@@ -69,10 +69,10 @@ only the binary.
 
 ## 7. Record and gate
 
-- [ ] 7.1 Write `results/SUMMARY-v3-candidate.md`: the A/B table, the entity-count delta, and what
+- [x] 7.1 Write `results/SUMMARY-v3-candidate.md`: the A/B table, the entity-count delta, and what
       the result does and does not establish
-- [ ] 7.2 If X01 does not move, record why rather than tuning until it does — the offline cosine
+- [x] 7.2 If X01 does not move, record why rather than tuning until it does — the offline cosine
       predicts it will, and a disagreement between prediction and stack is itself the finding
-- [ ] 7.3 `task lint` clean (revive warnings fail CI, pinned v1.15.0)
-- [ ] 7.4 `go test ./...` and `go test -race ./...`
-- [ ] 7.5 `openspec validate --all` before finalising
+- [x] 7.3 `task lint` clean (revive warnings fail CI, pinned v1.15.0)
+- [x] 7.4 `go test ./...` and `go test -race ./...`
+- [x] 7.5 `openspec validate --all` before finalising
