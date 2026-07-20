@@ -187,8 +187,20 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 - [x] 10.3 **DEFECT FIXED: body-less parents ranked above their own passages** (5/11 doc answers
       led with an empty-bodied node, was 0/11). Fixed with two levers — salience
       demotion (5->3) plus dropping body-less document nodes (3->0). Re-measured 0/11
-- [ ] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
-      ("CLAUDE.md § CLAUDE.md")
+- [x] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
+      ("CLAUDE.md § CLAUDE.md").
+      `passageTitle` (handler/doc/entities.go) now skips the parent qualifier when
+      the section IS the document, compared case-insensitively after trimming.
+      Common for CLAUDE.md, AGENTS.md, and any doc named after its subject.
+      Qualification exists to disambiguate six "Usage" sections across six
+      documents; repeating a name against itself disambiguates nothing.
+      Note this does not lose disambiguation: two documents that both had
+      H1 == title were equally indistinguishable before ("README.md § README.md"
+      twice), so the duplicate never carried information.
+      Pinned by `TestDocHandler_Passages_TitleNotDuplicatedWhenH1EqualsTitle`,
+      which reproduces the exact "CLAUDE.md § CLAUDE.md" string and also asserts
+      a genuinely distinct section is STILL qualified — suppressing the duplicate
+      must not disable qualification generally.
 - [x] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
       add discrimination questions where a whole-file match cannot answer.
       Added the `discrimination` band (X01-X03) plus `expect_top_all` /

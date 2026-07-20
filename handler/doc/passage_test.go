@@ -515,3 +515,41 @@ func TestDocHandler_Passages_LargeDocumentSplitsUnderHardMax(t *testing.T) {
 			joined.Len(), len(content))
 	}
 }
+
+// TestDocHandler_Passages_TitleNotDuplicatedWhenH1EqualsTitle pins the cosmetic
+// defect where a document whose H1 repeats its own title produced a passage
+// named "CLAUDE.md § CLAUDE.md". Qualifying a section with its parent exists to
+// disambiguate six "Usage" sections across six documents; when the section IS
+// the document, the qualifier adds nothing and the repetition reads as a bug in
+// every result list the passage appears in.
+func TestDocHandler_Passages_TitleNotDuplicatedWhenH1EqualsTitle(t *testing.T) {
+	dir := t.TempDir()
+	// The real shape from this repository: a file whose H1 is its own filename,
+	// so the derived document title and the first section heading are identical.
+	writeMD(t, dir, "CLAUDE.md", "# CLAUDE.md\n\n"+prose("guidance", 4)+headedSection("Testing", "testing", 4))
+
+	h, _ := docsHandler(t)
+	states := ingestDocs(t, h, dir)
+
+	parentTitle := tripleValue(t, parentStates(states)[0], source.DcTitle)
+	for _, p := range passageStates(states) {
+		title := tripleValue(t, p, source.DcTitle)
+		if title == parentTitle+" § "+parentTitle {
+			t.Errorf("passage %s title = %q; a section identical to its document title must not "+
+				"be qualified with itself", p.ID, title)
+		}
+	}
+
+	// The qualifier must survive where it still earns its place: a genuinely
+	// different section is still disambiguated by its parent.
+	var sawQualified bool
+	for _, p := range passageStates(states) {
+		if tripleValue(t, p, source.DcTitle) == parentTitle+" § Testing" {
+			sawQualified = true
+		}
+	}
+	if !sawQualified {
+		t.Errorf("no passage carries the qualified title %q; suppressing the duplicate must not "+
+			"disable qualification for distinct sections", parentTitle+" § Testing")
+	}
+}
