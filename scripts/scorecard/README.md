@@ -40,10 +40,18 @@ runs other stacks, and `nats` on 4222 is generally not ours.
 
 To measure a change rather than a build, score **both sides against one set**:
 
-1. Check out the baseline commit, bring up a stack with a **fresh** graph
-   (`docker compose down -v`), wait for ready, run with a label.
-2. Check out the candidate commit, `down -v` again, bring up, run with another label.
+1. Build the baseline binary from the baseline commit (a `git worktree` keeps the
+   main checkout intact), bring up a stack with a **fresh** graph, wait for ready,
+   run with a label.
+2. Rebuild from the candidate commit, `docker compose down -v` again, bring up,
+   run with another label.
 3. Compare per band.
+
+**Hold the corpus fixed and vary only the binary.** Point `SEMSOURCE_TARGET` at the
+same checkout for both runs. Ingesting each side's own tree would confound the
+result: the candidate's tree contains files the baseline's does not, so a question
+about new code could not pass the baseline for reasons having nothing to do with
+retrieval.
 
 The `down -v` matters. Doc identity and body handles changed in the passage-chunking
 work, and a graph carried over from the other side is neither one thing nor the other.

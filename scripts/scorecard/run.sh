@@ -26,20 +26,32 @@ out="$outdir/${label}.json"
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 
 # --- readiness -------------------------------------------------------------
-# Never score a stack that is still seeding: a miss caused by an incomplete
-# index is not a retrieval failure, and grading one as if it were would poison
-# the comparison.
-echo "waiting for ${status_url} to report ready..."
-deadline=$(( $(date +%s) + ${SCORECARD_READY_TIMEOUT:-900} ))
-until curl -sS --max-time 5 "$status_url" 2>/dev/null | grep -q '"phase":"ready"'; do
-	[ "$(date +%s)" -lt "$deadline" ] || { echo "stack never reported ready" >&2; exit 1; }
-	sleep 5
+# Never score a stack that is still catching up: a miss caused by an incomplete
+# index is not a retrieval failure, and grading one as such would poison the
+# comparison — worse, scoring one side of an A/B before it settles and the other
+# after would produce a difference that is pure timing.
+#
+# Gate on all three signals the status payload publishes, not on phase alone.
+# Its own note states the contract: a miss is a genuine absence only when phase
+# is "ready" AND the relevant index signal is ready — phase covers seeding,
+# index.ready covers NAME_INDEX (code_context / code_impact), embedding.ready
+# covers the semantic pipeline (code_search / doc_context). Waiting on a fixed
+# sleep instead would be guessing at something the product reports exactly.
+echo "waiting for phase=ready + index.ready + embedding.ready ..."
+deadline=$(( $(date +%s) + ${SCORECARD_READY_TIMEOUT:-1800} ))
+while :; do
+	s=$(curl -sS --max-time 5 "$status_url" 2>/dev/null || echo '{}')
+	gate=$(printf '%s' "$s" | jq -r '[(.phase == "ready"), (.index.ready == true), (.embedding.ready == true)] | all' 2>/dev/null || echo false)
+	[ "$gate" = "true" ] && break
+	[ "$(date +%s)" -lt "$deadline" ] || {
+		echo "stack never became fully ready: $(printf '%s' "$s" | jq -c '{phase, index:.index.ready, embedding:.embedding.ready, total_entities}')" >&2
+		exit 1
+	}
+	printf '  %s\n' "$(printf '%s' "$s" | jq -c '{phase, index:.index.ready, embedding:.embedding.ready, total_entities}' 2>/dev/null || echo waiting)"
+	sleep 10
 done
-echo "stack is ready"
-
-# Readiness means seeded, not embedded. Embeddings land asynchronously after
-# ingest, and scoring semantic retrieval before they exist measures nothing.
-sleep "${SCORECARD_EMBED_SETTLE:-60}"
+entities=$(curl -sS --max-time 5 "$status_url" | jq -r '.total_entities')
+echo "ready — total_entities=$entities"
 
 # --- MCP session -----------------------------------------------------------
 hdrs=$(mktemp); body=$(mktemp)
@@ -60,6 +72,9 @@ curl -sS --max-time 5 -o /dev/null -X POST \
 	-d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' \
 	"$mcp_url"
 
+# Returns the tool's inner result as parseable JSON. The MCP frame carries it
+# escaped inside content[0].text; decode it properly rather than stripping
+# backslashes, so evidence can be measured and not merely grepped.
 mcp_call() {
 	curl -sS --max-time "${SCORECARD_CALL_TIMEOUT:-30}" -X POST \
 		-H 'Content-Type: application/json' \
@@ -67,7 +82,9 @@ mcp_call() {
 		-H 'MCP-Protocol-Version: 2025-06-18' \
 		-H "Mcp-Session-Id: $session" \
 		-d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" \
-		"$mcp_url" | sed -n 's/^data: //p' | tr -d '\\'
+		"$mcp_url" | sed -n 's/^data: //p' \
+		| jq -c 'if .result.content[0].text then (.result.content[0].text | fromjson) else . end' 2>/dev/null \
+		|| echo '{}'
 }
 
 # --- run + grade -----------------------------------------------------------
@@ -84,8 +101,17 @@ for i in $(seq 0 $((n - 1))); do
 	tool=$(jq -r '.tool' <<<"$q")
 	args=$(jq -c '.args' <<<"$q")
 
-	answer=$(mcp_call "$tool" "$args" || echo "")
+	answer=$(mcp_call "$tool" "$args" || echo "{}")
 	lower=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
+
+	# Evidence precision is the measure that actually separates whole-file
+	# retrieval from passage retrieval. Fact-presence alone cannot: a whole-file
+	# body trivially contains every fact in the file, so a substring matcher
+	# passes whether the system found the right paragraph or just dumped the
+	# document. Bytes-per-answer is the difference.
+	nodes=$(printf '%s' "$answer" | jq '(.nodes // []) | length' 2>/dev/null || echo 0)
+	bodybytes=$(printf '%s' "$answer" | jq '[(.nodes // [])[] | (.body // "") | length] | add // 0' 2>/dev/null || echo 0)
+	topbytes=$(printf '%s' "$answer" | jq '((.nodes // [])[0].body // "") | length' 2>/dev/null || echo 0)
 
 	verdict="correct"; reason=""
 	# isError is a failed call, never a graded answer.
@@ -115,23 +141,31 @@ for i in $(seq 0 $((n - 1))); do
 
 	total=$((total + 1))
 	[ "$verdict" = "correct" ] && correct=$((correct + 1))
-	printf '%-5s %-10s %-13s %s %s\n' "$id" "$band" "$tool" "$verdict" "$reason"
+	printf '%-5s %-10s %-13s %-10s nodes=%-3s body=%-7s top=%-7s %s\n' \
+		"$id" "$band" "$tool" "$verdict" "$nodes" "$bodybytes" "$topbytes" "$reason"
 
 	jq --arg id "$id" --arg band "$band" --arg tool "$tool" --arg v "$verdict" \
-	   --arg r "$reason" --arg a "$(printf '%s' "$answer" | head -c 4000)" \
-	   '. += [{id:$id, band:$band, tool:$tool, verdict:$v, reason:$r, answer:$a}]' \
+	   --arg r "$reason" --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
+	   --argjson tb "${topbytes:-0}" --arg a "$(printf '%s' "$answer" | head -c 6000)" \
+	   '. += [{id:$id, band:$band, tool:$tool, verdict:$v, reason:$r, nodes:$n, body_bytes:$bb, top_body_bytes:$tb, answer:$a}]' \
 	   "$out.tmp" > "$out.tmp2" && mv "$out.tmp2" "$out.tmp"
 done
 
 jq -n --arg label "$label" --argjson score "$correct" --argjson total "$total" \
-   --slurpfile r "$out.tmp" \
-   '{label:$label, score:$score, total:$total, results:$r[0]}' > "$out"
+   --argjson entities "${entities:-0}" --slurpfile r "$out.tmp" \
+   '{label:$label, score:$score, total:$total, total_entities:$entities, results:$r[0]}' > "$out"
 rm -f "$out.tmp"
 
 echo
 echo "=== $label: $correct/$total ==="
 jq -r '.results | group_by(.band)[] |
        "\(.[0].band): \([.[] | select(.verdict=="correct")] | length)/\(length)"' "$out"
+echo
+echo "--- evidence precision (doc bands) ---"
+jq -r '[.results[] | select(.band|startswith("doc"))] |
+       "median top-node body: \(( [.[].top_body_bytes] | sort | .[length/2|floor] )) bytes",
+       "mean  total body:     \(( [.[].body_bytes] | add / length | floor )) bytes",
+       "mean  nodes/answer:   \(( [.[].nodes] | add / length ))"' "$out"
 fab=$(jq '[.results[] | select(.verdict=="FABRICATED")] | length' "$out")
 [ "$fab" = "0" ] || echo "!!! $fab FABRICATION(S) — this outranks every other result"
 echo "written: $out"

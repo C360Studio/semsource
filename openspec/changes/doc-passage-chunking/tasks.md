@@ -116,11 +116,25 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 - [x] 9.2 `go test ./...` and `go test -race -tags=integration ./...` green
 - [ ] 9.3 Integration test on a real stack: ingest a document larger than the truncation limit, then
       retrieve a phrase that appears only in its tail
-- [ ] 9.4 Measure entity count and time-to-ready on this repository before and after; record both in
+- [x] 9.4 Measure entity count and time-to-ready on this repository before and after; record both in
       this change and treat a large regression as a blocker
 - [ ] 9.5 Choose the chunk ceiling and floor empirically — A/B the graded interrogation, do not guess
       (the one open question in design.md)
-- [ ] 9.6 Re-run the graded interrogation; confirm Q13/Q17 improve and no previously correct answer
+- [x] 9.6 Re-run the graded interrogation; confirm Q13/Q17 improve and no previously correct answer
       regresses; record the score
 - [x] 9.7 Verify no reserved-but-unemitted vocabulary remains: every registered predicate has a live
       emitter or is gone
+
+
+## 10. Measured (2026-07-20) — see scripts/scorecard/results/SUMMARY.md
+
+- [x] 10.1 A/B run on a fixed corpus, only the binary varying: median top-ranked doc
+      body 12,142 B -> 1,102 B; mean total body 45,860 B -> 15,780 B; +526 entities (+11%)
+- [x] 10.2 No band regressed; doc-early control held 3/3; zero fabrication both sides
+- [ ] 10.3 **DEFECT: body-less parents rank above their own passages** (5/11 doc answers
+      lead with an empty-bodied node, was 0/11). Violates this change's own
+      retrieval-ranking requirement; task 7.1 is unmet, not passed
+- [ ] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
+      ("CLAUDE.md § CLAUDE.md")
+- [ ] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
+      add discrimination questions where a whole-file match cannot answer
