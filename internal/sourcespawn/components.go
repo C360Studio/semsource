@@ -102,8 +102,17 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 		}
 	}
 
+	// True-freeze snapshots (entity-staleness spec D5): watch:false with no
+	// explicit index_interval is a real one-shot snapshot — no watcher, no
+	// periodic reindex either. Previously this always defaulted to "60s"
+	// regardless of Watch, contradicting the documented "one-shot snapshot"
+	// semantics (add_source's tool description) and poisoning the sidecar
+	// use case, where a pinned ephemeral worktree is EXPECTED to vanish out
+	// from under a frozen source. An explicit IndexInterval is always
+	// honored — that is the opt-back-in to periodic tracking even with
+	// watch:false.
 	indexInterval := src.IndexInterval
-	if indexInterval == "" {
+	if indexInterval == "" && src.Watch {
 		indexInterval = "60s"
 	}
 

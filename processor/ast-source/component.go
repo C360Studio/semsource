@@ -29,6 +29,12 @@ import (
 	"github.com/c360studio/semsource/workspace"
 )
 
+// lifecycleTriggerTimeout bounds the background NATS round trip triggering a
+// staleness lifecycle pass. Fire-and-forget from the watch/reindex loop's
+// perspective — a missing or slow responder degrades staleness marking, it
+// never blocks or fails ingestion.
+const lifecycleTriggerTimeout = 30 * time.Second
+
 // astSourceSchema defines the configuration schema for the ast-source component.
 var astSourceSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
@@ -388,6 +394,9 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 		}
 	case semsourceast.OpDelete:
 		c.logger.Debug("File deleted", "path", event.Path)
+		if c.deleteTriggersLifecycleRun() {
+			c.triggerLifecycleRun(ctx, pw, graph.LifecycleReasonFileDeleted)
+		}
 	}
 
 	if event.Error != nil {
@@ -465,12 +474,61 @@ func (c *Component) performFullIndex(ctx context.Context) {
 			}
 			published++
 		}
+
+		// Every sweep announces scope to the staleness lifecycle pass — not
+		// just sweeps that observed a change — so a delete that happened
+		// while semsource was down (no fsnotify event ever fired) is still
+		// detected on the first pass after boot (design D2: graph-derived,
+		// restart-proof).
+		c.triggerLifecycleRun(ctx, pw, graph.LifecycleReasonPathMissing)
 	}
 
 	c.logger.Debug("Periodic reindex complete",
 		"files_scanned", totalFiles,
 		"files_published", published,
 		"files_skipped", totalFiles-published)
+}
+
+// deleteTriggersLifecycleRun reports whether an OpDelete event should
+// announce scope to the staleness lifecycle pass. False only when watching
+// is disabled — a frozen source (D5) never goes stale, so its vanished paths
+// must never be marked. The fast-path watcher goroutine only runs when
+// WatchEnabled is true anyway, so this is belt-and-suspenders, but it keeps
+// the invariant directly unit-testable without a live fsnotify pipeline.
+func (c *Component) deleteTriggersLifecycleRun() bool {
+	return c.config.WatchEnabled
+}
+
+// lifecycleRunRequestFor builds the staleness lifecycle trigger request for
+// one watch path. Pure (no I/O) so the scope-wiring is unit-testable without
+// a NATS connection.
+func lifecycleRunRequestFor(pw *pathWatcher, reason string) graph.LifecycleRunRequest {
+	return graph.LifecycleRunRequest{
+		Org:      pw.config.Org,
+		Systems:  []string{pw.scopedSystem},
+		RootPath: pw.root,
+		Reason:   reason,
+	}
+}
+
+// triggerLifecycleRun announces this watch path's scope to the staleness
+// lifecycle pass (processor/supersession), fired in the background so the
+// watch/reindex loop is never blocked on a full graph pass. Callers gate
+// whether to call this at all (the fast path only when WatchEnabled; the
+// periodic sweep only ever runs when IndexInterval is set) — this method
+// itself does not re-derive scope-eligibility, since "watch:false with an
+// explicit index_interval" is a legitimate tracked source (D5), not a frozen
+// one, and the two call sites have different preconditions.
+func (c *Component) triggerLifecycleRun(ctx context.Context, pw *pathWatcher, reason string) {
+	req := lifecycleRunRequestFor(pw, reason)
+	go func() {
+		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
+		defer cancel()
+		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
+			c.logger.Debug("lifecycle trigger failed (staleness marking degraded, not fatal)",
+				"path", pw.root, "reason", reason, "error", err)
+		}
+	}()
 }
 
 // parseDirectory parses all source files in a directory using the path's configured parsers.

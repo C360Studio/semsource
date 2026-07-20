@@ -163,9 +163,13 @@ func ingestFile(path, root string) (handler.RawEntity, error) {
 	}
 
 	hash := contentHash(content)
-	instance := hash[:6]
-
 	relPath, _ := filepath.Rel(root, path)
+	// Instance is the sanitized relative path, matching the typed
+	// IngestEntityStates path (entities.go newEntity) so normalizer and
+	// direct paths produce identical IDs — stable across content edits
+	// (entity-staleness spec D3).
+	instance := entityid.SanitizeInstance(relPath)
+
 	title := extractTitle(content, filepath.Base(path))
 	mimeType := mimeForExt(filepath.Ext(path))
 

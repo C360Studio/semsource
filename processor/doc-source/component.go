@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,12 +17,19 @@ import (
 	"github.com/c360studio/semstreams/pkg/retry"
 	"github.com/c360studio/semstreams/storage/objectstore"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/workspace"
 )
+
+// lifecycleTriggerTimeout bounds the background NATS round trip triggering a
+// staleness lifecycle pass. Fire-and-forget from the watch loop's
+// perspective — a missing or slow responder degrades staleness marking, it
+// never blocks or fails ingestion.
+const lifecycleTriggerTimeout = 30 * time.Second
 
 // docSourceSchema defines the configuration schema for the doc-source component.
 var docSourceSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
@@ -281,6 +290,14 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		"entity_states", len(event.EntityStates))
 
 	if event.Operation == handler.OperationDelete {
+		if c.deleteTriggersLifecycleRun() {
+			if root, ok := c.rootForPath(event.Path); ok {
+				c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
+			} else {
+				c.logger.Debug("delete event path not under any configured root; skipping lifecycle trigger",
+					"path", event.Path)
+			}
+		}
 		return
 	}
 
@@ -322,6 +339,54 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 // publishEntity enqueues an EntityPayload for buffered publishing via entitypub.
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
 	return c.publisher.Send(payload)
+}
+
+// deleteTriggersLifecycleRun reports whether a delete event should announce
+// scope to the staleness lifecycle pass. False only when watching is
+// disabled — a frozen source (D5) never goes stale, so its vanished paths
+// must never be marked. The fsnotify fan-in goroutine only runs when
+// WatchEnabled is true anyway, so this is belt-and-suspenders, but it keeps
+// the invariant directly unit-testable without a live fsnotify pipeline.
+func (c *Component) deleteTriggersLifecycleRun() bool {
+	return c.config.WatchEnabled
+}
+
+// rootForPath returns the configured Paths entry that is an ancestor of (or
+// equal to) absPath, resolving both to absolute form for comparison.
+// doc-source may watch multiple root paths; a deleted file's containing root
+// determines the entity-ID system and the RootPath the lifecycle pass
+// anchors its liveness stat to.
+func (c *Component) rootForPath(absPath string) (root string, ok bool) {
+	for _, p := range c.config.Paths {
+		absRoot, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		if absPath == absRoot || strings.HasPrefix(absPath, absRoot+string(filepath.Separator)) {
+			return absRoot, true
+		}
+	}
+	return "", false
+}
+
+// triggerLifecycleRun announces root's scope to the staleness lifecycle pass
+// (processor/supersession), fired in the background so the watch loop is
+// never blocked on a full graph pass.
+func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string) {
+	req := graph.LifecycleRunRequest{
+		Org:      c.config.Org,
+		Systems:  []string{entityid.SystemSlug(root)},
+		RootPath: root,
+		Reason:   reason,
+	}
+	go func() {
+		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
+		defer cancel()
+		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
+			c.logger.Debug("lifecycle trigger failed (staleness marking degraded, not fatal)",
+				"root", root, "reason", reason, "error", err)
+		}
+	}()
 }
 
 // updateLastActivity safely updates the last activity timestamp.

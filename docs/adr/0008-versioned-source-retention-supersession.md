@@ -5,6 +5,11 @@
 > **Revises:** ADR-0007's branch-deletion debate (Options A/B/C) — replaced by **retain + relate, don't delete**.
 > **Absorbs:** task #36 (dependency-version lifecycle) — "refresh-on-bump" becomes *index the new version + add supersession edges*, additive, no deletion.
 > **Framework-gated only for the rare deletion exception (OFF the critical path):** [semstreams#433](https://github.com/C360Studio/semstreams/issues/433) (index cleanup on delete) + a referential-cascade-delete primitive (candidate ask). Neither gates the retention core.
+> **Staleness exception implemented (2026-07-19):** the deferred staleness/retraction half landed as
+> markers + demotion — `entity.lifecycle.stale` (reason-valued, signed −3.0, below historical's −2.0),
+> a lifecycle pass with caller-announced scope, marker clearing via the mutation lane's `RemoveTriples`,
+> path-anchored doc identity, and true-freeze `watch:false`. Mechanics: `openspec/specs/entity-staleness/`.
+> Hard deletion/GC remains gated on the asks above; the marker is the future GC key.
 
 ## Context
 

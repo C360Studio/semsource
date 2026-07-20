@@ -43,14 +43,19 @@ type Entity struct {
 	bodyKey      string
 }
 
-// newEntity constructs a Entity with a deterministic 6-part ID.
-// The instance is the first 6 hex chars of the content hash — matching the
-// RawEntity path so normalizer and direct paths produce identical IDs.
+// newEntity constructs a Entity with a deterministic 6-part ID. The instance
+// is the sanitized relative file path (entity-staleness spec D3 — mirrors the
+// code-file convention: source/ast.BuildInstanceID uses the path, not a
+// content hash), matching the ingestFile/RawEntity path so normalizer and
+// direct paths produce identical IDs. This makes doc identity STABLE across
+// edits: an edit re-ingests the SAME entity ID, so the substrate's
+// per-predicate replace updates content triples in place instead of minting
+// an orphaned sibling entity every save. The content hash still travels as
+// the DocFileHash triple for change detection — it just no longer feeds
+// identity. BREAKING for existing doc entity IDs (which were content-hash
+// derived); migration is a reindex.
 func newEntity(org, title, filePath, mimeType, contentHash, content, system string, indexedAt time.Time) *Entity {
-	instance := contentHash
-	if len(instance) > 6 {
-		instance = instance[:6]
-	}
+	instance := entityid.SanitizeInstance(filePath)
 	return &Entity{
 		ID:          entityid.Build(org, entityid.PlatformSemsource, "web", system, "doc", instance),
 		Title:       title,
