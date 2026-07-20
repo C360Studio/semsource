@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semstreams/model"
 	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
@@ -217,6 +218,17 @@ func ValidateNamespace(namespace string) error {
 		return fmt.Errorf("config: namespace %q cannot be used as an entity-ID org segment "+
 			"(allowed: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ — no dots, spaces, or leading symbols); "+
 			"every published entity would be rejected by the graph: %w", namespace, err)
+	}
+	// The charset probe above uses short stand-ins for the other five segments,
+	// so it cannot catch an org that only overflows once real repo slugs and
+	// symbol names are in play. Bound it here instead: an over-long org is not
+	// a per-entity problem but a deployment-wide one, and failing startup beats
+	// discovering it as rejected entities during ingest.
+	if len(namespace) > entityid.MaxOrgLen {
+		return fmt.Errorf("config: namespace %q is %d bytes, over the %d-byte limit for an "+
+			"entity-ID org segment; it would leave too little of the %d-byte entity-ID budget "+
+			"for repo and symbol names, and entities would be rejected by the graph at ingest",
+			namespace, len(namespace), entityid.MaxOrgLen, semtypes.MaxEntityIDBytes)
 	}
 	return nil
 }

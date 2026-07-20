@@ -565,23 +565,75 @@ func (p *Parser) extractVariableDeclaration(node *sitter.Node, source []byte, fi
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 		if child.Type() == "variable_declarator" {
-			entity := p.extractVariableDeclarator(child, source, filePath, lang, parentID, kind, node)
-			if entity != nil {
-				entities = append(entities, entity)
-			}
+			entities = append(entities,
+				p.extractVariableDeclarator(child, source, filePath, lang, parentID, kind, node)...)
 		}
 	}
 
 	return entities
 }
 
-// extractVariableDeclarator extracts a single variable declarator
-func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) *ast.CodeEntity {
+// extractVariableDeclarator extracts the entities a single variable declarator
+// declares. Most declarators bind one name, but a destructuring pattern binds
+// several — `const {a, b, c} = x` declares three symbols, not one — so this
+// returns a slice.
+func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) []*ast.CodeEntity {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return nil
 	}
 
+	if ast.IsDestructuringPattern(nameNode) {
+		return p.destructuredEntities(nameNode, source, filePath, lang, parentID, kind, declarationNode)
+	}
+
+	entity := p.simpleDeclaratorEntity(node, nameNode, source, filePath, lang, parentID, kind, declarationNode)
+	if entity == nil {
+		return nil
+	}
+	return []*ast.CodeEntity{entity}
+}
+
+// destructuredEntities emits one entity per name bound by a destructuring
+// pattern. Previously the pattern's entire source text became a single entity
+// name, which made every bound symbol unsearchable and produced entity IDs long
+// enough to be rejected by the graph outright.
+//
+// Each binding is a real declaration, so it gets the declaration's kind,
+// visibility, and doc comment; line numbers come from the binding itself so a
+// multi-line pattern points at the right place rather than at the whole
+// statement.
+func (p *Parser) destructuredEntities(patternNode *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) []*ast.CodeEntity {
+	entityType := ast.TypeVar
+	if kind == "const" {
+		entityType = ast.TypeConst
+	}
+	visibility := p.determineVisibility(declarationNode, source)
+	docComment := p.docCommentFor(declarationNode, source, "")
+
+	var bindings []*sitter.Node
+	ast.CollectPatternBindings(patternNode, &bindings)
+
+	entities := make([]*ast.CodeEntity, 0, len(bindings))
+	for _, binding := range bindings {
+		name := nodeText(binding, source)
+		if name == "" {
+			continue
+		}
+		entity := ast.NewCodeEntity(p.org, lang, p.project, entityType, name, filePath)
+		entity.ContainedBy = parentID
+		entity.StartLine = int(binding.StartPoint().Row) + 1
+		entity.EndLine = int(binding.EndPoint().Row) + 1
+		entity.Visibility = visibility
+		entity.DocComment = docComment
+		entities = append(entities, entity)
+	}
+	return entities
+}
+
+// simpleDeclaratorEntity builds the entity for a declarator that binds a single
+// plain identifier.
+func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) *ast.CodeEntity {
 	name := nodeText(nameNode, source)
 	valueNode := node.ChildByFieldName("value")
 

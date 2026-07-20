@@ -15,6 +15,8 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+
+	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // PlatformSemsource is the platform segment used in all SemSource entity IDs.
@@ -23,14 +25,76 @@ const PlatformSemsource = "semsource"
 // Build constructs the canonical 6-part entity ID string.
 // Format: {org}.{platform}.{domain}.{system}.{type}.{instance}
 // All parts must be non-empty — callers are responsible for supplying valid values.
+//
+// Build additionally guarantees the one contract no per-segment sanitizer can:
+// the assembled ID fits semstreams' MaxEntityIDBytes. Segment sanitizers see
+// one fragment at a time, but the AST path joins a path slug, every enclosing
+// scope, and the symbol name into a single instance segment, so only the
+// assembly point knows the real size. IDs that already fit pass through
+// byte-for-byte — bounding must never re-key an entity that was landing fine.
+// Overlong IDs have their instance segment truncated with a content-hash
+// suffix, which keeps identity deterministic and keeps near-identical long
+// symbols distinct.
 func Build(org, platform, domain, system, entityType, instance string) string {
-	return fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, domain, system, entityType, instance)
+	id := fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, domain, system, entityType, instance)
+	if len(id) <= semtypes.MaxEntityIDBytes {
+		return id
+	}
+	return fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, domain, system, entityType,
+		boundInstance(len(id)-len(instance), instance))
 }
 
-// maxSystemSlugLen caps the system slug length. Entity IDs have a 255-char
-// limit and six dot-separated segments — keeping the system segment compact
-// leaves room for the other five.
+// boundInstance shrinks an instance segment so that prefixLen + the result
+// fits MaxEntityIDBytes, appending a content hash of the full original so two
+// symbols sharing a long prefix cannot collapse onto one ID.
+//
+// When the five fixed segments alone exhaust the budget, the hash is returned
+// on its own and the ID stays over-length. That is deliberate: org and system
+// are deployment-wide values, so silently mangling them here would re-key
+// every entity in the deployment instead of one. The publish gate rejects the
+// ID loudly and names this sanitizer, which is the right place to notice that
+// an org or repo slug is pathologically long.
+func boundInstance(prefixLen int, instance string) string {
+	suffix := shortHash(instance)
+	budget := semtypes.MaxEntityIDBytes - prefixLen
+
+	// Need room for at least one content byte, the '-', and the hash.
+	if budget < len(suffix)+2 {
+		return suffix
+	}
+
+	// Byte-slicing can split a multi-byte rune, but any such rune is already
+	// outside the segment alphabet; TrimRightFunc drops the fragment with it.
+	kept := strings.TrimRightFunc(instance[:budget-len(suffix)-1],
+		func(r rune) bool { return !isASCIIAlnum(r) })
+	if kept == "" {
+		return suffix
+	}
+	return kept + "-" + suffix
+}
+
+// maxSystemSlugLen caps the system slug length. Entity IDs are bounded by
+// semtypes.MaxEntityIDBytes across six dot-separated segments — keeping the
+// system segment compact leaves room for the other five, so that Build's
+// backstop truncation stays a rare last resort rather than routine.
 const maxSystemSlugLen = 80
+
+// MaxOrgLen bounds the org segment so the five non-instance segments cannot
+// consume the whole entity-ID budget between them. Org is the only one that is
+// neither derived nor capped by this package — it comes straight from operator
+// config — so it is the last way Build's truncation backstop can be reached.
+//
+// The arithmetic, against semtypes.MaxEntityIDBytes (256):
+//
+//	org (≤64) + platform (9) + domain (≤10) + system (≤80) + type (≤12) + 5 dots
+//	  = ≤180, leaving ≥76 bytes for the instance segment.
+//
+// That floor is above maxInstanceLen (60), so every SanitizeInstance-derived
+// ID fits without truncation, and AST instances truncate to a usable prefix
+// rather than collapsing to a bare hash. Enforced at config load by
+// config.ValidateNamespace, which fails startup loudly rather than letting
+// every published entity be rejected at ingest.
+const MaxOrgLen = 64
 
 // SystemSlug converts a canonical path, URL, or module string into a
 // graph-ingest-safe system segment. URLs have their scheme stripped; forward
@@ -100,6 +164,16 @@ func SystemSlug(canonicalPath string) string {
 // (matching [a-zA-Z0-9_-]). Returns the unmodified slug when branchSlug is
 // empty (single-branch mode, backward compatible).
 //
+// The join is re-slugged so the ≤maxSystemSlugLen cap holds. Branch names are
+// effectively unbounded — git allows them up to filesystem limits, the branch
+// lifecycle generates them, and workspace.slugify does not cap — so an
+// unbounded concatenation here could push the system segment past the entire
+// entity-ID budget on its own. When that happened the assembled ID was
+// rejected outright and the rest of that file's entities went unpublished;
+// Build's truncation could not help, because the overflow was in a segment it
+// must not rewrite. SystemSlug's truncation hashes the full pre-truncation
+// slug, so two long branches of one repo stay distinct rather than fusing.
+//
 // Example:
 //
 //	BranchScopedSlug("github-com-acme-repo", "scenario-auth-flow")
@@ -110,7 +184,7 @@ func BranchScopedSlug(systemSlug, branchSlug string) string {
 	if branchSlug == "" {
 		return systemSlug
 	}
-	return systemSlug + "-" + branchSlug
+	return SystemSlug(systemSlug + "-" + branchSlug)
 }
 
 // VersionScopedSlug appends a version qualifier to a system slug with a hyphen
@@ -118,7 +192,8 @@ func BranchScopedSlug(systemSlug, branchSlug string) string {
 // (matching [a-zA-Z0-9_-]). Returns the unmodified slug when versionSlug is
 // empty (version-independent entities, backward compatible). The caller is
 // responsible for pre-slugging both arguments via SystemSlug — the same
-// contract as BranchScopedSlug.
+// contract as BranchScopedSlug. As there, the join is re-slugged so the
+// ≤maxSystemSlugLen cap holds regardless of qualifier length.
 //
 // Example:
 //
@@ -130,14 +205,14 @@ func VersionScopedSlug(systemSlug, versionSlug string) string {
 	if versionSlug == "" {
 		return systemSlug
 	}
-	return systemSlug + "-" + versionSlug
+	return SystemSlug(systemSlug + "-" + versionSlug)
 }
 
 // ScopedSystemSlug is the single canonical helper for computing the system
 // segment when a version qualifier is involved. It applies SystemSlug to both
-// inputs, joins them via VersionScopedSlug, and then applies SystemSlug a
-// final time. That final pass enforces the ≤80-char cap and makes the result
-// idempotent under SystemSlug.
+// inputs and joins them via VersionScopedSlug, which re-slugs the join — that
+// pass enforces the ≤maxSystemSlugLen cap and makes the result idempotent
+// under SystemSlug.
 //
 // Idempotency is the critical safety property: code paths that call
 // SystemSlug(ScopedSystemSlug(p, v)) and paths that use the result raw both
@@ -155,7 +230,7 @@ func VersionScopedSlug(systemSlug, versionSlug string) string {
 //	ScopedSystemSlug("semstreams", "")
 //	  → "semstreams"
 func ScopedSystemSlug(project, version string) string {
-	return SystemSlug(VersionScopedSlug(SystemSlug(project), SystemSlug(version)))
+	return VersionScopedSlug(SystemSlug(project), SystemSlug(version))
 }
 
 // CanonicalizeURL normalizes a URL for use in deterministic entity ID construction.
@@ -207,7 +282,7 @@ func IsPublicNamespace(org string) bool {
 
 // maxInstanceLen caps the sanitized instance segment. Combined with the other
 // five segments and their dot separators, keeps total entity IDs well under
-// graph-ingest's 255-char limit.
+// semtypes.MaxEntityIDBytes.
 const maxInstanceLen = 60
 
 // SanitizeInstance converts an arbitrary string into a segment that satisfies

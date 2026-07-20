@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/c360studio/semsource/entityid"
 )
 
 // TestValidateNamespace pins the segment contract at the earliest surface: a
@@ -21,6 +23,23 @@ func TestValidateNamespace(t *testing.T) {
 		if err := ValidateNamespace(ns); err != nil {
 			t.Errorf("ValidateNamespace(%q) = %v, want nil", ns, err)
 		}
+	}
+}
+
+// TestValidateNamespace_RejectsOverlongOrg closes the last route to Build's
+// truncation backstop. Org is the only entity-ID segment this codebase neither
+// derives nor caps — it comes straight from config — so an over-long one is
+// charset-valid yet leaves too little budget for real repo and symbol names.
+// The failure must land at startup, not as rejected entities during ingest:
+// an over-long org breaks every entity in the deployment, not one.
+func TestValidateNamespace_RejectsOverlongOrg(t *testing.T) {
+	overlong := strings.Repeat("a", entityid.MaxOrgLen+1)
+	if err := ValidateNamespace(overlong); err == nil {
+		t.Errorf("ValidateNamespace accepted a %d-byte org", len(overlong))
+	}
+	atLimit := strings.Repeat("a", entityid.MaxOrgLen)
+	if err := ValidateNamespace(atLimit); err != nil {
+		t.Errorf("ValidateNamespace rejected an org at the limit (%d bytes): %v", len(atLimit), err)
 	}
 }
 

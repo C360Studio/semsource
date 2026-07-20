@@ -491,26 +491,75 @@ func (p *Parser) extractVariableDeclaration(node *sitter.Node, source []byte, fi
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 		if child.Type() == "variable_declarator" {
-			entity := p.extractVariableDeclarator(child, source, filePath, lang, parentID, kind, node)
-			if entity != nil {
-				entities = append(entities, entity)
-			}
+			entities = append(entities,
+				p.extractVariableDeclarator(child, source, filePath, lang, parentID, kind, node)...)
 		}
 	}
 
 	return entities
 }
 
-// extractVariableDeclarator extracts a single variable declarator. The
-// declarationNode is the enclosing lexical_declaration / variable_declaration
-// because JSDoc comments precede that wrapper rather than the inner
-// declarator.
-func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) *ast.CodeEntity {
+// extractVariableDeclarator extracts the entities a single variable declarator
+// declares. The declarationNode is the enclosing lexical_declaration /
+// variable_declaration because JSDoc comments precede that wrapper rather than
+// the inner declarator.
+//
+// A destructuring pattern binds several names, so this returns a slice. That
+// case carries extra weight in Svelte: `let { a, b } = $props()` is the
+// canonical runes idiom for declaring component props, so treating the pattern
+// as one name left virtually every component's props unsearchable.
+func (p *Parser) extractVariableDeclarator(node *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) []*ast.CodeEntity {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return nil
 	}
 
+	if ast.IsDestructuringPattern(nameNode) {
+		return p.destructuredEntities(nameNode, source, filePath, lang, parentID, kind, declarationNode)
+	}
+
+	entity := p.simpleDeclaratorEntity(node, nameNode, source, filePath, lang, parentID, kind, declarationNode)
+	if entity == nil {
+		return nil
+	}
+	return []*ast.CodeEntity{entity}
+}
+
+// destructuredEntities emits one entity per name bound by a destructuring
+// pattern, each carrying the declaration's kind and doc comment. Line numbers
+// come from the binding itself so a multi-line props pattern points at the
+// individual prop rather than the whole statement.
+func (p *Parser) destructuredEntities(patternNode *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) []*ast.CodeEntity {
+	entityType := ast.TypeVar
+	if kind == "const" {
+		entityType = ast.TypeConst
+	}
+	docComment := ast.CombineDocComment(ast.PrecedingJSDoc(declarationNode, source), "")
+
+	var bindings []*sitter.Node
+	ast.CollectPatternBindings(patternNode, &bindings)
+
+	entities := make([]*ast.CodeEntity, 0, len(bindings))
+	for _, binding := range bindings {
+		name := nodeText(binding, source)
+		if name == "" {
+			continue
+		}
+		entity := ast.NewCodeEntity(p.org, "svelte", p.project, entityType, name, filePath)
+		entity.Language = lang
+		entity.ContainedBy = parentID
+		entity.StartLine = int(binding.StartPoint().Row) + 1
+		entity.EndLine = int(binding.EndPoint().Row) + 1
+		entity.Visibility = ast.VisibilityPrivate
+		entity.DocComment = docComment
+		entities = append(entities, entity)
+	}
+	return entities
+}
+
+// simpleDeclaratorEntity builds the entity for a declarator that binds a single
+// plain identifier.
+func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []byte, filePath, lang, parentID, kind string, declarationNode *sitter.Node) *ast.CodeEntity {
 	name := nodeText(nameNode, source)
 	valueNode := node.ChildByFieldName("value")
 

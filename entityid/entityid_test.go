@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/workspace"
+	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // entityIDSegmentRegex mirrors the per-segment rule enforced by
@@ -326,6 +328,65 @@ func TestSanitizeInstance_LengthCapPreservesUniqueness(t *testing.T) {
 	}
 }
 
+// TestBuild_BoundsTotalIDLength pins the guarantee that closes the
+// over-length entity-ID class: Build never returns an ID that graph-ingest
+// will reject for size. The AST path composes an instance segment from a path
+// slug plus every enclosing scope plus the symbol name, so a single deeply
+// nested symbol (or one long JS destructuring pattern) can push the assembled
+// ID past MaxEntityIDBytes. Every producer funnels through Build, so bounding
+// it here is what makes the class unreachable rather than merely unlikely.
+func TestBuild_BoundsTotalIDLength(t *testing.T) {
+	// Faithful to the shape observed in the field: a JS destructuring const
+	// whose name is the entire pattern, under a deep node_modules path.
+	instance := "ui-node_modules--eslint-eslintrc-lib-config-array-" +
+		strings.Repeat("configArrayFactory--------------", 8) + "finalizeCache"
+
+	id := entityid.Build("c360", entityid.PlatformSemsource, "javascript",
+		"workspace", "const", instance)
+
+	if err := semtypes.ValidateEntityID(id); err != nil {
+		t.Errorf("Build produced an ID the graph will reject (%d bytes): %v", len(id), err)
+	}
+}
+
+// TestBuild_LengthBoundIsDeterministicAndUnique guards the two properties a
+// truncating bound can silently break: stable identity across runs, and
+// distinct entities keeping distinct IDs when they share a long prefix.
+func TestBuild_LengthBoundIsDeterministicAndUnique(t *testing.T) {
+	prefix := strings.Repeat("deeplyNestedScope-", 20)
+	build := func(instance string) string {
+		return entityid.Build("c360", entityid.PlatformSemsource, "javascript",
+			"workspace", "const", instance)
+	}
+
+	a, b := build(prefix+"handlerAlpha"), build(prefix+"handlerBeta")
+
+	if a != build(prefix+"handlerAlpha") {
+		t.Error("Build is not deterministic for the same over-length input")
+	}
+	if a == b {
+		t.Errorf("distinct symbols collided after bounding: both are %q", a)
+	}
+	for _, id := range []string{a, b} {
+		if err := semtypes.ValidateEntityID(id); err != nil {
+			t.Errorf("bounded ID %q is invalid: %v", id, err)
+		}
+	}
+}
+
+// TestBuild_UnderBudgetIDsAreUnchanged is the stability half of the contract.
+// Bounding must be invisible to every ID that already fits: rewriting those
+// would re-key existing graph entities and orphan their triples.
+func TestBuild_UnderBudgetIDsAreUnchanged(t *testing.T) {
+	instance := strings.Repeat("a", 200)
+	id := entityid.Build("acme", entityid.PlatformSemsource, "golang",
+		"github.com-acme-gcs", "function", instance)
+
+	if want := "acme.semsource.golang.github.com-acme-gcs.function." + instance; id != want {
+		t.Errorf("an ID that fits the budget was rewritten:\n got %q\nwant %q", id, want)
+	}
+}
+
 func TestBuild_AllTypesProduceValidNATSKeys(t *testing.T) {
 	ids := []string{
 		entityid.Build("acme", entityid.PlatformSemsource, "golang",
@@ -342,6 +403,95 @@ func TestBuild_AllTypesProduceValidNATSKeys(t *testing.T) {
 		if err := entityid.ValidateNATSKVKey(id); err != nil {
 			t.Errorf("ID %q failed NATS KV validation: %v", id, err)
 		}
+	}
+}
+
+// TestBranchScopedSlug_CapsSystemSegment pins the bound that keeps Build's
+// truncation backstop from ever firing. Branch names are unbounded (git allows
+// them up to filesystem limits, and the branch-lifecycle path generates them),
+// and workspace.slugify does not cap, so an uncapped concatenation here pushed
+// the system segment past the whole entity-ID budget on its own.
+func TestBranchScopedSlug_CapsSystemSegment(t *testing.T) {
+	repo := entityid.SystemSlug("github.com/c360studio/semsource-integration-scenarios-repo")
+	branch := strings.Repeat("auth-flow-regression-", 10)
+
+	slug := entityid.BranchScopedSlug(repo, branch)
+
+	if len(slug) > 80 {
+		t.Errorf("branch-scoped system segment is %d bytes, want <= 80: %q", len(slug), slug)
+	}
+	if !entityIDSegmentRegex.MatchString(slug) {
+		t.Errorf("branch-scoped slug is not a valid segment: %q", slug)
+	}
+}
+
+// TestBranchScopedSlug_LongBranchesStayDistinct is the collision guard on that
+// cap. Truncating two branches of one repo toward a shared repo prefix must not
+// merge them onto one system segment — that would silently fuse two branches'
+// graphs, which is worse than the rejection the cap prevents.
+func TestBranchScopedSlug_LongBranchesStayDistinct(t *testing.T) {
+	repo := entityid.SystemSlug("github.com/c360studio/semsource-integration-scenarios-repo")
+	shared := strings.Repeat("auth-flow-regression-", 10)
+
+	a := entityid.BranchScopedSlug(repo, shared+"alpha")
+	b := entityid.BranchScopedSlug(repo, shared+"beta")
+
+	if a == b {
+		t.Errorf("two long branches fused onto one system segment: %q", a)
+	}
+}
+
+// TestBranchScopedSlug_ShortInputsUnchanged keeps the cap invisible to the
+// ordinary case, where the combined slug already fits.
+func TestBranchScopedSlug_ShortInputsUnchanged(t *testing.T) {
+	if got, want := entityid.BranchScopedSlug("github-com-acme-repo", "scenario-auth-flow"),
+		"github-com-acme-repo-scenario-auth-flow"; got != want {
+		t.Errorf("BranchScopedSlug rewrote a slug that fits:\n got %q\nwant %q", got, want)
+	}
+	if got, want := entityid.BranchScopedSlug("github-com-acme-repo", ""),
+		"github-com-acme-repo"; got != want {
+		t.Errorf("empty branch changed the slug:\n got %q\nwant %q", got, want)
+	}
+}
+
+// TestBranchScopedSlug_BoundsAssembledID is the end-to-end property the two
+// caps exist to produce: a generated branch name, through the real slug path,
+// yields an ID the graph accepts. Before the cap this produced a 317-byte ID
+// whose instance had already collapsed to a bare hash — proof that no amount
+// of instance-side hashing could have fixed an over-budget system segment.
+func TestBranchScopedSlug_BoundsAssembledID(t *testing.T) {
+	repo := entityid.SystemSlug("github.com/c360studio/semsource-integration-scenarios-repo")
+	branch := workspace.BranchSlug("scenario/" + strings.Repeat("auth-flow-regression-", 10))
+
+	id := entityid.Build("c360", entityid.PlatformSemsource, "golang",
+		entityid.BranchScopedSlug(repo, branch), "function", "DoThing")
+
+	if err := semtypes.ValidateEntityID(id); err != nil {
+		t.Errorf("branch-scoped ID would never land (%d bytes): %v", len(id), err)
+	}
+}
+
+// TestWorstCaseSegmentsLeaveInstanceBudget pins the arithmetic MaxOrgLen
+// documents, so the three caps cannot drift apart silently. Compose the worst
+// legal case for all five non-instance segments and assert the instance still
+// gets a usable budget — above maxInstanceLen (60), so every
+// SanitizeInstance-derived ID fits untruncated and AST instances degrade to a
+// readable prefix rather than a bare hash. If a future cap is raised without
+// re-checking the sum, this fails rather than resurfacing as rejected entities.
+func TestWorstCaseSegmentsLeaveInstanceBudget(t *testing.T) {
+	org := strings.Repeat("o", entityid.MaxOrgLen)
+	system := entityid.SystemSlug(strings.Repeat("s", 200)) // saturates the 80-char cap
+	const longestDomain = "javascript"                      // 10
+	const longestType = "dependency"                        // 10
+
+	id := entityid.Build(org, entityid.PlatformSemsource, longestDomain, system, longestType, "i")
+	prefixLen := len(id) - 1 // everything but the 1-byte instance
+
+	budget := semtypes.MaxEntityIDBytes - prefixLen
+	if budget < 60 {
+		t.Errorf("worst-case segments leave only %d bytes for the instance, want >= 60 "+
+			"(org=%d system=%d); the caps have drifted out of budget",
+			budget, len(org), len(system))
 	}
 }
 
@@ -417,8 +567,8 @@ func TestBranchScopedSlug(t *testing.T) {
 //
 // When the joined slug exceeds maxSystemSlugLen these two paths produce different
 // system segments, so the call/type edge points at an entity ID that does not
-// exist (dangling edge). ScopedSystemSlug applies a final SystemSlug pass so the
-// output is always ≤80 chars and idempotent, making both code paths agree.
+// exist (dangling edge). VersionScopedSlug re-slugs its join so the output is
+// always ≤80 chars and idempotent, making both code paths agree.
 func TestScopedSystemSlug_FinalSlug(t *testing.T) {
 	// Project and version whose individual slugs are each under 80 but whose
 	// join exceeds 80: 50 + 1 + 40 = 91 > maxSystemSlugLen (80).
@@ -426,11 +576,10 @@ func TestScopedSystemSlug_FinalSlug(t *testing.T) {
 	version1 := strings.Repeat("y", 40)
 	version2 := strings.Repeat("z", 40) // same length, different chars → different hash
 
-	// Confirm the bug precondition: the raw join is >80.
-	rawJoined := entityid.VersionScopedSlug(
-		entityid.SystemSlug(longProject),
-		entityid.SystemSlug(version1),
-	)
+	// Confirm the bug precondition: the raw join is >80. Concatenate directly —
+	// VersionScopedSlug now caps its own join, so it is no longer the raw
+	// primitive this precondition needs.
+	rawJoined := entityid.SystemSlug(longProject) + "-" + entityid.SystemSlug(version1)
 	if len(rawJoined) <= 80 {
 		t.Fatalf("test precondition failed: raw joined slug is %d chars (≤80); "+
 			"adjust inputs to exceed maxSystemSlugLen", len(rawJoined))

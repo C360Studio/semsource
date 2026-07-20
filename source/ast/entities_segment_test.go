@@ -104,6 +104,49 @@ func TestEdgeEndpointParity(t *testing.T) {
 	}
 }
 
+// TestNewCodeEntity_OverlongSymbolsStillLand is the regression for the field
+// failure this test file's sanitizers could not catch: a JS destructuring
+// const under a deep path produced a 265-byte ID that graph-ingest rejected
+// outright ("entity will never land"). Per-segment sanitization cannot see the
+// total, so the AST path could emit individually-legal fragments that together
+// blew the byte budget. Assert against the real graph validator, not a
+// mirrored regex — the byte cap is the half a regex does not express.
+func TestNewCodeEntity_OverlongSymbolsStillLand(t *testing.T) {
+	// The shape observed in the field: the whole destructuring pattern becomes
+	// one symbol name, under a nested dependency path.
+	pattern := "cliConfigArray, configArrayFactory, finalizeCache, " +
+		"loadConfigFile, normalizeOptions, resolveExtends, translateESLintRC"
+	deepPath := "ui/node_modules/@eslint/eslintrc/lib/config-array/" +
+		"config-array-factory/normalize/extends/resolver/index.js"
+
+	entity := ast.NewScopedCodeEntity("c360", "javascript", "workspace", ast.TypeConst,
+		[]string{"ConfigArrayFactory", "normalizeExtends", "resolveModule"}, pattern, deepPath)
+
+	if err := semtypes.ValidateEntityID(entity.ID); err != nil {
+		t.Errorf("AST entity ID would never land (%d bytes): %v\nID: %q",
+			len(entity.ID), err, entity.ID)
+	}
+}
+
+// TestNewCodeEntity_OverlongSiblingsStayDistinct guards the failure mode the
+// length bound could introduce: two symbols sharing a long prefix must not
+// truncate onto a single ID, which would silently merge two entities.
+func TestNewCodeEntity_OverlongSiblingsStayDistinct(t *testing.T) {
+	deepPath := "ui/node_modules/@eslint/eslintrc/lib/config-array/" +
+		"config-array-factory/normalize/extends/resolver/index.js"
+	scope := []string{"ConfigArrayFactory", "normalizeExtends", "resolveModule"}
+	long := "cliConfigArray, configArrayFactory, finalizeCache, loadConfigFile, normalize"
+
+	a := ast.NewScopedCodeEntity("c360", "javascript", "workspace", ast.TypeConst,
+		scope, long+"Alpha", deepPath)
+	b := ast.NewScopedCodeEntity("c360", "javascript", "workspace", ast.TypeConst,
+		scope, long+"Beta", deepPath)
+
+	if a.ID == b.ID {
+		t.Errorf("distinct overlong symbols merged onto one ID: %q", a.ID)
+	}
+}
+
 // TestSanitizePathSegment_DistinctRoutesStayDistinct pins the anti-collision
 // property at the path level: "+page.svelte" and "page.svelte" in one
 // directory must not merge.
