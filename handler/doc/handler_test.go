@@ -2,6 +2,7 @@ package doc_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,6 +38,21 @@ func (s sourceConfig) IsWatchEnabled() bool        { return s.watch }
 func (s sourceConfig) GetKeyframeMode() string     { return "" }
 func (s sourceConfig) GetKeyframeInterval() string { return "" }
 func (s sourceConfig) GetSceneThreshold() float64  { return 0 }
+
+// bodyStoreInstance is the StorageReference.StorageInstance every test wires its
+// body store under, matching the name doc-source uses in production.
+const bodyStoreInstance = "objectstore"
+
+// docsHandler builds a doc handler wired to a fresh in-memory body store, and
+// returns both. Every test that ingests goes through it: the verbatim body store
+// is MANDATORY, so a handler built without one fails the walk outright with
+// dochandler.ErrBodyStoreRequired rather than quietly emitting bodyless
+// passages. Tests that do not care about blobs discard the store.
+func docsHandler(t *testing.T) (*dochandler.Handler, *memStore) {
+	t.Helper()
+	store := newMemStore()
+	return dochandler.New(dochandler.WithBodyStore(store, bodyStoreInstance)), store
+}
 
 // writeMD writes a markdown file and returns its absolute path.
 func writeMD(t *testing.T, dir, name, content string) string {
@@ -151,10 +167,10 @@ func docTypeOf(state *handler.EntityState) string {
 	return ""
 }
 
-// assertOffloadedBody pins the offloaded shape on one state — parent or passage
-// alike — and returns the body key: handle triples present, inline content
-// dropped, and StorageRef pointing at the SAME blob as the handle (ADR-063
-// unification).
+// assertOffloadedBody pins the offloaded shape on one PASSAGE and returns its
+// body key: handle triples present, no inline content, and StorageRef pointing
+// at the SAME blob as the handle (ADR-063 unification). Passages are the only
+// population that carries a body — see assertBodyless for the parent.
 func assertOffloadedBody(t *testing.T, state *handler.EntityState) string {
 	t.Helper()
 
@@ -170,12 +186,12 @@ func assertOffloadedBody(t *testing.T, state *handler.EntityState) string {
 			hasContent = true
 		}
 	}
-	if instance != "objectstore" || key == "" {
+	if instance != bodyStoreInstance || key == "" {
 		t.Fatalf("body handle triples on %s (%s): instance=%q key=%q, want instance=%q and a non-empty key",
-			state.ID, docTypeOf(state), instance, key, "objectstore")
+			state.ID, docTypeOf(state), instance, key, bodyStoreInstance)
 	}
 	if hasContent {
-		t.Errorf("%s (%s) kept an inline %s triple; it must be dropped when the body is offloaded",
+		t.Errorf("%s (%s) kept an inline %s triple; the body lives in the store, never in a triple",
 			state.ID, docTypeOf(state), source.DocContent)
 	}
 	if state.StorageRef == nil {
@@ -192,32 +208,51 @@ func assertOffloadedBody(t *testing.T, state *handler.EntityState) string {
 	return key
 }
 
-// assertInlineBody is the complement of assertOffloadedBody: the state kept its
-// body inline, with neither a handle nor a StorageRef.
-func assertInlineBody(t *testing.T, state *handler.EntityState) {
+// assertBodyless pins the parent document's contract: it carries NO body in any
+// form — no handle triples, no inline content, no StorageRef. A whole-file body
+// on the parent would return the same prose twice (once as the document, again
+// as its passages) and keep the averaged, truncated whole-file vector that
+// passages exist to replace.
+func assertBodyless(t *testing.T, state *handler.EntityState) {
 	t.Helper()
 
-	if state.StorageRef != nil {
-		t.Errorf("StorageRef on %s (%s) = %+v, want nil when the body is not offloaded",
-			state.ID, docTypeOf(state), state.StorageRef)
-	}
-	hasContent, hasHandle := false, false
 	for _, tr := range state.Triples {
 		switch tr.Predicate {
 		case source.DocContent:
-			hasContent = true
+			t.Errorf("%s (%s) carries a %s triple with object %v; the parent holds no body",
+				state.ID, docTypeOf(state), source.DocContent, tr.Object)
 		case source.DocBodyStore, source.DocBodyKey:
-			hasHandle = true
+			t.Errorf("%s (%s) carries the body handle triple %s = %v; the parent holds no body",
+				state.ID, docTypeOf(state), tr.Predicate, tr.Object)
 		}
 	}
-	if !hasContent {
-		t.Errorf("%s (%s) has no %s triple; the body must stay inline when it is not offloaded",
-			state.ID, docTypeOf(state), source.DocContent)
+	if state.StorageRef != nil {
+		t.Errorf("StorageRef on %s (%s) = %+v, want nil; the parent holds no body",
+			state.ID, docTypeOf(state), state.StorageRef)
 	}
-	if hasHandle {
-		t.Errorf("%s (%s) carries body handle triples; they must be absent when the body is not offloaded",
-			state.ID, docTypeOf(state))
+}
+
+// passageBody fetches a passage's verbatim body from the store by its handle.
+// Bodies live only in the store now — there is no inline triple to read — so
+// this is how a test looks at a passage's text.
+func passageBody(t *testing.T, store *memStore, state *handler.EntityState) string {
+	t.Helper()
+	key := tripleValue(t, state, source.DocBodyKey)
+	blob, err := store.Get(context.Background(), key)
+	if err != nil {
+		t.Fatalf("body key %q of %s (%s) is not in the store: %v", key, state.ID, docTypeOf(state), err)
 	}
+	return string(blob)
+}
+
+// hasPredicate reports whether state carries any triple with predicate.
+func hasPredicate(state *handler.EntityState, predicate string) bool {
+	for _, tr := range state.Triples {
+		if tr.Predicate == predicate {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +322,7 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	writeMD(t, dir, "readme.md", "# Hello\n\nContent here.")
 	writeMD(t, dir, "notes.txt", "Plain text.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -316,25 +351,22 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	}
 }
 
-// TestDocHandler_IngestEntityStates_BodyHandle: with a fusion body store, every
-// entity's body is offloaded to a single CONTENT blob wired two ways — the
-// DocBodyStore/DocBodyKey handle triples (docs lens hydrates by handle, ADR-062)
-// and EntityState.StorageRef (graph-embedding embeds the body via the shared
-// StoreRegistry, ADR-063). The inline DocContent triple is dropped.
+// TestDocHandler_IngestEntityStates_BodyHandle pins the offload wiring: each
+// PASSAGE body goes to a single CONTENT blob referenced two ways — the
+// DocBodyStore/DocBodyKey handle triples (the docs lens hydrates by handle,
+// ADR-062) and EntityState.StorageRef (graph-embedding embeds the body via the
+// shared StoreRegistry, ADR-063) — while the parent carries no body at all.
 //
-// The offload contract now covers BOTH populations, so both are asserted: the
-// parent's blob is the document byte for byte, and the passage blobs concatenate
-// back to that same document. The store must hold nothing but the blobs those
-// handles reference — content-addressing collapses identical bodies (here the
-// lone passage IS the whole file), so the blob count is derived from the
-// distinct referenced keys rather than hard-coded.
+// The store must hold nothing but the blobs those passage handles reference.
+// Content-addressing collapses identical bodies (here the lone passage IS the
+// whole file), so the blob count is derived from the distinct referenced keys
+// rather than hard-coded; a parent blob would show up as an extra key.
 func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 	dir := t.TempDir()
 	body := "# Retry\n\nUse exponential backoff."
 	writeMD(t, dir, "retry.md", body)
 
-	store := newMemStore()
-	h := dochandler.New(dochandler.WithBodyStore(store, "objectstore"))
+	h, store := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -351,34 +383,231 @@ func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 		t.Fatalf("passage state count: got 0, want at least 1 for retry.md; %d states in total", len(states))
 	}
 
+	assertBodyless(t, parents[0])
+
 	referenced := make(map[string]bool)
-	for _, state := range states {
-		referenced[assertOffloadedBody(t, state)] = true
+	for _, passage := range passages {
+		referenced[assertOffloadedBody(t, passage)] = true
 	}
 	if got := store.keys(); len(got) != len(referenced) {
-		t.Fatalf("store blob count: got %d %v, want %d (one blob per distinct referenced key)",
+		t.Fatalf("store blob count: got %d %v, want %d (one blob per distinct key a passage references, and nothing else)",
 			len(got), got, len(referenced))
-	}
-
-	// The parent's blob is the document byte for byte.
-	parentKey := tripleValue(t, parents[0], source.DocBodyKey)
-	got, err := store.Get(context.Background(), parentKey)
-	if err != nil || string(got) != body {
-		t.Fatalf("parent offloaded body = %q (err %v); want the document %q", got, err, body)
 	}
 
 	// The passage blobs tile the document: nothing is lost by the split.
 	var joined strings.Builder
 	for _, passage := range passages {
-		key := tripleValue(t, passage, source.DocBodyKey)
-		blob, err := store.Get(context.Background(), key)
-		if err != nil {
-			t.Fatalf("passage %s body key %q not in the store: %v", passage.ID, key, err)
-		}
-		joined.Write(blob)
+		joined.WriteString(passageBody(t, store, passage))
 	}
 	if joined.String() != body {
 		t.Errorf("passage bodies concatenated = %q, want the document %q", joined.String(), body)
+	}
+}
+
+// TestDocHandler_IngestEntityStates_ParentCarriesNoBody pins the parent's half
+// of the split. A whole-file body on the parent would return the same prose
+// twice — once as the document, again as its passages — and would keep the
+// averaged, truncated whole-file vector that passages exist to replace. Asserted
+// on a document with SEVERAL passages, because a single-passage document cannot
+// distinguish "the parent has no body" from "the parent's body happens to equal
+// the only passage's".
+func TestDocHandler_IngestEntityStates_ParentCarriesNoBody(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "guide.md", "# Guide\n\n"+prose("intro", 4)+
+		headedSection("Usage", "usage", 4)+
+		headedSection("Limits", "limits", 4))
+
+	h, _ := docsHandler(t)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+
+	parents := parentStates(states)
+	if len(parents) != 1 {
+		t.Fatalf("parent state count: got %d, want 1 (guide.md); %d states in total", len(parents), len(states))
+	}
+	if passages := passageStates(states); len(passages) < 2 {
+		t.Fatalf("passage state count: got %d, want at least 2, otherwise a parent body is indistinguishable from the sole passage's",
+			len(passages))
+	}
+	assertBodyless(t, parents[0])
+}
+
+// TestDocHandler_IngestEntityStates_ParentStaysNavigable is the complement to
+// _ParentCarriesNoBody: dropping the body must not hollow the parent out. It
+// remains the stable navigational node — name-resolvable by title, locatable by
+// path, change-detectable by hash, and carrying the DocChunkCount the staleness
+// pass compares passage indices against.
+func TestDocHandler_IngestEntityStates_ParentStaysNavigable(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "guide.md", "# Guide\n\n"+prose("intro", 4)+headedSection("Usage", "usage", 4))
+
+	h, _ := docsHandler(t)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	parents := parentStates(states)
+	if len(parents) != 1 {
+		t.Fatalf("parent state count: got %d, want 1 (guide.md); %d states in total", len(parents), len(states))
+	}
+	parent := parents[0]
+
+	if got := tripleValue(t, parent, source.DcTitle); got != "Guide" {
+		t.Errorf("%s on %s = %q, want %q; without a title the parent is not name-resolvable",
+			source.DcTitle, parent.ID, got, "Guide")
+	}
+	if got := tripleValue(t, parent, source.DocFilePath); got != "guide.md" {
+		t.Errorf("%s on %s = %q, want %q; without a path the parent is not locatable and the staleness pass skips it",
+			source.DocFilePath, parent.ID, got, "guide.md")
+	}
+	if got := tripleValue(t, parent, source.DocMimeType); got != "text/markdown" {
+		t.Errorf("%s on %s = %q, want %q", source.DocMimeType, parent.ID, got, "text/markdown")
+	}
+	if got := tripleValue(t, parent, source.DocFileHash); got == "" {
+		t.Errorf("%s on %s is empty; without it a content edit is undetectable", source.DocFileHash, parent.ID)
+	}
+	if got, want := tripleInt(t, parent, source.DocChunkCount), len(passageStates(states)); got != want {
+		t.Errorf("%s on %s = %d, want %d (the number of passages emitted for guide.md)",
+			source.DocChunkCount, parent.ID, got, want)
+	}
+	if got := tripleValue(t, parent, source.DocType); got != "document" {
+		t.Errorf("%s on %s = %q, want %q", source.DocType, parent.ID, got, "document")
+	}
+}
+
+// TestDocHandler_IngestEntityStates_EveryPassageIsHydratable pins the invariant
+// that makes the parent's emptiness safe: if the parent holds no body, then
+// every passage must hold one, or that stretch of the document is reachable
+// through no entity at all. One unhydratable passage is a silent hole in the
+// corpus, which is exactly the shape the inline fallback used to hide.
+func TestDocHandler_IngestEntityStates_EveryPassageIsHydratable(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "guide.md", "# Guide\n\n"+prose("intro", 4)+
+		headedSection("Usage", "usage", 4)+
+		headedSection("Limits", "limits", 4))
+	writeMD(t, dir, "short.md", "# Short\n\nOne line.")
+
+	h, store := docsHandler(t)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	passages := passageStates(states)
+	if len(passages) < 3 {
+		t.Fatalf("passage state count: got %d, want at least 3 (a multi-section document plus a one-liner); %d states in total",
+			len(passages), len(states))
+	}
+
+	for _, passage := range passages {
+		key := assertOffloadedBody(t, passage)
+		if body := passageBody(t, store, passage); body == "" {
+			t.Errorf("passage %s hydrates to an empty body from key %q; every passage must carry retrievable text",
+				passage.ID, key)
+		}
+	}
+}
+
+// TestDocHandler_IngestEntityStates_NoRetiredSummaryTriple pins the removal of
+// source.doc.summary at the producer. The predicate was registered with a
+// salience weight of 2.0, so a re-introduced triple would not merely be inert —
+// it would float whatever carried it above everything else. Named by its wire
+// string because the constant is gone, and checked over BOTH populations.
+func TestDocHandler_IngestEntityStates_NoRetiredSummaryTriple(t *testing.T) {
+	const retiredSummary = "source.doc.summary"
+
+	dir := t.TempDir()
+	writeMD(t, dir, "guide.md", "# Guide\n\n"+prose("intro", 4)+headedSection("Usage", "usage", 4))
+	writeMD(t, dir, "notes.txt", "Plain text with no heading at all.")
+
+	h, _ := docsHandler(t)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	if len(states) == 0 {
+		t.Fatal("no states returned; the assertion below would pass vacuously")
+	}
+
+	for _, state := range states {
+		for _, tr := range state.Triples {
+			if tr.Predicate == retiredSummary {
+				t.Errorf("%s (%s) emits the retired predicate %q with object %v; it must appear on no entity",
+					state.ID, docTypeOf(state), retiredSummary, tr.Object)
+			}
+		}
+	}
+}
+
+// TestDocHandler_IngestEntityStates_DocumentTextStoredExactlyOnce is the
+// storage-side statement of the split: the document's text reaches the store
+// once, through its passages, and nothing duplicates it.
+//
+// Two independent duplications are ruled out. The blob COUNT must equal the
+// number of distinct keys the passages reference, so a parent-level blob (which
+// no handle points at) shows up as a surplus key. And no single blob may hold
+// the whole file, so a parent blob that happened to be content-addressed onto a
+// passage's key — collapsing the count check — is still caught.
+func TestDocHandler_IngestEntityStates_DocumentTextStoredExactlyOnce(t *testing.T) {
+	dir := t.TempDir()
+	content := "# Guide\n\n" + prose("intro", 4) +
+		headedSection("Usage", "usage", 4) +
+		headedSection("Limits", "limits", 4)
+	writeMD(t, dir, "guide.md", content)
+
+	h, store := docsHandler(t)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates() error: %v", err)
+	}
+	passages := passageStates(states)
+	if len(passages) < 2 {
+		t.Fatalf("passage state count: got %d, want at least 2; with one passage a whole-file blob is legitimate and this test proves nothing",
+			len(passages))
+	}
+
+	// The passages tile the document: concatenating their bodies reproduces the
+	// file byte for byte, so the split loses nothing.
+	referenced := make(map[string]bool, len(passages))
+	var joined strings.Builder
+	for _, passage := range passages {
+		referenced[tripleValue(t, passage, source.DocBodyKey)] = true
+		joined.WriteString(passageBody(t, store, passage))
+	}
+	if joined.String() != content {
+		t.Errorf("passage bodies concatenated to %d bytes, want the whole %d-byte document",
+			joined.Len(), len(content))
+	}
+
+	// Nothing in the store is unreferenced: a parent blob would be a surplus key.
+	keys := store.keys()
+	if len(keys) != len(referenced) {
+		t.Errorf("store holds %d blobs %v, want %d (one per distinct passage key; a surplus blob is a duplicated body)",
+			len(keys), keys, len(referenced))
+	}
+	for _, key := range keys {
+		if !referenced[key] {
+			t.Errorf("store holds blob %q that no passage handle references; the parent must offload nothing", key)
+		}
+		blob, err := store.Get(context.Background(), key)
+		if err != nil {
+			t.Fatalf("store key %q reported by keys() but not gettable: %v", key, err)
+		}
+		if string(blob) == content {
+			t.Errorf("store blob %q holds the entire %d-byte document; the text must reach the store only in passage-sized pieces",
+				key, len(content))
+		}
 	}
 }
 
@@ -386,7 +615,7 @@ func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Title\nBody.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -412,37 +641,48 @@ func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	}
 }
 
+// TestDocHandler_IngestEntityStates_TriplesUseVocabularyPredicates pins the
+// parent's predicate set exactly: the six facts it carries, and the body
+// predicates it must not.
 func TestDocHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# My Doc\nSome content.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
-	if len(states) == 0 {
-		t.Fatal("no states returned")
+	parents := parentStates(states)
+	if len(parents) != 1 {
+		t.Fatalf("parent state count: got %d, want 1 (doc.md); %d states in total", len(parents), len(states))
 	}
-
-	predicates := make(map[string]bool)
-	for _, tr := range states[0].Triples {
-		predicates[tr.Predicate] = true
-	}
+	parent := parents[0]
 
 	wantPredicates := []string{
 		source.DocType,
 		source.DocFilePath,
 		source.DocMimeType,
 		source.DocFileHash,
-		source.DocContent,
-		source.DocSummary,
+		source.DcTitle,
+		source.DocChunkCount,
 	}
 	for _, p := range wantPredicates {
-		if !predicates[p] {
-			t.Errorf("missing triple with predicate %q", p)
+		if !hasPredicate(parent, p) {
+			t.Errorf("parent %s is missing a triple with predicate %q", parent.ID, p)
+		}
+	}
+
+	unwantedPredicates := []string{
+		source.DocContent,
+		source.DocBodyStore,
+		source.DocBodyKey,
+	}
+	for _, p := range unwantedPredicates {
+		if hasPredicate(parent, p) {
+			t.Errorf("parent %s carries a triple with predicate %q; the parent holds no body", parent.ID, p)
 		}
 	}
 }
@@ -451,7 +691,7 @@ func TestDocHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# My Doc\nSome content.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -470,7 +710,7 @@ func TestDocHandler_IngestEntityStates_DeterministicID(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Title\nContent.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -498,7 +738,7 @@ func TestDocHandler_IngestEntityStates_IDStableAcrossContentChange(t *testing.T)
 	dir := t.TempDir()
 	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states1, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -525,7 +765,7 @@ func TestDocHandler_IngestEntityStates_TitleFromFirstHeading(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# My Great Doc\n\nIntro paragraph.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -549,7 +789,7 @@ func TestDocHandler_IngestEntityStates_NoTitleFallback(t *testing.T) {
 	// Plain text file with no markdown heading.
 	writeMD(t, dir, "notes.txt", "Just some notes without a heading.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -582,7 +822,7 @@ func TestDocHandler_IngestEntityStates_FiltersByExtension(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -619,7 +859,7 @@ func TestDocHandler_IngestEntityStates_MultiplePaths(t *testing.T) {
 	writeMD(t, dirA, "beta.txt", "Plain text in dirA.")
 	writeMD(t, dirB, "gamma.md", "# Gamma\nContent in dirB.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	// GetPath returns paths[0] when paths is non-empty; GetPaths returns both dirs.
 	cfg := sourceConfig{
 		typ:   "docs",
@@ -656,7 +896,7 @@ func TestDocHandler_IngestEntityStates_ContentChangeUpdatesHash(t *testing.T) {
 	dir := t.TempDir()
 	path := writeMD(t, dir, "doc.md", "# First\nOriginal content.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -697,7 +937,7 @@ func TestDocHandler_IngestEntityStates_ContentChangeUpdatesHash(t *testing.T) {
 func TestDocHandler_IngestEntityStates_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
@@ -713,7 +953,7 @@ func TestDocHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Title\nContent.")
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -783,29 +1023,32 @@ func (s *memStore) keys() []string {
 	return keys
 }
 
-func TestDocHandler_IngestEntityStates_StoreFailureFallsBackToInline(t *testing.T) {
+// TestDocHandler_IngestEntityStates_StoreFailureIsFatal replaces the former
+// _StoreFailureFallsBackToInline. There is no inline fallback any more: a
+// passage without a handle is a passage whose body cannot be hydrated and whose
+// text never reaches the semantic index, so a store that cannot be written to
+// must fail the ingest instead of reporting a healthy walk over a corpus with no
+// retrievable bodies. The states returned alongside the error must be empty —
+// a caller that publishes them anyway would put bodyless entities in the graph.
+func TestDocHandler_IngestEntityStates_StoreFailureIsFatal(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Doc\n"+strings.Repeat("word ", 200))
 
-	// A body store whose Put always fails: the entity degrades to inline content
-	// with no body handle and no StorageRef — a best-effort facet, not a failed
-	// ingest. The degradation is per-entity, so parent AND every passage must
-	// fall back; a passage that kept a dangling handle would be unhydratable.
-	h := dochandler.NewWithOrg("acme", dochandler.WithBodyStore(&failStore{}, "objectstore"))
+	h := dochandler.NewWithOrg("acme", dochandler.WithBodyStore(&failStore{}, bodyStoreInstance))
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
-	if err != nil {
-		t.Fatalf("IngestEntityStates() error: %v", err)
+	if err == nil {
+		t.Fatalf("IngestEntityStates() error = nil with a failing body store, want an error; got %d states instead",
+			len(states))
 	}
-	if parents := parentStates(states); len(parents) != 1 {
-		t.Fatalf("parent state count: got %d, want 1 (doc.md); %d states in total", len(parents), len(states))
+	if len(states) != 0 {
+		t.Errorf("IngestEntityStates() returned %d states alongside its error, want 0; a caller that publishes them stores bodyless entities",
+			len(states))
 	}
-	if passages := passageStates(states); len(passages) == 0 {
-		t.Fatalf("passage state count: got 0, want at least 1 for doc.md; %d states in total", len(states))
-	}
-	for _, state := range states {
-		assertInlineBody(t, state)
+	if !strings.Contains(err.Error(), "simulated store failure") {
+		t.Errorf("IngestEntityStates() error = %v, want it to wrap the store's own failure (%q)",
+			err, "simulated store failure")
 	}
 }
 
@@ -821,45 +1064,60 @@ func (s *failStore) Get(context.Context, string) ([]byte, error) {
 func (s *failStore) List(context.Context, string) ([]string, error) { return nil, nil }
 func (s *failStore) Delete(context.Context, string) error           { return nil }
 
-func TestDocHandler_IngestEntityStates_NoStoreAllInline(t *testing.T) {
+// TestDocHandler_IngestEntityStates_NoStoreIsFatal replaces the former
+// _NoStoreAllInline. A handler with no body store cannot produce a hydratable
+// passage at all, so it reports ErrBodyStoreRequired rather than emitting a
+// corpus of unretrievable entities. The sentinel is matched with errors.Is
+// because doc-source distinguishes it from an ordinary per-file read error: this
+// one means the DEPLOYMENT is broken, so it aborts the whole walk.
+func TestDocHandler_IngestEntityStates_NoStoreIsFatal(t *testing.T) {
 	dir := t.TempDir()
-	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
-	writeMD(t, dir, "large.md", largeContent)
+	writeMD(t, dir, "large.md", "# Large Doc\n"+strings.Repeat("word ", 200))
 
-	// No store configured — all content stays inline regardless of size, for the
-	// parent and for every passage.
 	h := dochandler.NewWithOrg("acme")
 	cfg := sourceConfig{typ: "docs", path: dir}
 
 	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err == nil {
+		t.Fatalf("IngestEntityStates() error = nil with no body store, want %v; got %d states instead",
+			dochandler.ErrBodyStoreRequired, len(states))
+	}
+	if !errors.Is(err, dochandler.ErrBodyStoreRequired) {
+		t.Errorf("IngestEntityStates() error = %v, want it to wrap %v (errors.Is); doc-source keys the abort on that sentinel",
+			err, dochandler.ErrBodyStoreRequired)
+	}
+	if len(states) != 0 {
+		t.Errorf("IngestEntityStates() returned %d states alongside its error, want 0", len(states))
+	}
+}
+
+// TestDocHandler_IngestEntityStates_UnreadableFileIsSkippedNotFatal pins the
+// other side of that distinction, which the abort must not swallow: ONE
+// unreadable document is that document's problem, so the walk skips it and every
+// other document in the corpus still lands. A dangling symlink is the fixture
+// because filepath.Walk lstats — it is reported as a regular .md file — while
+// the subsequent read fails, and unlike a chmod-0 file it stays unreadable when
+// the suite runs as root.
+func TestDocHandler_IngestEntityStates_UnreadableFileIsSkippedNotFatal(t *testing.T) {
+	dir := t.TempDir()
+	writeMD(t, dir, "good.md", "# Good\n\nThis document is readable.")
+	if err := os.Symlink(filepath.Join(dir, "does-not-exist.md"), filepath.Join(dir, "broken.md")); err != nil {
+		t.Skipf("cannot create a symlink on this platform: %v", err)
+	}
+
+	h, _ := docsHandler(t)
+	cfg := sourceConfig{typ: "docs", path: dir}
+
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
 	if err != nil {
-		t.Fatalf("IngestEntityStates() error: %v", err)
+		t.Fatalf("IngestEntityStates() error = %v, want nil; one unreadable document must not fail the walk", err)
 	}
 
-	parents := parentStates(states)
-	if len(parents) != 1 {
-		t.Fatalf("parent state count: got %d, want 1 (large.md); %d states in total", len(parents), len(states))
+	seen := filePathSet(t, states)
+	if !seen["good.md"] {
+		t.Errorf("good.md is missing from the corpus; the unreadable sibling aborted the walk. Paths seen: %v", seen)
 	}
-	passages := passageStates(states)
-	if len(passages) == 0 {
-		t.Fatalf("passage state count: got 0, want at least 1 for large.md; %d states in total", len(states))
-	}
-	for _, state := range states {
-		assertInlineBody(t, state)
-	}
-
-	// Inline means the whole body, not a truncated one: the parent carries the
-	// document, and the passages tile it.
-	if got := tripleValue(t, parents[0], source.DocContent); got != largeContent {
-		t.Errorf("parent %s length = %d, want %d (the full document, inline)",
-			source.DocContent, len(got), len(largeContent))
-	}
-	var joined strings.Builder
-	for _, passage := range passages {
-		joined.WriteString(tripleValue(t, passage, source.DocContent))
-	}
-	if joined.String() != largeContent {
-		t.Errorf("passage %s concatenated length = %d, want %d (passages tile the document)",
-			source.DocContent, joined.Len(), len(largeContent))
+	if seen["broken.md"] {
+		t.Errorf("broken.md entered the corpus; an unreadable document must be skipped, not ingested empty. Paths seen: %v", seen)
 	}
 }

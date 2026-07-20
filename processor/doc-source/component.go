@@ -162,16 +162,22 @@ func (c *Component) Start(ctx context.Context) error {
 	// hydrates passages by handle (ADR-062) and graph-embedding embeds the same
 	// offloaded body via the shared StoreRegistry (ADR-063). One CONTENT blob,
 	// two consumers — no separate large-content store.
-	var opts []dochandler.Option
-	if bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+	// The body store is required, not best-effort. Without it every passage
+	// loses its handle and its embedding, so doc_context returns empty bodies
+	// and the semantic index is empty of document text — while the component
+	// reports itself healthy. That silent-degradation shape is the failure this
+	// service has repeatedly had to remove, so an unavailable store fails
+	// startup instead.
+	bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
 		BucketName:   graph.BodyStoreBucket,
 		InstanceName: graph.BodyStoreInstance,
-	}); err != nil {
-		c.logger.Warn("verbatim body store unavailable; doc bodies will not be offloaded", "error", err)
-	} else {
-		opts = append(opts, dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
+	})
+	if err != nil {
+		return fmt.Errorf("doc-source requires the verbatim body store (bucket %q): %w",
+			graph.BodyStoreBucket, err)
 	}
-	c.handler = dochandler.NewWithOrg(c.config.Org, opts...)
+	c.handler = dochandler.NewWithOrg(c.config.Org,
+		dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
 
 	c.publishStatusReport(ctx, "ingesting")
 

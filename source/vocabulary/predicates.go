@@ -14,10 +14,6 @@ const (
 	// Values: "document"
 	DocType = "source.doc.type"
 
-	// DocSummary is a short LLM-extracted summary.
-	// Used in context assembly when full document doesn't fit in budget.
-	DocSummary = "source.doc.summary"
-
 	// DocContent is the document text content.
 	// Present on both parent entities (full body) and chunk entities (chunk text).
 	DocContent = "source.doc.content"
@@ -132,15 +128,6 @@ func registerDocPredicates() {
 		vocabulary.WithDescription("Source type identifier (document)"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(Namespace+"docType"))
-
-	// Salience 2.0: a doc's distilled thesis (summary) is the highest-value fact
-	// a doc entity carries — float summarized docs above raw chunks (which carry
-	// no weighted predicate). Mirrors the code side's doc-comment salience.
-	vocabulary.Register(DocSummary,
-		vocabulary.WithDescription("Short extracted summary for context assembly"),
-		vocabulary.WithDataType("string"),
-		vocabulary.WithIRI(DcAbstract),
-		vocabulary.WithWeight(2.0))
 
 	vocabulary.Register(DocContent,
 		vocabulary.WithDescription("Chunk text content"),

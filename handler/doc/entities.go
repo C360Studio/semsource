@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,15 +19,27 @@ import (
 	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
-// Entity is a fully-typed document entity that builds triples directly
-// using canonical vocabulary predicates.
+// Entity is the parent document: the stable navigational node carrying
+// identity, title, path, hash, provenance, and the passage count.
+//
+// It holds NO body. A whole-file body here would keep the averaged, truncated
+// whole-file vector that passages exist to replace, and would return the same
+// prose twice — once as the document, again as its passages. Bodies live on
+// PassageEntity.
+//
+// It is still embedded, from its title: graph-embedding's text_suffixes include
+// ".title", and its indexingEligible is lenient by design (ADR-054 Phase 1 never
+// excludes), so there is no producer-side way to opt an entity out of embedding
+// today. A title-only vector for a navigational node is defensible — a title
+// match should surface the document — but whether it becomes lexical noise the
+// way empty-bodied config nodes did is an empirical question, measured by the
+// graded re-run rather than asserted here.
 type Entity struct {
 	ID          string
 	Title       string
 	FilePath    string
 	MimeType    string
 	ContentHash string
-	Content     string
 	IndexedAt   time.Time
 
 	// ChunkCount is how many passage entities this document currently has. It is
@@ -36,17 +49,6 @@ type Entity struct {
 	// every passage of a shrunken document still carries the path of a file that
 	// is very much still there.
 	ChunkCount int
-
-	// storageRef is set when content is stored in ObjectStore rather than
-	// inline in a triple. When non-nil, Triples() omits the DocContent triple.
-	storageRef *message.StorageReference
-
-	// bodyInstance / bodyKey are the fusion verbatim-body handle (ADR-062):
-	// the store instance + key the passage was offloaded to, emitted as
-	// DocBodyStore/DocBodyKey triples so the fusion docs lens hydrates by handle.
-	// Independent of storageRef (which serves message.Storable consumers).
-	bodyInstance string
-	bodyKey      string
 }
 
 // newEntity constructs a Entity with a deterministic 6-part ID. The instance
@@ -57,7 +59,7 @@ type Entity struct {
 // updates content triples in place instead of minting an orphaned sibling
 // entity every save. The content hash still travels as the DocFileHash triple
 // for change detection — it just no longer feeds identity.
-func newEntity(org, title, filePath, mimeType, contentHash, content, system string, indexedAt time.Time) *Entity {
+func newEntity(org, title, filePath, mimeType, contentHash, system string, indexedAt time.Time) *Entity {
 	instance := entityid.SanitizeInstance(filePath)
 	return &Entity{
 		ID:          entityid.Build(org, entityid.PlatformSemsource, "web", system, "doc", instance),
@@ -65,14 +67,12 @@ func newEntity(org, title, filePath, mimeType, contentHash, content, system stri
 		FilePath:    filePath,
 		MimeType:    mimeType,
 		ContentHash: contentHash,
-		Content:     content,
 		IndexedAt:   indexedAt,
 	}
 }
 
 // Triples converts the Entity to a slice of message.Triple using canonical
-// vocabulary predicates from source/vocabulary. When storageRef is set,
-// the DocContent triple is omitted — body text lives in ObjectStore.
+// vocabulary predicates. No body triples: the parent carries none.
 func (e *Entity) Triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
@@ -81,25 +81,7 @@ func (e *Entity) Triples() []message.Triple {
 		{Subject: e.ID, Predicate: source.DocMimeType, Object: e.MimeType, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DocFileHash, Object: e.ContentHash, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		// DocSummary still carries the title for back-compat; emit a real summary
-		// here once doc-source extracts one (then Label reads DcTitle only).
-		{Subject: e.ID, Predicate: source.DocSummary, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.DocChunkCount, Object: e.ChunkCount, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-	}
-	// Only include inline content when not stored externally.
-	if e.storageRef == nil {
-		triples = append(triples, message.Triple{
-			Subject: e.ID, Predicate: source.DocContent, Object: e.Content,
-			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
-		})
-	}
-	// Fusion verbatim-body handle (ADR-062): the docs lens reads these to
-	// hydrate the passage by handle, location-independently.
-	if e.bodyKey != "" && e.bodyInstance != "" {
-		triples = append(triples,
-			message.Triple{Subject: e.ID, Predicate: source.DocBodyStore, Object: e.bodyInstance, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-			message.Triple{Subject: e.ID, Predicate: source.DocBodyKey, Object: e.bodyKey, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		)
 	}
 	return triples
 }
@@ -183,12 +165,6 @@ func (p *PassageEntity) Triples() []message.Triple {
 			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
 		})
 	}
-	if p.storageRef == nil {
-		triples = append(triples, message.Triple{
-			Subject: p.ID, Predicate: source.DocContent, Object: p.Body,
-			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
-		})
-	}
 	if p.bodyKey != "" && p.bodyInstance != "" {
 		triples = append(triples,
 			message.Triple{Subject: p.ID, Predicate: source.DocBodyStore, Object: p.bodyInstance, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
@@ -215,7 +191,6 @@ func (e *Entity) EntityState() *handler.EntityState {
 		ID:              e.ID,
 		Triples:         e.Triples(),
 		UpdatedAt:       e.IndexedAt,
-		StorageRef:      e.storageRef,
 		IndexingProfile: semvocab.IndexingProfileContent,
 	}
 }
@@ -260,7 +235,14 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 
 			fileStates, err := h.ingestFileEntityStates(ctx, path, root, system, org, now)
 			if err != nil {
-				// Non-fatal: skip unreadable files.
+				// An unreadable file is one document's problem: skip it. A body
+				// store that cannot be written to is the deployment's problem,
+				// and every document after this one would fail the same way —
+				// abort rather than report a healthy ingest of a corpus with no
+				// retrievable bodies.
+				if errors.Is(err, ErrBodyStoreRequired) {
+					return err
+				}
 				return nil
 			}
 			states = append(states, fileStates...)
@@ -290,79 +272,76 @@ func (h *Handler) ingestFileEntityStates(ctx context.Context, path, root, system
 	mime := mimeForExt(filepath.Ext(path))
 	passages := splitPassages(content)
 
-	parent := newEntity(org, title, relPath, mime, hash, string(content), system, now)
+	parent := newEntity(org, title, relPath, mime, hash, system, now)
 	parent.ChunkCount = len(passages)
-
-	// Offload the verbatim body to the fusion body store, wiring both consumers
-	// to that single CONTENT blob (fusion body handle + EntityState.StorageRef).
-	// Non-fatal: on failure the entity keeps content inline in the DocContent triple.
-	offloadDocBody(ctx, parent, h.bodyStore, h.bodyInstance)
 
 	states := make([]*handler.EntityState, 0, len(passages)+1)
 	states = append(states, parent.EntityState())
 	for _, p := range passages {
 		pe := newPassageEntity(org, system, parent.ID, title, relPath, mime, p, now)
-		offloadPassageBody(ctx, pe, h.bodyStore, h.bodyInstance)
+		if err := offloadPassageBody(ctx, pe, h.bodyStore, h.bodyInstance); err != nil {
+			return nil, err
+		}
 		states = append(states, pe.EntityState())
 	}
 	return states, nil
 }
 
-// offloadDocBody offloads the entity's verbatim passage to the fusion body store
-// (content-addressed) and wires BOTH consumers to that single blob (ADR-063 store
-// unification): it stamps the fusion body handle (DocBodyStore/DocBodyKey triples,
-// read by the docs lens) AND sets EntityState.StorageRef to the same instance+key
-// so graph-embedding resolves and embeds the body via the shared StoreRegistry.
-// With the body offloaded, Triples() drops the inline DocContent triple. A nil
-// store or empty content is a no-op; a Put fault leaves the entity without a
-// handle or ref (inline content retained) — a best-effort facet, not a failed
-// ingest.
-func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instance string) {
-	key, ref, ok := putBody(ctx, store, instance, e.Content, e.MimeType)
-	if !ok {
-		return
+// offloadPassageBody stores a passage's verbatim body and stamps the handle.
+// Because the key is the hash of the PASSAGE and not of the file, editing one
+// section rewrites only that passage's blob while every unchanged passage keeps
+// its existing key and is never re-Put — per-edit blob churn is O(changed
+// passage), not O(file).
+//
+// A failure here is returned, not swallowed. There is no inline fallback any
+// more: a passage without a handle is a passage whose body cannot be hydrated
+// and whose text never reaches the semantic index, and reporting that as a
+// healthy ingest is the silent-degradation shape this project keeps removing.
+func offloadPassageBody(ctx context.Context, p *PassageEntity, store storage.Store, instance string) error {
+	key, ref, err := putBody(ctx, store, instance, p.Body, p.MimeType)
+	if err != nil {
+		return err
 	}
-	e.bodyInstance = instance
-	e.bodyKey = key
-	// Point message.Storable consumers (graph-embedding) at the same CONTENT blob
-	// so the body is fetched via the StoreRegistry and embedded — one blob, no
-	// separate offload, no inline duplicate.
-	e.storageRef = ref
-}
-
-// offloadPassageBody is offloadDocBody for a passage. Because the key is the
-// hash of the passage — not of the file — editing one section of a document
-// rewrites only that passage's blob; every unchanged passage keeps its existing
-// key and is never re-Put. Per-edit blob churn is O(changed passage), not
-// O(file).
-func offloadPassageBody(ctx context.Context, p *PassageEntity, store storage.Store, instance string) {
-	key, ref, ok := putBody(ctx, store, instance, p.Body, p.MimeType)
-	if !ok {
-		return
+	if ref == nil {
+		return nil // nothing to store
 	}
 	p.bodyInstance = instance
 	p.bodyKey = key
 	p.storageRef = ref
+	return nil
 }
+
+// ErrBodyStoreRequired reports that the verbatim body store is unavailable. It
+// is distinguished from an unreadable file so the caller can tell a per-document
+// problem (skip it) from a broken deployment (fail loudly).
+var ErrBodyStoreRequired = errors.New("doc handler: verbatim body store is required")
 
 // putBody content-addresses body and stores it, returning the key and a matching
 // StorageReference. Identical bodies — a shared licence header, a boilerplate
-// section repeated across documents — collapse onto one blob.
-func putBody(ctx context.Context, store storage.Store, instance, body, mimeType string) (string, *message.StorageReference, bool) {
-	if store == nil || instance == "" || body == "" {
-		return "", nil, false
+// section repeated across documents — collapse onto one blob. A nil ref with no
+// error means there was nothing to store.
+func putBody(ctx context.Context, store storage.Store, instance, body, mimeType string) (string, *message.StorageReference, error) {
+	if store == nil || instance == "" {
+		return "", nil, ErrBodyStoreRequired
+	}
+	if body == "" {
+		return "", nil, nil
 	}
 	sum := sha256.Sum256([]byte(body))
 	key := "doc:" + hex.EncodeToString(sum[:])
 	if err := store.Put(ctx, key, []byte(body)); err != nil {
-		return "", nil, false
+		// Classified as deployment-level, not per-document. A store that cannot
+		// be written to will fail identically for every following document, and
+		// falling through to the walk's skip branch would drop each one whole —
+		// parent included — while reporting a healthy ingest.
+		return "", nil, fmt.Errorf("%w: store passage body: %w", ErrBodyStoreRequired, err)
 	}
 	return key, &message.StorageReference{
 		StorageInstance: instance,
 		Key:             key,
 		ContentType:     mimeType,
 		Size:            int64(len(body)),
-	}, true
+	}, nil
 }
 
 // enrichEventEntityStates re-reads the changed file and populates ev.EntityStates

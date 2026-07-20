@@ -2,6 +2,7 @@ package doc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,29 @@ import (
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
+
+// nopStore is a body store that accepts every Put and never reads back. The
+// enrichment tests are about which entity states a change event carries, not
+// about blob contents — but the store is mandatory, so a handler built without
+// one enriches to nothing and every assertion below would pass or fail for the
+// wrong reason.
+type nopStore struct{}
+
+func (nopStore) Put(context.Context, string, []byte) error { return nil }
+func (nopStore) Get(context.Context, string) ([]byte, error) {
+	return nil, fmt.Errorf("nopStore: Get is not implemented")
+}
+func (nopStore) List(context.Context, string) ([]string, error) { return nil, nil }
+func (nopStore) Delete(context.Context, string) error           { return nil }
+
+// storedHandler builds a handler for org wired to a nopStore, the way doc-source
+// builds the live one.
+func storedHandler(org string) *Handler {
+	if org == "" {
+		return New(WithBodyStore(nopStore{}, "objectstore"))
+	}
+	return NewWithOrg(org, WithBodyStore(nopStore{}, "objectstore"))
+}
 
 // docTypeCounts tallies the states of a change event by source.DocType. One
 // changed file now enriches to a parent document plus its passages, so "the
@@ -38,7 +62,7 @@ func TestEnrichEventCreateUsesOnlyTypedState(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	h := NewWithOrg("acme")
+	h := storedHandler("acme")
 	event := h.enrichEvent(context.Background(), handler.ChangeEvent{
 		Path:      path,
 		Operation: handler.OperationCreate,
@@ -69,7 +93,7 @@ func TestEnrichEventWithoutOrgDoesNotFallBackToRawEntity(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	h := New()
+	h := storedHandler("")
 	event := h.enrichEvent(context.Background(), handler.ChangeEvent{
 		Path:      path,
 		Operation: handler.OperationModify,
@@ -81,7 +105,7 @@ func TestEnrichEventWithoutOrgDoesNotFallBackToRawEntity(t *testing.T) {
 }
 
 func TestEnrichEventDeleteIsPathOnly(t *testing.T) {
-	h := NewWithOrg("acme")
+	h := storedHandler("acme")
 	event := h.enrichEvent(context.Background(), handler.ChangeEvent{
 		Path:      "/removed/readme.md",
 		Operation: handler.OperationDelete,

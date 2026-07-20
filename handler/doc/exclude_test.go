@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/c360studio/semsource/handler/doc"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
@@ -37,7 +36,8 @@ func TestIngestEntityStates_DefaultExcludesPlanningDocs(t *testing.T) {
 	write("openspec/specs/cap/spec.md", "# Spec\n")
 	write("ui/node_modules/pkg/README.md", "# Vendored\n")
 
-	states, err := doc.New().IngestEntityStates(
+	h, _ := docsHandler(t)
+	states, err := h.IngestEntityStates(
 		context.Background(),
 		sourceConfig{typ: "docs", path: root},
 		"acme",

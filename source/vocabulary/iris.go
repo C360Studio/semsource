@@ -5,9 +5,6 @@ const Namespace = "https://semspec.dev/ontology/source/"
 
 // Standard ontology IRI constants for mappings.
 const (
-	// DcAbstract is the Dublin Core abstract property.
-	DcAbstract = "http://purl.org/dc/terms/abstract"
-
 	// DcFormat is the Dublin Core format property.
 	DcFormat = "http://purl.org/dc/terms/format"
 )

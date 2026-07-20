@@ -78,16 +78,16 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 6. Breaking cut (D10, D11, D12)
 
-- [ ] 6.1 Make the verbatim body store mandatory in `processor/doc-source/component.go`; replace the
+- [x] 6.1 Make the verbatim body store mandatory in `processor/doc-source/component.go`; replace the
       "store unavailable" warning with a hard startup error
-- [ ] 6.2 Delete the inline `DocContent` fallback and the tests pinning it
+- [x] 6.2 Delete the inline `DocContent` fallback and the tests pinning it
       (`StoreFailureFallsBackToInline`, `NoStoreAllInline`)
-- [ ] 6.3 Test: unavailable store fails startup loudly and the component is not ready
-- [ ] 6.4 Delete `DocSummary`: the emit, the lens `Label()` fallback, the `explicitRoles` entry, and the
+- [x] 6.3 Test: unavailable store fails startup loudly and the component is not ready
+- [x] 6.4 Delete `DocSummary`: the emit, the lens `Label()` fallback, the `explicitRoles` entry, and the
       three tests pinning them; reduce `Label()` to `DcTitle`
-- [ ] 6.5 Remove the parent's body handle, `StorageRef`, and content-indexing profile so it contributes
+- [x] 6.5 Remove the parent's body handle, `StorageRef`, and content-indexing profile so it contributes
       no content embedding
-- [ ] 6.6 Test: parent carries no body handle and produces no content embedding, but stays name-resolvable
+- [x] 6.6 Test: parent carries no body handle and produces no content embedding, but stays name-resolvable
 
 ## 7. Ranking behaviour (retrieval-ranking delta)
 

@@ -44,7 +44,7 @@ func (m *MemGraph) SetResolve(query string, ids ...string) { m.resolve[query] = 
 
 // titlePredicates are the predicates that may carry an entity's human name,
 // across domains — used to populate did_you_mean suggestions.
-var titlePredicates = []string{"dc.terms.title", "source.doc.summary"}
+var titlePredicates = []string{"dc.terms.title"}
 
 // AddEntity registers an entity from a predicate→object property map.
 func (m *MemGraph) AddEntity(id string, props map[string]any) {

@@ -10,7 +10,6 @@ func TestPredicatesRegistered(t *testing.T) {
 	// Document predicates
 	docPredicates := []string{
 		DocType,
-		DocSummary,
 		DocContent,
 		DocSection,
 		DocChunkIndex,
@@ -63,12 +62,31 @@ func TestPredicatesRegistered(t *testing.T) {
 	}
 }
 
+// TestRetiredDocPredicatesAreUnregistered pins the removal of
+// source.doc.summary. It was named by its wire string rather than a constant
+// because the constant is gone — which is the point: the registry is a global
+// keyed on strings, so a re-registration under any name would restore the
+// predicate's salience weight and float summary-bearing entities again, with
+// nothing in the type system to catch it.
+func TestRetiredDocPredicatesAreUnregistered(t *testing.T) {
+	retired := []string{"source.doc.summary"}
+
+	for _, pred := range retired {
+		t.Run(pred, func(t *testing.T) {
+			meta := vocabulary.GetPredicateMetadata(pred)
+			if meta != nil {
+				t.Errorf("predicate %q is registered (description %q, IRI %q, weight %v); it was retired and must stay unregistered",
+					pred, meta.Description, meta.StandardIRI, meta.Weight)
+			}
+		})
+	}
+}
+
 func TestPredicateIRIMappings(t *testing.T) {
 	tests := []struct {
 		predicate   string
 		expectedIRI string
 	}{
-		{DocSummary, DcAbstract},
 		{DocMimeType, DcFormat},
 	}
 

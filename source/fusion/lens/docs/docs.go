@@ -80,15 +80,9 @@ func (*Lens) Edges() []fusion.EdgeSpec {
 	}
 }
 
-// Label is the document title, read from the canonical dc.terms.title; it falls
-// back to the summary slot for entities emitted before doc-source carried a
-// title predicate.
-func (*Lens) Label(e *fusion.Entity) string {
-	if t := e.First(source.DcTitle); t != "" {
-		return t
-	}
-	return e.First(source.DocSummary)
-}
+// Label is the title, read from the canonical dc.terms.title. Every document
+// and every passage is stamped with one at ingest, so there is no fallback.
+func (*Lens) Label(e *fusion.Entity) string { return e.First(source.DcTitle) }
 
 // Kind is the document type ("document").
 func (*Lens) Kind(e *fusion.Entity) string { return e.First(source.DocType) }

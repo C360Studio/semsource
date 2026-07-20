@@ -108,7 +108,8 @@ func TestDocHandler_Passages_ParentChunkCountMatchesPassages(t *testing.T) {
 		headedSection("Usage", "usage", 4)+
 		headedSection("Limits", "limits", 4))
 
-	states := ingestDocs(t, dochandler.New(), dir)
+	h, _ := docsHandler(t)
+	states := ingestDocs(t, h, dir)
 
 	parents := parentStates(states)
 	if len(parents) != 1 {
@@ -144,7 +145,8 @@ func TestDocHandler_Passages_IDShape(t *testing.T) {
 		headedSection("Usage", "usage", 4)+
 		headedSection("Limits", "limits", 4))
 
-	passages := passageStates(ingestDocs(t, dochandler.New(), dir))
+	h, _ := docsHandler(t)
+	passages := passageStates(ingestDocs(t, h, dir))
 	if len(passages) < 2 {
 		t.Fatalf("passage state count: got %d, want at least 2 for a three-section document", len(passages))
 	}
@@ -193,7 +195,7 @@ func TestDocHandler_Passages_IDsAreDeterministic(t *testing.T) {
 		headedSection("Usage", "usage", 4)+
 		headedSection("Limits", "limits", 4))
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	first := passageStates(ingestDocs(t, h, dir))
 	second := passageStates(ingestDocs(t, h, dir))
 
@@ -222,7 +224,8 @@ func TestDocHandler_Passages_RepeatedHeadingsGetDistinctIDs(t *testing.T) {
 		headedSection("Usage", "first-usage", 4)+
 		headedSection("Usage", "second-usage", 4))
 
-	passages := passageStates(ingestDocs(t, dochandler.New(), dir))
+	h, _ := docsHandler(t)
+	passages := passageStates(ingestDocs(t, h, dir))
 
 	var usage []*handler.EntityState
 	for _, passage := range passages {
@@ -252,7 +255,7 @@ func TestDocHandler_Passages_HeadingRenameKeepsIDs(t *testing.T) {
 		headedSection("Limits", "limits", 4)
 	path := writeMD(t, dir, "guide.md", body)
 
-	h := dochandler.New()
+	h, _ := docsHandler(t)
 	before := passageStates(ingestDocs(t, h, dir))
 	if len(before) < 2 {
 		t.Fatalf("passage state count before the rename: got %d, want at least 2", len(before))
@@ -302,7 +305,8 @@ func TestDocHandler_Passages_BelongToTheirParent(t *testing.T) {
 	writeMD(t, dir, "alpha.md", "# Alpha\n\n"+prose("alpha-intro", 4)+headedSection("Usage", "alpha-usage", 4))
 	writeMD(t, dir, "beta.md", "# Beta\n\n"+prose("beta-intro", 4)+headedSection("Usage", "beta-usage", 4))
 
-	states := ingestDocs(t, dochandler.New(), dir)
+	h, _ := docsHandler(t)
+	states := ingestDocs(t, h, dir)
 	parents := parentByFile(t, states)
 	grouped := passagesByFile(t, states)
 
@@ -358,7 +362,8 @@ func TestDocHandler_Passages_HeadinglessProseIsCovered(t *testing.T) {
 	// headingless span. The title falls back to the filename stem.
 	writeMD(t, dir, "notes.md", prose("preamble", 4)+headedSection("Usage", "usage", 4))
 
-	states := ingestDocs(t, dochandler.New(), dir)
+	h, store := docsHandler(t)
+	states := ingestDocs(t, h, dir)
 	passages := passageStates(states)
 	if len(passages) < 2 {
 		t.Fatalf("passage state count: got %d, want at least 2 (headingless preamble + Usage section); %d states in total",
@@ -366,9 +371,9 @@ func TestDocHandler_Passages_HeadinglessProseIsCovered(t *testing.T) {
 	}
 
 	first := passages[0]
-	if got := tripleValue(t, first, source.DocContent); !strings.Contains(got, "preamble") {
-		t.Errorf("first passage %s does not carry the prose above the first heading; %s = %q",
-			first.ID, source.DocContent, got)
+	if got := passageBody(t, store, first); !strings.Contains(got, "preamble") {
+		t.Errorf("first passage %s does not carry the prose above the first heading; its offloaded body is %q",
+			first.ID, got)
 	}
 	title := tripleValue(t, first, source.DcTitle)
 	if title == "" {
@@ -389,7 +394,8 @@ func TestDocHandler_Passages_SectionPresence(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "notes.md", prose("preamble", 4)+headedSection("Usage", "usage", 4))
 
-	passages := passageStates(ingestDocs(t, dochandler.New(), dir))
+	h, _ := docsHandler(t)
+	passages := passageStates(ingestDocs(t, h, dir))
 	if len(passages) < 2 {
 		t.Fatalf("passage state count: got %d, want at least 2 (headingless preamble + Usage section)", len(passages))
 	}
@@ -413,7 +419,8 @@ func TestDocHandler_Passages_TitlesAreQualifiedPerDocument(t *testing.T) {
 	writeMD(t, dir, "alpha.md", "# Alpha\n\n"+prose("alpha-intro", 4)+headedSection("Usage", "alpha-usage", 4))
 	writeMD(t, dir, "beta.md", "# Beta\n\n"+prose("beta-intro", 4)+headedSection("Usage", "beta-usage", 4))
 
-	states := ingestDocs(t, dochandler.New(), dir)
+	h, _ := docsHandler(t)
+	states := ingestDocs(t, h, dir)
 	parents := parentByFile(t, states)
 	grouped := passagesByFile(t, states)
 
@@ -473,8 +480,8 @@ func TestDocHandler_Passages_LargeDocumentSplitsUnderHardMax(t *testing.T) {
 	}
 	writeMD(t, dir, "large.md", content)
 
-	store := newMemStore()
-	states := ingestDocs(t, dochandler.New(dochandler.WithBodyStore(store, "objectstore")), dir)
+	h, store := docsHandler(t)
+	states := ingestDocs(t, h, dir)
 	passages := passageStates(states)
 	if len(passages) < 2 {
 		t.Fatalf("passage state count for a %d-byte document: got %d, want at least 2 (a document over the cap must split)",

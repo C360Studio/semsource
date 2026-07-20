@@ -30,7 +30,7 @@ func TestFieldExtractionAndHydrate(t *testing.T) {
 	l := New()
 	e := &fusion.Entity{Triples: []message.Triple{
 		{Predicate: source.DocType, Object: "document"},
-		{Predicate: source.DocSummary, Object: "Retry Policy"},
+		{Predicate: source.DcTitle, Object: "Retry Policy"},
 		{Predicate: source.DocFilePath, Object: "docs/retry.md"},
 		{Predicate: source.DocBodyStore, Object: "objectstore"},
 		{Predicate: source.DocBodyKey, Object: "body:retry"},
@@ -63,7 +63,6 @@ func TestDocsLensViaEngine(t *testing.T) {
 	g.AddEntity(id, map[string]any{
 		source.DocType:          "document",
 		source.DcTitle:          "Retry Policy",
-		source.DocSummary:       "Retry Policy",
 		source.DocFilePath:      "docs/retry.md",
 		source.DocBodyStore:     "objectstore",
 		source.DocBodyKey:       "body:retry",
@@ -91,6 +90,34 @@ func TestDocsLensViaEngine(t *testing.T) {
 	// NL query → semantic resolve → embedding provenance.
 	if resp.Provenance != fusion.ProvenanceEmbedding {
 		t.Fatalf("expected embedding provenance for NL doc query, got %q", resp.Provenance)
+	}
+}
+
+// TestLabelReadsOnlyTheTitle pins the removal of the summary fallback. Label
+// used to try source.doc.summary when dc.terms.title was missing, which meant a
+// producer could skip the title and still get a plausible-looking result list —
+// the ingest bug stayed invisible. Every document and every passage is stamped
+// with a title at ingest, so a missing title is now a visible blank rather than
+// a silently substituted one, and a stray summary triple must not paper over it.
+func TestLabelReadsOnlyTheTitle(t *testing.T) {
+	l := New()
+
+	titled := &fusion.Entity{Triples: []message.Triple{
+		{Predicate: source.DocType, Object: "document"},
+		{Predicate: source.DcTitle, Object: "Retry Policy"},
+	}}
+	if got := l.Label(titled); got != "Retry Policy" {
+		t.Errorf("Label with %s present = %q, want %q", source.DcTitle, got, "Retry Policy")
+	}
+
+	// The retired predicate is named by its wire string: the constant is gone,
+	// but a stale producer or an archived entity can still carry the triple.
+	summaryOnly := &fusion.Entity{Triples: []message.Triple{
+		{Predicate: source.DocType, Object: "document"},
+		{Predicate: "source.doc.summary", Object: "Retry Policy"},
+	}}
+	if got := l.Label(summaryOnly); got != "" {
+		t.Errorf("Label with only a retired source.doc.summary triple = %q, want %q (no summary fallback)", got, "")
 	}
 }
 
