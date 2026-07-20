@@ -23,6 +23,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/internal/entitypub"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
@@ -170,6 +171,14 @@ func (c *Component) initializeWatchers() error {
 			excludes:     make(map[string]bool),
 		}
 
+		// Seed the floor FIRST, then add configured excludes. Additive, never
+		// substituted: a config that names one directory must not silently
+		// re-enable node_modules. The shipped default config names none at all,
+		// which is how ingesting a JS project's dependency tree became the
+		// default behaviour.
+		for _, exc := range handler.DefaultExcludedDirNames() {
+			pw.excludes[exc] = true
+		}
 		for _, exc := range rp.Config.Excludes {
 			pw.excludes[exc] = true
 		}

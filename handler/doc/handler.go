@@ -136,7 +136,7 @@ func mimeForExt(ext string) string {
 // (search-ranking-and-reach D3). docs/adr and docs/** stay indexed; a
 // deployment that wants specs indexed can add an explicit docs source.
 func isDefaultExcludedDocDir(root, path string) bool {
-	if filepath.Base(path) == "node_modules" {
+	if handler.IsDefaultExcludedDir(filepath.Base(path)) {
 		return true
 	}
 	rel, err := filepath.Rel(root, path)

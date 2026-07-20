@@ -53,12 +53,26 @@ func EnsureRepo(ctx context.Context, repoURL, branch, baseDir string, opts ...Op
 
 // IsRepoReady checks whether a directory is ready for ingestion.
 // It returns nil if the path is usable:
-//   - Path has no .git directory (not a git repo — ready as-is)
-//   - Path has .git/HEAD (clone complete)
+//   - Path has no .git at all (not a git repo — ready as-is)
+//   - Path has a .git DIRECTORY containing HEAD (clone complete)
+//   - Path has a .git FILE (a worktree or submodule gitlink — see below)
 //
 // It returns an error if:
 //   - Path does not exist
-//   - Path has .git but no HEAD (clone in progress)
+//   - Path has a .git directory but no HEAD (clone in progress)
+//   - The working tree is still empty
+//
+// The .git-as-a-file case is the one worth spelling out. In a git worktree or a
+// submodule, .git is not a directory but a one-line file pointing at the real
+// gitdir elsewhere ("gitdir: /path/to/.git/worktrees/name"). Probing .git/HEAD
+// there can never succeed — it is a path inside a regular file — so treating a
+// missing HEAD as "clone in progress" reports a permanently in-flight clone for
+// a checkout that is already complete. Callers retry persistently, so the source
+// never ingests and the service sits at phase "seeding" forever with the reason
+// only visible at debug level.
+//
+// Git writes the gitlink after the checkout populates, so its presence is itself
+// evidence the tree is ready; the working-tree content check below still applies.
 func IsRepoReady(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -69,15 +83,18 @@ func IsRepoReady(path string) error {
 	}
 
 	gitDir := filepath.Join(path, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
-		// No .git directory — not a git repo, ready to use.
+	gitInfo, err := os.Stat(gitDir)
+	if err != nil {
+		// No .git — not a git repo, ready to use.
 		return nil
 	}
 
-	// .git exists — check for HEAD to confirm clone is initialized.
-	head := filepath.Join(gitDir, "HEAD")
-	if _, err := os.Stat(head); err != nil {
-		return fmt.Errorf("git clone in progress: %s (.git exists but HEAD missing)", path)
+	if gitInfo.IsDir() {
+		// A real .git directory — HEAD confirms the clone is initialized.
+		head := filepath.Join(gitDir, "HEAD")
+		if _, err := os.Stat(head); err != nil {
+			return fmt.Errorf("git clone in progress: %s (.git exists but HEAD missing)", path)
+		}
 	}
 
 	// HEAD can exist before checkout completes. Verify the working tree has
