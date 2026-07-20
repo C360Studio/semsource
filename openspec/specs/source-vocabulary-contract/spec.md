@@ -1,7 +1,17 @@
 # source-vocabulary-contract Specification
 
 ## Purpose
-TBD - created by archiving change migrate-semstreams-beta-148-contracts. Update Purpose after archive.
+The canonical source vocabulary (`source/vocabulary/`) is the single registry of the predicates,
+classes, and ID constructors SemSource emits. Every registered identity is canonical under the
+SemStreams beta.148 predicate grammar, unique, and semantically unambiguous, and each one is backed
+by a live producer — vocabulary is emitted or deleted, never reserved indefinitely, and the
+vocabulary's own documentation describes only entity models a producer actually implements. Each
+migrated fact uses exactly one canonical identity across registrations, producers, exact queries,
+and fixtures, with no alias, rename map, dual read, or dual write. Guaranteed relationship objects
+are canonical six-part entity IDs marked with `EntityReferenceDatatype` while ordinary facts keep
+their declared literal datatypes, and every entity intended to be reachable by name carries
+`dc.terms.title` stamped at ingest.
+
 ## Requirements
 ### Requirement: The beta.148 migration vocabulary is canonical and complete
 
@@ -75,3 +85,42 @@ ad-hoc strings.
 
 - **WHEN** a demotion or authority marker predicate is emitted by any source
 - **THEN** that predicate is registered in the canonical vocabulary with its salience weight
+
+### Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
+
+Registered source vocabulary SHALL either be emitted by a live producer or be removed — this
+applies to every predicate, class, and ID constructor. Vocabulary MUST NOT remain registered
+while no code path emits it, and vocabulary documentation MUST NOT describe an entity model that no
+producer implements.
+
+#### Scenario: Chunk vocabulary is emitted
+
+- **WHEN** the doc source emits passage entities
+- **THEN** `DocChunkIndex`, `DocChunkCount`, and `DocSection` are emitted as triples by that producer
+- **AND** each remains registered in the canonical vocabulary
+
+#### Scenario: Unused vocabulary is removed
+
+- **WHEN** a registered predicate, class, or ID constructor has no emitting producer
+- **THEN** it is deleted rather than left registered
+
+#### Scenario: Vocabulary documentation matches the implementation
+
+- **WHEN** the source vocabulary documents an entity model
+- **THEN** a live producer emits entities matching that model, including the described identity shape
+
+### Requirement: Passage entities are name-reachable
+
+Passage entities SHALL carry the canonical title predicate `dc.terms.title`, stamped at ingest and
+registered through the canonical vocabulary, so a passage is resolvable through the name index like
+any other queryable entity.
+
+#### Scenario: A passage is resolved by name
+
+- **WHEN** a passage entity is published
+- **THEN** it carries `dc.terms.title` and is resolvable through the name index
+
+#### Scenario: Passage containment uses entity-reference datatype
+
+- **WHEN** a passage emits its containment triple naming its parent document
+- **THEN** the object is a canonical six-part entity ID marked with `EntityReferenceDatatype`
