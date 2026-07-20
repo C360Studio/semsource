@@ -79,6 +79,23 @@ func boundInstance(prefixLen int, instance string) string {
 // backstop truncation stays a rare last resort rather than routine.
 const maxSystemSlugLen = 80
 
+// MaxOrgLen bounds the org segment so the five non-instance segments cannot
+// consume the whole entity-ID budget between them. Org is the only one that is
+// neither derived nor capped by this package — it comes straight from operator
+// config — so it is the last way Build's truncation backstop can be reached.
+//
+// The arithmetic, against semtypes.MaxEntityIDBytes (256):
+//
+//	org (≤64) + platform (9) + domain (≤10) + system (≤80) + type (≤12) + 5 dots
+//	  = ≤180, leaving ≥76 bytes for the instance segment.
+//
+// That floor is above maxInstanceLen (60), so every SanitizeInstance-derived
+// ID fits without truncation, and AST instances truncate to a usable prefix
+// rather than collapsing to a bare hash. Enforced at config load by
+// config.ValidateNamespace, which fails startup loudly rather than letting
+// every published entity be rejected at ingest.
+const MaxOrgLen = 64
+
 // SystemSlug converts a canonical path, URL, or module string into a
 // graph-ingest-safe system segment. URLs have their scheme stripped; forward
 // slashes, colons, and dots are replaced with hyphens so the result is a
@@ -147,6 +164,16 @@ func SystemSlug(canonicalPath string) string {
 // (matching [a-zA-Z0-9_-]). Returns the unmodified slug when branchSlug is
 // empty (single-branch mode, backward compatible).
 //
+// The join is re-slugged so the ≤maxSystemSlugLen cap holds. Branch names are
+// effectively unbounded — git allows them up to filesystem limits, the branch
+// lifecycle generates them, and workspace.slugify does not cap — so an
+// unbounded concatenation here could push the system segment past the entire
+// entity-ID budget on its own. When that happened the assembled ID was
+// rejected outright and the rest of that file's entities went unpublished;
+// Build's truncation could not help, because the overflow was in a segment it
+// must not rewrite. SystemSlug's truncation hashes the full pre-truncation
+// slug, so two long branches of one repo stay distinct rather than fusing.
+//
 // Example:
 //
 //	BranchScopedSlug("github-com-acme-repo", "scenario-auth-flow")
@@ -157,7 +184,7 @@ func BranchScopedSlug(systemSlug, branchSlug string) string {
 	if branchSlug == "" {
 		return systemSlug
 	}
-	return systemSlug + "-" + branchSlug
+	return SystemSlug(systemSlug + "-" + branchSlug)
 }
 
 // VersionScopedSlug appends a version qualifier to a system slug with a hyphen
@@ -165,7 +192,8 @@ func BranchScopedSlug(systemSlug, branchSlug string) string {
 // (matching [a-zA-Z0-9_-]). Returns the unmodified slug when versionSlug is
 // empty (version-independent entities, backward compatible). The caller is
 // responsible for pre-slugging both arguments via SystemSlug — the same
-// contract as BranchScopedSlug.
+// contract as BranchScopedSlug. As there, the join is re-slugged so the
+// ≤maxSystemSlugLen cap holds regardless of qualifier length.
 //
 // Example:
 //
@@ -177,14 +205,14 @@ func VersionScopedSlug(systemSlug, versionSlug string) string {
 	if versionSlug == "" {
 		return systemSlug
 	}
-	return systemSlug + "-" + versionSlug
+	return SystemSlug(systemSlug + "-" + versionSlug)
 }
 
 // ScopedSystemSlug is the single canonical helper for computing the system
 // segment when a version qualifier is involved. It applies SystemSlug to both
-// inputs, joins them via VersionScopedSlug, and then applies SystemSlug a
-// final time. That final pass enforces the ≤80-char cap and makes the result
-// idempotent under SystemSlug.
+// inputs and joins them via VersionScopedSlug, which re-slugs the join — that
+// pass enforces the ≤maxSystemSlugLen cap and makes the result idempotent
+// under SystemSlug.
 //
 // Idempotency is the critical safety property: code paths that call
 // SystemSlug(ScopedSystemSlug(p, v)) and paths that use the result raw both
@@ -202,7 +230,7 @@ func VersionScopedSlug(systemSlug, versionSlug string) string {
 //	ScopedSystemSlug("semstreams", "")
 //	  → "semstreams"
 func ScopedSystemSlug(project, version string) string {
-	return SystemSlug(VersionScopedSlug(SystemSlug(project), SystemSlug(version)))
+	return VersionScopedSlug(SystemSlug(project), SystemSlug(version))
 }
 
 // CanonicalizeURL normalizes a URL for use in deterministic entity ID construction.
