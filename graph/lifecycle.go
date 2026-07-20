@@ -24,6 +24,11 @@ const (
 	LifecycleReasonFileDeleted   = "file_deleted"
 	LifecycleReasonSourceRemoved = "source_removed"
 	LifecycleReasonPathMissing   = "path_missing"
+	// LifecycleReasonPassageRemoved marks a passage whose parent document
+	// still exists but no longer has that passage — the document shrank. It
+	// needs its own reason because no filesystem check can detect it: the
+	// passage carries the path of a file that is still present.
+	LifecycleReasonPassageRemoved = "passage_removed"
 )
 
 // lifecycleTriggerTimeout bounds one request/reply round trip to the

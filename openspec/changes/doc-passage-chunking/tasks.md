@@ -56,16 +56,16 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 4. Retract vanished passages (D3)
 
-- [ ] 4.1 Fast path: on re-ingest with fewer passages, mark ordinals `[new_count, old_count)` with
+- [x] 4.1 Fast path: on re-ingest with fewer passages, mark ordinals `[new_count, old_count)` with
       `entity.lifecycle.stale`, reading the prior count from the parent's `DocChunkCount`
-- [ ] 4.2 Clear the marker for ordinals that come back when a document regrows (`RemoveTriples`)
-- [ ] 4.3 Backstop: extend `decideLifecycleActions` in `processor/supersession/lifecycle.go` so that for
+- [x] 4.2 Clear the marker for ordinals that come back when a document regrows (`RemoveTriples`)
+- [x] 4.3 Backstop: extend `decideLifecycleActions` in `processor/supersession/lifecycle.go` so that for
       a path present on disk, any passage whose `DocChunkIndex >= DocChunkCount` is marked stale
-- [ ] 4.4 Preserve the existing caller-side pre-filter (the add lane appends; only mark entities not
+- [x] 4.4 Preserve the existing caller-side pre-filter (the add lane appends; only mark entities not
       already carrying the marker)
-- [ ] 4.5 Test: shrink marks the tail, entities remain present, live passages are never marked
-- [ ] 4.6 Test: regrowth clears markers and re-points content
-- [ ] 4.7 Test: the backstop marks an orphaned tail when the fast path never ran (interrupted ingest)
+- [x] 4.5 Test: shrink marks the tail, entities remain present, live passages are never marked
+- [x] 4.6 Test: regrowth clears markers and re-points content
+- [x] 4.7 Test: the backstop marks an orphaned tail when the fast path never ran (interrupted ingest)
 
 ## 5. Expand passages through the docs lens (D5)
 

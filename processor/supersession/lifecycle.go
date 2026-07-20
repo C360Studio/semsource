@@ -164,17 +164,95 @@ func decideLifecycleActions(inScope []gtypes.EntityState, rootPath, reason strin
 
 	for path, group := range byPath {
 		present := stat(path)
+		if !present {
+			for i := range group {
+				if !isMarkedStale(group[i].Triples) {
+					toMark = append(toMark, staleTriple(group[i].ID, reason))
+				}
+			}
+			continue
+		}
+		// The file is present, but a document that SHRANK leaves passages
+		// behind that no filesystem check can see: every passage of a
+		// ten-passage document that is now seven passages long still carries
+		// the path of a file that is very much still there. The parent's
+		// DocChunkCount is the only evidence, so liveness for a passage is
+		// index < count rather than stat().
+		liveCount, haveCount := chunkCountOf(group)
 		for i := range group {
 			marked := isMarkedStale(group[i].Triples)
+			vanished := haveCount && isVanishedPassage(group[i].Triples, liveCount)
 			switch {
-			case !present && !marked:
-				toMark = append(toMark, staleTriple(group[i].ID, reason))
-			case present && marked:
+			case vanished && !marked:
+				toMark = append(toMark, staleTriple(group[i].ID, graph.LifecycleReasonPassageRemoved))
+			case !vanished && marked:
+				// Without the parent's count there is no evidence either way, so
+				// clearing a passage's marker here would resurrect a genuinely
+				// vanished passage whenever enumeration truncated before its
+				// parent — and re-mark it on the next full pass. Absence of
+				// evidence must not read as evidence of liveness.
+				if !haveCount && isPassage(group[i].Triples) {
+					continue
+				}
 				toClear = append(toClear, group[i].ID)
 			}
 		}
 	}
 	return toMark, toClear, pathCount
+}
+
+// chunkCountOf finds the parent document in a path group and returns its
+// current passage count. Reports false when no parent carries the predicate —
+// a code entity, or a doc ingested before passages existed — in which case no
+// passage judgement can be made and the group is left alone.
+func chunkCountOf(group []gtypes.EntityState) (int, bool) {
+	for i := range group {
+		if n, ok := tripleInt(group[i].Triples, source.DocChunkCount); ok {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+// isPassage reports whether triples describe a passage rather than a parent
+// document or a code entity, identified by carrying a chunk index at all.
+func isPassage(triples []message.Triple) bool {
+	_, ok := tripleInt(triples, source.DocChunkIndex)
+	return ok
+}
+
+// isVanishedPassage reports whether triples describe a passage whose ordinal is
+// at or beyond its parent's current passage count — i.e. a passage the document
+// no longer has. An entity with no chunk index is not a passage and is never
+// vanished by this rule.
+func isVanishedPassage(triples []message.Triple, liveCount int) bool {
+	idx, ok := tripleInt(triples, source.DocChunkIndex)
+	return ok && idx >= liveCount
+}
+
+// tripleInt reads a numeric triple object. The producer emits a Go int, but
+// these entities arrive back through a JSON query round trip, where that int is
+// a float64 — so both must be accepted or every passage judgement silently
+// fails closed and no phantom is ever marked.
+func tripleInt(triples []message.Triple, predicate string) (int, bool) {
+	for i := range triples {
+		if triples[i].Predicate != predicate {
+			continue
+		}
+		switch v := triples[i].Object.(type) {
+		case int:
+			return v, true
+		case int64:
+			return int(v), true
+		case float64:
+			return int(v), true
+		case json.Number:
+			n, err := v.Int64()
+			return int(n), err == nil
+		}
+		return 0, false
+	}
+	return 0, false
 }
 
 // entityIDSystem extracts the system segment (index 3) from a 6-part entity
