@@ -95,6 +95,12 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 			default:
 			}
 			if info.IsDir() {
+				// Prune whole dependency trees rather than filtering their files
+				// one by one: a node_modules walk yields thousands of package.json
+				// files that are not this project's configuration.
+				if handler.IsDefaultExcludedDir(info.Name()) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			base := filepath.Base(path)
@@ -144,6 +150,12 @@ func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.Sour
 			default:
 			}
 			if info.IsDir() {
+				// Prune whole dependency trees rather than filtering their files
+				// one by one: a node_modules walk yields thousands of package.json
+				// files that are not this project's configuration.
+				if handler.IsDefaultExcludedDir(info.Name()) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			base := filepath.Base(path)
