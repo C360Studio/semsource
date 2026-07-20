@@ -115,8 +115,30 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 - [x] 9.1 `task lint` clean at revive v1.15.0 (warnings fail), `gofmt`, `go vet`
 - [x] 9.2 `go test ./...` and `go test -race -tags=integration ./...` green
-- [ ] 9.3 Integration test on a real stack: ingest a document larger than the truncation limit, then
+- [x] 9.3 Integration test on a real stack: ingest a document larger than the truncation limit, then
       retrieve a phrase that appears only in its tail
+      (`TestIntegration_DocTailPhraseSurvivesPassageChunking`,
+      `internal/governance/doc_tail_retrieval_integration_test.go`)
+      Real in-process stack (embedded NATS, graph-ingest/index/query, a CONTENT
+      objectstore in a storeregistry, the REAL doc handler), then retrieval
+      through the REAL fusion docs engine.
+      **The load-bearing assertion is passage SIZE, not passage presence.** "The
+      marker landed in a passage" is insufficient: a passage larger than the
+      substrate's 8000-char cap would be truncated at embedding time and the
+      marker lost exactly as before, while every other assertion still passed.
+      The fixture's TAIL SECTION alone exceeds 8000 B, forcing the splitter to
+      subdivide an oversized section — the mechanism that actually protects tail
+      content — and the test asserts the marker's passage fits inside the
+      embedding window.
+      Verified red-green in the correct direction: raising `hardMax` above the
+      substrate cap makes it fail with "tail passage is 12241 bytes, larger than
+      the 8000-byte embedding cap", and it passes at the shipped bounds. (The
+      size check is ordered BEFORE the start-of-span check, because a single
+      oversized passage would otherwise trip the latter and report the less
+      informative complaint.)
+      Deliberately asserts presence and retrievability, **never rank** — the
+      ranking defect found in 9.5 would make a rank assertion fail for a cause
+      this test is not about.
 - [x] 9.4 Measure entity count and time-to-ready on this repository before and after; record both in
       this change and treat a large regression as a blocker
 - [x] 9.5 Choose the chunk ceiling and floor empirically — A/B the graded interrogation, do not guess
@@ -165,8 +187,20 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 - [x] 10.3 **DEFECT FIXED: body-less parents ranked above their own passages** (5/11 doc answers
       led with an empty-bodied node, was 0/11). Fixed with two levers — salience
       demotion (5->3) plus dropping body-less document nodes (3->0). Re-measured 0/11
-- [ ] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
-      ("CLAUDE.md § CLAUDE.md")
+- [x] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
+      ("CLAUDE.md § CLAUDE.md").
+      `passageTitle` (handler/doc/entities.go) now skips the parent qualifier when
+      the section IS the document, compared case-insensitively after trimming.
+      Common for CLAUDE.md, AGENTS.md, and any doc named after its subject.
+      Qualification exists to disambiguate six "Usage" sections across six
+      documents; repeating a name against itself disambiguates nothing.
+      Note this does not lose disambiguation: two documents that both had
+      H1 == title were equally indistinguishable before ("README.md § README.md"
+      twice), so the duplicate never carried information.
+      Pinned by `TestDocHandler_Passages_TitleNotDuplicatedWhenH1EqualsTitle`,
+      which reproduces the exact "CLAUDE.md § CLAUDE.md" string and also asserts
+      a genuinely distinct section is STILL qualified — suppressing the duplicate
+      must not disable qualification generally.
 - [x] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
       add discrimination questions where a whole-file match cannot answer.
       Added the `discrimination` band (X01-X03) plus `expect_top_all` /

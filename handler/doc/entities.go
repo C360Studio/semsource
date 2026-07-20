@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semsource/entityid"
@@ -126,8 +127,17 @@ func chunkInstance(filePath string, ordinal int) string {
 
 // passageTitle qualifies a passage's title with its parent's, so a results list
 // does not show six indistinguishable "Usage" entries from six documents.
+//
+// The qualifier is skipped when the section IS the document — a file whose H1
+// repeats its own title (common for CLAUDE.md, AGENTS.md, and any doc named
+// after its subject) otherwise yields "CLAUDE.md § CLAUDE.md". Qualification
+// exists to disambiguate; repeating a name against itself disambiguates nothing
+// and reads as a defect wherever the passage is listed.
 func passageTitle(parentTitle, section string, ordinal int) string {
 	if section != "" {
+		if strings.EqualFold(strings.TrimSpace(section), strings.TrimSpace(parentTitle)) {
+			return parentTitle
+		}
 		return parentTitle + " § " + section
 	}
 	return fmt.Sprintf("%s § passage %d", parentTitle, ordinal+1)
