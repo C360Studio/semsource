@@ -6,15 +6,19 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/c360studio/semsource/handler/doc"
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// TestIngest_DefaultExcludesArchivedPlanningDocs pins search-ranking-and-reach
+// TestIngestEntityStates_DefaultExcludesPlanningDocs pins search-ranking-and-reach
 // D3: OpenSpec planning artifacts (active AND archived — the graded re-run
 // showed even active proposals outrank the README for product questions) and
 // node_modules never enter the docs corpus; canonical docs incl. docs/adr
 // stay indexed.
-func TestIngest_DefaultExcludesArchivedPlanningDocs(t *testing.T) {
+//
+// This exercises IngestEntityStates because that is the path doc-source runs in
+// production; the RawEntity path this test used to drive had no production
+// callers and was deleted.
+func TestIngestEntityStates_DefaultExcludesPlanningDocs(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, body string) {
 		full := filepath.Join(root, rel)
@@ -32,15 +36,25 @@ func TestIngest_DefaultExcludesArchivedPlanningDocs(t *testing.T) {
 	write("openspec/specs/cap/spec.md", "# Spec\n")
 	write("ui/node_modules/pkg/README.md", "# Vendored\n")
 
-	entities, err := doc.New().Ingest(context.Background(), sourceConfig{typ: "docs", path: root})
+	h, _ := docsHandler(t)
+	states, err := h.IngestEntityStates(
+		context.Background(),
+		sourceConfig{typ: "docs", path: root},
+		"acme",
+	)
 	if err != nil {
-		t.Fatalf("Ingest: %v", err)
+		t.Fatalf("IngestEntityStates: %v", err)
 	}
 
 	paths := map[string]bool{}
-	for _, e := range entities {
-		fp, _ := e.Properties["file_path"].(string)
-		paths[filepath.ToSlash(fp)] = true
+	for _, st := range states {
+		for _, tr := range st.Triples {
+			if tr.Predicate == source.DocFilePath {
+				if fp, ok := tr.Object.(string); ok {
+					paths[filepath.ToSlash(fp)] = true
+				}
+			}
+		}
 	}
 	for _, want := range []string{
 		"README.md",

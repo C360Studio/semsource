@@ -37,6 +37,34 @@ var predicateDeclarationFiles = []string{
 // retired identity in an executable Go string literal.
 var predicateBehaviorRoots = []string{"handler", "processor", "source", "internal"}
 
+// beta148RetiredSymbols are ledger rows whose symbol has since been deleted as
+// dead vocabulary: every one carries producer: none and exact_query: none, so
+// nothing ever emitted or queried them. The ledger is an archived record of the
+// beta.148 rename and stays byte-for-byte intact — the rename genuinely
+// happened. What changes is the assertion: for these rows the contract is
+// inverted from "still declared and registered" to "provably gone", so a
+// deletion cannot silently regress into a re-registration.
+var beta148RetiredSymbols = map[string]struct{}{
+	"DocAppliesTo":       {},
+	"DocRelatedDomains":  {},
+	"RepoAutoPull":       {},
+	"RepoEntityCount":    {},
+	"RepoLastCommit":     {},
+	"RepoLastIndexed":    {},
+	"RepoPullInterval":   {},
+	"SourceAddedAt":      {},
+	"SourceAddedBy":      {},
+	"WebAnalysisSkipped": {},
+	"WebAppliesTo":       {},
+	"WebAutoRefresh":     {},
+	"WebChunkCount":      {},
+	"WebChunkIndex":      {},
+	"WebLastFetched":     {},
+	"WebRefreshInterval": {},
+	"WebRelatedDomains":  {},
+	"WebSemanticDomain":  {},
+}
+
 type beta148PredicateLedger struct {
 	Version  int                         `yaml:"version"`
 	RowCount int                         `yaml:"row_count"`
@@ -84,6 +112,15 @@ func TestBeta148PredicateMigrationContract(t *testing.T) {
 		if _, err := semvocabulary.ParsePredicate(row.CanonicalTarget); err != nil {
 			t.Errorf("%s target %q rejected by beta.148 parser: %v", row.Symbol, row.CanonicalTarget, err)
 		}
+		if _, retired := beta148RetiredSymbols[row.Symbol]; retired {
+			if got, declared := declarations[row.Symbol]; declared {
+				t.Errorf("retired symbol %s is declared again as %q", row.Symbol, got)
+			}
+			if metadata := semvocabulary.GetPredicateMetadata(row.CanonicalTarget); metadata != nil {
+				t.Errorf("retired symbol %s target %q is registered again", row.Symbol, row.CanonicalTarget)
+			}
+			continue
+		}
 		if metadata := semvocabulary.GetPredicateMetadata(row.CanonicalTarget); metadata == nil {
 			t.Errorf("%s target %q is not registered", row.Symbol, row.CanonicalTarget)
 		}
@@ -96,6 +133,9 @@ func TestBeta148PredicateMigrationContract(t *testing.T) {
 		assertBeta148SurfacesAgree(t, root, row)
 	}
 
+	if len(beta148RetiredSymbols) != 18 {
+		t.Errorf("retired symbol count = %d, want 18", len(beta148RetiredSymbols))
+	}
 	if replacements != 90 || additions != 2 {
 		t.Errorf("migration shape = %d replacements + %d additions, want 90 + 2", replacements, additions)
 	}

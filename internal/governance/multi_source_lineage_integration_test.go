@@ -206,7 +206,10 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	for time.Now().Before(rankDeadline) {
 		resp, ferr := engine.Fuse(ctx, fusion.Request{Query: prefix, Want: []fusion.Want{fusion.WantRelations}}, lens)
 		if ferr != nil {
-			t.Fatalf("Fuse: %v", ferr)
+			if fuseErrIsRetryable(t, ferr) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		newRank = rankByHandle(resp.Nodes, runNew.ID)
 		oldRank = rankByHandle(resp.Nodes, runOld.ID)

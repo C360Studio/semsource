@@ -35,6 +35,11 @@ confidence and dependency shape. The "why" behind durable choices lives in
 - **Agent-ready query surfaces**: MCP source tools, HTTP/NATS source manifest
   status, GraphQL through the UI profile, and deterministic fusion tools
   (`code_context`, `code_search`, `code_impact`, `doc_context`, `code_changes`).
+- **Passage-level document retrieval**: documents are ingested as a navigational
+  parent entity plus one entity per structural passage, each with its own
+  verbatim body. A question about one paragraph matches that paragraph instead of
+  an averaged whole file, and no document text is silently dropped for sitting
+  past the substrate's embedding truncation limit.
 - **Domain-scoped retrieval and ontology-aware ranking** so code, docs, versions,
   and public API signals are ranked by source role and graph semantics, not only
   lexical match.
@@ -94,6 +99,19 @@ confidence and dependency shape. The "why" behind durable choices lives in
   upstream instead of hiding them locally.
 - **Media bytes are local-filestore backed.** Code/doc bodies use ObjectStore, but
   image/video/audio bytes are not yet shared ObjectStore payloads.
+- **Passage chunking requires a graph rebuild, not a reindex.** The substrate
+  cannot clear a stored body reference in place, so parents would keep their old
+  whole-file bodies through an in-place reindex. See
+  [`docs/migration/doc-passage-chunking.md`](docs/migration/doc-passage-chunking.md).
+- **Passage bounds are not yet tuned.** Document split sizes are set to sensible
+  defaults, not values chosen by measurement. The architecture is settled; the
+  numbers await an A/B against the graded retrieval set.
+- **Parent document entities are still embedded from their title.** The framework
+  offers no way for a producer to opt an entity out of embedding (ADR-054 Phase 1
+  is deliberately lenient), so a body-less navigational node still carries a
+  title-only vector.
+- **Only documents are split into passages.** Code is already indexed per symbol;
+  web, config, and media sources are still one entity per artifact.
 - **Version diffs do not detect renames.** A renamed or moved symbol currently
   appears as a removal plus an addition.
 - **The graph is retention-first.** Safe, reference-complete deletion for genuine

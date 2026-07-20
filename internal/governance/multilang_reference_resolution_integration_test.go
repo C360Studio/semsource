@@ -126,7 +126,10 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 					Want:  []fusion.Want{fusion.WantRelations},
 				}, lens)
 				if ferr != nil {
-					t.Fatalf("Fuse: %v", ferr)
+					if fuseErrIsRetryable(t, ferr) {
+						time.Sleep(100 * time.Millisecond)
+						continue
+					}
 				}
 				if resp.Index.Ready {
 					if base := findNode(resp.Nodes, tcCase.base); base != nil {

@@ -22,6 +22,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	"github.com/c360studio/semsource/internal/entitypub"
+	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semsource/workspace"
 )
 
@@ -83,6 +84,13 @@ type Component struct {
 	// (publish counters inflate under periodic reindex — audit 2026-07-19).
 	distinct *entitypub.DistinctTracker
 
+	// passageCounts is the last published passage count per document path, used
+	// to notice a document shrinking so vanished passages get marked promptly.
+	// In-memory and therefore lossy across a restart on purpose — the lifecycle
+	// pass is graph-derived and converges the same answer without it.
+	passageCountMu sync.Mutex
+	passageCounts  map[string]int
+
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
 }
@@ -114,15 +122,16 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
-		name:       "doc-source",
-		config:     config,
-		publisher:  pub,
-		distinct:   entitypub.NewDistinctTracker(),
-		natsClient: deps.NATSClient,
-		logger:     deps.GetLogger(),
-		platform:   deps.Platform,
-		handler:    h,
-		sourceCfg:  sc,
+		name:          "doc-source",
+		config:        config,
+		publisher:     pub,
+		distinct:      entitypub.NewDistinctTracker(),
+		natsClient:    deps.NATSClient,
+		logger:        deps.GetLogger(),
+		platform:      deps.Platform,
+		handler:       h,
+		sourceCfg:     sc,
+		passageCounts: make(map[string]int),
 	}
 
 	return c, nil
@@ -153,16 +162,22 @@ func (c *Component) Start(ctx context.Context) error {
 	// hydrates passages by handle (ADR-062) and graph-embedding embeds the same
 	// offloaded body via the shared StoreRegistry (ADR-063). One CONTENT blob,
 	// two consumers — no separate large-content store.
-	var opts []dochandler.Option
-	if bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+	// The body store is required, not best-effort. Without it every passage
+	// loses its handle and its embedding, so doc_context returns empty bodies
+	// and the semantic index is empty of document text — while the component
+	// reports itself healthy. That silent-degradation shape is the failure this
+	// service has repeatedly had to remove, so an unavailable store fails
+	// startup instead.
+	bodyStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
 		BucketName:   graph.BodyStoreBucket,
 		InstanceName: graph.BodyStoreInstance,
-	}); err != nil {
-		c.logger.Warn("verbatim body store unavailable; doc bodies will not be offloaded", "error", err)
-	} else {
-		opts = append(opts, dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
+	})
+	if err != nil {
+		return fmt.Errorf("doc-source requires the verbatim body store (bucket %q): %w",
+			graph.BodyStoreBucket, err)
 	}
-	c.handler = dochandler.NewWithOrg(c.config.Org, opts...)
+	c.handler = dochandler.NewWithOrg(c.config.Org,
+		dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
 
 	c.publishStatusReport(ctx, "ingesting")
 
@@ -208,7 +223,7 @@ func (c *Component) Start(ctx context.Context) error {
 }
 
 // ingestOnce runs a single ingest pass: calls IngestEntityStates on the doc
-// handler (bypassing the normalizer) and publishes each EntityPayload to NATS.
+// handler and publishes each EntityPayload to NATS.
 func (c *Component) ingestOnce(ctx context.Context) error {
 	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.config.Org)
 	if err != nil {
@@ -301,7 +316,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		return
 	}
 
-	// Prefer pre-built EntityStates — no normalizer pass required.
+	// Prefer pre-built EntityStates.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
 			payload, err := entitypub.PayloadFromState(state)
@@ -327,6 +342,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			c.distinct.Observe(state.ID)
 			c.updateLastActivity()
 		}
+		c.notePassageCount(ctx, event.Path, event.EntityStates)
 		return
 	}
 
@@ -339,6 +355,65 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 // publishEntity enqueues an EntityPayload for buffered publishing via entitypub.
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
 	return c.publisher.Send(payload)
+}
+
+// notePassageCount records how many passages a document just published and
+// announces scope to the lifecycle pass when that count DROPPED.
+//
+// A shrinking document is invisible to the pass's filesystem check — every
+// passage of a ten-passage document that is now seven passages long still
+// carries the path of a file that is still on disk — so the three orphans would
+// otherwise keep serving deleted prose as current. The pass itself decides what
+// is stale (index versus the parent's DocChunkCount); this only makes it prompt.
+//
+// The count is tracked in memory rather than read back from the graph, so the
+// common edit costs no I/O at all. That makes it lossy across a restart by
+// design: the pass is graph-derived and converges the same answer on its next
+// run, which is exactly the division of labour the fast path assumes.
+func (c *Component) notePassageCount(ctx context.Context, path string, states []*handler.EntityState) {
+	passages := 0
+	for _, st := range states {
+		if st != nil && stateIsPassage(st) {
+			passages++
+		}
+	}
+
+	c.passageCountMu.Lock()
+	if c.passageCounts == nil {
+		// A Component assembled directly rather than through NewComponent still
+		// has to survive a change event; a nil map here would panic on write.
+		c.passageCounts = make(map[string]int)
+	}
+	previous, seen := c.passageCounts[path]
+	c.passageCounts[path] = passages
+	c.passageCountMu.Unlock()
+
+	if !seen {
+		// First sighting of this path — no previous count to compare against.
+		return
+	}
+	if !c.deleteTriggersLifecycleRun() || passages >= previous {
+		return
+	}
+	root, ok := c.rootForPath(path)
+	if !ok {
+		return
+	}
+	c.logger.Debug("document shrank; announcing scope so vanished passages are marked",
+		"path", path, "was", previous, "now", passages)
+	c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonPassageRemoved)
+}
+
+// stateIsPassage reports whether an entity state is a passage rather than the
+// parent document, read from the emitted DocType fact.
+func stateIsPassage(state *handler.EntityState) bool {
+	for i := range state.Triples {
+		if state.Triples[i].Predicate == source.DocType {
+			v, _ := state.Triples[i].Object.(string)
+			return v == "passage"
+		}
+	}
+	return false
 }
 
 // deleteTriggersLifecycleRun reports whether a delete event should announce

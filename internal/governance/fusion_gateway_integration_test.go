@@ -82,10 +82,9 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	})
 
 	t.Run("Entities batch returns triples", func(t *testing.T) {
-		ents, err := gc.Entities(ctx, []string{caller, callee})
-		if err != nil {
-			t.Fatalf("Entities: %v", err)
-		}
+		ents := retryUntilReady(t, "Entities", func() ([]*fusion.Entity, error) {
+			return gc.Entities(ctx, []string{caller, callee})
+		})
 		if len(ents) != 2 {
 			t.Fatalf("expected 2 entities, got %d", len(ents))
 		}
@@ -119,10 +118,9 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	})
 
 	t.Run("Resolve prefix returns the ingested IDs", func(t *testing.T) {
-		ids, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.semsource.golang.gw", Mode: fusion.ResolveModePrefix, Limit: 10})
-		if err != nil {
-			t.Fatalf("Resolve prefix: %v", err)
-		}
+		ids := retryUntilReady(t, "Resolve prefix", func() ([]string, error) {
+			return gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.semsource.golang.gw", Mode: fusion.ResolveModePrefix, Limit: 10})
+		})
 		if !containsID(ids, caller) || !containsID(ids, callee) {
 			t.Fatalf("prefix resolve missing ingested IDs, got %v", ids)
 		}
@@ -233,7 +231,10 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 			Want:  []fusion.Want{fusion.WantBody, fusion.WantRelations},
 		}, lens)
 		if err != nil {
-			t.Fatalf("Fuse: %v", err)
+			if fuseErrIsRetryable(t, err) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		resp = r
 		dispatch = findNode(resp.Nodes, "Dispatch")
@@ -296,7 +297,15 @@ func pollNeighbors(t *testing.T, ctx context.Context, gc *fusionnats.Client, id 
 	for time.Now().Before(deadline) {
 		edges, err := gc.Neighbors(ctx, id, preds, dir)
 		if err != nil {
-			t.Fatalf("Neighbors: %v", err)
+			// The readiness gate is not a failure — it is the condition this
+			// loop exists to wait out. #99 widened this deadline for cold CI
+			// runners, but a deadline cannot help a loop that returns on the
+			// first error.
+			if !isIndexNotReady(err) {
+				t.Fatalf("Neighbors: %v", err)
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
 		}
 		if len(edges) > 0 {
 			return edges

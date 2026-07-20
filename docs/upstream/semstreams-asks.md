@@ -277,7 +277,14 @@ Indexed **beta.124 itself** (21k+ code entities from 957 Go files + 289 docs) in
 semsource and queried it over MCP. This is the first time the graph/query stack ran on a
 real, high-cardinality corpus rather than fixtures. Three findings, one with a CPU profile.
 
-### 10. graph-index `UpdatePredicateIndex` is O(N²) at scale — framework-shaped — **CPU-profiled** — filed [semstreams#430](https://github.com/C360Studio/semstreams/issues/430)
+### 10. graph-index `UpdatePredicateIndex` is O(N²) at scale — framework-shaped — **CPU-profiled** — RESOLVED in beta.127 ([semstreams#430](https://github.com/C360Studio/semstreams/issues/430), PR #434) — ADOPTED
+
+**Status:** Shipped. beta.127 replaced the monolithic per-predicate JSON list with composite-key
+sharding (`predicateIndexKey(predicate, entityID)` — one unconditional Put per (entityID,
+predicate); see gh#474 notes in `processor/graph-index/component.go:2011`). Re-benchmarked on the
+same corpus: byName 15/15 within seconds of ready (was 9-10/15 over 6 min), `UpdatePredicateIndex`
+63% → 2.15% of ingest CPU, BM25 search functional during ingest. Verified present in beta.153.
+The original report is retained below as the profile record.
 The dominant cost of indexing a real codebase. A 30s CPU profile during ingest
 (`--pprof-port`, see #12) showed **63% of CPU in
 `graph-index.(*Component).UpdatePredicateIndex → natsclient.KVStore.UpdateWithRetry`**
@@ -539,3 +546,139 @@ Generalizes beyond code (docs backlinks, config dependents).
 **Surfaced by:** audit 2026-07-19 graded Q7 — `code_impact` returned bare counts for
 `SystemSlug`; the answer "5 nodes / 3 files" grades wrong when the asker needs *which* callers.
 **Interim in semsource:** exact-seed decorator + WantRelations default (go-callgraph-recall).
+
+### 20. `CONTENT` ObjectStore carries a hard-coded 24h TTL — verbatim bodies silently vanish — framework-shaped — not yet filed
+
+`objectstore.NewStoreWithConfigAndMetrics` creates every bucket with
+`TTL: 24 * time.Hour` as a literal (`storage/objectstore/store.go:114`, beta.153). There is no
+config field and no override — every semsource attach point routes through that one constructor
+(`ast-source/bodystore.go:48`, `doc-source/component.go:157`, `code-context/component.go:223`,
+`supersession/versiondiff_serve.go:40`).
+
+**Consequence.** Shipped configs run `watch: false` (`configs/mvp.json`, `configs/semsource.json`),
+so a body is `Put` once at ingest and never rewritten. On a deployment that does not restart
+daily, **every verbatim body expires ~24h after ingest** while the referencing `ENTITY_STATES`
+triples live forever. The failure is silent by contract: a resolver that cannot find the key
+"yields a (nil, nil) body with NO error" (`graph/bodystore.go:5-8`), so `code_context`,
+`doc_context`, and `code_changes` before/after bodies degrade to empty rather than erroring. A
+container that restarts daily masks it completely, which is why it survives testing.
+
+**It contradicts the substrate's own stated position.** ADR-0008:145 rejects reference-blind
+NATS-policy retention on the live graph outright, and `ENTITY_STATES` is defended at boot by
+`AssertNoLifecycleRetention` (`processor/graph-ingest/component.go:1107`). `CONTENT` gets no such
+guard, and the TTL there is the framework default rather than a misconfiguration.
+
+**Ask:** make the ObjectStore TTL configurable (default off for content-addressed body stores),
+and extend the `AssertNoLifecycleRetention`-class guardrail to `CONTENT`.
+
+**Coupling that must not be missed.** That accidental TTL is currently the *only* thing reclaiming
+orphaned blobs: bodies are content-addressed (`doc:<sha>` / `code:<sha>`), so an edit writes a new
+key **alongside** the old and strands the previous object with no refcount, sweep, or GC anywhere
+in either repo. Raising or removing the TTL without an orphan-reclamation story converts the blob
+store into genuinely unbounded growth. Both halves belong to the same retention design — see
+ADR-0008 open item #5 (per-source retention depth, designed but unimplemented) and ask #15.
+
+**Surfaced by:** doc-passage-chunking storage review, 2026-07-20. Not a blocker for that change —
+passages tile the source file exactly, so total stored body bytes are unchanged and per-edit blob
+churn drops from O(file) to O(changed passage) — but it is a live production correctness bug on
+its own.
+
+### 21. Offloaded entities never embed their title — framework-shaped — not yet filed
+
+`graph-embedding` has two lanes for producing embedding text. The StorageRef lane returns
+immediately once it has queued the offloaded body (`processor/graph-embedding/component.go:1150-1153`),
+so the inline-triple lane below it is unreachable for any entity carrying a `StorageRef`.
+
+**Consequence.** For every body-bearing entity — every code symbol and every doc passage SemSource
+produces — `dc.terms.title` and every other short identifying fact is **excluded from the embedding
+vector**. Only body bytes are embedded. A passage titled "Retry Policy § Exponential Backoff" whose
+body never repeats those words is unreachable by a query naming them.
+
+It also makes the `text_suffixes` configuration silently inert for exactly the entities it was tuned
+for. SemSource restates the defaults and adds `.signature`/`.comment`
+(`cmd/semsource/run.go:830-833`) specifically so code signatures and docstrings enter the semantic
+index — but those predicates live on entities that also carry a `StorageRef`, so the setting has no
+effect on them. The config appears to work and does nothing.
+
+**Ask:** embed the title/identity triples alongside the offloaded body (concatenate, or embed both
+and keep the better score), rather than letting the StorageRef lane short-circuit them away. At
+minimum, make the exclusion visible — the current behaviour is indistinguishable from working.
+
+**Surfaced by:** doc-passage-chunking design review, 2026-07-20. Independent of chunking; it applies
+to every offloaded entity SemSource has ever produced.
+
+### 22. The embedding text cap is hard-coded at 8000 characters — framework-shaped — not yet filed
+
+`maxTextLen` is a literal in `processor/graph-embedding/component.go:786-790` (8000, or 4000 for
+bm25), passed to `WithMaxSourceTextLen`; `graph/embedding/worker.go:23` carries the same default.
+There is no config field, so a producer cannot raise it, lower it, or discover it.
+
+**Consequence.** Any entity whose body exceeds the cap is truncated at a word boundary and the
+remainder is **silently dropped from the semantic index** — no error, no metric, no log at
+producer level. Measured on the SemSource repository before passage chunking: 47 of 218 Markdown
+files exceeded it, and ~252 KB of prose was unindexed, including roughly three quarters of the
+project README.
+
+**Ask:** expose the cap as component config (keeping today's value as the default), and count
+truncations so the loss is observable rather than silent.
+
+**Not blocking us.** SemSource now splits documents into passages sized well under the cap, so this
+is no longer a correctness issue for docs — the split is bounded by a hard maximum precisely because
+the framework's cap cannot be configured or detected. It still applies to any producer with
+legitimately large single bodies, and the silence is the part worth fixing regardless.
+
+**Surfaced by:** doc-passage-chunking, 2026-07-20.
+
+
+### 23. Strict catch-up readiness is reachable after any finite write burst — framework-shaped — RESOLVED in beta.156 ([#592](https://github.com/C360Studio/semstreams/issues/592) / [PR #593](https://github.com/C360Studio/semstreams/pull/593)) — ADOPTED
+
+**Status:** Shipped. Our evidence on [#590](https://github.com/C360Studio/semstreams/issues/590) was split
+out as #592 (read path) from #591/ADR-082 (community detection). The research **rejected** the
+bounded-stale read we proposed — retry-the-transient is the correct contract for exact consumers,
+because a bounded-stale fusion resolve can return a just-written symbol as an authoritative MISS, the
+false-negative ADR-066 exists to prevent. It found a real bug instead: `Fuse` handled
+`ErrorCodeIndexNotReady` INCONSISTENTLY — the top gate degraded to an empty-honest envelope,
+`collectEdges` swallowed it, but `Resolve`/`Entities` propagated it as a hard error. That is exactly
+the "passes 5/5 alone, fails under full-suite load" shape we reported. beta.156 makes the degrade
+consistent.
+
+**Correction adopted locally:** PR #593 classifies on the stable code
+(`errors.As` + `Code == graph.ErrorCodeIndexNotReady`), explicitly NOT `errs.IsTransient`, because a
+real connection timeout is also transient and must propagate as a hard error rather than be silently
+degraded. Our first fix used `errs.IsTransient` and was too broad — it would have retried a genuine
+outage until the deadline, converting a reportable failure into a mute timeout.
+`internal/governance/fuse_retry_integration_test.go` now matches their classification.
+
+Original report retained below.
+
+### 23a. Original report
+
+`ComputeIndexStatus` gates on `ready := target > 0 && indexed >= target`
+(`graph/index_status.go`), and `graph-index` answers queries below that bar with a classified
+transient `ErrorCodeIndexNotReady` (`processor/graph-index/query.go:183`).
+
+#590 reports this from a continuous-write load (semboids), where readiness never flips at all, and
+carries a caveat: 8.5 minutes may not be enough to distinguish "the gate is unreachable by
+construction" from "this load simply outruns graph-index."
+
+**SemSource is the control case for that caveat.** Our integration suite writes a FINITE burst —
+ingest a few entities, writes stop, then query — so lag cannot climb without limit. The gate still
+returns not-ready to a query arriving right after the burst. The reachability problem therefore is
+not only a firehose phenomenon; it opens a window after any ordinary write burst, independent of how
+semboids' lag behaves over a longer soak.
+
+Milder here than in semboids, in a way that isolates the mechanism: `indexBootstrapped` is sticky, so
+we flip once and then run clean, and the failure is load-dependent (the failing test passes 5/5 alone
+and fails only under full-suite load).
+
+**Local impact, already fixed:** nine fusion poll loops in `internal/governance` called `t.Fatalf` on
+this transient inside loops written to wait for exactly that condition, so a benign self-resolving lag
+read as a red build. They now retry on `errs.IsTransient` — detection by classification, never message
+text. See `internal/governance/fuse_retry_integration_test.go`.
+
+**Why it surfaced now:** doc passage chunking multiplies doc entity count ~7x (218 files → 1497
+entities on this repo), widening the catch-up window on every ingest. The gate was always reachable;
+more entities made it reliably so.
+
+**Position:** no ask of our own beyond the bounded-staleness tolerance already proposed in #590.
+Evidence contributed; the decision is theirs.

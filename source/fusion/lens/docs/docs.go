@@ -1,14 +1,23 @@
 // Package docs is the fusion docs lens: it serves documents through the same
 // pkg/fusion engine as code, proving fusion is a domain-general primitive
-// (ADR-0004). doc-source emits flat documents today (no section/link edges), so
-// Edges is empty; section/link edges plug in unchanged when doc-source emits them.
+// (ADR-0004).
 //
-// Since ADR-062 increment 4, Hydrate returns a StorageReference HANDLE (read from
-// body triples), not inline content — the doc analogue of the code lens. The doc
-// body producer HAS landed: handler/doc.offloadDocBody offloads each passage to the
-// shared CONTENT store (key "doc:<sha256>") and stamps the DocBodyStore/DocBodyKey
-// handle triples (doc-source wires it via WithBodyStore), so Hydrate returns the
-// verbatim passage. Verified live and unit-covered (handler/doc/handler_test.go).
+// The unit of retrieval is a PASSAGE, not a file. doc-source emits a parent
+// document entity plus one passage entity per structural section, so a hit
+// returns the passage that answers the question rather than an averaged
+// whole-file body. Edges declares passage containment, so a passage resolves to
+// its parent document and a document resolves to its passages.
+//
+// Hydrate returns a StorageReference HANDLE read from the body triples, not
+// inline content — the doc analogue of the code lens. handler/doc offloads each
+// PASSAGE to the shared CONTENT store (key "doc:<sha256-of-passage>") and stamps
+// the DocBodyStore/DocBodyKey handle triples; doc-source wires the store via
+// WithBodyStore. Because the key hashes the passage rather than the file,
+// editing one section rewrites one blob and leaves the rest untouched.
+//
+// The parent document carries no body at all: a whole-file body would restore
+// the diluted, truncated vector passages exist to replace, and would return the
+// same prose twice.
 //
 // Retrieval SCOPE is handled too (ask #16 / ADR-071, semstreams beta.141): the
 // code-context gateway defaults each lens's NL seed resolution to its own domain
@@ -38,9 +47,6 @@ func New() *Lens { return &Lens{} }
 // Name identifies the lens.
 func (*Lens) Name() string { return "docs" }
 
-// docExtensions mark a single-token query as a document path.
-var docExtensions = map[string]bool{".md": true, ".txt": true, ".rst": true, ".adoc": true}
-
 // ResolveMode routes a path-like query (slash, or a bare doc filename) to prefix
 // and everything else to nl (semantic) — documents are found by meaning over
 // their content, not by symbol name.
@@ -49,33 +55,53 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	if strings.ContainsAny(q, " \t\n") {
 		return fusion.ResolveModeNL
 	}
-	if strings.ContainsAny(q, "/\\") || docExtensions[strings.ToLower(path.Ext(q))] {
+	if strings.ContainsAny(q, "/\\") || source.IsDocExtension(path.Ext(q)) {
 		return fusion.ResolveModePrefix
 	}
 	return fusion.ResolveModeNL
 }
 
-// Edges is empty: doc-source emits flat documents today. Section (source.doc.section)
-// and cross-doc link edges plug in here, unchanged, once doc-source emits them.
-func (*Lens) Edges() []fusion.EdgeSpec { return nil }
-
-// Label is the document title, read from the canonical dc.terms.title; it falls
-// back to the summary slot for entities emitted before doc-source carried a
-// title predicate.
-func (*Lens) Label(e *fusion.Entity) string {
-	if t := e.First(source.DcTitle); t != "" {
-		return t
+// Edges declares passage containment, so a passage hit resolves to the document
+// it came from and a document resolves to its passages.
+//
+// Restricted to the relations facet deliberately, mirroring how the code lens
+// restricts CodeContains: containment belongs in the relations map, not in the
+// impact or paths walks. A passage-to-parent edge inside the impact BFS would
+// flood every doc-adjacent query with the parent's entire passage set, which is
+// noise, not blast radius.
+//
+// Sibling expansion is one hop short of what the engine does for you: a passage
+// seed yields its parent, but reaching that parent's other passages needs an
+// outgoing hop then an incoming one, which no built-in walk performs. Callers
+// re-seed on the returned parent handle. Emitting explicit sibling predicates
+// would mint O(n²) triples per document to save a round trip.
+func (*Lens) Edges() []fusion.EdgeSpec {
+	return []fusion.EdgeSpec{
+		{
+			Predicate:    source.CodeBelongs,
+			OutgoingRole: "parent_document",
+			IncomingRole: "passage",
+			Facets:       []fusion.Facet{fusion.FacetRelations},
+		},
 	}
-	return e.First(source.DocSummary)
 }
+
+// Label is the title, read from the canonical dc.terms.title. Every document
+// and every passage is stamped with one at ingest, so there is no fallback.
+func (*Lens) Label(e *fusion.Entity) string { return e.First(source.DcTitle) }
 
 // Kind is the document type ("document").
 func (*Lens) Kind(e *fusion.Entity) string { return e.First(source.DocType) }
 
-// Location is the document's file path (no line range — Fragment carries a
-// section anchor once sections are emitted).
+// Location is the file path, plus a section anchor when the entity is a passage
+// derived from a headed section, so a citation deep-links to the section rather
+// than the top of the file. No line range: the body comes pre-sliced through the
+// handle, and the locator is for display only.
 func (*Lens) Location(e *fusion.Entity) fusion.Locator {
-	return fusion.Locator{Path: e.First(source.DocFilePath)}
+	return fusion.Locator{
+		Path:     e.First(source.DocFilePath),
+		Fragment: source.SectionAnchor(e.First(source.DocSection)),
+	}
 }
 
 // Hydrate returns the handle to the document body, read from the body triples a

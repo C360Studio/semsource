@@ -115,7 +115,10 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 			Want:  []fusion.Want{fusion.WantRelations},
 		}, lens)
 		if ferr != nil {
-			t.Fatalf("Fuse: %v", ferr)
+			if fuseErrIsRetryable(t, ferr) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 		}
 		last = resp
 		newRank = rankByHandle(resp.Nodes, runNew)
