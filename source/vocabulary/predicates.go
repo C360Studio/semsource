@@ -26,7 +26,9 @@ const (
 	// Identifies which part of the document this chunk represents.
 	DocSection = "source.doc.section"
 
-	// DocChunkIndex is the chunk sequence number (1-indexed).
+	// DocChunkIndex is the passage's 0-indexed position in its parent document.
+	// Zero-indexed so retraction is a plain comparison: a passage whose index is
+	// at or above the parent's DocChunkCount no longer exists in the file.
 	DocChunkIndex = "source.doc.chunk-index"
 
 	// DocChunkCount is the total number of chunks in the parent document.

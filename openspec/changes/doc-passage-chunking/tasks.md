@@ -41,18 +41,18 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 
 ## 3. Emit passage entities (D1, D2, D6, D7)
 
-- [ ] 3.1 Add the chunk entity ID constructor: `{org}.semsource.web.{system}.chunk.{path-slug}-{ordinal}`
+- [x] 3.1 Add the chunk entity ID constructor: `{org}.semsource.web.{system}.chunk.{path-slug}-{ordinal}`
       via `entityid.Build`, zero-padded ordinal
-- [ ] 3.2 Test: ID determinism, repeated-heading distinctness, headingless coverage, and stability
+- [x] 3.2 Test: ID determinism, repeated-heading distinctness, headingless coverage, and stability
       under heading rename
-- [ ] 3.3 Rewrite `ingestFileEntityState` to emit one parent plus N passage entity states
-- [ ] 3.4 Emit passage triples: body handle, `DocChunkIndex`, `DocSection`, qualified `dc.terms.title`,
+- [x] 3.3 Rewrite `ingestFileEntityState` to emit one parent plus N passage entity states
+- [x] 3.4 Emit passage triples: body handle, `DocChunkIndex`, `DocSection`, qualified `dc.terms.title`,
       and `code.structure.belongs` to the parent with `EntityReferenceDatatype`
-- [ ] 3.5 Offload each passage body content-addressed (`doc:<sha-of-passage>`) and set its `StorageRef`
-- [ ] 3.6 Emit `DocChunkCount` on the parent; keep `DcTitle`, `DocFilePath`, `DocMimeType`,
+- [x] 3.5 Offload each passage body content-addressed (`doc:<sha-of-passage>`) and set its `StorageRef`
+- [x] 3.6 Emit `DocChunkCount` on the parent; keep `DcTitle`, `DocFilePath`, `DocMimeType`,
       `DocFileHash`, provenance
-- [ ] 3.7 Update the watch path (`enrichEventEntityStates`) to emit the same parent + passage set
-- [ ] 3.8 Test: parent/passage triple shapes, chunk count correctness, entity-reference datatype
+- [x] 3.7 Update the watch path (`enrichEventEntityStates`) to emit the same parent + passage set
+- [x] 3.8 Test: parent/passage triple shapes, chunk count correctness, entity-reference datatype
 
 ## 4. Retract vanished passages (D3)
 

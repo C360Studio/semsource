@@ -66,8 +66,42 @@ func tripleValue(t *testing.T, state *handler.EntityState, predicate string) str
 	return ""
 }
 
+// tripleInt returns the int object of the first triple on state carrying
+// predicate. The passage counters (DocChunkIndex, DocChunkCount) are emitted as
+// real ints, not stringified ones, so a consumer can compare them numerically.
+func tripleInt(t *testing.T, state *handler.EntityState, predicate string) int {
+	t.Helper()
+	for _, tr := range state.Triples {
+		if tr.Predicate == predicate {
+			v, ok := tr.Object.(int)
+			if !ok {
+				t.Fatalf("triple %q on %s: object is %T (%v), want int", predicate, state.ID, tr.Object, tr.Object)
+			}
+			return v
+		}
+	}
+	t.Fatalf("no triple with predicate %q on entity %s", predicate, state.ID)
+	return 0
+}
+
+// optionalTripleValue returns the string object of the first triple carrying
+// predicate and whether such a triple exists. Unlike tripleValue it does not
+// fail: absence is the thing under test for the conditionally-emitted
+// predicates (source.DocSection is only stamped on a headed passage).
+func optionalTripleValue(state *handler.EntityState, predicate string) (string, bool) {
+	for _, tr := range state.Triples {
+		if tr.Predicate == predicate {
+			v, ok := tr.Object.(string)
+			return v, ok
+		}
+	}
+	return "", false
+}
+
 // filePathSet collects the source.DocFilePath value of every state, so a test
-// can assert exactly which files entered the corpus.
+// can assert exactly which files entered the corpus. Parents and passages both
+// carry the path (deliberately — the staleness pass groups by it), so the set is
+// the same whichever population it is handed.
 func filePathSet(t *testing.T, states []*handler.EntityState) map[string]bool {
 	t.Helper()
 	seen := make(map[string]bool, len(states))
@@ -75,6 +109,115 @@ func filePathSet(t *testing.T, states []*handler.EntityState) map[string]bool {
 		seen[tripleValue(t, state, source.DocFilePath)] = true
 	}
 	return seen
+}
+
+// parentStates returns the document entities: one per ingested file, carrying
+// identity, title, hash and chunk count. A test about which FILES entered the
+// corpus counts these, not the raw state slice — one file now yields a parent
+// plus N passages.
+func parentStates(states []*handler.EntityState) []*handler.EntityState {
+	return statesOfDocType(states, "document")
+}
+
+// passageStates returns the passage entities: the retrievable slices of the
+// documents, in the order the handler emitted them (parent first, then its
+// passages in ordinal order, per file).
+func passageStates(states []*handler.EntityState) []*handler.EntityState {
+	return statesOfDocType(states, "passage")
+}
+
+func statesOfDocType(states []*handler.EntityState, docType string) []*handler.EntityState {
+	var out []*handler.EntityState
+	for _, state := range states {
+		if docTypeOf(state) == docType {
+			out = append(out, state)
+		}
+	}
+	return out
+}
+
+// docTypeOf reports a state's source.DocType, or "" when the triple is absent or
+// not a string. It classifies rather than asserts, so that a test can say "every
+// state is a document or a passage" and name the offender itself.
+func docTypeOf(state *handler.EntityState) string {
+	for _, tr := range state.Triples {
+		if tr.Predicate == source.DocType {
+			if v, ok := tr.Object.(string); ok {
+				return v
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// assertOffloadedBody pins the offloaded shape on one state — parent or passage
+// alike — and returns the body key: handle triples present, inline content
+// dropped, and StorageRef pointing at the SAME blob as the handle (ADR-063
+// unification).
+func assertOffloadedBody(t *testing.T, state *handler.EntityState) string {
+	t.Helper()
+
+	instance, key := "", ""
+	hasContent := false
+	for _, tr := range state.Triples {
+		switch tr.Predicate {
+		case source.DocBodyStore:
+			instance, _ = tr.Object.(string)
+		case source.DocBodyKey:
+			key, _ = tr.Object.(string)
+		case source.DocContent:
+			hasContent = true
+		}
+	}
+	if instance != "objectstore" || key == "" {
+		t.Fatalf("body handle triples on %s (%s): instance=%q key=%q, want instance=%q and a non-empty key",
+			state.ID, docTypeOf(state), instance, key, "objectstore")
+	}
+	if hasContent {
+		t.Errorf("%s (%s) kept an inline %s triple; it must be dropped when the body is offloaded",
+			state.ID, docTypeOf(state), source.DocContent)
+	}
+	if state.StorageRef == nil {
+		t.Fatalf("StorageRef on %s (%s) = nil, want a reference to the offloaded blob %q",
+			state.ID, docTypeOf(state), key)
+	}
+	if state.StorageRef.StorageInstance != instance {
+		t.Errorf("StorageRef.StorageInstance on %s = %q, want %q (the body handle instance)",
+			state.ID, state.StorageRef.StorageInstance, instance)
+	}
+	if state.StorageRef.Key != key {
+		t.Errorf("StorageRef.Key on %s = %q, want %q (the body handle key)", state.ID, state.StorageRef.Key, key)
+	}
+	return key
+}
+
+// assertInlineBody is the complement of assertOffloadedBody: the state kept its
+// body inline, with neither a handle nor a StorageRef.
+func assertInlineBody(t *testing.T, state *handler.EntityState) {
+	t.Helper()
+
+	if state.StorageRef != nil {
+		t.Errorf("StorageRef on %s (%s) = %+v, want nil when the body is not offloaded",
+			state.ID, docTypeOf(state), state.StorageRef)
+	}
+	hasContent, hasHandle := false, false
+	for _, tr := range state.Triples {
+		switch tr.Predicate {
+		case source.DocContent:
+			hasContent = true
+		case source.DocBodyStore, source.DocBodyKey:
+			hasHandle = true
+		}
+	}
+	if !hasContent {
+		t.Errorf("%s (%s) has no %s triple; the body must stay inline when it is not offloaded",
+			state.ID, docTypeOf(state), source.DocContent)
+	}
+	if hasHandle {
+		t.Errorf("%s (%s) carries body handle triples; they must be absent when the body is not offloaded",
+			state.ID, docTypeOf(state))
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +277,11 @@ func TestDocHandler_Watch_WatchDisabledReturnsNil(t *testing.T) {
 // IngestEntityStates — the live path
 // ---------------------------------------------------------------------------
 
+// TestDocHandler_IngestEntityStates_ReturnsStates pins the corpus census: the
+// question is which FILES were ingested, so it counts parents — one per file —
+// and separately requires each file to have contributed at least one passage.
+// The content indexing profile is asserted over the whole population, parents
+// and passages alike, because every one of them is embedded.
 func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "readme.md", "# Hello\n\nContent here.")
@@ -146,21 +294,40 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
-	if len(states) != 2 {
-		t.Fatalf("state count: got %d, want 2", len(states))
+
+	parents := parentStates(states)
+	if len(parents) != 2 {
+		t.Fatalf("parent state count: got %d, want 2 (readme.md + notes.txt); %d states in total",
+			len(parents), len(states))
+	}
+	passages := passageStates(states)
+	if len(passages) < 2 {
+		t.Errorf("passage state count: got %d, want at least 2 (each of the 2 files yields at least one passage)",
+			len(passages))
+	}
+	if got := len(parents) + len(passages); got != len(states) {
+		t.Errorf("classified %d of %d states; every state must be a document or a passage", got, len(states))
 	}
 	for _, state := range states {
 		if state.IndexingProfile != semvocab.IndexingProfileContent {
-			t.Errorf("IndexingProfile = %q, want %q", state.IndexingProfile, semvocab.IndexingProfileContent)
+			t.Errorf("IndexingProfile on %s (%s) = %q, want %q",
+				state.ID, docTypeOf(state), state.IndexingProfile, semvocab.IndexingProfileContent)
 		}
 	}
 }
 
 // TestDocHandler_IngestEntityStates_BodyHandle: with a fusion body store, every
-// doc's passage is offloaded to a single CONTENT blob wired two ways — the
+// entity's body is offloaded to a single CONTENT blob wired two ways — the
 // DocBodyStore/DocBodyKey handle triples (docs lens hydrates by handle, ADR-062)
 // and EntityState.StorageRef (graph-embedding embeds the body via the shared
 // StoreRegistry, ADR-063). The inline DocContent triple is dropped.
+//
+// The offload contract now covers BOTH populations, so both are asserted: the
+// parent's blob is the document byte for byte, and the passage blobs concatenate
+// back to that same document. The store must hold nothing but the blobs those
+// handles reference — content-addressing collapses identical bodies (here the
+// lone passage IS the whole file), so the blob count is derived from the
+// distinct referenced keys rather than hard-coded.
 func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 	dir := t.TempDir()
 	body := "# Retry\n\nUse exponential backoff."
@@ -174,50 +341,44 @@ func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
-	if len(states) != 1 {
-		t.Fatalf("state count: got %d, want 1", len(states))
-	}
-	state := states[0]
 
-	var instance, key string
-	hasContent := false
-	for _, tr := range state.Triples {
-		switch tr.Predicate {
-		case source.DocBodyStore:
-			instance, _ = tr.Object.(string)
-		case source.DocBodyKey:
-			key, _ = tr.Object.(string)
-		case source.DocContent:
-			hasContent = true
-		}
+	parents := parentStates(states)
+	if len(parents) != 1 {
+		t.Fatalf("parent state count: got %d, want 1 (retry.md); %d states in total", len(parents), len(states))
 	}
-	if instance != "objectstore" || key == "" {
-		t.Fatalf("body handle triples missing: instance=%q key=%q", instance, key)
-	}
-	if hasContent {
-		t.Error("inline DocContent triple should be dropped when the body is offloaded")
+	passages := passageStates(states)
+	if len(passages) == 0 {
+		t.Fatalf("passage state count: got 0, want at least 1 for retry.md; %d states in total", len(states))
 	}
 
-	// StorageRef must point at the SAME blob as the body handle so graph-embedding
-	// and the docs lens resolve one CONTENT object (ADR-063 unification).
-	if state.StorageRef == nil {
-		t.Fatal("StorageRef should be set when the body is offloaded")
+	referenced := make(map[string]bool)
+	for _, state := range states {
+		referenced[assertOffloadedBody(t, state)] = true
 	}
-	if state.StorageRef.StorageInstance != instance {
-		t.Errorf("StorageRef.StorageInstance = %q, want %q (body handle instance)",
-			state.StorageRef.StorageInstance, instance)
-	}
-	if state.StorageRef.Key != key {
-		t.Errorf("StorageRef.Key = %q, want %q (body handle key)", state.StorageRef.Key, key)
+	if got := store.keys(); len(got) != len(referenced) {
+		t.Fatalf("store blob count: got %d %v, want %d (one blob per distinct referenced key)",
+			len(got), got, len(referenced))
 	}
 
-	// Exactly one blob, and it is the exact passage byte-for-byte.
-	if got := store.keys(); len(got) != 1 {
-		t.Fatalf("store blob count: got %d, want 1", len(got))
-	}
-	got, err := store.Get(context.Background(), key)
+	// The parent's blob is the document byte for byte.
+	parentKey := tripleValue(t, parents[0], source.DocBodyKey)
+	got, err := store.Get(context.Background(), parentKey)
 	if err != nil || string(got) != body {
-		t.Fatalf("offloaded body = %q (err %v); want %q", got, err, body)
+		t.Fatalf("parent offloaded body = %q (err %v); want the document %q", got, err, body)
+	}
+
+	// The passage blobs tile the document: nothing is lost by the split.
+	var joined strings.Builder
+	for _, passage := range passages {
+		key := tripleValue(t, passage, source.DocBodyKey)
+		blob, err := store.Get(context.Background(), key)
+		if err != nil {
+			t.Fatalf("passage %s body key %q not in the store: %v", passage.ID, key, err)
+		}
+		joined.Write(blob)
+	}
+	if joined.String() != body {
+		t.Errorf("passage bodies concatenated = %q, want the document %q", joined.String(), body)
 	}
 }
 
@@ -407,7 +568,10 @@ func TestDocHandler_IngestEntityStates_NoTitleFallback(t *testing.T) {
 
 // TestDocHandler_IngestEntityStates_FiltersByExtension pins the corpus
 // boundary: only known document extensions produce entity states — a source
-// file sitting in the same directory never enters the docs corpus.
+// file sitting in the same directory never enters the docs corpus. The census
+// is over parents (one per file); the exclusion is checked over every state,
+// parents and passages alike, since a passage carries its parent's path and
+// would smuggle an excluded file in just as effectively.
 func TestDocHandler_IngestEntityStates_FiltersByExtension(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "valid.md", "# Doc\nContent.")
@@ -425,8 +589,9 @@ func TestDocHandler_IngestEntityStates_FiltersByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
-	if len(states) != 3 {
-		t.Fatalf("state count: got %d, want 3 (.adoc + .md + .mdx)", len(states))
+	if parents := parentStates(states); len(parents) != 3 {
+		t.Fatalf("parent state count: got %d, want 3 (.adoc + .md + .mdx); %d states in total",
+			len(parents), len(states))
 	}
 
 	seen := filePathSet(t, states)
@@ -437,6 +602,10 @@ func TestDocHandler_IngestEntityStates_FiltersByExtension(t *testing.T) {
 	}
 	if seen["main.go"] {
 		t.Errorf("main.go must not enter the docs corpus; seen: %v", seen)
+	}
+	if len(seen) != 3 {
+		t.Errorf("distinct %s values: got %d %v, want 3 (no file beyond the three documents)",
+			source.DocFilePath, len(seen), seen)
 	}
 }
 
@@ -463,9 +632,10 @@ func TestDocHandler_IngestEntityStates_MultiplePaths(t *testing.T) {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
 
-	// Three files total: two in dirA, one in dirB.
-	if len(states) != 3 {
-		t.Fatalf("state count: got %d, want 3", len(states))
+	// Three files total: two in dirA, one in dirB — one parent each.
+	if parents := parentStates(states); len(parents) != 3 {
+		t.Fatalf("parent state count: got %d, want 3 (alpha.md + beta.txt in dirA, gamma.md in dirB); %d states in total",
+			len(parents), len(states))
 	}
 
 	// The file paths are root-relative, so both roots having contributed is
@@ -619,7 +789,8 @@ func TestDocHandler_IngestEntityStates_StoreFailureFallsBackToInline(t *testing.
 
 	// A body store whose Put always fails: the entity degrades to inline content
 	// with no body handle and no StorageRef — a best-effort facet, not a failed
-	// ingest.
+	// ingest. The degradation is per-entity, so parent AND every passage must
+	// fall back; a passage that kept a dangling handle would be unhydratable.
 	h := dochandler.NewWithOrg("acme", dochandler.WithBodyStore(&failStore{}, "objectstore"))
 	cfg := sourceConfig{typ: "docs", path: dir}
 
@@ -627,29 +798,14 @@ func TestDocHandler_IngestEntityStates_StoreFailureFallsBackToInline(t *testing.
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
-	if len(states) != 1 {
-		t.Fatalf("state count: got %d, want 1", len(states))
+	if parents := parentStates(states); len(parents) != 1 {
+		t.Fatalf("parent state count: got %d, want 1 (doc.md); %d states in total", len(parents), len(states))
 	}
-	state := states[0]
-
-	if state.StorageRef != nil {
-		t.Error("StorageRef should be nil when the body store Put fails")
+	if passages := passageStates(states); len(passages) == 0 {
+		t.Fatalf("passage state count: got 0, want at least 1 for doc.md; %d states in total", len(states))
 	}
-
-	hasContent, hasHandle := false, false
-	for _, tr := range state.Triples {
-		switch tr.Predicate {
-		case source.DocContent:
-			hasContent = true
-		case source.DocBodyStore, source.DocBodyKey:
-			hasHandle = true
-		}
-	}
-	if !hasContent {
-		t.Error("DocContent triple should be present (inline fallback) when the store fails")
-	}
-	if hasHandle {
-		t.Error("body handle triples should be absent when the store fails")
+	for _, state := range states {
+		assertInlineBody(t, state)
 	}
 }
 
@@ -670,7 +826,8 @@ func TestDocHandler_IngestEntityStates_NoStoreAllInline(t *testing.T) {
 	largeContent := "# Large Doc\n" + strings.Repeat("word ", 200)
 	writeMD(t, dir, "large.md", largeContent)
 
-	// No store configured — all content stays inline regardless of size.
+	// No store configured — all content stays inline regardless of size, for the
+	// parent and for every passage.
 	h := dochandler.NewWithOrg("acme")
 	cfg := sourceConfig{typ: "docs", path: dir}
 
@@ -678,23 +835,31 @@ func TestDocHandler_IngestEntityStates_NoStoreAllInline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
-	if len(states) != 1 {
-		t.Fatalf("state count: got %d, want 1", len(states))
+
+	parents := parentStates(states)
+	if len(parents) != 1 {
+		t.Fatalf("parent state count: got %d, want 1 (large.md); %d states in total", len(parents), len(states))
+	}
+	passages := passageStates(states)
+	if len(passages) == 0 {
+		t.Fatalf("passage state count: got 0, want at least 1 for large.md; %d states in total", len(states))
+	}
+	for _, state := range states {
+		assertInlineBody(t, state)
 	}
 
-	state := states[0]
-
-	if state.StorageRef != nil {
-		t.Error("StorageRef should be nil when no store is configured")
+	// Inline means the whole body, not a truncated one: the parent carries the
+	// document, and the passages tile it.
+	if got := tripleValue(t, parents[0], source.DocContent); got != largeContent {
+		t.Errorf("parent %s length = %d, want %d (the full document, inline)",
+			source.DocContent, len(got), len(largeContent))
 	}
-
-	hasContent := false
-	for _, triple := range state.Triples {
-		if triple.Predicate == source.DocContent {
-			hasContent = true
-		}
+	var joined strings.Builder
+	for _, passage := range passages {
+		joined.WriteString(tripleValue(t, passage, source.DocContent))
 	}
-	if !hasContent {
-		t.Error("DocContent triple should be present when no store is configured")
+	if joined.String() != largeContent {
+		t.Errorf("passage %s concatenated length = %d, want %d (passages tile the document)",
+			source.DocContent, joined.Len(), len(largeContent))
 	}
 }

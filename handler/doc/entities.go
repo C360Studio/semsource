@@ -29,6 +29,14 @@ type Entity struct {
 	Content     string
 	IndexedAt   time.Time
 
+	// ChunkCount is how many passage entities this document currently has. It is
+	// the signal the retraction pass uses: a passage whose DocChunkIndex is at or
+	// above the parent's count no longer exists in the file and must not serve as
+	// current. The staleness pass cannot derive this from the filesystem, because
+	// every passage of a shrunken document still carries the path of a file that
+	// is very much still there.
+	ChunkCount int
+
 	// storageRef is set when content is stored in ObjectStore rather than
 	// inline in a triple. When non-nil, Triples() omits the DocContent triple.
 	storageRef *message.StorageReference
@@ -76,6 +84,7 @@ func (e *Entity) Triples() []message.Triple {
 		// DocSummary still carries the title for back-compat; emit a real summary
 		// here once doc-source extracts one (then Label reads DcTitle only).
 		{Subject: e.ID, Predicate: source.DocSummary, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DocChunkCount, Object: e.ChunkCount, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
 	// Only include inline content when not stored externally.
 	if e.storageRef == nil {
@@ -93,6 +102,113 @@ func (e *Entity) Triples() []message.Triple {
 		)
 	}
 	return triples
+}
+
+// PassageEntity is one retrievable passage of a document: its own entity, with
+// its own body handle, linked to the parent document by CodeBelongs.
+//
+// Passages exist because the substrate embeds one vector per entity from text
+// truncated at 8000 characters, so a whole-file entity both dilutes the vector
+// and silently loses everything past the cut. They carry the parent's FilePath
+// deliberately — the staleness pass groups by path to decide liveness, and a
+// passage with no path predicate is skipped outright.
+type PassageEntity struct {
+	ID        string
+	ParentID  string
+	Title     string
+	Section   string
+	Anchor    string
+	Ordinal   int
+	FilePath  string
+	MimeType  string
+	Body      string
+	IndexedAt time.Time
+
+	storageRef   *message.StorageReference
+	bodyInstance string
+	bodyKey      string
+}
+
+// chunkInstance builds a passage's instance segment from its parent's path and
+// its ordinal. Identity is derivable from (path, ordinal) alone — never from
+// content, timestamp, or insertion order — so re-ingesting an unchanged document
+// reproduces byte-identical passage IDs, and a heading rename does not orphan a
+// passage the way a content-derived or heading-derived ID would.
+func chunkInstance(filePath string, ordinal int) string {
+	return fmt.Sprintf("%s-%04d", entityid.SanitizeInstance(filePath), ordinal)
+}
+
+// passageTitle qualifies a passage's title with its parent's, so a results list
+// does not show six indistinguishable "Usage" entries from six documents.
+func passageTitle(parentTitle, section string, ordinal int) string {
+	if section != "" {
+		return parentTitle + " § " + section
+	}
+	return fmt.Sprintf("%s § passage %d", parentTitle, ordinal+1)
+}
+
+// newPassageEntity builds a passage entity for one split of a document.
+func newPassageEntity(org, system, parentID, parentTitle, filePath, mimeType string, p passage, indexedAt time.Time) *PassageEntity {
+	return &PassageEntity{
+		ID:        entityid.Build(org, entityid.PlatformSemsource, "web", system, "chunk", chunkInstance(filePath, p.Ordinal)),
+		ParentID:  parentID,
+		Title:     passageTitle(parentTitle, p.Heading, p.Ordinal),
+		Section:   p.Heading,
+		Anchor:    p.Anchor,
+		Ordinal:   p.Ordinal,
+		FilePath:  filePath,
+		MimeType:  mimeType,
+		Body:      p.Body,
+		IndexedAt: indexedAt,
+	}
+}
+
+// Triples builds the passage's typed facts. DocChunkIndex is 0-indexed so the
+// retraction rule is a plain comparison against the parent's DocChunkCount.
+func (p *PassageEntity) Triples() []message.Triple {
+	now := p.IndexedAt
+	triples := []message.Triple{
+		{Subject: p.ID, Predicate: source.DocType, Object: "passage", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocFilePath, Object: p.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocMimeType, Object: p.MimeType, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DcTitle, Object: p.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocChunkIndex, Object: p.Ordinal, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{
+			Subject: p.ID, Predicate: source.CodeBelongs, Object: p.ParentID,
+			Datatype: message.EntityReferenceDatatype,
+			Source:   entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
+		},
+	}
+	if p.Section != "" {
+		triples = append(triples, message.Triple{
+			Subject: p.ID, Predicate: source.DocSection, Object: p.Section,
+			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
+		})
+	}
+	if p.storageRef == nil {
+		triples = append(triples, message.Triple{
+			Subject: p.ID, Predicate: source.DocContent, Object: p.Body,
+			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
+		})
+	}
+	if p.bodyKey != "" && p.bodyInstance != "" {
+		triples = append(triples,
+			message.Triple{Subject: p.ID, Predicate: source.DocBodyStore, Object: p.bodyInstance, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+			message.Triple{Subject: p.ID, Predicate: source.DocBodyKey, Object: p.bodyKey, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		)
+	}
+	return triples
+}
+
+// EntityState converts the passage to a handler.EntityState for publication.
+func (p *PassageEntity) EntityState() *handler.EntityState {
+	return &handler.EntityState{
+		ID:              p.ID,
+		Triples:         p.Triples(),
+		UpdatedAt:       p.IndexedAt,
+		StorageRef:      p.storageRef,
+		IndexingProfile: semvocab.IndexingProfileContent,
+	}
 }
 
 // EntityState converts the Entity to a handler.EntityState for direct graph publication.
@@ -144,12 +260,12 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 				return nil
 			}
 
-			state, err := h.ingestFileEntityState(ctx, path, root, system, org, now)
+			fileStates, err := h.ingestFileEntityStates(ctx, path, root, system, org, now)
 			if err != nil {
 				// Non-fatal: skip unreadable files.
 				return nil
 			}
-			states = append(states, state)
+			states = append(states, fileStates...)
 			return nil
 		})
 		if walkErr != nil {
@@ -160,11 +276,11 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	return states, nil
 }
 
-// ingestFileEntityState reads a single document file and builds a Entity,
-// returning its EntityState. When a fusion body store is configured the verbatim
-// passage is offloaded to it (content-addressed) and the inline DocContent triple
-// is dropped in favour of the body handle triples + StorageRef.
-func (h *Handler) ingestFileEntityState(ctx context.Context, path, root, system, org string, now time.Time) (*handler.EntityState, error) {
+// ingestFileEntityStates reads a single document and returns the parent entity
+// followed by one entity per passage, in ordinal order. The parent is the stable
+// navigational node (identity, title, path, hash, provenance, chunk count); the
+// passages carry the retrievable bodies.
+func (h *Handler) ingestFileEntityStates(ctx context.Context, path, root, system, org string, now time.Time) ([]*handler.EntityState, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %q: %w", path, err)
@@ -174,15 +290,24 @@ func (h *Handler) ingestFileEntityState(ctx context.Context, path, root, system,
 	relPath, _ := filepath.Rel(root, path)
 	title := extractTitle(content, filepath.Base(path))
 	mime := mimeForExt(filepath.Ext(path))
+	passages := splitPassages(content)
 
-	e := newEntity(org, title, relPath, mime, hash, string(content), system, now)
+	parent := newEntity(org, title, relPath, mime, hash, string(content), system, now)
+	parent.ChunkCount = len(passages)
 
-	// Offload the verbatim passage to the fusion body store, wiring both consumers
+	// Offload the verbatim body to the fusion body store, wiring both consumers
 	// to that single CONTENT blob (fusion body handle + EntityState.StorageRef).
 	// Non-fatal: on failure the entity keeps content inline in the DocContent triple.
-	offloadDocBody(ctx, e, h.bodyStore, h.bodyInstance)
+	offloadDocBody(ctx, parent, h.bodyStore, h.bodyInstance)
 
-	return e.EntityState(), nil
+	states := make([]*handler.EntityState, 0, len(passages)+1)
+	states = append(states, parent.EntityState())
+	for _, p := range passages {
+		pe := newPassageEntity(org, system, parent.ID, title, relPath, mime, p, now)
+		offloadPassageBody(ctx, pe, h.bodyStore, h.bodyInstance)
+		states = append(states, pe.EntityState())
+	}
+	return states, nil
 }
 
 // offloadDocBody offloads the entity's verbatim passage to the fusion body store
@@ -195,12 +320,8 @@ func (h *Handler) ingestFileEntityState(ctx context.Context, path, root, system,
 // handle or ref (inline content retained) — a best-effort facet, not a failed
 // ingest.
 func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instance string) {
-	if store == nil || instance == "" || e.Content == "" {
-		return
-	}
-	sum := sha256.Sum256([]byte(e.Content))
-	key := "doc:" + hex.EncodeToString(sum[:])
-	if err := store.Put(ctx, key, []byte(e.Content)); err != nil {
+	key, ref, ok := putBody(ctx, store, instance, e.Content, e.MimeType)
+	if !ok {
 		return
 	}
 	e.bodyInstance = instance
@@ -208,12 +329,42 @@ func offloadDocBody(ctx context.Context, e *Entity, store storage.Store, instanc
 	// Point message.Storable consumers (graph-embedding) at the same CONTENT blob
 	// so the body is fetched via the StoreRegistry and embedded — one blob, no
 	// separate offload, no inline duplicate.
-	e.storageRef = &message.StorageReference{
+	e.storageRef = ref
+}
+
+// offloadPassageBody is offloadDocBody for a passage. Because the key is the
+// hash of the passage — not of the file — editing one section of a document
+// rewrites only that passage's blob; every unchanged passage keeps its existing
+// key and is never re-Put. Per-edit blob churn is O(changed passage), not
+// O(file).
+func offloadPassageBody(ctx context.Context, p *PassageEntity, store storage.Store, instance string) {
+	key, ref, ok := putBody(ctx, store, instance, p.Body, p.MimeType)
+	if !ok {
+		return
+	}
+	p.bodyInstance = instance
+	p.bodyKey = key
+	p.storageRef = ref
+}
+
+// putBody content-addresses body and stores it, returning the key and a matching
+// StorageReference. Identical bodies — a shared licence header, a boilerplate
+// section repeated across documents — collapse onto one blob.
+func putBody(ctx context.Context, store storage.Store, instance, body, mimeType string) (string, *message.StorageReference, bool) {
+	if store == nil || instance == "" || body == "" {
+		return "", nil, false
+	}
+	sum := sha256.Sum256([]byte(body))
+	key := "doc:" + hex.EncodeToString(sum[:])
+	if err := store.Put(ctx, key, []byte(body)); err != nil {
+		return "", nil, false
+	}
+	return key, &message.StorageReference{
 		StorageInstance: instance,
 		Key:             key,
-		ContentType:     e.MimeType,
-		Size:            int64(len(e.Content)),
-	}
+		ContentType:     mimeType,
+		Size:            int64(len(body)),
+	}, true
 }
 
 // enrichEventEntityStates re-reads the changed file and populates ev.EntityStates
@@ -228,9 +379,9 @@ func (h *Handler) enrichEventEntityStates(ctx context.Context, ev handler.Change
 	now := time.Now().UTC()
 	system := entityid.SystemSlug(root)
 
-	state, err := h.ingestFileEntityState(ctx, ev.Path, root, system, org, now)
+	states, err := h.ingestFileEntityStates(ctx, ev.Path, root, system, org, now)
 	if err == nil {
-		ev.EntityStates = []*handler.EntityState{state}
+		ev.EntityStates = states
 	}
 	return ev
 }
