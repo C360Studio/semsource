@@ -93,9 +93,11 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 		return lastScope
 	}
 
-	t.Run("docs lens defaults scope to the web domain on the wire", func(t *testing.T) {
+	t.Run("docs lens defaults scope to the web and config domains on the wire", func(t *testing.T) {
 		got := fetchScope(t, newComp("docs"), `{"query":"how does retry work"}`)
-		want := []string{"acme.semsource.web"}
+		// config joins web (search-ranking-and-reach D4): dependency/manifest
+		// questions answer through doc_context too, matching docScopeDomains.
+		want := []string{"acme.semsource.web", "acme.semsource.config"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("semantic scope = %v, want %v", got, want)
 		}

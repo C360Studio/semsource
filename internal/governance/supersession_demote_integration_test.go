@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
+	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
 )
 
 // TestIntegration_Supersession_DemotesHistoricalInRanking proves ADR-0008 #3:
@@ -93,7 +94,12 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	// prefixLens forces deterministic prefix resolution (the harness has no
 	// graph-embedding); rankEntities still folds predicate salience, so the
 	// -2.0 superseded_by weight decides the order.
-	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	// WithSignals attaches predicate-salience ranking (matching production
+	// code-context wiring); without it, ranking is pure resolve-order +
+	// lexical and never actually exercises the code.lineage.superseded_by
+	// weight this test claims to prove (ci-proof-chain D5).
+	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{})).
+		WithSignals(fusionvocab.New())
 	lens := prefixLens{code.New()}
 	// graph.query.prefix matches on dot-delimited segment boundaries, and the two
 	// versions differ in their `system` segment (semstreams-v1-9-0 vs -v1-10-0),
