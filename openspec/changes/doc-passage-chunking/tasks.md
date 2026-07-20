@@ -106,6 +106,9 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
 - [ ] 8.5 Update `ROADMAP.md` — passage chunking moves out of the dilution limitation
 - [ ] 8.6 File the two framework asks in `docs/upstream/semstreams-asks.md` (offloaded entities never
       embed their title; the 8000-character cap is not configurable) and open the GitHub issues
+- [x] 8.7 File ask #20: `CONTENT` ObjectStore's hard-coded 24h TTL silently expires verbatim bodies,
+      coupled to the missing orphan sweep (track only — folds into the on-hold retention ADR)
+- [x] 8.8 Correct the stale status on ask #10 (semstreams#430 is RESOLVED in beta.127, not open)
 
 ## 9. Proof
 

@@ -277,7 +277,14 @@ Indexed **beta.124 itself** (21k+ code entities from 957 Go files + 289 docs) in
 semsource and queried it over MCP. This is the first time the graph/query stack ran on a
 real, high-cardinality corpus rather than fixtures. Three findings, one with a CPU profile.
 
-### 10. graph-index `UpdatePredicateIndex` is O(N²) at scale — framework-shaped — **CPU-profiled** — filed [semstreams#430](https://github.com/C360Studio/semstreams/issues/430)
+### 10. graph-index `UpdatePredicateIndex` is O(N²) at scale — framework-shaped — **CPU-profiled** — RESOLVED in beta.127 ([semstreams#430](https://github.com/C360Studio/semstreams/issues/430), PR #434) — ADOPTED
+
+**Status:** Shipped. beta.127 replaced the monolithic per-predicate JSON list with composite-key
+sharding (`predicateIndexKey(predicate, entityID)` — one unconditional Put per (entityID,
+predicate); see gh#474 notes in `processor/graph-index/component.go:2011`). Re-benchmarked on the
+same corpus: byName 15/15 within seconds of ready (was 9-10/15 over 6 min), `UpdatePredicateIndex`
+63% → 2.15% of ingest CPU, BM25 search functional during ingest. Verified present in beta.153.
+The original report is retained below as the profile record.
 The dominant cost of indexing a real codebase. A 30s CPU profile during ingest
 (`--pprof-port`, see #12) showed **63% of CPU in
 `graph-index.(*Component).UpdatePredicateIndex → natsclient.KVStore.UpdateWithRetry`**
@@ -539,3 +546,39 @@ Generalizes beyond code (docs backlinks, config dependents).
 **Surfaced by:** audit 2026-07-19 graded Q7 — `code_impact` returned bare counts for
 `SystemSlug`; the answer "5 nodes / 3 files" grades wrong when the asker needs *which* callers.
 **Interim in semsource:** exact-seed decorator + WantRelations default (go-callgraph-recall).
+
+### 20. `CONTENT` ObjectStore carries a hard-coded 24h TTL — verbatim bodies silently vanish — framework-shaped — not yet filed
+
+`objectstore.NewStoreWithConfigAndMetrics` creates every bucket with
+`TTL: 24 * time.Hour` as a literal (`storage/objectstore/store.go:114`, beta.153). There is no
+config field and no override — every semsource attach point routes through that one constructor
+(`ast-source/bodystore.go:48`, `doc-source/component.go:157`, `code-context/component.go:223`,
+`supersession/versiondiff_serve.go:40`).
+
+**Consequence.** Shipped configs run `watch: false` (`configs/mvp.json`, `configs/semsource.json`),
+so a body is `Put` once at ingest and never rewritten. On a deployment that does not restart
+daily, **every verbatim body expires ~24h after ingest** while the referencing `ENTITY_STATES`
+triples live forever. The failure is silent by contract: a resolver that cannot find the key
+"yields a (nil, nil) body with NO error" (`graph/bodystore.go:5-8`), so `code_context`,
+`doc_context`, and `code_changes` before/after bodies degrade to empty rather than erroring. A
+container that restarts daily masks it completely, which is why it survives testing.
+
+**It contradicts the substrate's own stated position.** ADR-0008:145 rejects reference-blind
+NATS-policy retention on the live graph outright, and `ENTITY_STATES` is defended at boot by
+`AssertNoLifecycleRetention` (`processor/graph-ingest/component.go:1107`). `CONTENT` gets no such
+guard, and the TTL there is the framework default rather than a misconfiguration.
+
+**Ask:** make the ObjectStore TTL configurable (default off for content-addressed body stores),
+and extend the `AssertNoLifecycleRetention`-class guardrail to `CONTENT`.
+
+**Coupling that must not be missed.** That accidental TTL is currently the *only* thing reclaiming
+orphaned blobs: bodies are content-addressed (`doc:<sha>` / `code:<sha>`), so an edit writes a new
+key **alongside** the old and strands the previous object with no refcount, sweep, or GC anywhere
+in either repo. Raising or removing the TTL without an orphan-reclamation story converts the blob
+store into genuinely unbounded growth. Both halves belong to the same retention design — see
+ADR-0008 open item #5 (per-source retention depth, designed but unimplemented) and ask #15.
+
+**Surfaced by:** doc-passage-chunking storage review, 2026-07-20. Not a blocker for that change —
+passages tile the source file exactly, so total stored body bytes are unchanged and per-edit blob
+churn drops from O(file) to O(changed passage) — but it is a live production correctness bug on
+its own.
