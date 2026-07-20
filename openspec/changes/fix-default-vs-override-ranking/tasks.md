@@ -60,11 +60,11 @@ only the binary.
 
 ## 6. The spec correction (independent of the above)
 
-- [ ] 6.1 Apply the `runtime-configuration` delta: org is rejected, `project` is normalized by
+- [x] 6.1 Apply the `runtime-configuration` delta: org is rejected, `project` is normalized by
       design
-- [ ] 6.2 Confirm against code that the narrowed requirement is now true — `config.ValidateNamespace`
+- [x] 6.2 Confirm against code that the narrowed requirement is now true — `config.ValidateNamespace`
       covers namespace only, and `entityid.SystemSlug` normalizes `project`
-- [ ] 6.3 Add a test pinning that a `project` outside the alphabet loads successfully and is
+- [x] 6.3 Add a test pinning that a `project` outside the alphabet loads successfully and is
       slugified at ID construction, so the spec and the code cannot drift apart again
 
 ## 7. Record and gate
