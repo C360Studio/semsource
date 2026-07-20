@@ -87,21 +87,13 @@ mcp_call() {
 		|| echo '{}'
 }
 
-# --- run + grade -----------------------------------------------------------
-# Grading is deterministic substring matching, deliberately. An LLM judge drifts
-# between runs, and a drifting judge cannot support an A/B: a score change would
-# be indistinguishable from a judge change.
-echo "[]" > "$out.tmp"
-total=0; correct=0
-n=$(jq '.questions | length' "$questions")
-for i in $(seq 0 $((n - 1))); do
-	q=$(jq ".questions[$i]" "$questions")
-	id=$(jq -r '.id' <<<"$q")
-	band=$(jq -r '.band' <<<"$q")
-	tool=$(jq -r '.tool' <<<"$q")
-	args=$(jq -c '.args' <<<"$q")
-
-	answer=$(mcp_call "$tool" "$args" || echo "{}")
+# Grades one answer for one question. Reads $q and $answer; sets $verdict,
+# $reason and the evidence metrics. Extracted from the loop so a question can be
+# asked more than once and the verdicts compared — see the repeat logic below.
+#
+# Always returns 0: the body ends in conditionals whose natural exit status is
+# "no match", which under `set -e` would abort the run rather than record a miss.
+grade_answer() {
 	lower=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
 
 	# Evidence precision is the measure that actually separates whole-file
@@ -123,14 +115,14 @@ for i in $(seq 0 $((n - 1))); do
 	if [ "$verdict" = "correct" ]; then
 		for want in $(jq -r '(.expect_all // [])[]' <<<"$q" | tr ' ' '\001'); do
 			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$lower" | grep -qF "$w" || { verdict="miss"; reason="missing required: $w"; break; }
+			printf '%s' "$lower" | grep -qF -- "$w" || { verdict="miss"; reason="missing required: $w"; break; }
 		done
 	fi
 	if [ "$verdict" = "correct" ] && [ "$(jq '(.expect_any // []) | length' <<<"$q")" -gt 0 ]; then
 		hit=0
 		for want in $(jq -r '(.expect_any // [])[]' <<<"$q" | tr ' ' '\001'); do
 			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$lower" | grep -qF "$w" && { hit=1; break; }
+			printf '%s' "$lower" | grep -qF -- "$w" && { hit=1; break; }
 		done
 		[ "$hit" = 1 ] || { verdict="miss"; reason="none of expect_any present"; }
 	fi
@@ -140,29 +132,105 @@ for i in $(seq 0 $((n - 1))); do
 	# document rides along even when retrieval ranked the right passage first.
 	# The claim being tested is narrower and is the one that matters to an agent:
 	# the single best piece of evidence answers the question on its own.
+	#
+	# The answer side and the confusable side are evaluated INDEPENDENTLY, then
+	# combined. Short-circuiting to "miss" on the answer side (as this did until
+	# the v3 grader) made one of the three states unreachable: a top node holding
+	# the twin but NOT the answer broke out as a plain miss before the confusable
+	# check ever ran, so the most misleading outcome was scored as the most
+	# innocuous one.
 	if [ "$verdict" = "correct" ]; then
+		top_all_hit=1; top_none_hit=0; top_missing=""; top_carried=""
 		for want in $(jq -r '(.expect_top_all // [])[]' <<<"$q" | tr ' ' '\001'); do
 			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$toplower" | grep -qF "$w" || { verdict="miss"; reason="top node missing: $w"; break; }
+			printf '%s' "$toplower" | grep -qF -- "$w" || { top_all_hit=0; top_missing="$w"; break; }
 		done
-	fi
-	# IMPRECISE is deliberately NOT folded into FABRICATED. A whole-file body that
-	# carries both the answer and its confusable twin has invented nothing — it is
-	# imprecise, not dishonest. Conflating them would destroy the fabrication
-	# signal, which is the one result that outranks everything else here.
-	if [ "$verdict" = "correct" ]; then
 		for bad in $(jq -r '(.expect_top_none // [])[]' <<<"$q" | tr ' ' '\001'); do
 			b=$(printf '%s' "$bad" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$toplower" | grep -qF "$b" &&
-				{ verdict="IMPRECISE"; reason="top node also carries the confusable: $b"; break; }
+			printf '%s' "$toplower" | grep -qF -- "$b" && { top_none_hit=1; top_carried="$b"; break; }
 		done
+		# Four states, four verdicts:
+		#
+		#   answer + no twin  -> correct     the evidence settles the question
+		#   answer + twin     -> IMPRECISE   carries both; cannot settle it
+		#   twin, no answer   -> MISLEADING  argues for the WRONG answer
+		#   neither           -> miss        returns nothing useful
+		#
+		# MISLEADING is separated from miss for the same reason IMPRECISE is
+		# separated from FABRICATED: they are different failures, and folding the
+		# damaging one into the innocuous one hides exactly what matters. A miss
+		# tells a caller nothing; a MISLEADING top node tells it something false,
+		# and an agent citing the first result will state it as fact.
+		if [ "$top_all_hit" = 1 ] && [ "$top_none_hit" = 1 ]; then
+			verdict="IMPRECISE"; reason="top node also carries the confusable: $top_carried"
+		elif [ "$top_all_hit" = 0 ] && [ "$top_none_hit" = 1 ]; then
+			verdict="MISLEADING"; reason="top node carries the confusable ($top_carried) but not the answer ($top_missing)"
+		elif [ "$top_all_hit" = 0 ]; then
+			verdict="miss"; reason="top node missing: $top_missing"
+		fi
 	fi
 	# A fabrication is graded separately from a miss: they are different failures
 	# and conflating them hides the one that actually matters.
 	for bad in $(jq -r '(.expect_none // [])[]' <<<"$q" | tr ' ' '\001'); do
 		b=$(printf '%s' "$bad" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-		printf '%s' "$lower" | grep -qF "$b" && { verdict="FABRICATED"; reason="asserted: $b"; break; }
+		printf '%s' "$lower" | grep -qF -- "$b" && { verdict="FABRICATED"; reason="asserted: $b"; break; }
 	done
+	return 0
+}
+
+# --- run + grade -----------------------------------------------------------
+# Grading is deterministic substring matching, deliberately. An LLM judge drifts
+# between runs, and a drifting judge cannot support an A/B: a score change would
+# be indistinguishable from a judge change.
+#
+# Each question is asked SCORECARD_REPEATS times and the verdicts compared. This
+# exists because a verdict was found to depend on a question's POSITION in the
+# run: the same question against an unchanged stack returned the correct passage
+# when asked first and lost it entirely when asked last, transiently and
+# self-healingly (results/SUMMARY-instrument-diagnosis.md). That is a live
+# platform defect, not an instrument artifact.
+#
+# Disagreement is therefore reported as UNSTABLE and never resolved silently to
+# either the passing or the failing result. A warm-up call or a retry-until-pass
+# would have produced a clean number by concealing a defect a real caller hits,
+# and a scorecard that protects its own score is worse than one that admits it
+# cannot measure.
+repeats="${SCORECARD_REPEATS:-3}"
+echo "[]" > "$out.tmp"
+total=0; correct=0
+n=$(jq '.questions | length' "$questions")
+for i in $(seq 0 $((n - 1))); do
+	q=$(jq ".questions[$i]" "$questions")
+	id=$(jq -r '.id' <<<"$q")
+	band=$(jq -r '.band' <<<"$q")
+	tool=$(jq -r '.tool' <<<"$q")
+	args=$(jq -c '.args' <<<"$q")
+
+	# Ask the question $repeats times, grading each. The FIRST call's answer and
+	# metrics are what get retained — it is the one a real caller's first request
+	# corresponds to, and taking the best of N would be the concealment this
+	# repeat logic exists to prevent.
+	seen_verdicts=""
+	for rep in $(seq 1 "$repeats"); do
+		answer=$(mcp_call "$tool" "$args" || echo "{}")
+		grade_answer
+		seen_verdicts="$seen_verdicts$verdict
+"
+		if [ "$rep" = 1 ]; then
+			first_answer="$answer"; first_verdict="$verdict"; first_reason="$reason"
+			first_nodes="$nodes"; first_bb="$bodybytes"; first_tb="$topbytes"
+		fi
+	done
+	distinct=$(printf '%s' "$seen_verdicts" | sed '/^$/d' | sort -u)
+	answer="$first_answer"; nodes="$first_nodes"; bodybytes="$first_bb"; topbytes="$first_tb"
+	if [ "$(printf '%s\n' "$distinct" | wc -l | tr -d ' ')" -gt 1 ]; then
+		# Never resolve disagreement to either side: that choice is exactly what
+		# would hide the platform defect this detects.
+		verdict="UNSTABLE"
+		reason="verdict varied across $repeats calls: $(printf '%s' "$distinct" | tr '\n' '/' | sed 's|/$||') (first: $first_verdict — $first_reason)"
+	else
+		verdict="$first_verdict"; reason="$first_reason"
+	fi
 
 	total=$((total + 1))
 	[ "$verdict" = "correct" ] && correct=$((correct + 1))
@@ -182,9 +250,20 @@ jq -n --arg label "$label" --argjson score "$correct" --argjson total "$total" \
 rm -f "$out.tmp"
 
 echo
-echo "=== $label: $correct/$total ==="
+echo "=== $label: $correct/$total  (repeats=$repeats) ==="
 jq -r '.results | group_by(.band)[] |
        "\(.[0].band): \([.[] | select(.verdict=="correct")] | length)/\(length)"' "$out"
+# Reported next to the score, never folded into it. An UNSTABLE question has no
+# defensible verdict — the same question against the same stack answered two
+# ways — so counting it as either a pass or a fail would be inventing one.
+uns=$(jq '[.results[] | select(.verdict=="UNSTABLE")] | length' "$out")
+if [ "$uns" != "0" ]; then
+	echo
+	echo "!!! $uns UNSTABLE question(s) — verdict depended on the call, not on retrieval"
+	jq -r '.results[] | select(.verdict=="UNSTABLE") | "    \(.id): \(.reason)"' "$out"
+elif [ "$repeats" = "1" ]; then
+	echo "(repeats=1 — this run CANNOT detect instability; do not quote it as evidence of stability)"
+fi
 echo
 echo "--- evidence precision (doc bands) ---"
 jq -r '[.results[] | select(.band|startswith("doc"))] |
@@ -195,9 +274,12 @@ if [ "$(jq '[.results[] | select(.band=="discrimination")] | length' "$out")" -g
 	echo
 	echo "--- discrimination (top node answers on its own) ---"
 	jq -r '[.results[] | select(.band=="discrimination")] |
-	       "passed:    \([.[] | select(.verdict=="correct")] | length)/\(length)",
-	       "imprecise: \([.[] | select(.verdict=="IMPRECISE")] | length) (top node carried the confusable value too)"' "$out"
+	       "passed:     \([.[] | select(.verdict=="correct")] | length)/\(length)",
+	       "imprecise:  \([.[] | select(.verdict=="IMPRECISE")] | length) (top node carried the confusable value too)",
+	       "MISLEADING: \([.[] | select(.verdict=="MISLEADING")] | length) (top node carried the confusable INSTEAD of the answer)"' "$out"
 fi
+mis=$(jq '[.results[] | select(.verdict=="MISLEADING")] | length' "$out")
+[ "$mis" = "0" ] || echo "!!! $mis MISLEADING result(s) — the top evidence argues for the wrong answer"
 fab=$(jq '[.results[] | select(.verdict=="FABRICATED")] | length' "$out")
 [ "$fab" = "0" ] || echo "!!! $fab FABRICATION(S) — this outranks every other result"
 echo "written: $out"

@@ -6,25 +6,25 @@ used throughout the diagnosis (`git archive d554bcc`, `scripts/scorecard/` exclu
 
 ## 1. Make the matcher evaluate its literals
 
-- [ ] 1.1 Add `--` to all five matcher loops in `run.sh` (`expect_all`, `expect_any`,
+- [x] 1.1 Add `--` to all five matcher loops in `run.sh` (`expect_all`, `expect_any`,
       `expect_top_all`, `expect_top_none`, `expect_none`)
-- [ ] 1.2 Add a regression test that a literal beginning with `-` is matched as content, not
+- [x] 1.2 Add a regression test that a literal beginning with `-` is matched as content, not
       parsed as an option — assert on the matcher, not on a live stack
-- [ ] 1.3 Extend `check-discrimination.py` with the behavioural evaluability gate: feed every
+- [x] 1.3 Extend `check-discrimination.py` with the behavioural evaluability gate: feed every
       literal through the same matcher against a known-hit and a known-miss string and require
       the two to disagree (design D2 — behavioural, not a syntactic ban on leading `-`)
-- [ ] 1.4 Confirm the gate fails on X02's literal under the unfixed matcher and passes under the
+- [x] 1.4 Confirm the gate fails on X02's literal under the unfixed matcher and passes under the
       fixed one, so the gate is proven to catch the bug it exists for
 
 ## 2. Name the third discrimination verdict
 
-- [ ] 2.1 Add the `MISLEADING` verdict to `run.sh`: `expect_top_none` matched **and**
+- [x] 2.1 Add the `MISLEADING` verdict to `run.sh`: `expect_top_none` matched **and**
       `expect_top_all` unmatched (no new question fields — derive from the existing pair)
-- [ ] 2.2 Order the verdict checks so `MISLEADING` cannot be shadowed by the plain `miss` that
+- [x] 2.2 Order the verdict checks so `MISLEADING` cannot be shadowed by the plain `miss` that
       `expect_top_all` currently produces first
-- [ ] 2.3 Report `MISLEADING` separately in the per-band summary, distinct from `miss` and from
+- [x] 2.3 Report `MISLEADING` separately in the per-band summary, distinct from `miss` and from
       `FABRICATED`
-- [ ] 2.4 Update the README's verdict section from four verdicts to five, keeping the existing
+- [x] 2.4 Update the README's verdict section from four verdicts to five, keeping the existing
       rationale for why `IMPRECISE` is not folded into `FABRICATED` and adding the same
       reasoning for `MISLEADING` vs `miss`
 
@@ -42,14 +42,14 @@ used throughout the diagnosis (`git archive d554bcc`, `scripts/scorecard/` exclu
 
 ## 4. Measure the instability rather than hide it
 
-- [ ] 4.1 Add `SCORECARD_REPEATS` (default 3) and ask each question N times
-- [ ] 4.2 Add the `UNSTABLE` verdict for disagreement across repeats, retaining each distinct
+- [x] 4.1 Add `SCORECARD_REPEATS` (default 3) and ask each question N times
+- [x] 4.2 Add the `UNSTABLE` verdict for disagreement across repeats, retaining each distinct
       outcome and the question's position in the run
-- [ ] 4.3 Never resolve disagreement silently to the passing or the failing result (design D3 —
+- [x] 4.3 Never resolve disagreement silently to the passing or the failing result (design D3 —
       this is the decision, not an implementation detail)
-- [ ] 4.4 Surface the unstable count in the summary alongside fabrication, not folded into the
+- [x] 4.4 Surface the unstable count in the summary alongside fabrication, not folded into the
       score
-- [ ] 4.5 Document in the README that `SCORECARD_REPEATS=1` cannot detect instability, so a
+- [x] 4.5 Document in the README that `SCORECARD_REPEATS=1` cannot detect instability, so a
       one-repeat run may not be quoted as evidence of stability
 
 ## 5. Re-baseline on the repaired instrument

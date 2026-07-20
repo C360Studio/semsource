@@ -31,7 +31,16 @@ be re-examined without re-running the stack.
 
 Knobs: `SEMSOURCE_HTTP_PORT` (default 28080), `SEMSOURCE_HOST`,
 `SCORECARD_READY_TIMEOUT`, `SCORECARD_CALL_TIMEOUT`,
-`SCORECARD_QUESTIONS`.
+`SCORECARD_QUESTIONS`, `SCORECARD_REPEATS` (default 3 — see *Repeats* below).
+
+Before scoring, validate the question set. This gates both ways a question rots —
+the corpus relationship between a confusable pair, and whether the grader can
+evaluate the literals at all:
+
+```bash
+scripts/scorecard/check-discrimination.py <corpus-dir>
+scripts/scorecard/test-matcher.sh              # no stack needed
+```
 
 Always use an isolated `COMPOSE_PROJECT_NAME` and high ports — this machine also
 runs other stacks, and `nats` on 4222 is generally not ours.
@@ -64,13 +73,17 @@ indistinguishable from a judge change. The trade is that matchers are coarse: th
 verify the answer *contains* the load-bearing fact, not that the prose around it is
 good.
 
-Four verdicts, deliberately distinct:
+Six verdicts, deliberately distinct:
 
 - **correct** — required content present.
 - **miss** — the answer did not contain it. An honest failure.
 - **IMPRECISE** — the top-ranked evidence carried the answer *and* a confusable
   value it could be mistaken for, so the evidence does not settle the question.
   Only discrimination questions can produce this.
+- **MISLEADING** — the top-ranked evidence carried the confusable value **instead
+  of** the answer. Only discrimination questions can produce this.
+- **UNSTABLE** — the same question returned different verdicts across repeated
+  calls, so it has no defensible verdict at all. See *Repeats* below.
 - **FABRICATED** — the answer asserted something known to be false. This is not a
   worse miss, it is a different failure, and it outranks every other result in the
   summary. Zero fabrication is this product's actual moat; a set that scores well
@@ -81,7 +94,34 @@ happens to contain both the answer and its twin has invented nothing — it is
 imprecise, not dishonest. Merging the two would destroy the fabrication signal,
 which is the single result that outranks everything else here.
 
+**MISLEADING is deliberately not folded into `miss`,** for the same reason. A miss
+returns nothing useful; a MISLEADING top node argues for the *wrong* answer, and an
+agent citing the first result will state it as fact. Until version 3 this state was
+unreachable: the answer-side check short-circuited to `miss` before the confusable
+check ever ran, so the most damaging outcome was scored as the most innocuous one.
+
 An `isError` result is recorded as `error`, never graded as an answer.
+
+### Repeats — why a question is asked more than once
+
+Each question is asked `SCORECARD_REPEATS` times (default 3) and the verdicts
+compared. If they disagree the verdict is **UNSTABLE**, recording every distinct
+outcome; it is counted separately and never resolved to either the passing or the
+failing result.
+
+This is not defensive coding. A verdict was measured to depend on a question's
+**position in the run**: the same question against an unchanged stack returned the
+correct passage when asked first and lost it from the entire response when asked
+last — transiently, self-healing on the very next call, with nothing logged. That
+is a live platform defect, reproduced and filed upstream, not an instrument
+artifact. See [`results/SUMMARY-instrument-diagnosis.md`](results/SUMMARY-instrument-diagnosis.md).
+
+A warm-up call or a retry-until-pass would produce a cleaner number by concealing a
+defect a real caller hits on their first request. A scorecard that protects its own
+score is worse than one that admits it cannot measure.
+
+**`SCORECARD_REPEATS=1` cannot detect instability**, so a one-repeat run must not be
+quoted as evidence that anything is stable. The run prints that caveat itself.
 
 ### Matchers
 

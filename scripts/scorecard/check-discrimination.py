@@ -30,6 +30,7 @@ Exits non-zero if any question is unsafe, so it can gate a run.
 
 import json
 import os
+import subprocess
 import sys
 
 # Passages are byte-bounded, so line distance is a proxy — but a coarse one is
@@ -71,20 +72,92 @@ def closest_cooccurrence(corpus, good, bad):
     return worst
 
 
+MATCHER_FIELDS = ("expect_all", "expect_any", "expect_none",
+                  "expect_top_all", "expect_top_none")
+
+
+def matcher_argv(literal, terminated=True):
+    """The grep invocation run.sh grades with, for one literal.
+
+    Kept here deliberately rather than described in prose: this gate is only
+    meaningful if it exercises the SAME matcher the grader does.
+    """
+    return ["grep", "-qF", "--", literal] if terminated else ["grep", "-qF", literal]
+
+
+def evaluable(literal, terminated=True):
+    """Can the grader actually evaluate this literal?
+
+    Behavioural, not syntactic. Feed the literal through the real matcher against
+    a string that contains it and one that does not, and require the two to
+    disagree. A syntactic rule (say, "reject literals starting with -") would
+    only enumerate the footgun already known; this catches the next one too.
+
+    Returns (ok, detail).
+    """
+    hit = "xx" + literal + "xx"
+    miss = "nothing to see here"
+    argv = matcher_argv(literal, terminated)
+    try:
+        r_hit = subprocess.run(argv, input=hit, text=True, capture_output=True)
+        r_miss = subprocess.run(argv, input=miss, text=True, capture_output=True)
+    except OSError as exc:  # pragma: no cover - grep missing is an environment fault
+        return False, f"could not run matcher: {exc}"
+    # 0 = matched, 1 = no match. Anything else is the matcher failing to run,
+    # which the grader records as "not found" — a silent, permanent miss.
+    if r_hit.returncode == 0 and r_miss.returncode == 1:
+        return True, ""
+    if r_hit.returncode > 1 or r_miss.returncode > 1:
+        err = (r_hit.stderr or r_miss.stderr).strip().splitlines()
+        return False, f"matcher errored (exit {max(r_hit.returncode, r_miss.returncode)}): {err[0] if err else 'no stderr'}"
+    return False, (f"matcher cannot distinguish present from absent "
+                   f"(hit exit {r_hit.returncode}, miss exit {r_miss.returncode})")
+
+
+def check_evaluable(questions, terminated=True):
+    """Gate every literal in every question, not just the discrimination band.
+
+    X02 shipped for months grading `miss` on every system because its expected
+    value began with `-p` and grep parsed it as options. The corpus checks below
+    could never have caught that: they validate the relationship between a pair
+    of literals in the text, never that the grader can match them at all.
+    """
+    failed = False
+    for q in questions:
+        for field in MATCHER_FIELDS:
+            for literal in q.get(field, []):
+                ok, detail = evaluable(literal.lower(), terminated)
+                if not ok:
+                    print(f"{q['id']}  FATAL     {field} literal {literal!r} "
+                          f"is not evaluable by the grader: {detail}")
+                    failed = True
+    return failed
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    corpus = sys.argv[1]
-    questions_path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
+    argv = [a for a in sys.argv[1:] if a != "--simulate-unterminated"]
+    # Proves this gate catches the bug it exists for: with the pre-v3 matcher
+    # (no `--`), X02's `-p 8083:8083` must fail here.
+    terminated = "--simulate-unterminated" not in sys.argv
+    corpus = argv[0]
+    questions_path = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "questions.json")
 
     questions = json.load(open(questions_path, encoding="utf-8"))["questions"]
+
+    # Evaluability first: it applies to every question, and a literal the grader
+    # cannot match makes every other check about that question meaningless.
+    failed = check_evaluable(questions, terminated)
+    if not terminated:
+        print("(--simulate-unterminated: graded with the pre-v3 matcher)")
+
     discrimination = [q for q in questions if q.get("band") == "discrimination"]
     if not discrimination:
         print("no discrimination questions to check")
-        return 0
+        return 1 if failed else 0
 
-    failed = False
     for q in discrimination:
         for good in q.get("expect_top_all", []):
             for bad in q.get("expect_top_none", []):
