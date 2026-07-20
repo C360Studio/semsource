@@ -64,16 +64,31 @@ indistinguishable from a judge change. The trade is that matchers are coarse: th
 verify the answer *contains* the load-bearing fact, not that the prose around it is
 good.
 
-Three verdicts, deliberately distinct:
+Four verdicts, deliberately distinct:
 
 - **correct** — required content present.
 - **miss** — the answer did not contain it. An honest failure.
+- **IMPRECISE** — the top-ranked evidence carried the answer *and* a confusable
+  value it could be mistaken for, so the evidence does not settle the question.
+  Only discrimination questions can produce this.
 - **FABRICATED** — the answer asserted something known to be false. This is not a
   worse miss, it is a different failure, and it outranks every other result in the
   summary. Zero fabrication is this product's actual moat; a set that scores well
   while inventing one answer has failed.
 
+**IMPRECISE is deliberately not folded into FABRICATED.** A whole-file body that
+happens to contain both the answer and its twin has invented nothing — it is
+imprecise, not dishonest. Merging the two would destroy the fabrication signal,
+which is the single result that outranks everything else here.
+
 An `isError` result is recorded as `error`, never graded as an answer.
+
+### Matchers
+
+`expect_all`, `expect_any` and `expect_none` match against the **whole answer**.
+`expect_top_all` and `expect_top_none` match against the **top-ranked node's body
+only** — see the discrimination band below for why that distinction is the whole
+point.
 
 ## Question bands
 
@@ -84,6 +99,7 @@ Bands exist so a score can be read rather than just totalled.
 - **code** — symbol and concept retrieval on the code side.
 - **impact** — dependents named, not merely counted.
 - **negative** — must miss.
+- **discrimination** — the top node must answer on its own.
 
 `doc-early` versus `doc-late` is the load-bearing split for passage chunking. The
 substrate truncates embedding text at 8000 characters, so before chunking a
@@ -97,6 +113,43 @@ Fusion API sit after.
 The early band is what detects a regression: if chunking breaks something that
 already worked, it shows up there, and a `doc-late` gain bought with a `doc-early`
 loss is not a win.
+
+## The discrimination band — what fact-presence cannot measure
+
+Fact-presence grading cannot separate whole-file retrieval from passage retrieval.
+A 31 KB README body trivially contains every fact in it, so a substring matcher
+passes whether the system found the right paragraph or dumped the document. The
+first A/B run said so in its own summary and had to fall back on bytes-per-answer
+as the real result. Bytes are a proxy: they show the evidence got smaller without
+showing that anything became answerable that was not answerable before.
+
+A discrimination question closes that gap. It targets a fact whose document also
+contains a **confusable twin** in a different section — the same env var with a
+different value, the same command shape with a different port. The question then
+asserts both directions against the top-ranked node:
+
+```json
+"expect_top_all":  ["NATS_MONITOR_HOST_PORT=8222"],
+"expect_top_none": ["NATS_MONITOR_HOST_PORT=28222"]
+```
+
+Whole-file retrieval puts both strings in one body, so the evidence cannot settle
+which is the default — `IMPRECISE`. Passage retrieval returns the section holding
+one of them, so the evidence answers on its own — `correct`. That is a capability
+difference, not a size difference.
+
+**Why the top node and not the whole answer.** An answer carries up to 20 passages.
+Grading the union would let a confusable value elsewhere in the same document ride
+along even when retrieval ranked the right passage first, so both systems would
+fail and the question would measure nothing. The narrower claim — the single best
+piece of evidence stands alone — is also the one an agent actually depends on.
+
+**Picking a distractor.** It must be a literal that does not appear near the
+answer, and must not be a substring of the answer or vice versa. `8222` and `28222`
+overlap as bare numbers, which is why X01 matches on `NATS_MONITOR_HOST_PORT=8222`
+— the prefixed form is unambiguous in both directions. Verify placement by reading
+the file, not by assuming: a "two meanings" candidate that turns out to be
+self-disambiguating inside one sentence discriminates nothing.
 
 ## Adding questions
 

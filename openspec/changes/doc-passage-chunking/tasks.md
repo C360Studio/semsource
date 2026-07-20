@@ -137,5 +137,22 @@ groups 2–5 are additive, group 6 is the breaking cut, groups 7–9 are documen
       demotion (5->3) plus dropping body-less document nodes (3->0). Re-measured 0/11
 - [ ] 10.4 Cosmetic: passage title duplicates when a document's H1 equals its title
       ("CLAUDE.md § CLAUDE.md")
-- [ ] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
-      add discrimination questions where a whole-file match cannot answer
+- [x] 10.5 Fact-presence grading cannot separate whole-file from passage retrieval —
+      add discrimination questions where a whole-file match cannot answer.
+      Added the `discrimination` band (X01-X03) plus `expect_top_all` /
+      `expect_top_none`, which grade the TOP node alone. Grading the union of an
+      answer's ~20 nodes cannot discriminate: a confusable value elsewhere in the
+      same document rides along even when the right passage ranked first. New
+      `IMPRECISE` verdict, kept distinct from `FABRICATED` — a whole-file body
+      carrying both an answer and its twin is imprecise, not dishonest, and
+      merging them would destroy the fabrication signal.
+      Each question pairs a fact with a confusable twin elsewhere in the SAME
+      document, all three verified by reading the corpus: X01 NATS monitor port
+      (default 8222 at ~15.5KB vs conflict-workaround 28222 at ~1.8KB — the
+      distractor is inside the old 8000-char window and the answer is past it);
+      X02 seminstruct 8083 vs semembed 8081 in configs/tiers/README.md (8257 B,
+      near-identical `docker run -d -p` lines); X03 ui-dev overlay vs released
+      ghcr image. Matchers use prefixed literals because bare `8222` matches
+      inside `28222` — verified, and it would have made X01 silently useless.
+      questions.json version 1 -> 2, so prior results are NOT comparable; the
+      band's first live run is 9.5's A/B.
