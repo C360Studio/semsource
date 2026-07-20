@@ -109,18 +109,27 @@ This matters more than it looks: upstream #21 means the title is excluded from t
 so putting the heading in the body would have been the only way to get it embedded — and it is not
 worth breaking a tested invariant for a 0.0006 cosine difference.
 
-### D5 — Exempt homogeneity groups from the floor merge
+### D5 — Exempt homogeneity groups from the floor merge — ~~required~~ **UNNECESSARY, corrected during implementation**
 
-`mergeSmallSections` folds consecutive below-floor sections together, and every group this change
-produces is below the 400-byte floor. Left alone, the merge would immediately reassemble the block
-and the change would be a silent no-op.
+**The reasoning below was wrong about this codebase, and the exemption was not implemented.**
 
-Groups produced by D1 are therefore marked as not merge-eligible. The floor exists to stop a run of
-one-line *headings* minting a passage each; a key group is self-contained evidence, which is the
-distinction the floor was never asked to make before.
+The concern was real in the abstract: every group this change produces is below the 400-byte floor,
+so a merge pass that saw them would reassemble the block and make the change a silent no-op. That
+would have been invisible — the detection tests would still pass.
 
-This is the decision most likely to be got wrong in implementation, and the one a test must pin
-directly: split, then assert the groups survive the merge pass.
+It cannot happen here. `mergeSmallSections` operates on `[]section` and runs **before** `subdivide`
+(`splitPassagesBounded`); the groups are created *inside* `subdivide`, after the merge has already
+run. The floor merges sections, never spans within one. There is nothing to exempt.
+
+**What was kept anyway:** the test the decision called for
+(`TestKeyGroupsSurviveTheFloorMerge`). It asserts end-to-end through `splitPassages` that the NATS
+group and the SEMSOURCE group land in different passages. That is no longer guarding against the
+floor specifically — it guards against any future reordering that puts a merge pass after
+subdivision, which would silently reintroduce exactly this failure.
+
+Recorded rather than quietly dropped: a design that predicts a hazard the architecture already
+prevents is worth correcting in place, so the next reader does not add the exemption believing it
+is load-bearing.
 
 ### D6 — Gate the trigger so most documents are untouched
 

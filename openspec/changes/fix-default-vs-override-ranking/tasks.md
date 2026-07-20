@@ -6,41 +6,42 @@ only the binary.
 
 ## 1. Detect a homogeneous key/value block
 
-- [ ] 1.1 Add detection in `handler/doc/splitter.go`: a fenced block whose non-blank lines are
+- [x] 1.1 Add detection in `handler/doc/splitter.go`: a fenced block whose non-blank lines are
       predominantly `^[A-Za-z_][A-Za-z0-9_]*=` (design D2)
-- [ ] 1.2 Group consecutive qualifying lines by the key's leading token up to the first underscore
+- [x] 1.2 Group consecutive qualifying lines by the key's leading token up to the first underscore
       (design D3) — purely lexical, no dictionary and no model
-- [ ] 1.3 Gate on at least three distinct groups, so small or uniform blocks are left whole
+- [x] 1.3 Gate on at least three distinct groups, so small or uniform blocks are left whole
       (design D6)
-- [ ] 1.4 Unit-test detection against the measured case (README `§ Configuration`: five groups,
+- [x] 1.4 Unit-test detection against the measured case (README `§ Configuration`: five groups,
       `NATS_*` is three keys) and against a two-group block that must NOT split
 
 ## 2. Split on homogeneity, independently of size
 
-- [ ] 2.1 Introduce the split as a trigger that runs regardless of section size — § Configuration
+- [x] 2.1 Introduce the split as a trigger that runs regardless of section size — § Configuration
       is 1363 B, under the 2000 ceiling, so a size-gated path can never reach it (design D1)
-- [ ] 2.2 Narrow the fenced-block-is-atomic rule to exclude homogeneous key/value lists only;
+- [x] 2.2 Narrow the fenced-block-is-atomic rule to exclude homogeneous key/value lists only;
       ordinary code fences keep today's behaviour unchanged
-- [ ] 2.3 Do NOT repeat the section heading in each group's body (design D4): it breaks tiling and
+- [x] 2.3 Do NOT repeat the section heading in each group's body (design D4): it breaks tiling and
       measured 0.8127 vs 0.8133 without, so it buys nothing
-- [ ] 2.4 Verify the tiling invariant still holds — the existing tests
+- [x] 2.4 Verify the tiling invariant still holds — the existing tests
       (`splitter_test.go:301`, `passage_test.go:514`) must pass **unmodified**. If an
       implementation needs those tests edited, the implementation is wrong
 
 ## 3. Survive the floor merge
 
-- [ ] 3.1 Mark homogeneity groups as not merge-eligible in `mergeSmallSections` (design D5)
-- [ ] 3.2 Confine the marker to spans the homogeneity split produced, so the floor still merges
-      runs of one-line headings as before
-- [ ] 3.3 Test the failure mode directly: split, run the merge pass, assert the groups survive.
+- [x] 3.1 ~~Mark homogeneity groups as not merge-eligible~~ **NOT NEEDED** — `mergeSmallSections`
+      operates on `[]section` and runs *before* `subdivide`, so it never sees these spans. Design D5
+      corrected in place rather than implementing a no-op exemption
+- [x] 3.2 ~~Confine the marker~~ **NOT NEEDED** — no marker exists; the floor is untouched
+- [x] 3.3 Test the failure mode directly: split, run the merge pass, assert the groups survive.
       This is the decision most likely to be got wrong — without it the whole change is a silent
       no-op
 
 ## 4. Offline confirmation before spending a stack
 
-- [ ] 4.1 Extend the bounds/sweep test to assert the README `§ Configuration` block yields a
+- [x] 4.1 Extend the bounds/sweep test to assert the README `§ Configuration` block yields a
       passage containing `NATS_MONITOR_HOST_PORT=8222` and NOT `SEMSOURCE_CONFIG=`
-- [ ] 4.2 Confirm the emitted group matches the measured 236-byte shape closely enough that the
+- [x] 4.2 Confirm the emitted group matches the measured 236-byte shape closely enough that the
       0.7783 cosine result is expected to carry — if the emitted text differs materially, re-measure
       offline before running the stack
 

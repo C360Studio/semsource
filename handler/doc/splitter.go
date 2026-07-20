@@ -250,6 +250,16 @@ func mergeSmallSections(in []section, b passageBounds) []section {
 // cutting on paragraph boundaries first and sentence boundaries second. It
 // returns [start,end) pairs that exactly tile the section.
 func subdivide(content []byte, lines []line, s section, b passageBounds) [][2]int {
+	// Homogeneity is checked BEFORE size, and is the only split reason that does
+	// not depend on it. A list of independent settings dilutes its own vector at
+	// any size: measured on this repository, README § Configuration is 1363 bytes
+	// — under every ceiling ever tested — and the fact a query asked for scored
+	// 0.6569 inside it against 0.8133 alone, losing to a workaround value in a
+	// different section. A size-gated path can never reach that block, which is
+	// why a 4x sweep of the ceiling moved no graded outcome.
+	if spans := splitHomogeneousBlocks(lines, s); spans != nil {
+		return spans
+	}
 	if s.end-s.start <= b.ceiling {
 		return [][2]int{{s.start, s.end}}
 	}
@@ -426,4 +436,123 @@ func runeBoundary(content []byte, i int) int {
 		i--
 	}
 	return i
+}
+
+// minKeyGroups is the number of distinct key groups a homogeneous block must
+// yield before it is worth dividing. Two related settings are not diluting each
+// other in any way this can measure, and splitting them would mint passages for
+// nothing.
+const minKeyGroups = 3
+
+// minKeyValueShare is the fraction of a fenced block's content lines that must
+// be KEY=VALUE assignments for it to count as a homogeneous key/value list.
+// Below this the block is prose or code that merely contains an assignment, and
+// splitting it would cut something whose parts are not independent.
+const minKeyValueShare = 0.6
+
+// splitHomogeneousBlocks divides a section when it contains a fenced block that
+// is a homogeneous list of KEY=VALUE settings, returning spans that tile the
+// section exactly. It returns nil when no block qualifies, leaving the size-based
+// path untouched.
+//
+// The qualifying block is divided on key-group boundaries; everything around it
+// (heading, prose, the fence delimiters) tiles alongside as its own spans. The
+// section heading is deliberately NOT repeated into each group: passages must
+// concatenate back to the document byte for byte, and the heading is worth
+// nothing to the vector anyway — measured, the same fact scored 0.8127 with its
+// heading and 0.8133 without.
+func splitHomogeneousBlocks(lines []line, s section) [][2]int {
+	var out [][2]int
+	cursor := s.start
+	found := false
+	for _, blk := range blocksOf(lines, s) {
+		groups := keyValueGroups(lines, blk)
+		if groups == nil {
+			continue
+		}
+		found = true
+		if groups[0][0] > cursor {
+			out = append(out, [2]int{cursor, groups[0][0]})
+		}
+		out = append(out, groups...)
+		cursor = groups[len(groups)-1][1]
+	}
+	if !found {
+		return nil
+	}
+	if cursor < s.end {
+		out = append(out, [2]int{cursor, s.end})
+	}
+	return out
+}
+
+// keyValueGroups returns one span per run of consecutive KEY=VALUE lines sharing
+// a leading token, for a fenced block that qualifies as a homogeneous key/value
+// list. It returns nil when the block does not qualify.
+//
+// Grouping is purely lexical — the token up to the first underscore, so
+// NATS_URL, NATS_HOST_PORT and NATS_MONITOR_HOST_PORT group together. Nothing
+// here knows what NATS is. That is the point: deciding which lines belong
+// together by reading them would be the prose classification this deliberately
+// avoids, and it would be far more fragile than the key names already are.
+//
+// Only CONSECUTIVE lines group, so a key that reappears later in the block forms
+// its own group. That keeps spans contiguous and the tiling trivially correct.
+func keyValueGroups(lines []line, blk [2]int) [][2]int {
+	if !blockIsFenced(lines, blk) {
+		return nil
+	}
+	var content, assignments int
+	var groups [][2]int
+	prefix := ""
+	for i := range lines {
+		ln := lines[i]
+		if ln.start < blk[0] || ln.end > blk[1] {
+			continue
+		}
+		trimmed := strings.TrimSpace(ln.text)
+		if trimmed == "" || isFenceDelimiter(trimmed) {
+			continue
+		}
+		content++
+		key, ok := assignmentPrefix(trimmed)
+		if !ok {
+			prefix = ""
+			continue
+		}
+		assignments++
+		if key == prefix && len(groups) > 0 {
+			groups[len(groups)-1][1] = ln.end
+			continue
+		}
+		groups = append(groups, [2]int{ln.start, ln.end})
+		prefix = key
+	}
+	if content == 0 || len(groups) < minKeyGroups {
+		return nil
+	}
+	if float64(assignments)/float64(content) < minKeyValueShare {
+		return nil
+	}
+	return groups
+}
+
+// assignmentPrefix reports whether a line is a KEY=VALUE assignment and, if so,
+// the grouping token: the key up to its first underscore.
+func assignmentPrefix(trimmed string) (string, bool) {
+	eq := strings.IndexByte(trimmed, '=')
+	if eq <= 0 {
+		return "", false
+	}
+	key := trimmed[:eq]
+	for i, r := range key {
+		valid := r == '_' || unicode.IsDigit(r) || unicode.IsLetter(r)
+		if !valid || (i == 0 && unicode.IsDigit(r)) {
+			return "", false
+		}
+	}
+	if under := strings.IndexByte(key, '_'); under > 0 {
+		return key[:under], true
+	}
+	return key, true
 }
