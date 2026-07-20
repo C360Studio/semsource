@@ -1,5 +1,15 @@
 # Scorecard A/B — choosing the passage ceiling and floor (task 9.5)
 
+> **Correction (2026-07-20).** The `discrimination 0/2` result below is **not a retrieval
+> finding** and must not be quoted as one. X02 was graded by a matcher that could not evaluate
+> its literals (a `grep` option-parsing bug) and failed on every system regardless of content;
+> it retrieves correctly today. X01's failure is real but is a two-position ranking miss, not
+> the total absence described below. See
+> [`SUMMARY-instrument-diagnosis.md`](SUMMARY-instrument-diagnosis.md).
+>
+> **The bounds conclusion is unaffected and stands** — a 4x ceiling range changed no graded
+> outcome, and every non-discrimination band scored identically across all three.
+
 questions.json **version 2**. Corpus held fixed: `git archive` of `d554bcc`, 206
 ingestable documents / 1.17 MB, `scripts/scorecard/` excluded (it quotes both
 literals of every discrimination question, so ingesting it plants a
