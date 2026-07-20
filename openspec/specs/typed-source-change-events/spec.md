@@ -34,3 +34,15 @@ silently accept the event, or use a mixed-version fallback.
 - **WHEN** a doc or URL processor receives create or modify without EntityStates
 - **THEN** it records a bounded contract error and publishes no entity
 - **AND** the failure is observable through existing health or metrics evidence
+
+### Requirement: Delete and rename events publish typed state changes
+
+Watch and periodic-reindex paths SHALL treat file deletion and rename as first-class typed change
+events that publish the staleness marker for affected entities — never silently discarded
+(the audit found OpDelete events dropped on the floor).
+
+#### Scenario: Delete event reaches the graph
+
+- **WHEN** a watcher or reindex pass observes that a previously indexed file is gone
+- **THEN** a typed change event publishes staleness markers for that file's entities within one
+  index interval
