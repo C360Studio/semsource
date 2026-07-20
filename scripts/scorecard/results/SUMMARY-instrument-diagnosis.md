@@ -120,3 +120,37 @@ docker run --rm --network <project>_c360 natsio/nats-box:latest \
 
 Position dependence: run the full set with X02 last, then reorder it first, changing nothing
 else.
+
+## Follow-up: localising the order-dependent drop
+
+Three further probes, same stack and corpus.
+
+**It is transient and self-healing.** 21 diverse queries in one MCP session, then X02 four
+times in a row:
+
+```
+X02 call 1: TIER2 ABSENT
+X02 call 2: TIER2 rank [1]
+X02 call 3: TIER2 rank [1]
+X02 call 4: TIER2 rank [1]
+```
+
+Only the first call after the burst fails. Other passages from the same document
+(`configs-tiers-README-md-0003`, `-0004`) survive that call at ranks 9 and 18; it is the
+**top-ranked** entity that vanishes. Nothing is logged — zero `WARN`/`ERROR` in the window.
+
+**It is not the embedding service.** The obvious suspicion is that the query-embedding path
+degrades under load. Tested by running the same burst and then making `graph.query.semantic`
+the *first* call afterwards, bypassing fusion: the recall list came back pristine — identical
+similarities (0.6801 / 0.6443 / 0.6155 / 0.6124) in identical order — with no errors in the
+`semembed` log for the whole session. Fusion reaches the embedder through that same subject and
+handler, so query embedding, cosine scoring and candidate selection are all intact. The defect
+is strictly downstream of recall.
+
+(For the avoidance of doubt: this stack is **tier-1 only** — `configs/mvp.json`, `semembed`.
+`seminstruct` is tier-2 and is not running. It appears only as corpus text that X02 asks
+about.)
+
+**It is `doc_context`-only, so far.** After the same burst, `code_search` (C04/C05/C06 — the
+embedding-backed code lens) returned an identical top node across 4 consecutive calls each. Not
+proof of immunity, but the reproduction should not be generalised across lenses.
