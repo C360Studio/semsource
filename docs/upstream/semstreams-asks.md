@@ -532,7 +532,7 @@ directed/evidenced edges, or make GraphQL a prerequisite.
 **Related:** semstreams#376 (fusion framework primitive), semstreams#367 (graph-visible provenance
 conventions), OpenSpec `add-opt-in-source-workbench` D9/tasks 3.1–3.2.
 
-### 19. Impact facet should name direct dependents (bounded, truncation-labeled) — framework-shaped — not yet filed
+### 19. Impact facet should name direct dependents (bounded, truncation-labeled) — framework-shaped — filed [semstreams#603](https://github.com/C360Studio/semstreams/issues/603)
 
 `fusion.Impact` is counts-only (`{nodes, files, truncated}`): the blast radius is sized but
 never named, so "what depends on this" costs a follow-up query per node. semsource's interim
@@ -547,7 +547,7 @@ Generalizes beyond code (docs backlinks, config dependents).
 `SystemSlug`; the answer "5 nodes / 3 files" grades wrong when the asker needs *which* callers.
 **Interim in semsource:** exact-seed decorator + WantRelations default (go-callgraph-recall).
 
-### 20. `CONTENT` ObjectStore carries a hard-coded 24h TTL — verbatim bodies silently vanish — framework-shaped — not yet filed
+### 20. `CONTENT` ObjectStore carries a hard-coded 24h TTL — verbatim bodies silently vanish — framework-shaped — filed [semstreams#600](https://github.com/C360Studio/semstreams/issues/600)
 
 `objectstore.NewStoreWithConfigAndMetrics` creates every bucket with
 `TTL: 24 * time.Hour` as a literal (`storage/objectstore/store.go:114`, beta.153). There is no
@@ -578,12 +578,15 @@ in either repo. Raising or removing the TTL without an orphan-reclamation story 
 store into genuinely unbounded growth. Both halves belong to the same retention design — see
 ADR-0008 open item #5 (per-source retention depth, designed but unimplemented) and ask #15.
 
+**Re-verified against beta.156, 2026-07-21** — the TTL literal, the once-only write, and the silent
+`(nil, nil)` resolver miss are all still present.
+
 **Surfaced by:** doc-passage-chunking storage review, 2026-07-20. Not a blocker for that change —
 passages tile the source file exactly, so total stored body bytes are unchanged and per-edit blob
 churn drops from O(file) to O(changed passage) — but it is a live production correctness bug on
 its own.
 
-### 21. Offloaded entities never embed their title — framework-shaped — not yet filed
+### 21. Offloaded entities never embed their title — framework-shaped — filed [semstreams#601](https://github.com/C360Studio/semstreams/issues/601)
 
 `graph-embedding` has two lanes for producing embedding text. The StorageRef lane returns
 immediately once it has queued the offloaded body (`processor/graph-embedding/component.go:1150-1153`),
@@ -607,7 +610,7 @@ minimum, make the exclusion visible — the current behaviour is indistinguishab
 **Surfaced by:** doc-passage-chunking design review, 2026-07-20. Independent of chunking; it applies
 to every offloaded entity SemSource has ever produced.
 
-### 22. The embedding text cap is hard-coded at 8000 characters — framework-shaped — not yet filed
+### 22. The embedding text cap is hard-coded at 8000 characters — framework-shaped — filed [semstreams#602](https://github.com/C360Studio/semstreams/issues/602)
 
 `maxTextLen` is a literal in `processor/graph-embedding/component.go:786-790` (8000, or 4000 for
 bm25), passed to `WithMaxSourceTextLen`; `graph/embedding/worker.go:23` carries the same default.
