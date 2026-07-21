@@ -135,10 +135,15 @@ what makes the class impossible.
 
 ## Risks / Trade-offs
 
-- **[Role inference is heuristic]** → It is, and D1 says so. It is bounded by being applied only
-  to endpoints in our own shipped configs, where we control both sides. If it ever
-  misclassifies, the failure is a loud validation error, not silent garbage — the safe
-  direction. The startup probe (open question) is the way to make it authoritative.
+- **[Role inference is heuristic]** → It is, and D1 says so. **Corrected during
+  implementation: the inference is only sound in ONE direction, and the design originally
+  assumed both.** A positive signal (`query_prefix`, or a known embedding family in the model
+  name) is strong evidence an endpoint serves embeddings; its *absence* is not evidence of the
+  reverse, because an unrecognised embedder looks identical to a chat endpoint. Checking that
+  `embedding` resolves to something recognisably an embedder rejected `model: "arctic-s"` — a
+  real embedding model — in this package's own fixtures. That direction is dropped: a chat
+  endpoint bound to `embedding` fails loudly at first use, whereas the defect this change
+  exists for is silent and deferred. Only the sound direction is enforced.
 - **[Dropping `defaults.model` changes behaviour for an operator who relied on it]** → It
   changes behaviour from "chat requests to an embeddings endpoint" to "documented graceful
   degradation". Both were unexercised. Called out in the tiers README so the intent is on the

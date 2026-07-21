@@ -608,8 +608,7 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
   },
   "model_registry": {
     "endpoints": {"semembed": {"provider": "openai", "url": "http://localhost:8081/v1", "model": "arctic-s"}},
-    "capabilities": {"embedding": {"preferred": ["semembed"]}},
-    "defaults": {"model": "semembed"}
+    "capabilities": {"embedding": {"preferred": ["semembed"]}}
   }
 }`
 	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))

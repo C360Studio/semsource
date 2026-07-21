@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semstreams/model"
@@ -261,6 +262,13 @@ func (c *Config) validateModelRegistry() error {
 		}
 	}
 
+	// Every capability that resolves at all must resolve to an endpoint that can
+	// serve it — the complement of the tier checks below, which only cover the
+	// capabilities a selected tier needs.
+	if err := validateCapabilityRoles(c.ModelRegistry); err != nil {
+		return err
+	}
+
 	// Tier 2: LLM community summaries resolve "community_summary" (→ seminstruct).
 	if clusteringLLM {
 		if err := requireCapability(c.ModelRegistry, model.CapabilityCommunitySummary,
@@ -291,5 +299,109 @@ func requireCapability(reg *model.Registry, capability, hint string) error {
 	if name == "" || reg.GetEndpoint(name) == nil {
 		return fmt.Errorf("config: %s — %q resolves to no endpoint", hint, capability)
 	}
+	return nil
+}
+
+// llmCapabilities are the model-registry capabilities that require a generative
+// (chat-completions) endpoint. Routing any of them to an embeddings endpoint
+// starts cleanly and then fails at call time — the failure mode requireCapability
+// already names for the tier capabilities it guards.
+//
+// embedding is deliberately absent: it is the one capability that REQUIRES an
+// embeddings endpoint, and it is checked in the opposite direction below.
+var llmCapabilities = []string{
+	model.CapabilityQueryClassification,
+	model.CapabilityAnswerSynthesis,
+	model.CapabilityCommunitySummary,
+	model.CapabilityAnomalyReview,
+	model.CapabilitySummarization,
+	model.CapabilityIntentClassification,
+}
+
+// isEmbeddingEndpoint reports whether an endpoint serves embeddings rather than
+// chat completions.
+//
+// INFERENCE, NOT A PROBE. Asking the endpoint (GET /v1/models) would be
+// authoritative, but `semsource validate` must work offline: making config
+// validation depend on a running service would fail a perfectly good config
+// whenever a container happens to be down, which is a worse failure than the one
+// being prevented.
+//
+// query_prefix is the signal because the substrate documents it as "used ONLY by
+// the embedding capability" — the query instruction for asymmetric retrieval
+// models (arctic-embed, BGE, E5). It is meaningless on a chat endpoint, so its
+// presence is a deliberate statement by whoever wrote the config. The model-name
+// check is the backstop for symmetric embedders, which need no prefix.
+//
+// Both signals are already present in every config; neither is invented for this
+// check. If this ever misclassifies, it fails validation loudly rather than
+// producing garbage at runtime — the safe direction to be wrong in.
+func isEmbeddingEndpoint(ep *model.EndpointConfig) bool {
+	if ep == nil {
+		return false
+	}
+	if ep.QueryPrefix != "" {
+		return true
+	}
+	name := strings.ToLower(ep.Model)
+	for _, marker := range []string{"embed", "arctic", "bge-", "e5-", "gte-", "nomic-"} {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateCapabilityRoles rejects a registry in which a capability resolves to an
+// endpoint that cannot serve it.
+//
+// This is the complement of requireCapability. That function enforces that a
+// capability a SELECTED TIER needs is explicitly declared; this one enforces that
+// a capability which resolves AT ALL resolves to something real. Both say the same
+// thing — a capability's binding is never allowed to be fictional — and the gap
+// between them is how every shipped config came to route query_classification and
+// answer_synthesis to the embedder via defaults.model.
+//
+// A misroute is REJECTED, not silently treated as unbound. Quietly degrading would
+// fix the runtime behaviour and leave the configuration asserting something untrue,
+// which is the same defect one layer up. An operator who set defaults.model
+// deliberately deserves to be told it cannot serve answer_synthesis.
+func validateCapabilityRoles(reg *model.Registry) error {
+	if reg == nil {
+		return nil
+	}
+	for _, capability := range llmCapabilities {
+		name := reg.Resolve(capability)
+		if name == "" {
+			continue // unbound: the consuming component uses its documented non-LLM path
+		}
+		ep := reg.GetEndpoint(name)
+		if ep == nil {
+			continue // semstreams Registry.Validate already covers dangling references
+		}
+		if isEmbeddingEndpoint(ep) {
+			return fmt.Errorf("config: model_registry: capability %q resolves to endpoint %q "+
+				"(model %q), which serves embeddings and cannot answer chat completions; "+
+				"either bind %q to a generative endpoint, or leave it unbound (remove "+
+				"defaults.model) so the component uses its documented non-LLM fallback",
+				capability, name, ep.Model, capability)
+		}
+	}
+	// Deliberately NOT checked in the opposite direction — that embedding resolves
+	// to something recognisably an embedder.
+	//
+	// The inference is asymmetric and only one direction is sound. A positive
+	// signal (query_prefix, or a known embedding family in the model name) is
+	// strong evidence an endpoint serves embeddings. The ABSENCE of one is not
+	// evidence of the reverse: it is equally consistent with an embedder nobody
+	// taught this function to recognise. Enforcing that direction rejected
+	// `model: "arctic-s"` — a real embedding model — in this package's own
+	// fixtures, which is exactly the false positive it would inflict on an
+	// operator running a model we have not enumerated.
+	//
+	// Left unchecked, a chat endpoint bound to `embedding` fails at first use with
+	// a protocol error. That is a loud, immediate, self-explanatory failure. The
+	// defect this function exists for is the opposite: silent, deferred, and
+	// invisible until an unexercised path is called.
 	return nil
 }

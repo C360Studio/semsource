@@ -1,9 +1,23 @@
 {
   "namespace": "acme",
   "sources": [
-    { "type": "ast", "path": "/workspace", "languages": ["go", "typescript", "javascript", "java", "python", "svelte"], "watch": false }
+    {
+      "type": "ast",
+      "path": "/workspace",
+      "languages": [
+        "go",
+        "typescript",
+        "javascript",
+        "java",
+        "python",
+        "svelte"
+      ],
+      "watch": false
+    }
   ],
-  "source_roots": ["/workspace"],
+  "source_roots": [
+    "/workspace"
+  ],
   "graph": {
     "embedder_type": "http",
     "index_workers": 4,
@@ -19,8 +33,11 @@
       }
     },
     "capabilities": {
-      "embedding": { "preferred": ["semembed"] }
-    },
-    "defaults": { "model": "semembed" }
+      "embedding": {
+        "preferred": [
+          "semembed"
+        ]
+      }
+    }
   }
 }
