@@ -29,7 +29,14 @@ type MemGraph struct {
 // NewMemGraph returns a ready in-memory graph.
 func NewMemGraph() *MemGraph {
 	return &MemGraph{
-		status:   fusion.IndexStatus{Ready: true, State: fusion.StateReady, Revision: "test"},
+		status: fusion.IndexStatus{
+			Ready: true, State: fusion.StateReady, Revision: "test",
+			// BootstrapComplete is load-bearing since beta.157: the readiness gate
+			// fails CLOSED without it (ADR-084 D2), so a fake that omits it makes
+			// every query return zero nodes for a reason unrelated to the test.
+			// This fake stands in for a healthy, fully-built graph.
+			BootstrapComplete: true,
+		},
 		entities: map[string]*fusion.Entity{},
 		out:      map[string][]fusion.Edge{},
 		resolve:  map[string][]string{},
@@ -83,8 +90,17 @@ func (m *MemGraph) Status(context.Context) (fusion.IndexStatus, error) { return 
 
 // Resolve implements fusion.RetrievalClient. Keys on the query text only (Mode,
 // Scope, and Limit are ignored — the fake returns the pre-seeded IDs verbatim).
-func (m *MemGraph) Resolve(_ context.Context, q fusion.ResolveQuery) ([]string, error) {
-	return m.resolve[q.Query], nil
+func (m *MemGraph) Resolve(_ context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
+	ids := m.resolve[q.Query]
+	seeds := make([]fusion.Seed, 0, len(ids))
+	for _, id := range ids {
+		// HasSimilarity stays false: this fake stands in for symbol/prefix
+		// resolution, which reports no score. Claiming a zero score would surface
+		// every seed as a perfect zero-relevance match — a claim the real wire
+		// never makes.
+		seeds = append(seeds, fusion.Seed{ID: id})
+	}
+	return seeds, nil
 }
 
 // Entity implements fusion.RetrievalClient.
@@ -93,14 +109,20 @@ func (m *MemGraph) Entity(_ context.Context, id string) (*fusion.Entity, error) 
 }
 
 // Entities implements fusion.RetrievalClient.
-func (m *MemGraph) Entities(_ context.Context, ids []string) ([]*fusion.Entity, error) {
+func (m *MemGraph) Entities(_ context.Context, ids []string) (fusion.Hydration, error) {
 	var out []*fusion.Entity
+	var missing []fusion.Unhydrated
 	for _, id := range ids {
 		if e := m.entities[id]; e != nil {
 			out = append(out, e)
+			continue
 		}
+		// Account for every requested ID, which is the whole point of Hydration
+		// (gh#597): a fake that silently returned a shorter slice would let a
+		// test pass over exactly the ambiguity the contract removed.
+		missing = append(missing, fusion.Unhydrated{Handle: id, Reason: fusion.UnhydratedNotFound})
 	}
-	return out, nil
+	return fusion.Hydration{Entities: out, Unhydrated: missing}, nil
 }
 
 // Neighbors implements fusion.RetrievalClient (Incoming returns sources as Target).

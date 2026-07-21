@@ -22,7 +22,7 @@ type scopeCapturingGraph struct {
 	lastScope []string
 }
 
-func (g *scopeCapturingGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]string, error) {
+func (g *scopeCapturingGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
 	g.lastScope = q.Scope
 	return g.MemGraph.Resolve(ctx, q)
 }
@@ -32,7 +32,11 @@ func (g *scopeCapturingGraph) Resolve(ctx context.Context, q fusion.ResolveQuery
 // the resolve (capturing Scope) and returns an empty response without hydrating.
 func newScopeComponent(lensKind, org string) (*Component, *scopeCapturingGraph) {
 	g := &scopeCapturingGraph{MemGraph: fusiontest.NewMemGraph()}
-	g.SetStatus(fusion.IndexStatus{Ready: true})
+	// State + BootstrapComplete are load-bearing since beta.157: the gate
+	// allow-lists State and fails closed on BootstrapComplete (ADR-084), and a
+	// deferred serve never reaches Resolve — so the Scope this test captures
+	// would never be set.
+	g.SetStatus(fusion.IndexStatus{Ready: true, State: fusion.StateReady, BootstrapComplete: true})
 	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: fusiontest.NewMemStore()})
 	c := &Component{
 		name:        "code-context",
