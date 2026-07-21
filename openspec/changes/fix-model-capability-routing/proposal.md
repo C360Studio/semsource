@@ -30,15 +30,26 @@ generative model. `seminstruct` / `qwen3-0.6b` is configured and correctly mappe
 `community_summary` — and the two capabilities most obviously needing it still fall through
 to `semembed`.
 
-**This defeats a deliberate design.** The consuming components degrade gracefully when a
-capability is unconfigured: `graph-query` falls back to a keyword-only classifier and a
-`TemplateAnswerSynthesizer`, and its own comment states the intent — *"No
-query_classification capability configured — keyword-only is fine"*. `defaults.model`
-converts **"unconfigured, degrade safely"** into **"configured wrong, fail at call time"**.
+**This is entirely our misconfiguration.** The framework behaves exactly as documented, and
+the documentation names this hazard directly. `docs/operations/05-model-registry.md`:
+
+- `defaults.model` "is the endpoint used when a capability resolves nowhere else (no
+  preferred chain, no fallback)" — a documented catch-all, working as specified.
+- Its guidance is precisely the fix here: operators wanting per-site routing "should **bind
+  the capability explicitly rather than reshaping `defaults.model`**".
+- Its capability table states the intended unbound behaviour — `query_classification`
+  *"Unbound by default; degrades gracefully to keyword-only"*, `answer_synthesis` *"Unbound
+  by default; falls back to template synthesis"* — and flags `semembed` as an
+  *"HTTP embedder, **not** chat completions — different protocol"*.
+
+So SemSource set a catch-all to an endpoint the framework's own table marks as a different
+protocol, which suppresses the documented unbound behaviour the consuming components
+implement (keyword-only classifier, `TemplateAnswerSynthesizer`). Nothing upstream needs to
+change; we told it to do this.
 
 Verified: with no `defaults.model`, `Resolve` returns `""`, `GetEndpoint` returns nil,
-`ResolveEndpoint` errors, and the component takes its designed fallback. Removing the
-default *is* the fix, not a workaround.
+`ResolveEndpoint` errors, and the component takes its designed fallback — which is the
+documented "unbound" state, reached the documented way.
 
 **Why now.** Nothing is broken in the shipped path today — `doc_context` / `code_context`
 go through `pkg/fusion`, not graph-query's GraphRAG path, and clustering is off by default
@@ -51,8 +62,11 @@ was found by reading a startup log during unrelated work, which is not a control
 - **Drop `defaults.model`** from `configs/mvp.json` and `configs/tiers/tier1-semantic.json`.
   Unmapped LLM capabilities then degrade to keyword-only and template synthesis, as the
   components intend. `embedding` is explicitly mapped in both, so it is unaffected.
-- **Map the LLM capabilities in `tier2-semantic-instruct.json`** — `query_classification`,
-  `answer_synthesis`, `anomaly_review` — to `seminstruct`, which is already configured there.
+- **Map graph-query's LLM capabilities in `tier2-semantic-instruct.json`** —
+  `query_classification` and `answer_synthesis` — to `seminstruct`, which is already configured
+  there. **Not `anomaly_review`**: design D5 narrowed this. Its consumer runs only under
+  clustering, which SemSource ships off, so binding it would invent coverage for something
+  nothing runs.
 - **Add a role-compatibility test over every shipped config.** For each config in `configs/`
   and `configs/tiers/`, assert every capability resolves to an endpoint whose role matches:
   embedding capabilities to an embedding endpoint, LLM capabilities to a generative endpoint
@@ -61,10 +75,6 @@ was found by reading a startup log during unrelated work, which is not a control
 - **Document the degradation contract** in `configs/tiers/README.md`: an unmapped LLM
   capability is a supported state that degrades, not an omission to be papered over with a
   default.
-- **File an upstream ask.** `defaults.model` silently defeats a deliberate degradation path,
-  and there is no way for a producer to express "this capability has no model, use your
-  fallback" other than by leaving the default unset — which is easy to get wrong and
-  impossible to detect from the config alone.
 
 ## Capabilities
 
@@ -86,7 +96,6 @@ None.
   `configs/tiers/tier2-semantic-instruct.json` — registry blocks only.
 - A new test over the shipped configs (`config/` package).
 - `configs/tiers/README.md` — the degradation contract.
-- `docs/upstream/semstreams-asks.md` — the `defaults.model` ask.
 - **No product code changes expected.** If the role-compatibility test proves otherwise, the
   design says so rather than widening quietly.
 
@@ -98,8 +107,9 @@ None.
 - **Wiring an LLM into the default profile.** The MVP stays embeddings-only. `doc_context`
   returns evidence and the calling agent reasons over it (ADR-0004); that division is
   deliberate and unchanged.
-- **Changing `Registry.Resolve`.** Substrate. The outcome there is a GitHub issue and an entry
-  in `docs/upstream/semstreams-asks.md`, never a PR.
+- **An upstream ask.** There is nothing to file. `Registry.Resolve` is documented behaviour,
+  the documentation warns against exactly this pattern, and its capability table already marks
+  `semembed` as a different protocol. The defect is ours, in our configs.
 - **Re-tuning retrieval.** Nothing here touches ranking, chunking, or the scorecard.
 
 ## Consumers
