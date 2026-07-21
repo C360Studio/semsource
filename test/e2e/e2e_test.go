@@ -1410,28 +1410,57 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	// =====================================================================
 	// Doc assertions — markdown/text files
 	// =====================================================================
+	//
+	// Since doc-passage-chunking a document is TWO entity types under domain=web:
+	// a `doc` PARENT (one per file — identity, provenance, DocChunkCount, no body)
+	// plus one `chunk` PASSAGE per structural section (its own body handle, a
+	// DocChunkIndex, and a link back to the parent). The pre-chunking test asserted
+	// every web entity was type `doc` and then demanded file-hash off whichever
+	// entity happened to sort first — both wrong now: passages are `chunk`, and a
+	// passage carries no file-hash. Validate the real two-type model instead.
 	if docDomain := domains["web"]; docDomain != nil {
 		if len(docDomain.entities) == 0 {
 			t.Error("web: no doc entities")
 		} else {
-			t.Logf("web: %d doc entities", len(docDomain.entities))
-
-			// All doc entities should have domain=web, type=doc.
+			var parents, passages []entityPayload
 			for _, e := range docDomain.entities {
 				_, _, domain, _, eType, _, _ := parseEntityID(e.ID)
 				if domain != "web" {
 					t.Errorf("doc entity domain = %q, want 'web'", domain)
 				}
-				if eType != "doc" {
-					t.Errorf("doc entity type = %q, want 'doc'", eType)
+				switch eType {
+				case "doc":
+					parents = append(parents, e)
+				case "chunk":
+					passages = append(passages, e)
+				default:
+					t.Errorf("web entity type = %q, want 'doc' (parent) or 'chunk' (passage)", eType)
 				}
 			}
+			t.Logf("web: %d doc parents, %d chunk passages", len(parents), len(passages))
 
-			// Verify doc entity triple structure.
-			doc := docDomain.entities[0]
-			assertHasPredicate(t, doc, "source.doc.file-path")
-			assertHasPredicate(t, doc, "source.doc.mime-type")
-			assertHasPredicate(t, doc, "source.doc.file-hash")
+			// A parent must exist and carry file-level provenance (no body).
+			if len(parents) == 0 {
+				t.Error("web: no doc PARENT entities (type=doc)")
+			} else {
+				doc := parents[0]
+				assertHasPredicate(t, doc, "source.doc.file-path")
+				assertHasPredicate(t, doc, "source.doc.mime-type")
+				assertHasPredicate(t, doc, "source.doc.file-hash")
+				assertHasPredicate(t, doc, "source.doc.chunk-count")
+			}
+
+			// A passage carries its own ordinal and links back to its parent. It
+			// is the unit that holds a body, so its absence would mean chunking
+			// silently produced parents with nothing readable underneath.
+			if len(passages) == 0 {
+				t.Error("web: no chunk PASSAGE entities (type=chunk) — parents with no readable body")
+			} else {
+				p := passages[0]
+				assertHasPredicate(t, p, "source.doc.file-path")
+				assertHasPredicate(t, p, "source.doc.chunk-index")
+				assertHasPredicate(t, p, "code.structure.belongs")
+			}
 		}
 	}
 
