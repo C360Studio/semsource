@@ -41,7 +41,16 @@ FATAL_LINES = 5
 RISKY_LINES = 25
 
 INGESTED_SUFFIXES = (".md", ".mdx", ".txt")
-EXCLUDED_DIRS = ("scripts/scorecard",)
+# Mirror what the INGESTER excludes, not just what this checker finds awkward.
+# handler/doc excludes openspec/ from the docs corpus (handler.go, pinned by
+# exclude_test.go): planning artifacts are proposals about the code, not
+# documentation of it. Change proposals routinely quote both literals of a
+# discrimination pair side by side while arguing about them — this one's did —
+# so walking a directory the corpus never sees produces a FATAL for a passage
+# that cannot exist in the graph. A checker that disagrees with the ingester
+# about corpus membership reports failures nobody can fix, which is the same
+# trap as a question that fails on every system forever.
+EXCLUDED_DIRS = ("scripts/scorecard", "openspec")
 
 
 def ingested_files(corpus):
