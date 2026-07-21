@@ -66,6 +66,6 @@ Config and validation only. No graph rebuild, no reindex, no consumer contract c
 - [x] 6.1 `task lint` clean — revive warnings fail CI, pinned v1.15.0
 - [x] 6.2 `go test ./...` and `go test -race ./config/`
 - [x] 6.3 `openspec validate --all`
-- [ ] 6.4 Bring up the default profile and confirm the misleading startup log is gone — no
+- [x] 6.4 Bring up the default profile and confirm the misleading startup log is gone — no
       "LLM query classifier enabled" or "LLM answer synthesis enabled" naming an embedding
       model. That log line is what surfaced this, so it is the honest end-to-end check
