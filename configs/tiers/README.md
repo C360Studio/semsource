@@ -138,11 +138,22 @@ would invent coverage.
 
 ## Tier 2 — Semantic + Instruct (seminstruct) — wired (`tier2-semantic-instruct.json`)
 
-Tier 2 adds **graph-clustering** (`graph.enable_clustering: true`): pure-Go LPA community detection over
-ENTITY_STATES → COMMUNITY_INDEX, lighting up the already-declared `local`/`global`/`summary` query
-routes. `graph.clustering_llm: true` additionally enables GraphRAG community summaries via the
-`model_registry` **`community_summary`** capability (→ seminstruct). LPA runs with no external service;
-only the LLM summaries need seminstruct.
+> **Ships OFF, and is not part of the MVP.** `enable_clustering` and `clustering_llm` are both
+> `false` in this config, and **no compose file defines a `seminstruct` service** — you bring your
+> own. Treat this file as a **wiring example**, not a supported profile: the capability bindings show
+> what to bind if you run seminstruct, and nothing here starts by default.
+>
+> It previously shipped with both flags `true`, which meant selecting this config would have driven
+> community summaries at `localhost:8083` with nothing listening. Flipped off rather than deleted so
+> the wiring stays documented.
+
+Tier 2 *would* add **graph-clustering** (`graph.enable_clustering: true`): pure-Go LPA community
+detection over ENTITY_STATES → COMMUNITY_INDEX, lighting up the already-declared
+`local`/`global`/`summary` query routes. `graph.clustering_llm: true` additionally enables GraphRAG
+community summaries via the `model_registry` **`community_summary`** capability (→ seminstruct). LPA
+runs with no external service; only the LLM summaries need seminstruct.
+
+To try it, stand up seminstruct yourself and set both flags to `true`:
 
 ```bash
 docker run -d -p 8083:8083 ghcr.io/c360studio/seminstruct:qwen3-0.6b   # OpenAI-compatible inference
@@ -150,12 +161,21 @@ semsource run --config configs/tiers/tier2-semantic-instruct.json
 ```
 
 Requires **seminstruct** running (Rust proxy, :8083, OpenAI-compatible inference) only when
-`clustering_llm` is set.
+`clustering_llm` is set — and you must provide it: it is not in any compose profile.
+
+**None of this is on the agent path.** The MCP tools (`code_context`, `code_impact`, `code_search`,
+`doc_context`, `code_changes`) resolve through the fusion gateway and never reach GraphRAG,
+`query_classification`, or `answer_synthesis`. An agent gets ranked, citable evidence and does its
+own reasoning (ADR-0004) — which is why the MVP needs no generative model at all.
 
 ## Current state / enablement
 
 - **Tier 0 works now** (BM25, no external service).
-- **Tier 1/2 are wired** (`config.ModelRegistry` → `ssCfg.ModelRegistry`; `graph.enable_clustering`
+- **Tier 1 is the MVP default** (`configs/mvp.json`) and is what the shipped compose runs.
+- **Tier 2 is wired but ships off** — see the note above: no compose service, both clustering flags
+  `false`, and its GraphRAG path has no in-repo consumer. It is unexercised; do not read its row in
+  the table above as evidence it works end to end.
+- Tier 1/2 wiring is real (`config.ModelRegistry` → `ssCfg.ModelRegistry`; `graph.enable_clustering`
   adds graph-clustering). Validated end-to-end against local semembed: http embedder active,
   embeddings generated with 0 errors, `provenance: embedding` on `code_search`.
 - **Tier-1 beats BM25 with the query prefix set** (semstreams#438 resolved, beta.129). On the dogfood
