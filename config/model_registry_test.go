@@ -43,8 +43,7 @@ func TestModelRegistry_Tier1_HTTP_WithRegistry_OK(t *testing.T) {
 		"graph":{"embedder_type":"http"},
 		"model_registry":{
 			"endpoints":{"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"}},
-			"capabilities":{"embedding":{"preferred":["semembed"]}},
-			"defaults":{"model":"semembed"}
+			"capabilities":{"embedding":{"preferred":["semembed"]}}
 		}
 	}`)
 	if err != nil {
@@ -87,8 +86,7 @@ func TestModelRegistry_Tier2_ClusteringLLM_RequiresCommunitySummary(t *testing.T
 		"graph":{"embedder_type":"http","enable_clustering":true,"clustering_llm":true},
 		"model_registry":{
 			"endpoints":{"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"}},
-			"capabilities":{"embedding":{"preferred":["semembed"]}},
-			"defaults":{"model":"semembed"}
+			"capabilities":{"embedding":{"preferred":["semembed"]}}
 		}
 	}`)
 	if err == nil {
@@ -111,8 +109,7 @@ func TestModelRegistry_Tier2_Full_OK(t *testing.T) {
 			"capabilities":{
 				"embedding":{"preferred":["semembed"]},
 				"community_summary":{"preferred":["seminstruct"]}
-			},
-			"defaults":{"model":"semembed"}
+			}
 		}
 	}`)
 	if err != nil {

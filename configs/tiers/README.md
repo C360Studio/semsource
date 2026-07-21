@@ -87,6 +87,43 @@ semsource run --config configs/tiers/tier1-semantic.json
 > container `--cpus` limit fully covers the local-dev need, so this is a documented lever, **not** an
 > upstream ask. (A default intra-op thread cap would be a marginal semembed DX nicety if it ever comes up.)
 
+### Capability binding — an unbound LLM capability is a supported state
+
+The model registry maps *capabilities* (`embedding`, `query_classification`, `answer_synthesis`,
+`community_summary`, …) to *endpoints*. Only bind a capability when there is an endpoint that can
+actually serve it.
+
+**These configs deliberately set no `defaults.model`.** It is a legitimate framework feature — a
+catch-all for capabilities that resolve nowhere else — but a catch-all pointed at an embeddings
+endpoint routes *every* unbound LLM capability there. That starts cleanly and fails only when
+called, and semstreams' own guidance is to "bind the capability explicitly rather than reshaping
+`defaults.model`".
+
+Leaving an LLM capability unbound is **not** an omission to paper over. The consuming components
+document and implement a non-LLM path for exactly this state:
+
+| capability | unbound behaviour |
+| --- | --- |
+| `query_classification` | keyword-only classifier |
+| `answer_synthesis` | template synthesis, no model |
+
+So tier 0 and tier 1 bind `embedding` and nothing else, and that is correct, not incomplete.
+
+Config load enforces this: a capability resolving to an endpoint that cannot serve it fails
+`semsource validate` **and** `semsource run` before any component starts, naming the capability,
+the endpoint, and both remedies. Every shipped config is checked by a test that discovers them,
+so a config added later is covered without anyone remembering to register it.
+
+**Tier 2 binds `query_classification` and `answer_synthesis` to `seminstruct`** — it has a
+generative endpoint, so the honest binding is the real one. It does **not** bind `anomaly_review`:
+that consumer runs only under clustering, which ships off, and binding a capability nothing runs
+would invent coverage.
+
+> **What this does and does not claim.** Binding these capabilities makes tier 2's configuration
+> *honest*, not *proven*. They are consumed on graph-query's GraphRAG path, which `code_context` /
+> `doc_context` do not use — so that path remains unexercised here, and this table should not be
+> read as evidence it works end to end.
+
 > **Query prefix — REQUIRED for arctic/BGE/E5 (resolved semstreams#438, beta.129).** These retrieval
 > models are *asymmetric*: the query must carry an instruction prefix (arctic:
 > `"Represent this sentence for searching relevant passages: "`) while documents are embedded raw.
