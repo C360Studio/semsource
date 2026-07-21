@@ -176,8 +176,14 @@ func TestHTTPGraphProjectionCompatibility(t *testing.T) {
 	if resp.Graph == nil {
 		t.Fatalf("graph projection omitted: %s", rec.Body.String())
 	}
-	if got := resp.Graph.ViewRevision; got.Start != 153 || got.End != 153 || !got.Coherent {
-		t.Fatalf("view_revision = %+v, want a meaningful coherent revision 153", got)
+	// Both bounds are OBSERVATIONS, not a consistency claim. semstreams beta.157
+	// deleted the former Coherent bool (ADR-083): the projection is assembled from
+	// N independent reads with no snapshot, and two equal samples cannot establish
+	// the absence of motion between them. Assert the sampled revisions and nothing
+	// more — re-adding a coherence assertion here would re-assert exactly the claim
+	// the substrate retracted.
+	if got := resp.Graph.ViewRevision; got.Start != 153 || got.End != 153 {
+		t.Fatalf("view_revision = %+v, want both bounds sampled at revision 153", got)
 	}
 	if len(resp.Graph.Nodes) != 1 || resp.Graph.Nodes[0].Handle != seed {
 		t.Fatalf("graph nodes = %+v, want seed %q", resp.Graph.Nodes, seed)
@@ -228,6 +234,10 @@ func newGraphProjectionCompatibilityComponent(seed, target, idLikeFact string, w
 		State:           fusion.StateReady,
 		IndexedRevision: 153,
 		TargetRevision:  153,
+		// Required since beta.157: the readiness gate defers without it (ADR-084
+		// D2, fail-closed), and a deferred response carries no graph facet at all.
+		// This fixture is a fully-built graph, so the flag states that.
+		BootstrapComplete: true,
 	})
 	g.AddEntity(seed, map[string]any{
 		ast.DcTitle:  "Dispatch",

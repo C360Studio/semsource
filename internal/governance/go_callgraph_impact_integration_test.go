@@ -31,26 +31,29 @@ type exactByTitle struct {
 	fusion.RetrievalClient
 }
 
-func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]string, error) {
-	ids, err := c.RetrievalClient.Resolve(ctx, q)
-	if err != nil || q.Mode != fusion.ResolveModeSymbol || len(ids) == 0 {
-		return ids, err
+func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
+	seeds, err := c.RetrievalClient.Resolve(ctx, q)
+	if err != nil || q.Mode != fusion.ResolveModeSymbol || len(seeds) == 0 {
+		return seeds, err
 	}
-	entities, err := c.RetrievalClient.Entities(ctx, ids)
+	hydration, err := c.RetrievalClient.Entities(ctx, fusion.SeedIDs(seeds))
 	if err != nil {
 		return nil, err
 	}
 	want := strings.TrimSpace(q.Query)
-	keep := make(map[string]bool, len(entities))
-	for _, e := range entities {
+	keep := make(map[string]bool, len(hydration.Entities))
+	for _, e := range hydration.Entities {
 		if e.First(ast.DcTitle) == want {
 			keep[e.ID] = true
 		}
 	}
-	exact := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if keep[id] {
-			exact = append(exact, id)
+	// Mirrors processor/code-context/exact_seed.go, including carrying seeds
+	// through whole so Similarity survives — the two must not drift, since this
+	// exists to prove that policy against the real stack.
+	exact := make([]fusion.Seed, 0, len(seeds))
+	for _, s := range seeds {
+		if keep[s.ID] {
+			exact = append(exact, s)
 		}
 	}
 	return exact, nil

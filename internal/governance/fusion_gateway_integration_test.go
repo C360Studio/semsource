@@ -83,7 +83,12 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 
 	t.Run("Entities batch returns triples", func(t *testing.T) {
 		ents := retryUntilReady(t, "Entities", func() ([]*fusion.Entity, error) {
-			return gc.Entities(ctx, []string{caller, callee})
+			// Since beta.157 a batch reports what it could NOT hydrate rather than
+			// returning a shorter slice (gh#597). This assertion is about the two
+			// entities that must load; an unhydrated one would surface below as a
+			// count mismatch, which is now a real signal instead of an ambiguity.
+			h, err := gc.Entities(ctx, []string{caller, callee})
+			return h.Entities, err
 		})
 		if len(ents) != 2 {
 			t.Fatalf("expected 2 entities, got %d", len(ents))
@@ -119,7 +124,10 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 
 	t.Run("Resolve prefix returns the ingested IDs", func(t *testing.T) {
 		ids := retryUntilReady(t, "Resolve prefix", func() ([]string, error) {
-			return gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.semsource.golang.gw", Mode: fusion.ResolveModePrefix, Limit: 10})
+			// Prefix resolve reports no similarity (HasSimilarity false), so the
+			// seed identities are the whole payload here — project and assert those.
+			seeds, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.semsource.golang.gw", Mode: fusion.ResolveModePrefix, Limit: 10})
+			return fusion.SeedIDs(seeds), err
 		})
 		if !containsID(ids, caller) || !containsID(ids, callee) {
 			t.Fatalf("prefix resolve missing ingested IDs, got %v", ids)

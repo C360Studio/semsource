@@ -33,24 +33,24 @@ func TestExactSeedDecorator(t *testing.T) {
 	c := exactSeedClient{g}
 	ctx := context.Background()
 
-	ids, err := c.Resolve(ctx, fusion.ResolveQuery{Query: "SystemSlug", Mode: fusion.ResolveModeSymbol})
-	if err != nil || !slices.Equal(ids, []string{exact}) {
-		t.Errorf("symbol resolve = %v, %v; want exactly [%s]", ids, err, exact)
+	seeds, err := c.Resolve(ctx, fusion.ResolveQuery{Query: "SystemSlug", Mode: fusion.ResolveModeSymbol})
+	if err != nil || !slices.Equal(fusion.SeedIDs(seeds), []string{exact}) {
+		t.Errorf("symbol resolve = %v, %v; want exactly [%s]", fusion.SeedIDs(seeds), err, exact)
 	}
 
-	ids, err = c.Resolve(ctx, fusion.ResolveQuery{Query: "Fuse", Mode: fusion.ResolveModeSymbol})
-	if err != nil || !slices.Equal(ids, []string{method}) {
-		t.Errorf("method resolve = %v, %v; want the method kept by bare name", ids, err)
+	seeds, err = c.Resolve(ctx, fusion.ResolveQuery{Query: "Fuse", Mode: fusion.ResolveModeSymbol})
+	if err != nil || !slices.Equal(fusion.SeedIDs(seeds), []string{method}) {
+		t.Errorf("method resolve = %v, %v; want the method kept by bare name", fusion.SeedIDs(seeds), err)
 	}
 
-	ids, err = c.Resolve(ctx, fusion.ResolveQuery{Query: "systemslug", Mode: fusion.ResolveModeSymbol})
-	if err != nil || len(ids) != 0 {
-		t.Errorf("case-sloppy resolve = %v, %v; want zero survivors (miss path)", ids, err)
+	seeds, err = c.Resolve(ctx, fusion.ResolveQuery{Query: "systemslug", Mode: fusion.ResolveModeSymbol})
+	if err != nil || len(seeds) != 0 {
+		t.Errorf("case-sloppy resolve = %v, %v; want zero survivors (miss path)", seeds, err)
 	}
 
-	ids, err = c.Resolve(ctx, fusion.ResolveQuery{Query: "systemslug", Mode: fusion.ResolveModeNL})
-	if err != nil || len(ids) != 2 {
-		t.Errorf("nl resolve = %v, %v; want pass-through", ids, err)
+	seeds, err = c.Resolve(ctx, fusion.ResolveQuery{Query: "systemslug", Mode: fusion.ResolveModeNL})
+	if err != nil || len(seeds) != 2 {
+		t.Errorf("nl resolve = %v, %v; want pass-through", seeds, err)
 	}
 }
 

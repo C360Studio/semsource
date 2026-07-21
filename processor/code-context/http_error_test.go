@@ -183,7 +183,11 @@ func TestFusionHTTPErrorContract_SuccessHonestyStates(t *testing.T) {
 
 	t.Run("ready miss", func(t *testing.T) {
 		g := fusiontest.NewMemGraph()
-		g.SetStatus(fusion.IndexStatus{Ready: true, State: fusion.StateReady})
+		// BootstrapComplete is what licenses a MISS rather than a defer (ADR-084):
+		// "readiness licenses health, not absence". Only a graph that finished
+		// building may answer "this does not exist"; an unbootstrapped one must
+		// defer, because it cannot tell absence from not-yet-indexed.
+		g.SetStatus(fusion.IndexStatus{Ready: true, State: fusion.StateReady, BootstrapComplete: true})
 		c := newTestComponent("code", g, fusiontest.NewMemStore())
 		rec := httptest.NewRecorder()
 		c.handleHTTP(rec, httptest.NewRequest(http.MethodPost, "/code-context/context", strings.NewReader(`{"query":"Missing"}`)), "context")
