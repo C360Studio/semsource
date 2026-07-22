@@ -827,6 +827,13 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				// (code.doc.signature, code.doc.comment) — otherwise code entities
 				// embed dc.terms.title (the symbol name) ALONE, and signatures /
 				// docstrings never enter the semantic index.
+				//
+				// This config was silently INERT for offloaded (StorageRef) entities
+				// until semstreams beta.158 (#635, our upstream ask #601): the
+				// StorageRef lane returned before the inline-text lane ran, so title/
+				// signature/comment never reached the vector for any body-bearing
+				// entity. beta.158 embeds this identity text ahead of the fetched
+				// body, so the setting now takes effect where it was documented to.
 				"text_suffixes": []string{
 					".title", ".content", ".description", ".summary", ".text",
 					".name", ".body", ".abstract", ".subject",

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
@@ -94,7 +95,13 @@ type Component struct {
 	// through it (lazily, per query); nil in standalone/tests, where buildEngine
 	// falls back to its own objectstore attach.
 	storeRegistry *storeregistry.Registry
-	logger        *slog.Logger
+	// metrics is the app Prometheus registry (nil in standalone/tests). Wired into
+	// each fusion engine so its body-hydration-failure counter
+	// (fusion_body_hydration_failures_total, gh#616) is scraped: an offloaded body
+	// that fails to hydrate returns an empty node rather than an error, which was
+	// silent before beta.158 exposed this counter (the failure mode behind #600).
+	metrics *metric.MetricsRegistry
+	logger  *slog.Logger
 	// marshalHTTPResponse is a test seam for the otherwise-infallible concrete
 	// fusion.Response encoding path. Production leaves it nil and uses
 	// json.Marshal.
@@ -135,6 +142,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		graph:         graph,
 		client:        deps.NATSClient,
 		storeRegistry: deps.StoreRegistry,
+		metrics:       deps.MetricsRegistry,
 		logger:        deps.GetLogger(),
 	}, nil
 }
@@ -198,13 +206,13 @@ func (c *Component) buildEngine(ctx context.Context) error {
 	// + predicate salience (vocabulary WithWeight). Without this the engine
 	// ranks on resolve-order + lexical only, ignoring the ontology class we emit
 	// on every entity. fusionvocab resolves both against the framework registries.
-	c.engine = fusion.NewEngine(c.graph, resolver).WithSignals(fusionvocab.New())
+	c.engine = fusion.NewEngine(c.graph, resolver).WithSignals(fusionvocab.New()).WithMetrics(c.metrics)
 	c.exactEngine = c.engine
 	if c.lensKind != "docs" {
 		// Code answers demand byte-exact symbol seeds (D4); search keeps the
 		// folded recall of the shared engine — discovery is where
 		// case-insensitivity is a feature, not a leak.
-		c.exactEngine = fusion.NewEngine(exactSeedClient{c.graph}, resolver).WithSignals(fusionvocab.New())
+		c.exactEngine = fusion.NewEngine(exactSeedClient{c.graph}, resolver).WithSignals(fusionvocab.New()).WithMetrics(c.metrics)
 	}
 	return nil
 }

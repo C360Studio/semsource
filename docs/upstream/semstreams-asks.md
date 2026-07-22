@@ -547,7 +547,7 @@ Generalizes beyond code (docs backlinks, config dependents).
 `SystemSlug`; the answer "5 nodes / 3 files" grades wrong when the asker needs *which* callers.
 **Interim in semsource:** exact-seed decorator + WantRelations default (go-callgraph-recall).
 
-### 20. `CONTENT` ObjectStore carries a hard-coded 24h TTL — verbatim bodies silently vanish — framework-shaped — filed [semstreams#600](https://github.com/C360Studio/semstreams/issues/600)
+### 20. `CONTENT` ObjectStore carries a hard-coded 24h TTL — verbatim bodies silently vanish — framework-shaped — [#600](https://github.com/C360Studio/semstreams/issues/600) — RESOLVED in beta.158
 
 `objectstore.NewStoreWithConfigAndMetrics` creates every bucket with
 `TTL: 24 * time.Hour` as a literal (`storage/objectstore/store.go:114`, beta.153). There is no
@@ -571,6 +571,13 @@ guard, and the TTL there is the framework default rather than a misconfiguration
 **Ask:** make the ObjectStore TTL configurable (default off for content-addressed body stores),
 and extend the `AssertNoLifecycleRetention`-class guardrail to `CONTENT`.
 
+**RESOLVED in beta.158 (#632/#636, ADR-068):** BOTH halves shipped — the CONTENT TTL constant is
+gone (`storage/objectstore/store.go`: "No TTL: content ObjectStores hold ref-addressed payloads
+pointed at by live-graph entities that outlive them") AND a boot guard reconciles/rejects lifecycle
+retention on the CONTENT bucket. Fusion also now exposes `fusion_body_hydration_failures_total`
+(#616), so the silent empty-body degradation is observable — semsource wires it via
+`Engine.WithMetrics` in code-context.
+
 **Coupling that must not be missed.** That accidental TTL is currently the *only* thing reclaiming
 orphaned blobs: bodies are content-addressed (`doc:<sha>` / `code:<sha>`), so an edit writes a new
 key **alongside** the old and strands the previous object with no refcount, sweep, or GC anywhere
@@ -586,7 +593,7 @@ passages tile the source file exactly, so total stored body bytes are unchanged 
 churn drops from O(file) to O(changed passage) — but it is a live production correctness bug on
 its own.
 
-### 21. Offloaded entities never embed their title — framework-shaped — filed [semstreams#601](https://github.com/C360Studio/semstreams/issues/601)
+### 21. Offloaded entities never embed their title — framework-shaped — [#601](https://github.com/C360Studio/semstreams/issues/601) — RESOLVED in beta.158
 
 `graph-embedding` has two lanes for producing embedding text. The StorageRef lane returns
 immediately once it has queued the offloaded body (`processor/graph-embedding/component.go:1150-1153`),
@@ -607,10 +614,15 @@ effect on them. The config appears to work and does nothing.
 and keep the better score), rather than letting the StorageRef lane short-circuit them away. At
 minimum, make the exclusion visible — the current behaviour is indistinguishable from working.
 
+**RESOLVED in beta.158 (#635):** the StorageRef lane now extracts the entity's inline identity text
+(title/.signature/.comment, per `text_suffixes`) and embeds it AHEAD of the fetched body
+(identity-first, one vector). Our `text_suffixes` config in `cmd/semsource/run.go` — inert for
+offloaded entities before this — now takes effect as documented.
+
 **Surfaced by:** doc-passage-chunking design review, 2026-07-20. Independent of chunking; it applies
 to every offloaded entity SemSource has ever produced.
 
-### 22. The embedding text cap is hard-coded at 8000 characters — framework-shaped — filed [semstreams#602](https://github.com/C360Studio/semstreams/issues/602)
+### 22. The embedding text cap is hard-coded at 8000 characters — framework-shaped — [#602](https://github.com/C360Studio/semstreams/issues/602) — RESOLVED in beta.158
 
 `maxTextLen` is a literal in `processor/graph-embedding/component.go:786-790` (8000, or 4000 for
 bm25), passed to `WithMaxSourceTextLen`; `graph/embedding/worker.go:23` carries the same default.
@@ -624,6 +636,10 @@ project README.
 
 **Ask:** expose the cap as component config (keeping today's value as the default), and count
 truncations so the loss is observable rather than silent.
+
+**RESOLVED in beta.158 (#628):** `max_text_len` is now a `graph-embedding` config field (0 → the
+per-embedder default of 4000 bm25 / 8000 neural), bounded by `MaxSourceTextLenCeiling`. semsource
+keeps the default; the knob exists for producers with legitimately large single bodies.
 
 **Not blocking us.** SemSource now splits documents into passages sized well under the cap, so this
 is no longer a correctness issue for docs — the split is bounded by a hard maximum precisely because
