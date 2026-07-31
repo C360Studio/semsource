@@ -130,7 +130,8 @@ heading so URL anchors are unaffected. The credibility pin still reproduces the 
 - [x] 6.1 Run the full gate set.
   - Test: `task check`, `task test:race`, `task test:e2e`, and `task core:smoke` all pass with revive
     clean. **All four passed on the iteration-2 tree (2026-07-31).**
-- [ ] 6.2 Update `doc-passage-chunking`'s Purpose, which currently describes the `KEY=VALUE` rule as
+- [x] 6.2 Update `doc-passage-chunking`'s Purpose, which currently describes the `KEY=VALUE` rule as
   the exception, to describe independent-peer blocks.
   - Test: the archived spec's Purpose matches the shipped behaviour; no reference to `KEY=VALUE` as
-    the sole divisible form remains.
+    the sole divisible form remains. **Done at sync: Purpose now names both size-independent rules
+    (key-group division and fence isolation) and the ancestry-qualified titles.**

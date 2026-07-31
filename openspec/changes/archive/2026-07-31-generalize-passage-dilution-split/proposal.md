@@ -28,10 +28,17 @@ sample, table, and flag list in the corpus, and it gets worse as documentation m
 
 ## What Changes
 
-- **BREAKING**: generalize the size-independent split rule from "a homogeneous `KEY=VALUE` block" to
-  any fenced block whose lines are independent peers — commands, code samples, and flag or key lists
-  alike. A block whose entries do not depend on one another dilutes its own vector at any size, and
-  the current `KEY=VALUE` test is a description of one instance rather than of the property.
+- **BREAKING**: add a second size-independent split rule — fence ISOLATION. A fenced block that is
+  not a homogeneous key/value list becomes its own passage whenever the section's non-fence content
+  is at least the floor, so a command or code sample no longer competes with the prose around it.
+  The block is never divided; `KEY=VALUE` grouping is retained unchanged. (The first draft proposed
+  dividing any "independent peer" block by entry group; the offline harness killed that before code
+  was written — see design D1.)
+- Passage titles carry the heading's full ancestor chain (`SemSource § Docker Compose §
+  Configuration`, not `SemSource § Configuration`). The title is the identity text retrieval ranks
+  by; the ancestry is document structure the splitter previously discarded, and it is what lets a
+  canonical section beat a workaround note for a query that names the parent section. `DocSection`
+  keeps the verbatim immediate heading, so URL anchors are unaffected (see design D6).
 - Land the offline cosine harness as a first-class instrument under `handler/doc`, alongside the
   existing `TestBoundsSweep`. It splits candidate documents with the real splitter, embeds passages
   through semembed with the arctic-embed query prefix applied to the query only, and reports each
@@ -69,8 +76,9 @@ contract changes; passage *identity* is unaffected because IDs derive from paren
 
 ### Modified Capabilities
 
-- `doc-passage-chunking`: replace the `KEY=VALUE`-specific split rule with the general property it
-  was a special case of — a fenced block of independent peer entries is divisible at any size.
+- `doc-passage-chunking`: add fence isolation as a second size-independent split reason (a fenced
+  block is separated whole from diluting prose), and qualify passage titles with the heading's full
+  ancestor chain while `DocSection` keeps the verbatim immediate heading.
 - `retrieval-ranking`: extend the anti-dilution guarantee beyond homogeneous lists to any passage
   whose specific fact competes with unrelated prose, and require that a candidate change to the
   emitted body text be scored offline against a named distractor before a live A/B.
