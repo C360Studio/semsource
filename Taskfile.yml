@@ -79,6 +79,11 @@ tasks:
     cmds:
       - ./scripts/core-profile-smoke.sh
 
+  tier2:smoke:dev:
+    desc: Check the tier-2 dev overlay's composition, pins, and config wiring (no bring-up)
+    cmds:
+      - ./scripts/tier2-dev-smoke.sh
+
   check:
     desc: Run all checks (lint + test)
     cmds:
