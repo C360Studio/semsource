@@ -13,3 +13,16 @@ var PassageHardMax = defaultBounds.hardMax
 func SplitPassagesBounded(content []byte, ceiling, floor, hardMax int) []passage {
 	return splitPassagesBounded(content, passageBounds{ceiling: ceiling, floor: floor, hardMax: hardMax})
 }
+
+// Passage re-exports the passage type to the external test package so a
+// harness can name it in helper signatures. An alias rather than a definition:
+// SplitPassagesBounded returns the real type, and a distinct named type would
+// need conversions at every call site.
+type Passage = passage
+
+// PassageTitle re-exports the title a passage entity would carry, so the
+// dilution harness embeds the EXACT identity text production emits instead of a
+// reimplementation that would drift the day title construction changes.
+func PassageTitle(parentTitle string, p Passage) string {
+	return passageTitle(parentTitle, p.headingPath(), p.Ordinal)
+}
