@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/graphstatus"
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/fusion"
@@ -198,7 +199,10 @@ func hydrateOne(ctx context.Context, resolver *fusion.BodyResolver, cand *candid
 func (c *Component) indexReady(ctx context.Context) (bool, string) {
 	statusCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	raw, err := c.client.Request(statusCtx, "graph.index.query.status", []byte("{}"), 3*time.Second)
+	// semstreams ADR-083 removed graph.index.query.status; readiness is a
+	// GRAPH_STATUS KV envelope per producer. Requesting the old subject got no
+	// responder, so this note always claimed the status was unavailable.
+	raw, err := c.graphStatus.Raw(statusCtx, graphstatus.KeyGraphIndex)
 	if err != nil {
 		return false, "index status unavailable; diff computed over currently-indexed state"
 	}

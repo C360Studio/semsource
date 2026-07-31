@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
@@ -40,10 +41,12 @@ type Component struct {
 	logger *slog.Logger
 	// readinessRequest is a test seam for the two bounded index-status probes
 	// used by the workbench capability document. Production leaves it nil and
-	// uses client.RequestReady so an absent optional responder cannot trip the
-	// shared NATS circuit breaker.
+	// reads GRAPH_STATUS through graphStatus instead.
 	readinessRequest readinessRequestFunc
 	readinessTimeout time.Duration
+	// graphStatus reads ADR-083 readiness envelopes from the GRAPH_STATUS KV
+	// bucket. It replaces the removed graph.index.query.status request/reply.
+	graphStatus *graphstatus.Reader
 
 	// Manifest query
 	querySub     *natsclient.Subscription
@@ -99,10 +102,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return &Component{
-		name:   "source-manifest",
-		config: config,
-		client: deps.NATSClient,
-		logger: deps.GetLogger(),
+		name:        "source-manifest",
+		config:      config,
+		client:      deps.NATSClient,
+		logger:      deps.GetLogger(),
+		graphStatus: graphstatus.New(deps.NATSClient),
 	}, nil
 }
 
@@ -720,8 +724,8 @@ func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err == nil {
 		ctx := r.Context()
-		payload["index"] = c.fetchIndexReadiness(ctx, structuralStatusSubject, "structural index")
-		payload["embedding"] = c.fetchIndexReadiness(ctx, semanticStatusSubject, "semantic index")
+		payload["index"] = c.fetchIndexReadiness(ctx, structuralReadinessKey, "structural index")
+		payload["embedding"] = c.fetchIndexReadiness(ctx, semanticReadinessKey, "semantic index")
 		payload["note"] = ReadinessNote
 		if merged, mErr := json.Marshal(payload); mErr == nil {
 			data = merged

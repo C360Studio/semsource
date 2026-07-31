@@ -33,6 +33,28 @@ func newMemConfigStore() *memConfigStore {
 	return &memConfigStore{cfg: semconfig.NewSafeConfig(&semconfig.Config{
 		Platform:   semconfig.PlatformConfig{Org: "acme", ID: "test"},
 		Components: map[string]types.ComponentConfig{},
+		// A spawned source declares a graph.ingest output port, which makes
+		// config validation resolve the GRAPH stream and — since semstreams
+		// beta.159 — demand its bounds. Production supplies this from
+		// cmd/semsource's graphStreamConfig; without it the fixture validates a
+		// config shape that cannot exist at runtime, so Add fails for a reason
+		// no real deployment would hit.
+		Streams: semconfig.StreamConfigs{
+			"GRAPH": semconfig.StreamConfig{
+				Subjects: []string{
+					"graph.ingest.entity",
+					"graph.ingest.batch",
+					"graph.ingest.manifest",
+					"graph.ingest.status",
+					"graph.ingest.predicates",
+				},
+				Storage:  "memory",
+				MaxBytes: 256 * 1024 * 1024,
+				MaxAge:   "1h",
+				Replicas: 1,
+				Discard:  semconfig.StreamDiscardNew,
+			},
+		},
 	})}
 }
 

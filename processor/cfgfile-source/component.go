@@ -140,11 +140,11 @@ func (c *Component) Start(ctx context.Context) error {
 		"watch_enabled", c.config.WatchEnabled)
 
 	// Retry initial ingest — paths may not exist yet if a git clone is still
-	// in progress (repo expansion pattern). We check IsRepoReady rather than
+	// in progress (repo expansion pattern). We check IsPathReady rather than
 	// just os.Stat because git clone creates the directory before populating it.
 	if err := retry.Do(ctx, retry.Persistent(), func() error {
 		for _, p := range c.config.Paths {
-			if err := workspace.IsRepoReady(p); err != nil {
+			if err := workspace.IsPathReady(p); err != nil {
 				c.logger.Debug("waiting for cfgfile paths to become available",
 					"path", p, "error", err)
 				return err

@@ -40,6 +40,14 @@ reviewed as if a green build meant conformance.
   source facts), and exposes the knob as a `streams.GRAPH.discard` override. This was found by the
   test suite during adoption, not by the earlier audit, which had assumed the existing
   `max_bytes`/`max_age` declaration was sufficient.
+- **BREAKING**: read structural and semantic index readiness from the `GRAPH_STATUS` KV bucket
+  instead of requesting `graph.index.query.status` / `graph.embedding.query.status`. ADR-083 deleted
+  the structural subject outright, so nothing answered it: `/source-manifest/status` and the MCP
+  `source_status` tool reported `index: {available: false, state: "unknown"}` permanently while
+  `GRAPH_STATUS/graph-index` carried a correct `ready: true`. `scripts/core-profile-smoke.sh` blocks
+  on `index.ready`, so `task core:smoke` could not pass either. Two production call sites were
+  affected (`source-manifest`, `supersession`); both now read the KV envelope through a shared
+  `internal/graphstatus` reader that binds the bucket must-exist via the catalog seam.
 - **BREAKING**: pin the Compose NATS server to `nats:2.12-alpine`, matching SemStreams' e2e, tiered,
   and testcontainers usage, and satisfying `compose-deployment`'s existing "exact version, no bare
   `latest`" pin requirement that a floating major tag does not meet.
@@ -55,9 +63,13 @@ reviewed as if a green build meant conformance.
 
 ## Non-goals
 
-- Adopting the caught-up readiness producers (`GRAPH_STATUS` folding, ADR-088). It is explicitly
-  additive and not breaking; SemSource already watches `GRAPH_STATUS` for code-context readiness.
-  Folding the remaining waits is a follow-up, not lockstep conformance.
+- Folding `GRAPH_STATUS` into SemSource's *gating* decisions (waiting on caught-up before acting,
+  ADR-088's `readiness.Set`). That part is genuinely additive and remains a follow-up.
+
+  This non-goal was originally written to cover all GRAPH_STATUS adoption, on the reading that the
+  wave's readiness work was "additive, not breaking." Runtime proved otherwise and the scope moved
+  into this change — see **What Changes** above: reading a producer's readiness envelope is not
+  additive, because ADR-083 *deleted* the subject the old read used.
 - Changing the GraphQL read path. The `graphSummary` envelope unwrap (gh#762) is the wave's only
   GraphQL break, and SemSource reads no such path: `graph.query.summary` is consumed NATS-direct by
   source-manifest, which the adopter note states is unaffected. Adding or stripping a `.data` hop

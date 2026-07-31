@@ -2,6 +2,8 @@ package workspace_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/c360studio/semsource/workspace"
@@ -73,5 +75,53 @@ func TestEnsureRepo_RequiresBaseDir(t *testing.T) {
 	_, err := workspace.EnsureRepo(ctx, "https://github.com/acme/repo.git", "main", "")
 	if err == nil {
 		t.Fatal("EnsureRepo with empty baseDir: expected error, got nil")
+	}
+}
+
+// TestIsPathReady_AcceptsExistingFile guards the boot-blocking bug beta.159's
+// component-start barrier exposed: doc-source and cfgfile-source legitimately
+// name FILES ("README.md", "go.mod"), but the directory-only IsRepoReady can
+// never accept one. Callers retry persistently, so under fail-closed boot the
+// component never finishes Start and takes the whole service down with it.
+func TestIsPathReady_AcceptsExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(file, []byte("module example.com/x\n"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	if err := workspace.IsPathReady(file); err != nil {
+		t.Errorf("workspace.IsPathReady(regular file) = %v, want nil — a file that exists is ready", err)
+	}
+	// The directory-only contract is unchanged, and that is the point: ast-source
+	// and git-source still need a non-directory to be an error.
+	if err := workspace.IsRepoReady(file); err == nil {
+		t.Error("workspace.IsRepoReady(regular file) = nil; its documented directory contract must not have been relaxed")
+	}
+}
+
+// TestIsPathReady_DirectoryStillDelegates proves a directory keeps the full
+// repo-readiness semantics rather than being short-circuited to "it exists".
+func TestIsPathReady_DirectoryStillDelegates(t *testing.T) {
+	dir := t.TempDir()
+	if err := workspace.IsPathReady(dir); err != nil {
+		t.Errorf("workspace.IsPathReady(plain directory) = %v, want nil", err)
+	}
+
+	// A .git directory with no HEAD is a clone in progress; IsPathReady must
+	// report it, not mask it.
+	repo := filepath.Join(dir, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("create fixture repo: %v", err)
+	}
+	if err := workspace.IsPathReady(repo); err == nil {
+		t.Error("workspace.IsPathReady(.git without HEAD) = nil; an in-progress clone must not read as ready")
+	}
+}
+
+// TestIsPathReady_MissingPath keeps absence distinct from readiness.
+func TestIsPathReady_MissingPath(t *testing.T) {
+	if err := workspace.IsPathReady(filepath.Join(t.TempDir(), "nope")); err == nil {
+		t.Error("workspace.IsPathReady(missing path) = nil, want an error")
 	}
 }

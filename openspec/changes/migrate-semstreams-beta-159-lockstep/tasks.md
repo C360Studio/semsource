@@ -44,6 +44,29 @@
   - Test: the sourcespawn suite passes for every flat source type (ast, docs, config, url, image, git),
     each of which declares a `graph.ingest` output port.
 
+- [x] 2.8 **BREAKING** Read index readiness from the `GRAPH_STATUS` KV bucket instead of the removed
+  `graph.index.query.status` subject, via a shared `internal/graphstatus` reader that binds
+  must-exist through the catalog seam and treats an absent key as unknown rather than not-ready.
+  Covers both production call sites (`source-manifest`, `supersession`). See design D9.
+  - Test: against a live stack, `/source-manifest/status` reports
+    `index: {available:true, ready:true}`; before the fix the same stack reported
+    `{available:false, state:"unknown", reason:"status_unavailable"}` while `GRAPH_STATUS/graph-index`
+    carried `ready:true`.
+- [x] 2.9 Prove the acquisition seam classifies a missing owner as retryable-not-ready naming the
+  owner, and an off-catalog bucket as permanently invalid.
+  - Test: `go test -tags=integration ./internal/graphstatus/` — the first yields `framework bucket
+    "GRAPH_STATUS" is not ready: its owner (graph-index/graph-embedding ...) has not provisioned it`,
+    the second yields a classified invalid error naming the off-catalog name.
+
+- [x] 2.10 **BREAKING** Add `workspace.IsPathReady` and use it in `doc-source`/`cfgfile-source`, so a
+  source that legitimately names a FILE (`README.md`, `go.mod`) can finish `Start`. beta.159's
+  component-start barrier turns a component that never completes `Start` into a total boot failure;
+  both sources gated ingest on the directory-only `IsRepoReady` and retried forever. Pre-existing
+  SemSource bug, made fatal by the migration. See design D10.
+  - Test: `go test ./workspace/ -run TestIsPathReady` covers file/directory/in-progress-clone/missing;
+    `go test -tags=e2e -run TestE2E_NativeQuickStart ./test/e2e/` passes (it failed on this branch and
+    passed at `main`, which is how the regression was isolated).
+
 ## 3. Align the deployment substrate
 
 - [x] 3.1 **BREAKING** Pin the Compose NATS service to `nats:2.12-alpine` in `docker-compose.yml`,
@@ -57,54 +80,64 @@
 
 ## 4. Execute the local cutover
 
-- [ ] 4.1 Stop every writer against the local deployment and capture the literal NATS account
+- [x] 4.1 Stop every writer against the local deployment and capture the literal NATS account
   inventory (streams, KV buckets, object stores) before any deletion.
   - Test: the captured inventory is attached to the evidence envelope and no `semsource` process
     holds a connection at capture time.
-- [ ] 4.2 **BREAKING** Execute the catalog-derived deletion — `semstreams_config`, observed `GRAPH`,
+- [x] 4.2 **BREAKING** Execute the catalog-derived deletion — `semstreams_config`, observed `GRAPH`,
   every enabled observed catalog bucket, and `PREDICATE_CATALOG` only if observed — preserving
   authoritative source inputs, source/content/media stores, and unrelated state.
   - Test: the post-deletion inventory contains no resource from the deletion sheet and every resource
     on the preservation list, with no wildcard deletion issued.
-- [ ] 4.3 Start only migrated writers, reseed from canonical source inputs, and wait for readiness.
+  - **Result: the deletion set was EMPTY.** The local Docker environment held no volumes and no
+    containers, so no pre-beta.159 graph state existed to delete. Recorded as an observed empty
+    inventory rather than a performed wipe — the procedure itself is proven by the beta148 cutover
+    rehearsal, which executes it end to end against a disposable account.
+- [x] 4.3 Start only migrated writers, reseed from canonical source inputs, and wait for readiness.
   - Test: the source-manifest status surface reaches `phase: ready` with every configured source
     seeded, and the first-boot log carries the expected `ENTITY_STATES` History reconcile warning.
-- [ ] 4.4 Prove query parity with a canonical known-answer query, then restart once with no
+- [x] 4.4 Prove query parity with a canonical known-answer query, then restart once with no
   intervening write and prove replay parity.
   - Test: the known-answer query returns the expected result before and after the restart, byte-equal
     on the asserted fields.
 
 ## 5. Verify the silent behavioral contracts
 
-- [ ] 5.1 Verify add-lane six-field tuple deduplication against SemSource's producers and reconcile
+- [x] 5.1 Verify add-lane six-field tuple deduplication against SemSource's producers and reconcile
   any distinct-entity count movement as a finding rather than a re-baseline.
   - Test: entity/triple counts on the status surfaces are stable across a republication cycle, and
     any delta from the pre-migration baseline is explained in the evidence envelope.
-- [ ] 5.2 Verify that a read path against an unprovisioned bucket surfaces the framework's classified
+- [x] 5.2 Verify that a read path against an unprovisioned bucket surfaces the framework's classified
   not-ready error naming the owner, and that SemSource branches on the error class rather than the
   code string.
   - Test: an integration test starts a reader without its owning component and asserts the classified
     `index_not_ready` error and a backoff retry, not an empty-result path.
-- [ ] 5.3 Verify graph-clustering under a tier-2 config: `COMMUNITY_INDEX` remains the declared output
+- [x] 5.3 Verify graph-clustering under a tier-2 config: `COMMUNITY_INDEX` remains the declared output
   and becomes trigger-only, with summaries landing in `COMMUNITY_SUMMARIES`.
   - Test: with clustering enabled, both buckets are present and populated as expected, and local/global
     summary query routes still answer.
 
 ## 6. Review and release gates
 
-- [ ] 6.1 Run the full gate set and record results.
+- [x] 6.1 Run the full gate set and record results.
   - Test: `task check`, `task test:race`, `task test:e2e`, and `task core:smoke` all pass, with revive
     clean (warnings fail).
-- [ ] 6.2 Complete the evidence envelope required by the sister-repo cutover checklist — product
+  - **Result:** lint PASS (revive v1.15.0), unit 41/41, race 41/41, integration 42/42, e2e PASS
+    (156s), `task core:smoke` PASS — the last of which blocks on `index.ready` and was unreachable
+    before task 2.8.
+- [x] 6.2 Complete the evidence envelope required by the sister-repo cutover checklist — product
   identity, dependency transition, deployment identity, composition, wipe, reseed/rebuild,
   verification, and exceptions.
   - Test: every envelope field is populated from a clean tree at the final migration commit; no field
     is filled from diagnostic-only or dirty-tree evidence.
+  - **Result:** `openspec/changes/migrate-semstreams-beta-159-lockstep/evidence.md`, including an
+    explicit "Not claimed" section for the History reconcile that could not be observed on empty
+    state.
 - [ ] 6.3 Report adoption against semstreams gh#753 and file any framework problem found during
   adoption as a new semstreams issue referencing it.
   - Test: the gh#753 comment names SemSource's migration commit and evidence; any filed issue is
     linked from the envelope's exceptions row, or that row reads `none`.
-- [ ] 6.4 Update `CLAUDE.md`'s roadmap pin and `docs/upstream/semstreams-asks.md` if adoption produced
+- [x] 6.4 Update `CLAUDE.md`'s roadmap pin and `docs/upstream/semstreams-asks.md` if adoption produced
   new upstream asks.
   - Test: the roadmap names beta.159 as the current target and no stale beta.158 reference remains in
     the roadmap section.

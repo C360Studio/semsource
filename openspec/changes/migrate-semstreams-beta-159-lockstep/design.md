@@ -126,6 +126,57 @@ gap. `MaxAge` still expires messages, so a producer stalled at the ceiling recov
 action. The knob is exposed as a `streams.GRAPH.discard` override so a deployment that would rather
 shed load than stall can say so explicitly.
 
+### D9. Readiness reads move to GRAPH_STATUS — and this was not additive
+
+The wave's readiness note is headed "additive, NOT breaking," and this change's first draft took it
+at its word and listed GRAPH_STATUS adoption as a non-goal. That was wrong, and the way it was wrong
+is the point of D1: the codebase compiled, every unit test passed, and the defect only appeared when
+a real stack answered a real status request.
+
+The note is accurate about what it describes — *folding* readiness into gating decisions is additive.
+But ADR-083 separately **deleted** `graph.index.query.status`, and SemSource read it in two places.
+A deleted request/reply subject does not fail loudly at a client: it returns no-responder, which the
+composer correctly reports as `unknown`. So the surface degraded to a permanent honest-looking
+"we don't know" while the substrate published `ready: true` one KV key away.
+
+The blast radius was larger than one field. `/source-manifest/status` and the MCP `source_status`
+tool both under-reported, and `scripts/core-profile-smoke.sh` blocks on `index.ready` — so the very
+gate this change lists in task 6.1 could never have gone green. A migration that shipped with the
+original non-goal would have been "complete" with a broken shipped surface.
+
+The fix is a small shared reader (`internal/graphstatus`) rather than per-caller KV code, because
+both call sites need the same three things: binding must-exist through the catalog seam (readers
+never create), retrying the bind rather than caching a startup failure, and treating an absent key
+as *unknown* rather than as *not ready*. The producer key list stays SemSource's own, per ADR-088 —
+there is no framework-declared "all producers" set, and declaring a key you do not depend on makes
+you defer on someone else's outage.
+
+### D10. Fail-closed boot converts latent source misconfiguration into a boot failure
+
+beta.159's component-start barrier (#719) is listed in the wave as "component-start barrier,
+fail-closed boot," and reads like an internal robustness change. Its actual adopter impact is that
+**any component that never finishes `Start` now takes the whole service down**, where beta.158 would
+bring the manager up around it.
+
+SemSource had exactly such a component, in the default install. `doc-source` and `cfgfile-source`
+legitimately name files (`README.md`, `go.mod`), but both gated their initial ingest on
+`workspace.IsRepoReady`, which is documented as a *directory* check and returns
+`path is not a directory` for a file. Callers retry persistently (30 attempts), so those two sources
+never ingested — and the only evidence was a debug-level line.
+
+Under beta.158 this was invisible: the service came up, `/source-manifest/sources` answered, and the
+quickstart e2e passed in 7.75s with the same six errors in its logs. Under beta.159 `StartAll` never
+returns, so nothing serves and the e2e fails at its first HTTP call. The bug is SemSource's and
+predates the migration; the migration is what made it fatal instead of silent.
+
+The fix is a new `workspace.IsPathReady` that delegates directories to `IsRepoReady` and accepts an
+existing regular file, rather than relaxing `IsRepoReady` itself — ast-source and git-source depend
+on its directory contract, and for them a non-directory genuinely is the error.
+
+The general lesson is D1's again, sharpened: this is the third defect in this migration that no
+compiler and no unit test could have found, and the only reason it was found at all is that the plan
+insisted on runtime acceptance.
+
 ### D8. Scope the destructive cutover to the local Compose deployment
 
 The wipe covers the local Compose JetStream state (the `nats-data` volume) only. The checklist's

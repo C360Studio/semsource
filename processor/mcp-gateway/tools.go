@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semsource/internal/sourceallow"
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
@@ -121,9 +122,9 @@ func (c *Component) removeSource(ctx context.Context, _ *mcp.CallToolRequest, in
 // sourceStatus reports graph readiness. It merges THREE honest signals (ADR-066)
 // so a caller isn't misled by any alone: the source-manifest ingest phase
 // (graph.query.status: phase + per-source counts + total_entities), the
-// graph-index structural readiness (graph.index.query.status: caught-up
+// graph-index structural readiness (GRAPH_STATUS/graph-index: caught-up
 // Ready/Lag/State), and the graph-embedding semantic readiness
-// (graph.embedding.query.status — surfaced, not gated). The index/embedding
+// (GRAPH_STATUS/graph-embedding — surfaced, not gated). The index/embedding
 // objects use the canonical readiness shape shared with the HTTP status and
 // capabilities surfaces; a failed sub-query yields an explicit
 // {available:false, reason} object — the signal agents gate on is never
@@ -133,8 +134,12 @@ func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ 
 	if err != nil {
 		return nil, nil, fmt.Errorf("status request failed: %w", err)
 	}
-	idxResp, idxErr := c.request(ctx, "graph.index.query.status", nil)
-	embResp, embErr := c.request(ctx, "graph.embedding.query.status", nil)
+	// semstreams ADR-083 removed the index status subjects; readiness is a
+	// GRAPH_STATUS KV envelope per producer. This is the agent-facing readiness
+	// surface, so a silent "unknown" here is what makes an agent treat a
+	// still-building index as a genuine absence.
+	idxResp, idxErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphIndex)
+	embResp, embErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphEmbedding)
 	out := map[string]any{
 		"status":    json.RawMessage(statusResp),
 		"index":     sourcemanifest.IndexReadinessJSON(idxResp, idxErr, "structural index"),
