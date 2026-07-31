@@ -9,3 +9,12 @@ coverage.out
 *.md
 LICENSE
 configs
+
+# The root image is a Go-only build (`go build ./cmd/semsource`); the workbench
+# ships as its own image built from the ./ui context with its own .dockerignore
+# (docker-compose.ui-dev.yml). Nothing under ui/ is compiled or embedded here,
+# so shipping it — 159MB of node_modules alone — only slows every context
+# upload and busts the `COPY . .` layer on unrelated frontend churn. If Go ever
+# go:embeds built UI assets, narrow this to `ui/node_modules` rather than
+# dropping the rule.
+ui
