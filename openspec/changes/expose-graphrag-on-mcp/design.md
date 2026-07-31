@@ -34,18 +34,70 @@ Two further corrections to the proposal's Impact section:
   `01c94d6`). The only config that turns clustering and LLM summaries on is
   `tier2-compose-dev.json`. Acceptance must target that one.
 
+### The capability ladder
+
+Verification also settles what "the benefit" actually is at each tier. `SynthesisOutcome`
+(`answer.go:30`) escalates in three rungs:
+
+| Stack | A thematic search answer contains |
+| --- | --- |
+| No clustering | Entity hits / digests. No community summaries, and **no synthesized answer** — synthesis requires summaries |
+| Clustering, no LLM | \+ community summaries \+ a **template** answer |
+| Clustering \+ LLM | \+ an **LLM-synthesized** answer |
+
+With one trap that shapes the design: **`degraded` is not the "was this an LLM answer" flag.** A
+deployment with no LLM configured returns a template answer with `degraded: false` deliberately —
+"the template IS the canonical answer for that operator's deployment" (`answer.go:44-49`). `degraded`
+means only that an LLM-*configured* deployment fell back. The sole discriminator for LLM synthesis
+is a non-empty `answer_model`.
+
+### Answering never requires an LLM
+
+A natural-language query does not need LLM classification to be answered. `ClassifierChain`
+(`graph/query/classifier_chain.go:44`) is tiered with a deterministic floor: **T0 KeywordClassifier**
+is always present and tried first, and a keyword match returns immediately, bypassing the LLM tier
+entirely; T1/T2 embedding runs only if no keyword matched; the LLM tier runs only if nothing above
+did. The LLM tier is enabled solely by a `model_registry` entry with the `query_classification`
+capability — absent it the substrate logs "keyword-only is fine" and proceeds. Even a fully nil
+chain is supported: `classifyQuery` returns nil, `resolveStrategy(nil)` yields the default `graphrag`
+strategy, and `extractSearchRefinements(nil, …)` passes the raw query through unrefined.
+
+So there are **three independent LLM knobs, each with its own deterministic floor** — and they are
+not the same switch:
+
+| Knob | Enabled by | Floor without it |
+| --- | --- | --- |
+| Query classification | `model_registry` `query_classification` capability | KeywordClassifier (T0) |
+| Answer synthesis | `clustering_llm` \+ `community_summary` capability | `TemplateAnswerSynthesizer` |
+| Community summaries | `clustering_llm` | statistical summary |
+
+SemSource exposes no configuration for `query_classification` today, so that tier is off in every
+current deployment — and the substrate carries hardening showing a small classifier model can make
+results *worse* (template placeholders emitted verbatim; single-token proper nouns replaced with
+generic examples — `graphrag.go:423-445`). Consequence for this design: no new dependency and no
+gating, but tool descriptions must not promise natural-language query understanding, since it is
+registry-dependent and not observable from the response.
+
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Route MCP tools to the substrate's community query surface with per-subject gating that matches
-  each subject's actual dependency, not a uniform tier check.
-- Make "which retrieval path answered this" legible to the agent from the tool result alone.
+- Give an agent the graph-query surface **on every tier**, with the answer escalating as the stack
+  provides more, rather than the tool disappearing when it provides less.
+- Require no LLM for any tool to answer.
+- Make the reached rung legible from the tool result alone.
 - Keep the deterministic fusion family and the new family distinguishable in the roster.
 
 **Non-Goals** (beyond `proposal.md` — Non-goals):
 
-- Normalizing the four substrate response shapes into one envelope. They differ because they answer
+- **`community_context` / `graph.query.localSearch` — deferred to a follow-up change.** It is the
+  only hard-gated subject, and it carries essentially all of this change's cost: config plumbing, a
+  `COMMUNITY_INDEX` probe, a three-state readiness signal, a `source_status` extension, and a live
+  tier-2 harness with a seminstruct model dependency. It is also the least reachable capability —
+  of four shipped tier configs, only `tier2-compose-dev.json` enables clustering. Deferring it
+  leaves the no-responder trap unfixed but *unreachable*, which is the status quo, not a regression.
+  Upstream ask 2 below is what gives the follow-up a real readiness source instead of a bucket probe.
+- Normalizing the substrate response shapes into one envelope. They differ because they answer
   different questions; flattening them would hide the differences this change exists to expose.
 - Caching, pre-warming, or otherwise influencing when clustering runs.
 - A GraphQL-side change; the substrate signal gaps identified here are filed upstream, not patched
@@ -53,140 +105,121 @@ Two further corrections to the proposal's Impact section:
 
 ## Decisions
 
-### D1 — Three tools, gated per subject, not one mode-switched tool
+### D1 — Two ungated tools, not one mode-switched tool
 
-The proposal left tool count and arity open. Decision: **three new tools**, each with its own typed
-argument struct, following the existing `<domain>_<noun>` naming.
+The proposal left tool count and arity open. Decision: **two new tools**, each with its own typed
+argument struct, following the existing `<domain>_<noun>` naming, neither gated.
 
-| Tool | Subject | Gate |
+| Tool | Subject | Availability |
 | --- | --- | --- |
-| `graph_summary` | `graph.query.summary` | **None** — works at every tier |
-| `graph_search` | `graph.query.searchGraph` | **None** — always answers; result discloses which path answered |
-| `community_context` | `graph.query.localSearch` | **Capability-gated** — the only hard gate |
+| `graph_summary` | `graph.query.summary` | Every tier — a discovery resolver that never touched clustering |
+| `graph_search` | `graph.query.searchGraph` | Every tier — always answers; the result discloses the rung it reached |
 
-*Why not one tool with a `mode` argument.* The argument shapes are genuinely different —
-`localSearch` requires an `entity_id` **and** a query, `summary` takes no query at all, `searchGraph`
-takes a query plus optional shaping flags. A single tool would need conditionally-required fields,
-which is the schema shape models most reliably get wrong, and it would force one gating story onto
-three different dependencies.
+*Why not one tool with a `mode` argument.* The argument shapes are genuinely different — `summary`
+takes no query at all, `searchGraph` takes a query plus optional shaping flags. A single tool would
+need conditionally-required fields, which is the schema shape models most reliably get wrong.
 
 *Why `globalSearch` gets no tool of its own.* `searchGraph` calls `handleGlobalSearch` first and
 returns its response **unchanged** when non-empty; it only adds a labelled fallback on empty. A
-separate `global_search` tool would offer the agent a strictly weaker sibling of `graph_search`
+separate `global_search` tool would offer the agent a strictly weaker sibling of `graph_search`,
 distinguishable only by expertise the agent does not have. `globalSearch` remains reachable — every
 non-empty answer from `graph_search` *is* a `globalSearch` answer. This is a roster decision, not a
 capability removal.
 
-*Why `graph_summary` ships ungated.* It never touched clustering. Gating it would be a fabricated
-restriction.
+*Why neither is gated.* Neither routed subject requires clustering. Gating them would be a fabricated
+restriction, and it would withhold the tool exactly when the agent has least other recourse. The one
+subject that genuinely needs a gate — `localSearch` — is deferred (see Non-Goals).
 
-### D2 — Availability is a three-state signal from two sources
+### D2 — Disclosure is derived from response fields, and the gaps are filed upstream
 
-`community_context` needs to separate three states, and no single source gives all three:
+`GlobalSearchResponse.Strategy` would say which path answered, but it is unpopulated on every normal
+path (see Context), so SemSource cannot report the strategy. What it *can* read from the substrate's
+own response, without recomputing anything:
 
-| State | Source | Retryable |
-| --- | --- | --- |
-| Not enabled in this configuration | `config.Graph.EnableClustering`, passed into the gateway's component config from `cmd/semsource/run.go` (`mcpGatewayComponentConfig`, which already holds `*config.Config`) | No — reconfigure |
-| Enabled, community index not yet populated | `COMMUNITY_INDEX` KV bucket: absent or empty | Yes — retry |
-| Enabled and populated | Both above pass | — |
+| Signal read | What it establishes |
+| --- | --- |
+| `community_summaries` / `community_id` non-empty | The answer is community-backed |
+| `answer` non-empty | A synthesized answer is present |
+| `answer_model` non-empty | That answer was LLM-synthesized — **the only reliable discriminator** |
+| `degraded` \+ `degraded_reason` | An LLM-*configured* deployment fell back, including `global_search_empty_semantic_fallback` |
 
-The no-responder transport error stays as a backstop, but it is no longer how the agent learns the
-answer: the gate is checked before the request is issued, so the agent gets a stated capability
-condition instead of a timeout.
+`degraded` deliberately does **not** discriminate LLM from template (see the capability ladder), so
+the disclosure derives the rung from `community_summaries` and `answer_model`, and carries `degraded`
+through as the separate signal it actually is.
 
-*Alternative rejected — config flag alone.* Cheap and adds no substrate coupling, but it cannot
-distinguish "still clustering" from "ready", so a mid-clustering empty answer would still read as a
-genuine absence.
-
-*Alternative rejected — probe only, no config flag.* An empty bucket cannot tell "clustering
-disabled" from "clustering enabled and not finished", collapsing a reconfigure into a retry.
-
-Reading `COMMUNITY_INDEX` is reading substrate state, not reimplementing substrate behavior; the
-boundary rule prohibits computing membership or summaries locally, which this does not do. It is
-still coupling to a bucket name, so it is paired with D3's upstream ask and retired once that lands.
-
-### D3 — Disclosure is derived from response fields, and the gap is filed upstream
-
-Because `strategy` is unpopulated on every normal path (see Context), SemSource cannot report which
-strategy answered. What it *can* read from the substrate's own response, without recomputing
-anything:
-
-- `community_summaries` / `community_id` present → the answer is community-backed.
-- `degraded` + `degraded_reason` → the substrate already labels its own degradation, including
-  `global_search_empty_semantic_fallback`.
-- `answer_model` → whether an LLM synthesized the prose, so a statistical summary is never
-  presented as an LLM one.
-
-`graph_search` and `community_context` results therefore carry a small SemSource-added disclosure
-block alongside the substrate payload, stating community-backed yes/no and echoing the substrate's
-degradation fields. The substrate payload itself passes through **verbatim** — the disclosure sits
-beside it, never rewrites it, so a future substrate `strategy` value cannot be contradicted by a
-SemSource-derived guess.
+A `graph_search` result therefore carries a small SemSource-added disclosure block **alongside** the
+substrate payload, which passes through verbatim. The disclosure never rewrites the payload, so a
+future substrate `strategy` value can be preferred over the SemSource-derived rung without conflict.
 
 Two upstream asks (`docs/upstream/semstreams-asks.md` + semstreams issues), neither blocking:
 
 1. Populate `GlobalSearchResponse.Strategy` on all `globalSearch` paths — the value is already
-   computed and metered, it just never reaches the wire.
-2. Publish a `graph-clustering` `GRAPH_STATUS` readiness envelope, so D2's bucket probe can be
-   replaced by the same readiness contract every other producer uses.
+   computed and metered to Prometheus, it just never reaches the wire.
+2. Publish a `graph-clustering` `GRAPH_STATUS` readiness envelope. Not needed by this change, but it
+   is what lets the deferred `community_context` use the same readiness contract as every other
+   producer instead of probing a bucket name.
 
-### D4 — The new family is marked in the roster, not blended into it
+### D3 — The new family is marked in the roster, not blended into it
 
 The existing tools' honesty story rests on `contract_version` and the fusion envelope; these tools
-have neither. Rather than manufacture a fake `contract_version`, each new tool's description opens
-by naming what it is (substrate graph query, not fusion) and what it requires. `source_status`
-grows a `graphrag` object using the same `available`/`ready`/`state`/`reason{retryable}` shape as
-`index` and `embedding`, so the discovery path an agent already knows extends to this family
-instead of being a second mechanism.
+have neither. Rather than manufacture a fake `contract_version`, each new tool's description opens by
+naming what it is — a substrate graph query, not a fusion answer — and states that its result
+discloses the rung it reached. No `source_status` change is needed in this scope: nothing here is
+gated, so there is no availability signal to publish.
 
-### D5 — Acceptance is layered; only the cheap layer gates CI
+Descriptions must also draw a hard line against `code_search` and must not promise natural-language
+query understanding, which is registry-dependent (see the classification note above).
 
-- **Unit / integration** (`processor/mcp-gateway/`, always in CI): gating decisions across the three
-  states, the "no empty success" invariant, disclosure derivation from synthetic substrate
-  responses, and the roster's shape. Fast, hermetic, and it covers every honesty requirement the
-  specs state.
-- **Live tier-2 acceptance** (script under `scripts/`, Task target, **not** default CI): boots
-  `configs/tiers/tier2-compose-dev.json` — the only tier config with `enable_clustering: true` and
-  `clustering_llm: true` — waits for a populated community index, and asserts non-empty
-  community-backed results with attribution on a known corpus. Kept out of default CI because it
-  needs a model registry with the `community_summary` capability (`config/config.go:282` →
-  seminstruct); a heavyweight model dependency in the PR gate buys flakiness, not confidence.
+### D4 — Acceptance is hermetic; no live tier-2 stack required
 
-Both are deterministic. No LLM judge in either, per `proposal.md` — Non-goals.
+- **Unit / integration** (`processor/mcp-gateway/`, always in CI): disclosure derivation across all
+  three rungs from recorded substrate responses — including the template-vs-LLM discrimination that
+  `degraded` alone would get wrong — plus roster shape, argument validation, and error mapping.
+- **Existing tier-0 compose smoke**, extended with one real `tools/call` per new tool asserting a
+  non-empty answer and the not-community-backed disclosure. This is the default stack, so it needs no
+  new infrastructure, no clustering, and no model registry.
 
-### D6 — ADR revising the ADR-0004 boundary
+The community-backed and LLM rungs are proven from recorded responses rather than a live clustered
+stack: the logic under test is SemSource's derivation, not the substrate's clustering, and a
+seminstruct model dependency in the PR gate buys flakiness rather than confidence. When
+`community_context` ships, it brings the live tier-2 harness with it.
 
-One page: fusion tools remain deterministic and fusion-backed; graph-query tools are a second,
-separately-gated family that discloses its retrieval path. The ADR records the boundary decision;
+### D5 — ADR revising the ADR-0004 boundary
+
+One page: fusion tools remain deterministic and fusion-backed; graph-query tools are a second family
+that answers at every tier and discloses the rung it reached. The ADR records the boundary decision;
 the mechanics stay in the specs. ADR-0004 gets a pointer, not a rewrite.
 
 ## Risks / Trade-offs
 
-- **`graph_search` and `code_search` are confusable** → Descriptions must draw the line at the first
+- **`graph_search` and `code_search` are confusable** → Descriptions draw the line in the first
   clause: `code_search` finds code symbols by meaning; `graph_search` answers corpus-wide thematic
-  questions across all entity types. The tier-2 acceptance asserts a query that only one of them
-  should win, so a description regression is visible.
-- **Coupling to the `COMMUNITY_INDEX` bucket name** → Isolated behind one accessor with a single
-  call site, and retired when upstream ask 2 lands.
+  questions across all entity types. The compose smoke asserts a query only one of them should win,
+  so a description regression is visible.
+- **Shipping `graph_search` on a non-clustered stack could read as "GraphRAG on MCP" when the answer
+  is a semantic hit list** → This is exactly what the disclosure requirement exists to prevent, and
+  it is the one thing in this scope that must not be cut: without it, phase one would create an
+  honesty hole rather than close one.
 - **Derived disclosure could disagree with a future substrate `strategy` field** → The disclosure is
-  additive and namespaced; the substrate payload is verbatim, so both can be present and a consumer
-  can prefer the substrate's own value.
-- **Live acceptance outside default CI can rot** → The unit layer covers every spec requirement
-  independently; the live layer proves the wiring. The Task target is named in the
-  advertised-surface evidence matrix so it stays discoverable.
-- **A three-state gate adds a pre-flight read to every `community_context` call** → One KV read
-  against a local NATS, well inside the existing 30s tool timeout; cache with a short TTL if it ever
-  shows up in latency.
+  additive and namespaced; the substrate payload passes through verbatim, so both can be present and
+  a consumer can prefer the substrate's own value.
+- **Deferring `community_context` leaves the no-responder trap unfixed** → It also leaves it
+  unreachable: no MCP agent can hit `localSearch` today, so this is the status quo rather than a
+  regression. The follow-up change owns it.
+- **Proving the community and LLM rungs from recorded responses, not a live clustered stack** → The
+  logic under test is SemSource's derivation, which recorded responses exercise fully. What they do
+  not prove is that the substrate still emits those fields; that is pinned by the semstreams version
+  bump process, and the follow-up change's live harness covers it.
 
 ## Migration Plan
 
 Purely additive: no existing tool's name, arguments, or response changes, so current MCP consumers
-are unaffected and no version bump is forced on them. Rollback is removing the three registrations.
+are unaffected and no version bump is forced on them. Rollback is removing the two registrations.
 
-Sequencing: pass the clustering flags into the gateway config → add the availability accessor →
-register the three tools with gating and disclosure → extend `source_status` → unit/integration
-tests → ADR → docs (`configs/tiers/README.md`, `scripts/scorecard/README.md`, README surface
-matrix) → live tier-2 acceptance script → file the two upstream asks.
+Sequencing: register the two tools with verbatim passthrough → add the disclosure derivation →
+unit/integration tests → extend the tier-0 compose smoke → ADR → docs
+(`configs/tiers/README.md`, `scripts/scorecard/README.md`, README surface matrix) → file the two
+upstream asks. No config plumbing, no readiness work, and no new stack are on this path.
 
 ## Open Questions
 

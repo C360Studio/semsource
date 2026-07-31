@@ -14,38 +14,50 @@ only the deterministic surface quietly redefines "quality" as retrieval precisio
 
 ## What Changes
 
-- New MCP tools on the gateway exposing the GraphRAG query surface, routed to the **existing**
-  semstreams subjects (`graph.query.localSearch`, `graph.query.globalSearch`,
-  `graph.query.summary`, `graph.query.searchGraph`). SemSource adds gateway routes and tool
-  contracts only; the substrate APIs are semstreams' and are not reimplemented or modified. Tool
-  count, naming, and argument shapes (one tool with a mode argument vs. separate tools) are a
-  design decision, made against what the subjects actually accept at the pinned semstreams version.
-- **Honest capability gating.** GraphRAG requires tier 2 (`enable_clustering`, and
-  `clustering_llm` for LLM community summaries). On a tier-0/1 stack the new tools MUST say so —
-  a truthful "capability not enabled at this tier" `isError`, never an empty result
-  indistinguishable from a miss. Readiness must gate on the community index actually being
-  populated, in the same spirit as the existing `phase`/`index.ready`/`embedding.ready` envelope.
-- **ADR revising the ADR-0004 MCP boundary.** ADR-0004's MCP note scoped the surface to "a thin
-  wrapper over the same fusion contract." Adding non-fusion tools is a genuine, deliberate
-  revision of that stance and gets a one-page decision record (fusion tools stay deterministic
-  and fusion-backed; GraphRAG tools are a second, capability-gated family — not fusion, and not a
-  reason to blur the two).
-- **Live tier-2 acceptance, deterministic only.** A runtime acceptance check that boots a tier-2
-  stack and verifies the tools' contracts: honest gating at tier 1, non-empty community results at
-  tier 2 on a known corpus, envelope/shape invariants. Answer-quality grading of summary prose is
-  explicitly out (see Non-goals) — a drifting judge cannot join a deterministic set.
+Verification against the pinned semstreams version corrected the premise this change started from:
+the four `graph.query.*` subjects are not one family behind one tier-2 gate (see `design.md` —
+Context). `summary` never touches clustering; `globalSearch`/`searchGraph` answer at every tier
+through non-community paths; only `localSearch` is hard-gated. Scope is narrowed accordingly.
+
+- **Two new ungated MCP tools** routed to the **existing** semstreams subjects: `graph_summary`
+  (`graph.query.summary`) and `graph_search` (`graph.query.searchGraph`, which delegates to
+  `graph.query.globalSearch` and returns it unchanged when non-empty). SemSource adds gateway routes
+  and tool contracts only; the substrate APIs are semstreams' and are not reimplemented or modified.
+- **Answers escalate with the stack; the tool never disappears.** A result carries entity hits at
+  every tier, plus community summaries where clustering is enabled, plus an LLM-synthesized answer
+  where an LLM is configured. No tool is gated on clustering, and no tool requires an LLM to answer —
+  query classification has a deterministic keyword floor.
+- **Honest disclosure of the rung reached.** Because the substrate does not put its strategy on the
+  wire, each result carries a SemSource-derived disclosure — community-backed or not, and
+  LLM-synthesized or template — sitting alongside a verbatim substrate payload. The discriminator is
+  `answer_model`, not the substrate's `degraded` flag, which is false by design on a template-only
+  deployment.
+- **ADR revising the ADR-0004 MCP boundary.** ADR-0004 scoped the MCP surface to "a thin wrapper over
+  the same fusion contract". Adding non-fusion tools is a deliberate revision and gets a one-page
+  decision record.
+- **Deterministic acceptance on the default stack.** Hermetic tests cover disclosure derivation
+  across all three rungs from recorded substrate responses; the existing tier-0 compose smoke gains a
+  real `tools/call` per new tool. No clustered stack, model registry, or new infrastructure is
+  required.
+- **Two upstream asks filed**, neither blocking: populate `GlobalSearchResponse.Strategy` on all
+  paths, and publish a `graph-clustering` `GRAPH_STATUS` readiness envelope.
 
 ## Non-goals
 
+- **`community_context` / `graph.query.localSearch` — a follow-up change.** It is the only
+  hard-gated subject and carries nearly all of this change's original cost (config plumbing, a
+  `COMMUNITY_INDEX` probe, three-state readiness, a `source_status` extension, a live tier-2 harness
+  with a model dependency), while being the least reachable capability: of four shipped tier configs
+  only `tier2-compose-dev.json` enables clustering. Deferring it leaves the no-responder trap unfixed
+  but unreachable — the status quo, not a regression.
 - Implementing or modifying GraphRAG itself — clustering, community summaries, and the
-  `graph.query.*` handlers are substrate (semstreams). Any gap found in the subjects' contracts is
-  a semstreams ask (`docs/upstream/semstreams-asks.md` + GitHub issue), never a reimplementation.
+  `graph.query.*` handlers are substrate (semstreams). Any gap found in the subjects' contracts is a
+  semstreams ask (`docs/upstream/semstreams-asks.md` + GitHub issue), never a reimplementation.
 - LLM-judged answer-quality grading, in the scorecard or beside it. The scorecard's own rationale
-  stands: a drifting judge cannot support an A/B. A GraphRAG quality instrument is a separate
-  change with its own design.
-- Changing the GraphQL surface — it already exposes GraphRAG.
-- Making tier 2 the default, packaging seminstruct, or changing tier semantics.
-- New scorecard questions for GraphRAG (they would require the judge this change declines to add).
+  stands: a drifting judge cannot support an A/B. A quality instrument is a separate change.
+- Changing the GraphQL surface — it already exposes this surface.
+- Making clustering the default, packaging seminstruct, or changing tier semantics.
+- New scorecard questions (they would require the judge this change declines to add).
 
 ## Consumers
 
@@ -57,33 +69,30 @@ and SemOps consume the same gateway surface unchanged.
 
 ### New Capabilities
 
-- `graphrag-access`: what the GraphRAG MCP tools guarantee — routing to the substrate's community
-  query surface, truthful tier/capability gating, readiness semantics, and result envelope
-  invariants.
+- `graphrag-access`: what the graph-query MCP tools guarantee — routing to the substrate's query
+  surface, availability at every tier, honest disclosure of the capability rung an answer reached,
+  and citable result attribution.
 
 ### Modified Capabilities
 
-- `mcp-gateway-contract`: the tool roster grows beyond fusion-backed tools; honesty requirements
-  (isError mapping, truthful signal statements) must extend to the non-fusion family, including
-  the "capability not enabled" state that fusion tools never had.
-- `advertised-surface-coverage`: the advertised tool/route surface must include the new tools and
-  their tier-conditional availability, so a consumer can discover whether GraphRAG is reachable
-  before calling it.
+- `mcp-gateway-contract`: the tool roster grows beyond fusion-backed tools; the honesty requirements
+  (isError mapping, truthful signal statements) extend to the non-fusion family, including a
+  graph-query success that legitimately carries no `contract_version`.
+- `advertised-surface-coverage`: the new tools need named test evidence proving they answer on the
+  default stack and disclose the rung reached, with the escalated rungs proven from recorded
+  substrate responses.
 
 ## Impact
 
-- `processor/mcp-gateway/` — tool registration, argument schemas, routing to the four
-  `graph.query.*` subjects, capability gating.
-- `processor/source-manifest/` — readiness/capability advertisement if the community-index signal
-  joins the status payload (`workbench_capabilities.go`, `readiness.go`).
-- `config/config.go` already models `enable_clustering`/`clustering_llm`; the gating logic reads
-  it — no config shape change expected.
+- `processor/mcp-gateway/` — two tool registrations, argument schemas, routing to
+  `graph.query.summary` and `graph.query.searchGraph`, and the disclosure derivation.
 - `docs/adr/` — new ADR revising the ADR-0004 MCP boundary; pointer update in ADR-0004.
-- `configs/tiers/README.md` and `scripts/scorecard/README.md` — both currently state the MCP
-  tools never reach GraphRAG; both must be updated to describe the new family and why the
+- `configs/tiers/README.md` and `scripts/scorecard/README.md` — both currently state the MCP tools
+  never reach GraphRAG; both must describe the new family and the capability ladder, and say why the
   scorecard still does not grade it.
-- Acceptance harness (location per design: `test/e2e/` or `scripts/`) booting
-  `tier2-semantic-instruct.json` / the tier-2 compose overlay.
-- Dependency: the pinned semstreams version's `graph.query.localSearch`/`globalSearch`/`summary`/
-  `searchGraph` contracts — the design phase must verify their request/response shapes against
-  beta.159 before fixing tool schemas.
+- The existing tier-0 compose smoke — one real `tools/call` per new tool.
+- `docs/upstream/semstreams-asks.md` — two asks filed.
+- No change to `config/config.go`, `processor/source-manifest/`, or the compose profiles: nothing in
+  this scope is gated, so there is no availability signal to plumb or publish.
+- Dependency: the pinned semstreams version's `graph.query.summary` / `searchGraph` / `globalSearch`
+  contracts, verified against `v1.0.0-beta.159` in `design.md` — Context.
