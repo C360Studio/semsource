@@ -33,26 +33,44 @@ const (
 	beta148UnrelatedMessage = "preserve-unrelated-stream-beta148"
 )
 
-// This literal list is the reviewed beta.148 default. The parity assertion is
-// intentionally first: a framework-owned bucket addition must stop the
-// rehearsal for review instead of silently widening its deletion boundary.
+// This literal list is the reviewed framework-owned set at the pinned SemStreams
+// target (beta.159, whose KV descriptor catalog derives it by owner-only write
+// policy). The parity assertion is intentionally first: a framework-owned bucket
+// addition must stop the rehearsal for review instead of silently widening its
+// deletion boundary. It is order-sensitive — the assertion compares against
+// catalog order, not a sorted set.
+//
+// Reviewed at the beta.158 → beta.159 migration: EMBEDDINGS_CACHE was deleted
+// framework-side, and seven buckets entered the owned set. ENTITY_SUFFIX_INDEX
+// and GRAPH_INGEST_APPLIED_SEQ moved INTO the catalog, so they are no longer
+// deleted by the separate migration-bucket pass below. The four operational
+// entries (GRAPH_STATUS, OWNER_CLAIMS, OWNER_PRESENCE, STORAGE_REPORT) are a
+// deliberate widening: a full cutover re-bootstraps ownership and re-derives
+// readiness. COMPONENT_STATUS is NOT here — it declares open writes, so it stays
+// on the preservation side.
 var beta148DefaultFrameworkBuckets = []string{
 	"ENTITY_STATES",
-	"PREDICATE_INDEX",
-	"INCOMING_INDEX",
+	"ENTITY_SUFFIX_INDEX",
+	"GRAPH_INGEST_APPLIED_SEQ",
 	"OUTGOING_INDEX",
+	"INCOMING_INDEX",
 	"ALIAS_INDEX",
+	"PREDICATE_INDEX",
+	"CONTEXT_INDEX",
 	"NAME_INDEX",
 	"SPATIAL_INDEX",
 	"TEMPORAL_INDEX",
 	"TEMPORAL_INDEX_REVERSE",
-	"CONTEXT_INDEX",
-	"EMBEDDINGS_CACHE",
 	"EMBEDDING_INDEX",
 	"EMBEDDING_DEDUP",
 	"COMMUNITY_INDEX",
+	"COMMUNITY_SUMMARIES",
 	"ANOMALY_INDEX",
 	"STRUCTURAL_INDEX",
+	"GRAPH_STATUS",
+	"OWNER_CLAIMS",
+	"OWNER_PRESENCE",
+	"STORAGE_REPORT",
 }
 
 var beta148PreservedKVBuckets = []string{
@@ -185,7 +203,11 @@ func TestE2E_Beta148CutoverRehearsal(t *testing.T) {
 			}
 		}
 	}
-	for _, bucket := range []string{"ENTITY_SUFFIX_INDEX", "GRAPH_INGEST_APPLIED_SEQ", "PREDICATE_CATALOG"} {
+	// Only legacy resources outside the framework catalog belong here. kvSet is
+	// the PRE-deletion snapshot, so anything already removed by the catalog pass
+	// above would be deleted twice and fail; ENTITY_SUFFIX_INDEX and
+	// GRAPH_INGEST_APPLIED_SEQ left this list when they entered the catalog.
+	for _, bucket := range []string{"PREDICATE_CATALOG"} {
 		if kvSet[bucket] {
 			if err := js.DeleteKeyValue(ctx, bucket); err != nil {
 				t.Fatalf("delete observed migration KV %s: %v", bucket, err)

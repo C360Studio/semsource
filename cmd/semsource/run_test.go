@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/config"
+	semgraph "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/types"
 )
 
@@ -361,5 +362,110 @@ func assertPortSubjects(t *testing.T, got, want map[string]string) {
 		if gotSubject != wantSubject {
 			t.Fatalf("port %q subject = %q, want %q", name, gotSubject, wantSubject)
 		}
+	}
+}
+
+// kvPortSubjects walks every component's declared ports and returns the subjects
+// of the KV-typed ones, keyed by "<component>/<direction>/<port>" so a failure
+// names the exact declaration site.
+func kvPortSubjects(t *testing.T, components map[string]types.ComponentConfig) map[string]string {
+	t.Helper()
+
+	found := map[string]string{}
+	for compName, comp := range components {
+		var raw map[string]any
+		if err := json.Unmarshal(comp.Config, &raw); err != nil {
+			t.Fatalf("unmarshal %s config: %v", compName, err)
+		}
+		ports, ok := raw["ports"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, direction := range []string{"inputs", "outputs"} {
+			entries, ok := ports[direction].([]any)
+			if !ok {
+				continue
+			}
+			for _, entry := range entries {
+				port, ok := entry.(map[string]any)
+				if !ok {
+					t.Fatalf("%s %s port is not an object: %#v", compName, direction, entry)
+				}
+				portType, _ := port["type"].(string)
+				if !strings.HasPrefix(portType, "kv") {
+					continue
+				}
+				subject, _ := port["subject"].(string)
+				portName, _ := port["name"].(string)
+				found[compName+"/"+direction+"/"+portName] = subject
+			}
+		}
+	}
+	return found
+}
+
+// TestGraphSubsystemComponents_KVPortSubjectsResolveToFrameworkCatalog guards the
+// semstreams beta.159 acquisition seam: a KV port subject that does not resolve
+// to a bucket in the framework descriptor catalog now fails the owning
+// component's Start, and therefore boot. Previously a typo silently created a
+// stray bucket that no guard protected and no reader consumed, so there is no
+// compile error and no runtime warning to catch this — only a dead deployment.
+func TestGraphSubsystemComponents_KVPortSubjectsResolveToFrameworkCatalog(t *testing.T) {
+	cases := map[string]*config.Config{
+		"default":            {},
+		"clustering enabled": {Graph: &config.GraphConfig{EnableClustering: true}},
+	}
+
+	for name, cfg := range cases {
+		t.Run(name, func(t *testing.T) {
+			components, err := graphSubsystemComponents(cfg)
+			if err != nil {
+				t.Fatalf("graphSubsystemComponents() error = %v", err)
+			}
+
+			subjects := kvPortSubjects(t, components)
+			if len(subjects) == 0 {
+				t.Fatal("no KV ports discovered; the walker is not seeing the composition")
+			}
+			for site, subject := range subjects {
+				if _, ok := semgraph.SpecFor(subject); !ok {
+					t.Errorf("KV port %s declares subject %q, which resolves to no framework catalog bucket",
+						site, subject)
+				}
+			}
+		})
+	}
+}
+
+// TestGraphSubsystemComponents_GraphEmbeddingDeclaresNoOutputPorts guards the
+// beta.159 EMBEDDINGS_CACHE removal. graph-embedding's durable writes
+// (EMBEDDING_INDEX, EMBEDDING_DEDUP, the GRAPH_STATUS readiness envelope) are
+// direct bucket writes at Start, never ports — so the component now rejects ANY
+// ports.outputs entry at creation. This composition previously declared an
+// output port for the deleted EMBEDDINGS_CACHE bucket, which fails boot.
+func TestGraphSubsystemComponents_GraphEmbeddingDeclaresNoOutputPorts(t *testing.T) {
+	components, err := graphSubsystemComponents(&config.Config{})
+	if err != nil {
+		t.Fatalf("graphSubsystemComponents() error = %v", err)
+	}
+
+	embedding, ok := components["graph-embedding"]
+	if !ok {
+		t.Fatal("graph-embedding component not configured")
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(embedding.Config, &raw); err != nil {
+		t.Fatalf("unmarshal graph-embedding config: %v", err)
+	}
+	ports, ok := raw["ports"].(map[string]any)
+	if !ok {
+		t.Fatalf("graph-embedding ports missing or not an object: %#v", raw["ports"])
+	}
+	if outputs, present := ports["outputs"]; present {
+		t.Errorf("graph-embedding declares ports.outputs = %#v; beta.159 rejects any output port here", outputs)
+	}
+	if _, present := ports["inputs"]; !present {
+		t.Error("graph-embedding lost its ENTITY_STATES input port")
 	}
 }

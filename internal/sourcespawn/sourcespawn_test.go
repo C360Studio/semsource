@@ -29,6 +29,29 @@ func newFakeStore() *fakeStore {
 		cfg: semconfig.NewSafeConfig(&semconfig.Config{
 			Platform:   semconfig.PlatformConfig{Org: "test", ID: "test"},
 			Components: map[string]types.ComponentConfig{},
+			// Every spawned source declares a graph.ingest output port, which
+			// makes config validation resolve the GRAPH stream and — since
+			// semstreams beta.159 — demand its bounds. Production supplies this
+			// from cmd/semsource's graphStreamConfig; without it here the
+			// fixture validated a config shape that can never exist at runtime,
+			// so Add failed for a reason no real deployment would hit. Keep the
+			// bounds in step with graphStreamConfig.
+			Streams: semconfig.StreamConfigs{
+				"GRAPH": semconfig.StreamConfig{
+					Subjects: []string{
+						"graph.ingest.entity",
+						"graph.ingest.batch",
+						"graph.ingest.manifest",
+						"graph.ingest.status",
+						"graph.ingest.predicates",
+					},
+					Storage:  "memory",
+					MaxBytes: 256 * 1024 * 1024,
+					MaxAge:   "1h",
+					Replicas: 1,
+					Discard:  semconfig.StreamDiscardNew,
+				},
+			},
 		}),
 		puts: make(map[string]types.ComponentConfig),
 	}

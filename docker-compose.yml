@@ -162,7 +162,11 @@ services:
   # loss under a still-healthy stack). Container-lifecycle durability only —
   # graph retention semantics stay ADR-0008's (no NATS TTL/MaxBytes lifecycle).
   nats:
-    image: nats:2-alpine
+    # Exact version, matching the server line SemStreams tests its own substrate
+    # against (its e2e, tiered, and testcontainers harnesses all pin 2.12). A
+    # floating major tag would let a server upgrade arrive implicitly under a
+    # governed graph the framework has not exercised on that version.
+    image: nats:2.12-alpine
     command: ["-js", "-sd", "/data", "-m", "8222", "--name", "c360-nats"]
     volumes:
       - nats-data:/data

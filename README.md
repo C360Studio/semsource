@@ -49,7 +49,7 @@ ports, config, and connecting an agent.
 go install github.com/c360studio/semsource/cmd/semsource@latest
 
 # SemSource needs NATS (JetStream + KV) — start one if you don't have it:
-docker run --rm -p 4222:4222 nats:2-alpine -js
+docker run --rm -p 4222:4222 nats:2.12-alpine -js
 
 # Auto-detect your project, write semsource.json, and start ingesting
 semsource init --quick

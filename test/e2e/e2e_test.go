@@ -320,7 +320,10 @@ func startNATS(t *testing.T) (natsURL string, cleanup func()) {
 	cmd := exec.Command("docker", "run", "-d",
 		"--name", containerName,
 		"-p", fmt.Sprintf("%d:4222", port),
-		"nats:2-alpine", "-js",
+		// Exact version, matching docker-compose.yml and the server line
+		// SemStreams tests against. The e2e harness must not exercise a
+		// different NATS server than the one the product ships on.
+		"nats:2.12-alpine", "-js",
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

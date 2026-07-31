@@ -62,7 +62,7 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
 | `task ui:image:verify`                                                    | `scripts/ui-image-verify.sh`                                                                    | covered  | Local production-image proof only; not registry evidence |
 | `task ui:image:release:test`                                              | Release metadata/workflow/verifier/pin contract test suite                                      | covered  | No registry access and no release claim                  |
 | `go install ...@latest`                                                   | e2e `buildBinary` compiles `./cmd/semsource`                                                    | partial  | Consider install smoke                                   |
-| `docker run ... nats:2-alpine -js`                                        | `TestE2E_NativeQuickStart`                                                                      | covered  | None                                                     |
+| `docker run ... nats:2.12-alpine -js`                                     | `TestE2E_NativeQuickStart`                                                                      | covered  | None                                                     |
 | `git clone ...` / `cd semsource`                                          | External Git behavior                                                                           | external | None                                                     |
 
 ## Native CLI
