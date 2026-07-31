@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 )
@@ -23,12 +24,15 @@ const serverVersion = "0.1.0"
 // Component is the semsource MCP gateway. It serves a Streamable-HTTP MCP
 // endpoint whose tools translate into NATS request/reply against source-manifest.
 type Component struct {
-	name     string
-	config   Config
-	client   *natsclient.Client
-	apiToken string
-	server   *mcp.Server
-	logger   *slog.Logger
+	name   string
+	config Config
+	client *natsclient.Client
+	// graphStatus reads ADR-083 readiness envelopes from GRAPH_STATUS, which
+	// replaced the removed graph.index/embedding.query.status subjects.
+	graphStatus *graphstatus.Reader
+	apiToken    string
+	server      *mcp.Server
+	logger      *slog.Logger
 
 	mu        sync.RWMutex
 	running   bool
@@ -53,11 +57,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	c := &Component{
-		name:     "mcp-gateway",
-		config:   cfg,
-		client:   deps.NATSClient,
-		apiToken: os.Getenv("SEMSOURCE_API_TOKEN"),
-		logger:   deps.GetLogger(),
+		name:        "mcp-gateway",
+		config:      cfg,
+		client:      deps.NATSClient,
+		graphStatus: graphstatus.New(deps.NATSClient),
+		apiToken:    os.Getenv("SEMSOURCE_API_TOKEN"),
+		logger:      deps.GetLogger(),
 	}
 	c.server = c.buildServer()
 	return c, nil

@@ -376,6 +376,35 @@ func EnsureWorktree(ctx context.Context, repoPath, branch, worktreeDir string) (
 	return dest, nil
 }
 
+// IsPathReady reports whether an ingestion path is ready to read, for sources
+// whose configuration legitimately names FILES as well as directories
+// (doc-source takes "README.md", cfgfile-source takes "go.mod").
+//
+// A directory delegates to IsRepoReady, because a directory may be a git
+// checkout still being populated. A regular file that exists is ready by
+// definition: git writes a file's content as part of the checkout, so its
+// presence is already the evidence IsRepoReady's directory probes go looking
+// for.
+//
+// Why this exists as a separate function rather than a relaxation of
+// IsRepoReady: IsRepoReady is documented as a directory check and ast-source and
+// git-source depend on that — for them a non-directory IS the error. Passing a
+// file path to it was a category error at the call site, and it was silent
+// because the resulting failure only appeared at debug level while the caller
+// retried persistently. Under semstreams beta.158 the manager still came up, so
+// the source merely never ingested; beta.159's component-start barrier makes the
+// same condition fail the whole boot (#719, fail-closed boot).
+func IsPathReady(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("path not available: %w", err)
+	}
+	if info.IsDir() {
+		return IsRepoReady(path)
+	}
+	return nil
+}
+
 // slugify converts an arbitrary string into a lowercase, hyphen-separated
 // filesystem-safe identifier. Consecutive hyphens are collapsed, and leading
 // or trailing hyphens are stripped.

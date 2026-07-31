@@ -1,0 +1,72 @@
+# Tier-2 local development overlay: adds seminstruct (LLM) on top of the core
+# profile's nats + semembed + semsource.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tier2-dev.yml up -d
+#
+# Pair it with a tier-2 config that uses Compose service hostnames:
+#   SEMSOURCE_CONFIG=tiers/tier2-compose-dev.json
+#
+# This is a DEV overlay, deliberately not a profile on the core stack: tier 2 is
+# a ~1GB image running real LLM inference, and the shippable MVP must stay
+# nats+semembed+semsource (scripts/core-profile-smoke.sh asserts that exact set).
+services:
+  # seminstruct — OpenAI-compatible inference proxy (llama-server, qwen3-0.6b).
+  # The GGUF is baked into the image at /models/model.gguf, so there is no
+  # runtime model download and no volume to provision.
+  seminstruct:
+    # Digest-pinned for the same reason the core profile pins semembed: a moved
+    # tag must never silently change what a dev machine runs. Refresh with
+    #   docker buildx imagetools inspect ghcr.io/c360studio/seminstruct:<tag>
+    #
+    # Model size is the quality/cost dial — pick one (MODEL_ALIAS must match):
+    #   qwen3-0.6b  sha256:297507bee8396438fe284f9ed285165c47a565b3f65be177030c473a4b90bdb9  (smoke only)
+    #   qwen3-1.7b  sha256:c7197a6b1d81443d9a739684345fc5d7d760c38e85dfaa92dc2afb643f24464f  (quick test)
+    #   qwen3-8b    sha256:a83168cff65158a02ead5850fc79931a58f43d72e3b3d320691d42b17aa3bd1b  (real results)
+    #
+    # 0.6b is the default only because it boots fast enough to prove the wiring.
+    # Community summaries and NL-search quality need 8b; treat 0.6b output as
+    # evidence the path works, never as evidence the answers are good.
+    image: ${SEMINSTRUCT_IMAGE:-ghcr.io/c360studio/seminstruct:qwen3-0.6b@sha256:297507bee8396438fe284f9ed285165c47a565b3f65be177030c473a4b90bdb9}
+    environment:
+      # Deliberately a SIZE-FREE alias, so the tier-2 config's model_registry
+      # entry stays valid across 0.6b/1.7b/8b and swapping size is a
+      # one-variable change (SEMINSTRUCT_IMAGE).
+      #
+      # This is about honesty, not breakage: llama-server ignores the requested
+      # model name and serves whatever GGUF it loaded (verified — a request for
+      # "qwen3-0.6b" against the 8b container answers, tagged "seminstruct").
+      # So a stale size-specific name would NOT error; it would keep working
+      # while every log line and config claimed the wrong model. A size-free
+      # alias makes the mismatch impossible to have in the first place.
+      - MODEL_ALIAS=${SEMINSTRUCT_MODEL_ALIAS:-seminstruct}
+      - MODEL_CONTEXT=${SEMINSTRUCT_CONTEXT:-16384}
+      - MODEL_REASONING=${SEMINSTRUCT_REASONING:-off}
+      - MODEL_THREADS=${SEMINSTRUCT_THREADS:-2}
+      # llama-server splits MODEL_CONTEXT across MODEL_PARALLEL slots, so the KV
+      # cache scales with parallel × per-slot ctx × model size. Four slots is
+      # fine for 0.6b and wasteful-to-fatal for 8b on a 16GB Docker allocation —
+      # drop to 1-2 when running the larger images.
+      - MODEL_PARALLEL=${SEMINSTRUCT_PARALLEL:-4}
+    # Generation is CPU-bound and will happily eat every core on a dev box —
+    # the same footprint caveat configs/tiers/README.md documents for semembed.
+    deploy:
+      resources:
+        limits:
+          cpus: "${SEMINSTRUCT_CPUS:-2}"
+    # Published so a native `semsource run` (outside compose) can reach it too,
+    # mirroring how the core stack publishes NATS.
+    ports:
+      - "${SEMINSTRUCT_HOST_PORT:-8083}:8083"
+    networks:
+      - c360
+    restart: unless-stopped
+
+  # Tier 2 is only meaningful once the LLM answers, so gate semsource on it.
+  semsource:
+    depends_on:
+      nats:
+        condition: service_healthy
+      semembed:
+        condition: service_healthy
+      seminstruct:
+        condition: service_healthy

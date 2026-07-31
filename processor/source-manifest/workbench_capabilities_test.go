@@ -15,8 +15,8 @@ import (
 
 func TestWorkbenchCapabilities_ReadyHeadlessContract(t *testing.T) {
 	c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
-		"graph.index.query.status":     {status: readyIndexStatus(42)},
-		"graph.embedding.query.status": {status: readyIndexStatus(42)},
+		"graph-index":     {status: readyIndexStatus(42)},
+		"graph-embedding": {status: readyIndexStatus(42)},
 	})
 	mux := http.NewServeMux()
 	c.RegisterHTTPHandlers("/source-manifest", mux)
@@ -136,8 +136,8 @@ func TestWorkbenchCapabilities_PartialAndUnavailableSignals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := newCapabilityTestComponent(t, tt.phase, true, map[string]capabilityStatusResult{
-				"graph.index.query.status":     tt.structural,
-				"graph.embedding.query.status": tt.semantic,
+				"graph-index":     tt.structural,
+				"graph-embedding": tt.semantic,
 			})
 			rec := httptest.NewRecorder()
 			c.handleWorkbenchCapabilities(rec,
@@ -177,8 +177,8 @@ func TestWorkbenchCapabilities_PartialAndUnavailableSignals(t *testing.T) {
 
 func TestWorkbenchCapabilities_MalformedStatusAndUnavailableActions(t *testing.T) {
 	c := newCapabilityTestComponent(t, PhaseReady, false, map[string]capabilityStatusResult{
-		"graph.index.query.status":     {status: readyIndexStatus(7)},
-		"graph.embedding.query.status": {raw: []byte(`{"ready":`)},
+		"graph-index":     {status: readyIndexStatus(7)},
+		"graph-embedding": {raw: []byte(`{"ready":`)},
 	})
 	rec := httptest.NewRecorder()
 	c.handleWorkbenchCapabilities(rec,
@@ -202,8 +202,8 @@ func TestWorkbenchCapabilities_MalformedStatusAndUnavailableActions(t *testing.T
 func TestWorkbenchCapabilities_SourceErrorsOverrideAggregateReady(t *testing.T) {
 	secret := "private source credential failure"
 	c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
-		structuralStatusSubject: {status: readyIndexStatus(7)},
-		semanticStatusSubject:   {status: readyIndexStatus(7)},
+		structuralReadinessKey: {status: readyIndexStatus(7)},
+		semanticReadinessKey:   {status: readyIndexStatus(7)},
 	})
 	c.statusData = mustMarshal(t, &StatusPayload{
 		Namespace: "acme",
@@ -247,8 +247,8 @@ func TestWorkbenchCapabilities_SourceErrorsOverrideAggregateReady(t *testing.T) 
 
 func TestWorkbenchCapabilities_AbsentIndexMetadataRemainsAbsent(t *testing.T) {
 	c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
-		structuralStatusSubject: {raw: []byte(`{"ready":false,"state":"building"}`)},
-		semanticStatusSubject:   {raw: []byte(`{"ready":false,"state":"building"}`)},
+		structuralReadinessKey: {raw: []byte(`{"ready":false,"state":"building"}`)},
+		semanticReadinessKey:   {raw: []byte(`{"ready":false,"state":"building"}`)},
 	})
 	rec := httptest.NewRecorder()
 	c.handleWorkbenchCapabilities(rec,
@@ -312,7 +312,7 @@ func TestWorkbenchCapabilities_StatusTimeoutIsPartialAndSanitized(t *testing.T) 
 	c := newCapabilityTestComponent(t, PhaseReady, true, nil)
 	c.readinessTimeout = 20 * time.Millisecond
 	c.readinessRequest = func(ctx context.Context, subject string) ([]byte, error) {
-		if subject == structuralStatusSubject {
+		if subject == structuralReadinessKey {
 			return json.Marshal(readyIndexStatus(12))
 		}
 		<-ctx.Done()

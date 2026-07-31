@@ -1,0 +1,51 @@
+{
+  "namespace": "c360",
+  "sources": [
+    {
+      "type": "ast",
+      "path": "/workspace",
+      "languages": ["go", "typescript", "javascript", "java", "python", "svelte"],
+      "watch": true
+    },
+    {
+      "type": "docs",
+      "paths": ["/workspace"],
+      "watch": true
+    },
+    {
+      "type": "config",
+      "paths": ["/workspace"],
+      "watch": true
+    }
+  ],
+  "source_roots": ["/workspace"],
+  "graph": {
+    "embedder_type": "http",
+    "index_workers": 4,
+    "coalesce_ms": 200,
+    "enable_clustering": true,
+    "clustering_llm": true
+  },
+  "model_registry": {
+    "endpoints": {
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "query_prefix": "Represent this sentence for searching relevant passages: "
+      },
+      "seminstruct": {
+        "provider": "openai",
+        "url": "http://seminstruct:8083/v1",
+        "model": "seminstruct",
+        "max_tokens": 16384
+      }
+    },
+    "capabilities": {
+      "embedding": { "preferred": ["semembed"] },
+      "community_summary": { "preferred": ["seminstruct"] },
+      "query_classification": { "preferred": ["seminstruct"] },
+      "answer_synthesis": { "preferred": ["seminstruct"] }
+    }
+  }
+}

@@ -139,9 +139,14 @@ would invent coverage.
 ## Tier 2 — Semantic + Instruct (seminstruct) — wired (`tier2-semantic-instruct.json`)
 
 > **Ships OFF, and is not part of the MVP.** `enable_clustering` and `clustering_llm` are both
-> `false` in this config, and **no compose file defines a `seminstruct` service** — you bring your
-> own. Treat this file as a **wiring example**, not a supported profile: the capability bindings show
-> what to bind if you run seminstruct, and nothing here starts by default.
+> `false` in this config, and it names **no compose service** — you bring your own seminstruct.
+> Treat this file as a **wiring example**, not a supported profile: the capability bindings show what
+> to bind if you run seminstruct, and nothing here starts by default.
+>
+> If you want a tier-2 stack that actually comes up, use the **dev overlay** below
+> (`docker-compose.tier2-dev.yml` + `tier2-compose-dev.json`) rather than editing this file. The
+> overlay is an opt-in `-f` overlay, deliberately **not** a profile on the core stack — the shippable
+> MVP stays nats+semembed+semsource, and `task core:smoke` asserts exactly that set.
 >
 > It previously shipped with both flags `true`, which meant selecting this config would have driven
 > community summaries at `localhost:8083` with nothing listening. Flipped off rather than deleted so
@@ -161,7 +166,42 @@ semsource run --config configs/tiers/tier2-semantic-instruct.json
 ```
 
 Requires **seminstruct** running (Rust proxy, :8083, OpenAI-compatible inference) only when
-`clustering_llm` is set — and you must provide it: it is not in any compose profile.
+`clustering_llm` is set — and with this config you must provide it yourself.
+
+### Tier 2 in Compose — the dev overlay (`tier2-compose-dev.json`)
+
+`docker-compose.tier2-dev.yml` adds a digest-pinned `seminstruct` service on top of the core stack,
+and `configs/tiers/tier2-compose-dev.json` is the matching config — the difference from
+`tier2-semantic-instruct.json` is that it targets **Compose service hostnames** (`http://semembed:8081`,
+`http://seminstruct:8083`) instead of `localhost`, and it turns **both clustering flags on**. It is
+the only config in this repo that enables clustering, so it is what you need to exercise the
+community-summary path at all.
+
+```bash
+SEMSOURCE_CONFIG=tiers/tier2-compose-dev.json \
+  docker compose -f docker-compose.yml -f docker-compose.tier2-dev.yml up -d
+```
+
+Two things the overlay is deliberate about:
+
+- **Not a profile.** Tier 2 is a ~1GB image running real inference. Keeping it an opt-in `-f`
+  overlay is what lets `task core:smoke` keep asserting that the default Compose resolves exactly
+  nats, semembed, and semsource.
+- **A size-free model alias.** The config asks for model `seminstruct`, not `qwen3-0.6b`, and the
+  overlay sets `MODEL_ALIAS` to match. llama-server ignores the requested model name and serves
+  whatever GGUF it loaded, so a size-specific name would *not* error after you swapped images — it
+  would keep working while every log line and config claimed the wrong model. Swap size with
+  `SEMINSTRUCT_IMAGE` alone; the digests for 0.6b / 1.7b / 8b are listed in the overlay.
+
+Treat 0.6b output as evidence the wiring works, never as evidence the answers are good — community
+summaries and NL-search quality need the 8b image.
+
+Check the overlay's composition, image pins, and config wiring without pulling anything:
+
+```bash
+task tier2:smoke:dev                          # composition checks only
+SEMSOURCE_TIER2_SMOKE_FULL=1 task tier2:smoke:dev   # also pulls, starts, and polls to ready
+```
 
 **None of this is on the agent path.** The MCP tools (`code_context`, `code_impact`, `code_search`,
 `doc_context`, `code_changes`) resolve through the fusion gateway and never reach GraphRAG,

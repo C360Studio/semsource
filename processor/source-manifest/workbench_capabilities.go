@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/c360studio/semsource/internal/graphstatus"
 )
 
 const (
@@ -19,11 +21,18 @@ const (
 	readinessUnknown      = "unknown"
 )
 
+// Readiness comes from the GRAPH_STATUS KV bucket, one key per producer.
+// semstreams ADR-083 REMOVED the `graph.index.query.status` request/reply
+// subject that these probes used to call; nothing answers it, so the structural
+// index reported "unknown" forever while GRAPH_STATUS carried a correct
+// `ready: true`. See internal/graphstatus.
 const (
-	structuralStatusSubject = "graph.index.query.status"
-	semanticStatusSubject   = "graph.embedding.query.status"
+	structuralReadinessKey = graphstatus.KeyGraphIndex
+	semanticReadinessKey   = graphstatus.KeyGraphEmbedding
 )
 
+// readinessRequestFunc fetches one producer's raw readiness envelope by
+// GRAPH_STATUS key. It stays a seam so tests can supply envelopes without NATS.
 type readinessRequestFunc func(context.Context, string) ([]byte, error)
 
 type workbenchCapabilitiesResponse struct {
@@ -261,18 +270,18 @@ func (c *Component) collectIndexReadiness(parent context.Context) (workbenchInde
 
 	results := make(chan namedReadinessSignal, 2)
 	for _, query := range []struct {
-		name    string
-		subject string
-		label   string
+		name  string
+		key   string
+		label string
 	}{
-		{name: "structural", subject: structuralStatusSubject, label: "Structural index"},
-		{name: "semantic", subject: semanticStatusSubject, label: "Semantic index"},
+		{name: "structural", key: structuralReadinessKey, label: "Structural index"},
+		{name: "semantic", key: semanticReadinessKey, label: "Semantic index"},
 	} {
 		query := query
 		go func() {
 			results <- namedReadinessSignal{
 				name:   query.name,
-				signal: c.fetchIndexReadiness(ctx, query.subject, query.label),
+				signal: c.fetchIndexReadiness(ctx, query.key, query.label),
 			}
 		}()
 	}
@@ -295,26 +304,29 @@ func (c *Component) collectIndexReadiness(parent context.Context) (workbenchInde
 	return structural, semantic
 }
 
-func (c *Component) fetchIndexReadiness(ctx context.Context, subject, label string) workbenchIndexReadiness {
-	raw, err := c.requestReadiness(ctx, subject)
+func (c *Component) fetchIndexReadiness(ctx context.Context, key, label string) workbenchIndexReadiness {
+	raw, err := c.requestReadiness(ctx, key)
 	return indexReadinessFrom(raw, err, label)
 }
 
-func (c *Component) requestReadiness(ctx context.Context, subject string) ([]byte, error) {
+// requestReadiness reads one producer's readiness envelope from GRAPH_STATUS.
+// It is a KV read rather than a request/reply because ADR-083 removed the
+// status subjects; an absent key means nothing was published, which is unknown
+// rather than not-ready.
+func (c *Component) requestReadiness(ctx context.Context, key string) ([]byte, error) {
 	if c.readinessRequest != nil {
-		raw, err := c.readinessRequest(ctx, subject)
+		raw, err := c.readinessRequest(ctx, key)
 		if err != nil {
-			return nil, fmt.Errorf("request readiness %s: %w", subject, err)
+			return nil, fmt.Errorf("read readiness %s: %w", key, err)
 		}
 		return raw, nil
 	}
-	if c.client == nil {
-		return nil, fmt.Errorf("request readiness %s: NATS client is unavailable", subject)
+	if c.graphStatus == nil {
+		return nil, fmt.Errorf("read readiness %s: GRAPH_STATUS reader is unavailable", key)
 	}
-	timeout := c.workbenchReadinessTimeout()
-	raw, err := c.client.RequestReady(ctx, subject, nil, timeout, timeout)
+	raw, err := c.graphStatus.Raw(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("request readiness %s: %w", subject, err)
+		return nil, fmt.Errorf("read readiness %s: %w", key, err)
 	}
 	return raw, nil
 }

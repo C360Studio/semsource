@@ -461,7 +461,7 @@ func wrapNATSConnError(err error, url string) error {
 		strings.Contains(msg, "timeout") {
 		return fmt.Errorf("NATS connection failed at %s: %w\n\n"+
 			"SemSource needs a NATS server (JetStream + KV). Start one with:\n"+
-			"  docker run --rm -p 4222:4222 nats:2-alpine -js\n"+
+			"  docker run --rm -p 4222:4222 nats:2.12-alpine -js\n"+
 			"or, from the semsource repo:\n"+
 			"  docker compose up -d nats\n"+
 			"Then re-run, or set --nats-url / NATS_URL to an existing server.", url, err)
@@ -839,12 +839,15 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 					".name", ".body", ".abstract", ".subject",
 					".signature", ".comment",
 				},
+				// graph-embedding declares NO output ports. Its durable writes
+				// (EMBEDDING_INDEX, EMBEDDING_DEDUP, and the GRAPH_STATUS
+				// readiness envelope) are direct bucket writes at Start, never
+				// ports. semstreams beta.159 deleted the EMBEDDINGS_CACHE bucket
+				// this block used to declare and now rejects ANY ports.outputs
+				// here at component creation, so an outputs entry fails boot.
 				"ports": map[string]any{
 					"inputs": []map[string]any{
 						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
-					},
-					"outputs": []map[string]any{
-						{"name": "embeddings", "type": "kv-write", "subject": "EMBEDDINGS_CACHE"},
 					},
 				},
 			},
@@ -950,6 +953,22 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		MaxBytes: 256 * 1024 * 1024,
 		MaxAge:   "1h",
 		Replicas: 1,
+		// semstreams beta.159 requires an ordinary stream to declare its
+		// discard policy — it was hardcoded to "old" before, so the policy was
+		// never anyone's choice.
+		//
+		// "new" here, deliberately. GRAPH is the ingest TRANSPORT for
+		// graph.ingest.* (graph state itself lives in the ENTITY_STATES KV, so
+		// ADR-0008's retention-first rule is not in play). At the ceiling,
+		// "old" would silently evict published source facts before graph-ingest
+		// consumed them — producer-side surfaces all report healthy while the
+		// graph quietly loses entities, which is precisely the failure class
+		// the no-silent-entity-loss work exists to eliminate. "new" refuses the
+		// publish instead, and entitypub treats a non-circuit-breaker publish
+		// error as terminal and returns it, so the pressure is visible rather
+		// than silent. MaxAge still expires messages, so a stalled producer
+		// recovers without intervention.
+		Discard: semconfig.StreamDiscardNew,
 	}
 
 	if override, ok := cfg.Streams["GRAPH"]; ok {
@@ -964,6 +983,9 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		}
 		if override.Replicas != nil {
 			sc.Replicas = *override.Replicas
+		}
+		if override.Discard != "" {
+			sc.Discard = override.Discard
 		}
 	}
 

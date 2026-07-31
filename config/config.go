@@ -74,6 +74,13 @@ type StreamOverride struct {
 	MaxBytes *int64 `json:"max_bytes,omitempty"`
 	MaxAge   string `json:"max_age,omitempty"`
 	Replicas *int   `json:"replicas,omitempty"`
+
+	// Discard is what happens when the stream reaches MaxBytes or MaxAge:
+	// "old" evicts the oldest messages (the write succeeds and the loss is
+	// silent), "new" refuses the write (producers see NATS 503
+	// err_code=10077). semstreams beta.159 requires ordinary streams to
+	// declare it; see graphStreamConfig for why the GRAPH default is "new".
+	Discard string `json:"discard,omitempty"`
 }
 
 // Config is the top-level semsource configuration.

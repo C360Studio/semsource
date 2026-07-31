@@ -10,6 +10,7 @@ import (
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semstreams/component"
 	gtypes "github.com/c360studio/semstreams/graph"
 	graphquery "github.com/c360studio/semstreams/graph/query"
@@ -24,7 +25,10 @@ type Component struct {
 	name   string
 	config Config
 	client *natsclient.Client
-	logger *slog.Logger
+	// graphStatus reads ADR-083 readiness envelopes from GRAPH_STATUS, which
+	// replaced the removed graph.index.query.status request/reply.
+	graphStatus *graphstatus.Reader
+	logger      *slog.Logger
 
 	// storeRegistry is the shared {StorageInstance → store} resolver (ADR-063),
 	// injected via deps; nil in standalone/tests, where the body resolver falls
@@ -61,6 +65,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		name:          "supersession",
 		config:        config,
 		client:        deps.NATSClient,
+		graphStatus:   graphstatus.New(deps.NATSClient),
 		logger:        deps.GetLogger(),
 		storeRegistry: deps.StoreRegistry,
 	}, nil

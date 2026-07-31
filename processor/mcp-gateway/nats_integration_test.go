@@ -14,6 +14,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/c360studio/semsource/internal/graphstatus"
+	semgraph "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/natsclient"
 
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
@@ -73,12 +75,12 @@ func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 
 // TestIntegration_SourceStatusMergesSignals proves source_status merges the three
 // honest readiness signals (ADR-066) — the source-manifest ingest status
-// (graph.query.status), the graph-index structural readiness
-// (graph.index.query.status), and the graph-embedding semantic readiness
-// (graph.embedding.query.status) — plus the note.
+// (graph.query.status request/reply), plus the graph-index structural and
+// graph-embedding semantic readiness, which since ADR-083 are KV envelopes under
+// GRAPH_STATUS rather than request/reply subjects — plus the note.
 func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t)
+	tc := natsclient.NewTestClient(t, natsclient.WithKV())
 
 	sub1, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status",
 		func(_ context.Context, _ []byte) ([]byte, error) {
@@ -89,29 +91,27 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sub1.Unsubscribe() })
 
-	sub2, err := tc.Client.SubscribeForRequests(ctx, "graph.index.query.status",
-		func(_ context.Context, _ []byte) ([]byte, error) {
-			return []byte(`{"ready":false,"state":"building"}`), nil
-		})
+	// Seed the readiness producers' envelopes the way the producers would, so the
+	// two signals are deliberately DIFFERENT: a still-building structural index
+	// alongside a ready semantic one is exactly the state an agent must be able to
+	// tell apart.
+	statusKV, err := semgraph.EnsureCatalogBucket(ctx, tc.Client, semgraph.BucketGraphStatus)
 	if err != nil {
-		t.Fatalf("subscribe index status: %v", err)
+		t.Fatalf("ensure %s: %v", semgraph.BucketGraphStatus, err)
 	}
-	t.Cleanup(func() { _ = sub2.Unsubscribe() })
-
-	sub3, err := tc.Client.SubscribeForRequests(ctx, "graph.embedding.query.status",
-		func(_ context.Context, _ []byte) ([]byte, error) {
-			return []byte(`{"ready":true,"state":"ready"}`), nil
-		})
-	if err != nil {
-		t.Fatalf("subscribe embedding status: %v", err)
+	if _, err := statusKV.PutString(ctx, "graph-index", `{"ready":false,"state":"building"}`); err != nil {
+		t.Fatalf("seed graph-index readiness: %v", err)
 	}
-	t.Cleanup(func() { _ = sub3.Unsubscribe() })
+	if _, err := statusKV.PutString(ctx, "graph-embedding", `{"ready":true,"state":"ready"}`); err != nil {
+		t.Fatalf("seed graph-embedding readiness: %v", err)
+	}
 
 	c := &Component{
-		name:   "mcp-gateway",
-		config: Config{Namespace: "ss", RequestTimeoutMs: 3000},
-		client: tc.Client,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		name:        "mcp-gateway",
+		config:      Config{Namespace: "ss", RequestTimeoutMs: 3000},
+		client:      tc.Client,
+		graphStatus: graphstatus.New(tc.Client),
+		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	c.server = c.buildServer()
 	cs := connect(t, c)
