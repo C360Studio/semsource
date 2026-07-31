@@ -133,10 +133,13 @@
   - **Result:** `openspec/changes/migrate-semstreams-beta-159-lockstep/evidence.md`, including an
     explicit "Not claimed" section for the History reconcile that could not be observed on empty
     state.
-- [ ] 6.3 Report adoption against semstreams gh#753 and file any framework problem found during
+- [x] 6.3 Report adoption against semstreams gh#753 and file any framework problem found during
   adoption as a new semstreams issue referencing it.
   - Test: the gh#753 comment names SemSource's migration commit and evidence; any filed issue is
     linked from the envelope's exceptions row, or that row reads `none`.
+  - **Result:** adoption reported upstream by the product owner (Coby), not from this workspace. No
+    framework problem was found that required a new semstreams issue — all three defects this
+    migration surfaced were SemSource's own, so the exceptions row reads `none`.
 - [x] 6.4 Update `CLAUDE.md`'s roadmap pin and `docs/upstream/semstreams-asks.md` if adoption produced
   new upstream asks.
   - Test: the roadmap names beta.159 as the current target and no stale beta.158 reference remains in

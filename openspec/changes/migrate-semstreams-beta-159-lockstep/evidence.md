@@ -16,7 +16,8 @@ Required by `docs/operations/31-sister-repo-cutover-checklist.md`. One immutable
 | **Replay parity** | Restarted once with no intervening write; the same query returned a byte-identical node set (`diff` clean over the sorted `nodes` payload). |
 | **Event consumer** | No SemSource component consumes the raw event stream in a way this wave changes. Add-lane dedup verified behaviorally instead: after a full restart and republication, `total_entities` remained 8 with per-source counts summing to 8 — distinct cardinality invariant under republication. |
 | **Verification** | `task lint` PASS (revive v1.15.0, warnings fail) · `task test` 41/41 · `task test:race` 41/41 · `go test -tags=integration ./...` 42/42 · `task test:e2e` PASS (156s) · `task core:smoke` PASS · `task tier2:smoke:dev` PASS. |
-| **Exceptions** | None blocking. Three defects were found at runtime and fixed in this change (see below); none required a framework change, so no new semstreams issues were filed. |
+| **Exceptions** | `none`. Three defects were found at runtime and fixed in this change (see below); all were SemSource's own, so no new semstreams issues were filed. |
+| **Adoption reported** | Reported to semstreams gh#753 by the product owner. |
 
 ## Defects this migration surfaced
 
@@ -67,4 +68,3 @@ without running a real stack — which is why design D1 refuses a green build as
   destructive reconcile and capture any out-of-tree history first.
 - The tier-2 overlay's full bring-up is gated behind `SEMSOURCE_TIER2_SMOKE_FULL=1` and is not run
   in CI; `task tier2:smoke:dev` covers composition, pins, and config wiring only.
-- Adoption has not yet been reported to semstreams gh#753.
