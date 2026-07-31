@@ -290,7 +290,7 @@ if [ "$mcp_tools_code" != "200" ]; then
 	echo "Body: $(cat "$mcp_tools_body")" >&2
 	exit 1
 fi
-for tool_name in add_source code_changes code_context code_impact code_search doc_context remove_source source_status; do
+for tool_name in add_source code_changes code_context code_impact code_search doc_context graph_search remove_source source_status; do
 	if ! grep -q "\"name\":\"$tool_name\"" "$mcp_tools_body"; then
 		echo "MCP tools/list missing $tool_name: $(cat "$mcp_tools_body")" >&2
 		exit 1
@@ -446,6 +446,33 @@ if ! printf '%s' "$changes_body" | grep -q 'no indexed entities for project'; th
 	exit 1
 fi
 echo "code_changes returns the honest no-versions note"
+
+# --- graphrag-access assertions (this is the default tier: no clustering) ---
+#
+# graph_search must ANSWER here, not refuse: graph.query.searchGraph does not
+# need clustering. And it must say its answer is not community-backed — without
+# that, an agent reads a similarity hit list as thematic community reasoning,
+# which is the honesty hole this tool would otherwise open.
+
+echo "Checking graph_search answers and discloses its retrieval rung"
+graph_search_body=$(mcp_call graph_search '{"query":"core smoke documentation"}')
+if printf '%s' "$graph_search_body" | grep -q '"isError":true'; then
+	echo "graph_search refused on the default tier: $graph_search_body" >&2
+	exit 1
+fi
+if ! printf '%s' "$graph_search_body" | grep -q '"rung":"entities_only"'; then
+	echo "graph_search did not disclose the entities-only rung: $graph_search_body" >&2
+	exit 1
+fi
+if ! printf '%s' "$graph_search_body" | grep -q '"community_backed":false'; then
+	echo "graph_search failed to disclose that the answer is not community-backed: $graph_search_body" >&2
+	exit 1
+fi
+if printf '%s' "$graph_search_body" | grep -q '"answer_source":"llm"'; then
+	echo "graph_search claimed an LLM answer on a stack with no LLM: $graph_search_body" >&2
+	exit 1
+fi
+echo "graph_search answers and discloses a non-community, non-LLM retrieval rung"
 
 # --- compose-packaging-hardening assertions ---
 

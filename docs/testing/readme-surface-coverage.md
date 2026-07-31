@@ -118,6 +118,8 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
 | `code_impact`                         | `TestIntegration_QueryToolsTranslateToNATS`; code lens impact tests below MCP             | covered  | None      |
 | `doc_context`                         | `TestIntegration_QueryToolsTranslateToNATS`                                               | covered  | None      |
 | `code_changes`                        | `TestIntegration_QueryToolsTranslateToNATS`; `TestIntegration_VersionDiff` below MCP      | covered  | None      |
+| `graph_search`                        | `TestIntegration_GraphSearchDisclosesAndPassesThrough`; `TestDeriveDisclosureAcrossTheCapabilityLadder` covers all three rungs from recorded substrate responses; `task core:smoke` asserts the answer and its not-community-backed disclosure | covered  | Community/LLM rungs are proven from recorded responses, not a live clustered stack — the deferred `community_context` change brings the live tier-2 harness |
+| `graph_search` disclosure honesty     | `TestTemplateAnswerIsNeverReportedAsLLM` (mutation-verified: fails when `degraded` is used as the LLM discriminator); `TestSemanticFallbackIsNotNarratedAsFailedSynthesis` | covered  | None      |
 
 ## Fused Context Routes
 

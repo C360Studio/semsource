@@ -774,3 +774,53 @@ though it were the top result.
 
 **Surfaced by:** semsource `repair-retrieval-scorecard`, 2026-07-20. Full measurement in
 `scripts/scorecard/results/SUMMARY-instrument-diagnosis.md`.
+
+## Graph-query observability (ADR-0010, graphrag on MCP)
+
+### `GlobalSearchResponse.Strategy` is computed, metered, and then dropped before the wire
+
+`graph.query.globalSearch` resolves a strategy per request (`resolveStrategy`,
+`processor/graph-query/graphrag.go:556`), logs it, and records it as a Prometheus counter
+(`recordGlobalSearchStrategy`). The response type has a field for it —
+`GlobalSearchResponse.Strategy` — but across non-test code that field is assigned in exactly **one**
+place: `searchGraph`'s semantic fallback (`processor/graph-query/searchgraph.go:219`). All twelve
+`GlobalSearchResponse{}` constructions in `graphrag.go` leave it empty.
+
+So a caller receiving a successful `globalSearch`/`searchGraph` answer cannot tell whether it was
+served by the `graphrag`, `semantic`, `entity_lookup`, `pathrag`, `temporal`, or `spatial` path. The
+distinction is not cosmetic: on a deployment without a community index the `graphrag` path degrades
+to semantic similarity and still returns a healthy-looking result, so a consumer that presents these
+answers as community/thematic reasoning is over-claiming with no way to detect it.
+
+**Ask:** populate `Strategy` on every `globalSearch` response path. The value already exists at the
+point each response is built; this is a field assignment, not new computation. Prometheus is the
+wrong channel for it — an operator dashboard cannot inform a per-answer decision made by an agent.
+
+**Consumer impact.** SemSource's `graph_search` MCP tool must disclose to agents whether an answer is
+community-backed. Lacking `Strategy`, it derives that from `community_summaries` presence — a proxy
+that happens to work but is inference over a signal the substrate already has. When `Strategy`
+lands, SemSource prefers it and drops the proxy.
+
+**Surfaced by:** semsource `expose-graphrag-on-mcp`, 2026-07-31, against `v1.0.0-beta.159`.
+
+### `graph-clustering` publishes no `GRAPH_STATUS` readiness envelope
+
+ADR-083 moved producer readiness to per-producer keys in the `GRAPH_STATUS` KV bucket, and
+`graph-index`, `graph-embedding`, and `graph-ingest` each publish one. `graph-clustering` does not.
+
+There is therefore no contract-shaped way to ask "is the community index built yet". The observable
+alternatives are both poor: probe the `COMMUNITY_INDEX` bucket for non-emptiness (couples a consumer
+to a bucket name and cannot distinguish "clustering disabled" from "clustering not finished"), or
+call `graph.query.localSearch` and interpret the resulting no-responder error, which is
+indistinguishable from an infrastructure fault.
+
+**Ask:** publish a `graph-clustering` readiness envelope on the same `GRAPH_STATUS` contract as every
+other producer, distinguishing at minimum *not enabled* from *enabled but not yet populated* from
+*ready*.
+
+**Consumer impact.** SemSource has **deferred** exposing `graph.query.localSearch` over MCP because
+of this. A capability-gated tool must tell an agent whether to retry or to reconfigure, and today
+SemSource cannot answer that question truthfully from any substrate signal. This ask is the
+precondition for that follow-up, not a nice-to-have.
+
+**Surfaced by:** semsource `expose-graphrag-on-mcp`, 2026-07-31, against `v1.0.0-beta.159`.

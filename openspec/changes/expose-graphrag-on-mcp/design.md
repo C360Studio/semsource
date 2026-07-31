@@ -105,30 +105,27 @@ registry-dependent and not observable from the response.
 
 ## Decisions
 
-### D1 — Two ungated tools, not one mode-switched tool
+### D1 — One ungated tool
 
-The proposal left tool count and arity open. Decision: **two new tools**, each with its own typed
-argument struct, following the existing `<domain>_<noun>` naming, neither gated.
+The proposal left tool count and arity open. Decision: **one new tool**, `graph_search`, routed to
+`graph.query.searchGraph`, with its own typed argument struct and no capability gate.
 
-| Tool | Subject | Availability |
-| --- | --- | --- |
-| `graph_summary` | `graph.query.summary` | Every tier — a discovery resolver that never touched clustering |
-| `graph_search` | `graph.query.searchGraph` | Every tier — always answers; the result discloses the rung it reached |
+A second tool, `graph_summary` over `graph.query.summary`, was designed, implemented, and then
+**withdrawn during runtime acceptance** — see D6. `graph.query.summary` is contested, and a tool on
+a contested subject returns a nondeterministic payload.
 
-*Why not one tool with a `mode` argument.* The argument shapes are genuinely different — `summary`
-takes no query at all, `searchGraph` takes a query plus optional shaping flags. A single tool would
-need conditionally-required fields, which is the schema shape models most reliably get wrong.
+*Why not one tool with a `mode` argument.* Moot at one tool, and it was already the wrong shape:
+conditionally-required fields are the schema models most reliably get wrong.
 
 *Why `globalSearch` gets no tool of its own.* `searchGraph` calls `handleGlobalSearch` first and
 returns its response **unchanged** when non-empty; it only adds a labelled fallback on empty. A
-separate `global_search` tool would offer the agent a strictly weaker sibling of `graph_search`,
-distinguishable only by expertise the agent does not have. `globalSearch` remains reachable — every
-non-empty answer from `graph_search` *is* a `globalSearch` answer. This is a roster decision, not a
-capability removal.
+separate `global_search` tool would offer the agent a strictly weaker sibling, distinguishable only
+by expertise the agent does not have. `globalSearch` remains reachable — every non-empty answer from
+`graph_search` *is* a `globalSearch` answer.
 
-*Why neither is gated.* Neither routed subject requires clustering. Gating them would be a fabricated
-restriction, and it would withhold the tool exactly when the agent has least other recourse. The one
-subject that genuinely needs a gate — `localSearch` — is deferred (see Non-Goals).
+*Why it is not gated.* `graph.query.searchGraph` does not require clustering. Gating it would be a
+fabricated restriction that withholds the tool exactly when the agent has least other recourse. The
+one subject that genuinely needs a gate — `localSearch` — is deferred (see Non-Goals).
 
 ### D2 — Disclosure is derived from response fields, and the gaps are filed upstream
 
@@ -190,6 +187,33 @@ One page: fusion tools remain deterministic and fusion-backed; graph-query tools
 that answers at every tier and discloses the rung it reached. The ADR records the boundary decision;
 the mechanics stay in the specs. ADR-0004 gets a pointer, not a rewrite.
 
+### D6 — `graph.query.summary` is contested, so no tool routes to it
+
+Runtime acceptance on the real stack returned SemSource's **source-manifest** payload from what was
+supposed to be the substrate's graph summary. The cause is a subject collision inside a single
+SemSource process:
+
+| Subject | SemSource handler | SemStreams handler |
+| --- | --- | --- |
+| `graph.query.summary` | `source-manifest` (`processor/source-manifest/component.go:264`) | `graph-query` (`processor/graph-query/query.go:45`) |
+
+Both subscribe with plain request/reply and no queue group, so a requester receives whichever handler
+replies first and discards the other. The two payloads are entirely different shapes. This is a live
+defect independent of this change: any consumer calling `graph.query.summary` on a SemSource
+deployment today gets a race.
+
+It is SemSource's defect, not the substrate's. `graph.query.*` is a substrate-owned namespace, and
+source-manifest claims four subjects inside it (`sources`, `predicates`, `status`, `summary`). Three
+name SemSource concepts the substrate does not define; `summary` collides.
+
+**Decision: withdraw `graph_summary` from this change.** Shipping a tool whose payload is decided by
+a race would be worse than not shipping it. Resolving the collision means moving source-manifest to
+a SemSource-owned subject, which changes a documented consumer contract and therefore needs its own
+change with a deprecation path — not a silent fix folded into this one.
+
+The capability is not lost: the same content is served at `GET /source-manifest/summary`. What is
+lost is MCP reachability for it, which the follow-up restores once the subject is unambiguous.
+
 ## Risks / Trade-offs
 
 - **`graph_search` and `code_search` are confusable** → Descriptions draw the line in the first
@@ -206,6 +230,10 @@ the mechanics stay in the specs. ADR-0004 gets a pointer, not a rewrite.
 - **Deferring `community_context` leaves the no-responder trap unfixed** → It also leaves it
   unreachable: no MCP agent can hit `localSearch` today, so this is the status quo rather than a
   regression. The follow-up change owns it.
+- **Other SemSource subjects sit inside the substrate's `graph.query.*` namespace** → `sources`,
+  `predicates`, and `status` do not collide today because the substrate defines no such subjects, but
+  nothing prevents a future semstreams release from adding one. The `summary` collision is the
+  warning; a subject-ownership audit belongs with the fix.
 - **Proving the community and LLM rungs from recorded responses, not a live clustered stack** → The
   logic under test is SemSource's derivation, which recorded responses exercise fully. What they do
   not prove is that the substrate still emits those fields; that is pinned by the semstreams version

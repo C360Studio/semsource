@@ -15,6 +15,12 @@ type QueryInput struct {
 	Query string `json:"query" jsonschema:"the query — a symbol name (e.g. registerProvidedStores) for context/impact, or a natural-language phrase for search"`
 }
 
+// GraphSearchInput is the graph_search argument: a natural-language question
+// about the corpus as a whole, not a symbol name.
+type GraphSearchInput struct {
+	Query string `json:"query" jsonschema:"a natural-language question about the indexed corpus as a whole (e.g. 'how does readiness gating work'), not a symbol name"`
+}
+
 // ChangesInput is the argument for the code_changes tool: a project (source
 // identity) and two version identifiers to compare.
 type ChangesInput struct {
@@ -64,6 +70,37 @@ func (c *Component) codeSearch(ctx context.Context, _ *mcp.CallToolRequest, in Q
 // query — the intended design, not just the code.
 func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in QueryInput) (*mcp.CallToolResult, any, error) {
 	return c.fusionQuery(ctx, "docs.v1.context", in.Query)
+}
+
+// graphSearch answers a corpus-wide thematic question. It routes to
+// graph.query.searchGraph, which delegates to globalSearch and returns that
+// response unchanged when non-empty, adding a labelled semantic fallback only
+// when it is empty — so this one subject covers both.
+//
+// The result is the substrate payload verbatim plus a derived disclosure of the
+// rung reached. Without the disclosure this tool would present semantic
+// similarity hits as thematic community reasoning on any stack without
+// clustering, which is most of them.
+func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in GraphSearchInput) (*mcp.CallToolResult, any, error) {
+	if in.Query == "" {
+		return nil, nil, fmt.Errorf("query is required")
+	}
+	data, err := json.Marshal(map[string]string{"query": in.Query})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal query: %w", err)
+	}
+	resp, err := c.request(ctx, "graph.query.searchGraph", data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("graph search failed: %w", err)
+	}
+	out, err := json.Marshal(disclosedResult{
+		Retrieval: deriveDisclosure(resp),
+		Result:    json.RawMessage(resp),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal graph search result: %w", err)
+	}
+	return textResult(out), nil, nil
 }
 
 // fusionQuery sends a fusion.Request ({"query": ...}) to a code-context /

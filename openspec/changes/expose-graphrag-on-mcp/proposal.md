@@ -19,10 +19,12 @@ the four `graph.query.*` subjects are not one family behind one tier-2 gate (see
 Context). `summary` never touches clustering; `globalSearch`/`searchGraph` answer at every tier
 through non-community paths; only `localSearch` is hard-gated. Scope is narrowed accordingly.
 
-- **Two new ungated MCP tools** routed to the **existing** semstreams subjects: `graph_summary`
-  (`graph.query.summary`) and `graph_search` (`graph.query.searchGraph`, which delegates to
-  `graph.query.globalSearch` and returns it unchanged when non-empty). SemSource adds gateway routes
-  and tool contracts only; the substrate APIs are semstreams' and are not reimplemented or modified.
+- **One new ungated MCP tool**, `graph_search`, routed to the **existing** semstreams subject
+  `graph.query.searchGraph` (which delegates to `graph.query.globalSearch` and returns it unchanged
+  when non-empty). SemSource adds a gateway route and tool contract only; the substrate APIs are
+  semstreams' and are not reimplemented or modified. A second tool over `graph.query.summary` was
+  withdrawn during runtime acceptance: that subject is answered by both SemSource's source-manifest
+  and the substrate's graph-query, so a tool on it returns a nondeterministic payload (design.md — D6).
 - **Answers escalate with the stack; the tool never disappears.** A result carries entity hits at
   every tier, plus community summaries where clustering is enabled, plus an LLM-synthesized answer
   where an LLM is configured. No tool is gated on clustering, and no tool requires an LLM to answer —
@@ -84,13 +86,13 @@ and SemOps consume the same gateway surface unchanged.
 
 ## Impact
 
-- `processor/mcp-gateway/` — two tool registrations, argument schemas, routing to
-  `graph.query.summary` and `graph.query.searchGraph`, and the disclosure derivation.
+- `processor/mcp-gateway/` — one tool registration, argument schema, routing to
+  `graph.query.searchGraph`, and the disclosure derivation.
 - `docs/adr/` — new ADR revising the ADR-0004 MCP boundary; pointer update in ADR-0004.
 - `configs/tiers/README.md` and `scripts/scorecard/README.md` — both currently state the MCP tools
   never reach GraphRAG; both must describe the new family and the capability ladder, and say why the
   scorecard still does not grade it.
-- The existing tier-0 compose smoke — one real `tools/call` per new tool.
+- The existing tier-0 compose smoke — a real `tools/call` asserting the answer and its disclosure.
 - `docs/upstream/semstreams-asks.md` — two asks filed.
 - No change to `config/config.go`, `processor/source-manifest/`, or the compose profiles: nothing in
   this scope is gated, so there is no availability signal to plumb or publish.

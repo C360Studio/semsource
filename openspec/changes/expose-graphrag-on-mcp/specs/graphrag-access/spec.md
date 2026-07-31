@@ -1,26 +1,34 @@
 ## Purpose
 
-Make the substrate's graph-query surface — corpus-wide thematic search and graph summary —
-reachable by an agent over MCP, at every tier. What an answer contains escalates with what the
-stack provides (entity hits, then community summaries, then an LLM-synthesized answer), and every
-result discloses which rung it reached, so a thinner answer is never mistaken for a richer one.
+Make the substrate's corpus-wide thematic search reachable by an agent over MCP, at every tier.
+What an answer contains escalates with what the stack provides (entity hits, then community
+summaries, then an LLM-synthesized answer), and every result discloses which rung it reached, so a
+thinner answer is never mistaken for a richer one.
 
 ## ADDED Requirements
 
-### Requirement: The graph-query surface is reachable over MCP
+### Requirement: Corpus-wide thematic search is reachable over MCP
 
-SemSource SHALL expose the substrate's graph-query surface through the MCP gateway, routing to the
-existing semstreams subjects `graph.query.summary` and `graph.query.searchGraph`. Corpus-wide
-thematic search and graph summary SHALL each be reachable through an advertised tool. Thematic
-search MAY be routed through `graph.query.searchGraph`, which delegates to `graph.query.globalSearch`
-and returns its response unchanged when non-empty; a separate tool per subject is not required. Tool
-count, names, and argument grouping are fixed by design.
+SemSource SHALL expose the substrate's corpus-wide thematic search through the MCP gateway, routing
+to the existing semstreams subject `graph.query.searchGraph`, which delegates to
+`graph.query.globalSearch` and returns its response unchanged when non-empty. Tool names and
+argument shapes are fixed by design.
 
-#### Scenario: The roster covers the surface
+A tool SHALL NOT be routed to a subject that more than one live handler answers. Where SemSource and
+the substrate both subscribe to a subject, the reply is a race between two payload shapes, and a tool
+built on it would return a nondeterministic result.
+
+#### Scenario: The roster covers thematic search
 
 - **WHEN** an MCP client lists the gateway's tools
-- **THEN** corpus-wide thematic search and graph summary are each reachable through an advertised
-  tool
+- **THEN** corpus-wide thematic search is reachable through an advertised tool
+
+#### Scenario: A contested subject is not routed to
+
+- **GIVEN** a subject answered by both a SemSource component and a substrate component in the same
+  deployment
+- **WHEN** a graph-query tool is designed
+- **THEN** that subject is not used, and the collision is recorded as a defect to resolve
 
 #### Scenario: A call reaches the substrate handler
 
@@ -30,17 +38,15 @@ count, names, and argument grouping are fixed by design.
 
 ### Requirement: The surface is available at every tier
 
-No tool on this surface SHALL be gated on clustering. `graph.query.summary` is a discovery resolver
-that does not involve clustering, and `graph.query.searchGraph` answers through non-community
-retrieval paths when no community index exists. Capability differences between tiers SHALL be
-disclosed in the result, never expressed by withholding the tool.
+No tool on this surface SHALL be gated on clustering. `graph.query.searchGraph` answers through
+non-community retrieval paths when no community index exists. Capability differences between tiers
+SHALL be disclosed in the result, never expressed by withholding the tool.
 
-#### Scenario: Both tools answer without clustering
+#### Scenario: Thematic search answers without clustering
 
 - **GIVEN** a stack running with `enable_clustering` false
-- **WHEN** an agent calls the graph summary tool and the thematic search tool
-- **THEN** both calls succeed rather than being refused, because neither routed subject requires
-  clustering
+- **WHEN** an agent calls the thematic search tool
+- **THEN** the call succeeds through a non-community retrieval path rather than being refused
 
 ### Requirement: An answer discloses how far it escalated
 
