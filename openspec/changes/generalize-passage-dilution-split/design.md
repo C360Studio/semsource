@@ -119,6 +119,27 @@ The risk that matters is not "boundaries moved" but "a fact that used to be foun
 explanatory prose is now split away from it". That is measurable — it would show as a doc-band
 regression — and is the specific thing the live A/B is for.
 
+### D6. Identity carries heading ancestry, because isolation's symmetric cost needs an asymmetric fix
+
+Iteration 1 (isolation alone) fixed X02 live and regressed X01 `correct` → `MISLEADING`: isolating
+`§ Quick Start`'s `git clone` fence left the port-conflict workaround blockquote as a sharper 463 B
+prose passage, which then outscored the Configuration key group by 0.0009. Any further *splitting*
+rule faces the same symmetry — sharpening an answer sharpens some other query's distractor.
+
+The asymmetric lever is identity, not boundaries. The X01 answer lives under `### Configuration`
+inside `## Docker Compose`, and the query names that parent ("in docker compose") — but the
+splitter only carried the immediate heading, so the embedded identity read `SemSource §
+Configuration` and the structural context was discarded. Passages now record the heading's full
+ancestor chain, and the title spells it out: `SemSource § Docker Compose § Configuration`.
+Measured: X01 0.7584 → 0.7803 (margin −0.0009 → +0.0210) with the distractor unchanged; X02
++0.0121, still positive and still rank 0 in a whole-file rank probe. No split boundary, passage ID,
+or entity count changes; `DocSection` keeps the verbatim immediate heading because URL anchors
+derive from it.
+
+This stays inside the change's own constraint — structural, derivable from the document bytes, no
+prose classification. The heading hierarchy was always in the document; discarding it made two
+same-named facts indistinguishable.
+
 ## Risks / Trade-offs
 
 - **Over-splitting continuous code.** The worst outcome: fragments of a Go function as separate

@@ -19,3 +19,10 @@ func SplitPassagesBounded(content []byte, ceiling, floor, hardMax int) []passage
 // SplitPassagesBounded returns the real type, and a distinct named type would
 // need conversions at every call site.
 type Passage = passage
+
+// PassageTitle re-exports the title a passage entity would carry, so the
+// dilution harness embeds the EXACT identity text production emits instead of a
+// reimplementation that would drift the day title construction changes.
+func PassageTitle(parentTitle string, p Passage) string {
+	return passageTitle(parentTitle, p.headingPath(), p.Ordinal)
+}

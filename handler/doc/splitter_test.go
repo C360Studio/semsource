@@ -3,6 +3,7 @@ package doc
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -102,7 +103,7 @@ func TestSplitPassages_IsDeterministic(t *testing.T) {
 					t.Fatalf("run %d produced %d passages, first run produced %d", i, len(again), len(first))
 				}
 				for j := range first {
-					if again[j] != first[j] {
+					if !reflect.DeepEqual(again[j], first[j]) {
 						t.Fatalf("run %d passage %d differs:\n got %+v\nwant %+v", i, j, again[j], first[j])
 					}
 				}
@@ -131,6 +132,106 @@ func TestSplitPassages_SplitsOnHeadings(t *testing.T) {
 	for i, p := range got {
 		if p.Ordinal != i {
 			t.Errorf("passage %d has ordinal %d", i, p.Ordinal)
+		}
+	}
+}
+
+// TestSplitPassages_HeadingPathCarriesAncestry pins that a passage records its
+// heading's full ancestor chain, because the title built from it is the
+// identity text retrieval ranks by. Measured on this repository's README, the
+// NATS settings group under "### Configuration" inside "## Docker Compose"
+// scored 0.7584 without the ancestry and 0.7803 with it — the difference
+// between losing and beating a workaround passage for the query that names the
+// parent section.
+func TestSplitPassages_HeadingPathCarriesAncestry(t *testing.T) {
+	body := strings.Repeat("Filler prose to keep every section above the merge floor. ", 10) // ~580 B
+	got := splitPassages([]byte("# Title\n\n" + body + "\n" +
+		"## Parent\n\n" + body + "\n" +
+		"### Child\n\n" + body + "\n" +
+		"##### Jump\n\n" + body + "\n" + // skips H4: ancestry records real structure, not an idealized outline
+		"## Next\n\n" + body + "\n"))
+
+	want := map[string][]string{
+		"Title":  {"Title"},
+		"Parent": {"Title", "Parent"},
+		"Child":  {"Title", "Parent", "Child"},
+		"Jump":   {"Title", "Parent", "Child", "Jump"},
+		"Next":   {"Title", "Next"}, // the new H2 pops Parent's whole subtree
+	}
+	seen := map[string]bool{}
+	for _, p := range got {
+		wantPath, ok := want[p.Heading]
+		if !ok {
+			t.Fatalf("unexpected heading %q", p.Heading)
+		}
+		seen[p.Heading] = true
+		if !reflect.DeepEqual(p.HeadingPath, wantPath) {
+			t.Errorf("heading %q has path %v, want %v", p.Heading, p.HeadingPath, wantPath)
+		}
+	}
+	for h := range want {
+		if !seen[h] {
+			t.Errorf("no passage produced for heading %q", h)
+		}
+	}
+}
+
+// TestSplitPassages_HeadingPathSetextLevels pins that setext headings carry
+// their CommonMark levels into the ancestry: "===" opens an H1 scope and "---"
+// nests under it as an H2.
+func TestSplitPassages_HeadingPathSetextLevels(t *testing.T) {
+	body := strings.Repeat("Filler prose to keep every section above the merge floor. ", 10)
+	got := splitPassages([]byte("Alpha\n=====\n\n" + body + "\n" +
+		"Beta\n----\n\n" + body + "\n"))
+
+	want := map[string][]string{
+		"Alpha": {"Alpha"},
+		"Beta":  {"Alpha", "Beta"},
+	}
+	for _, p := range got {
+		wantPath, ok := want[p.Heading]
+		if !ok {
+			t.Fatalf("unexpected heading %q", p.Heading)
+		}
+		if !reflect.DeepEqual(p.HeadingPath, wantPath) {
+			t.Errorf("heading %q has path %v, want %v", p.Heading, p.HeadingPath, wantPath)
+		}
+	}
+}
+
+// TestSplitPassages_MergedSectionsKeepFirstPath pins that when small sections
+// merge, the passage keeps the FIRST section's path — mirroring how the merge
+// already keeps the first section's heading. README's "## Quick Start"
+// absorbing "### Fastest — Docker Compose" must stay titled "Quick Start", not
+// inherit the absorbed subsection's deeper path.
+func TestSplitPassages_MergedSectionsKeepFirstPath(t *testing.T) {
+	got := splitPassages([]byte("## Outer\n\nshort\n\n### Absorbed\n\nalso short\n"))
+
+	if len(got) != 1 {
+		t.Fatalf("expected the two small sections to merge into 1 passage, got %d", len(got))
+	}
+	if !reflect.DeepEqual(got[0].HeadingPath, []string{"Outer"}) {
+		t.Errorf("merged passage path = %v, want [Outer]", got[0].HeadingPath)
+	}
+}
+
+// TestPassageTitle_AncestryAndCollapse pins title construction over heading
+// paths: ancestry is spelled out, and leading components that repeat the
+// document title are dropped rather than stuttered.
+func TestPassageTitle_AncestryAndCollapse(t *testing.T) {
+	cases := []struct {
+		name, parent string
+		path         []string
+		want         string
+	}{
+		{"ancestry spelled out", "SemSource", []string{"Docker Compose", "Configuration"}, "SemSource § Docker Compose § Configuration"},
+		{"leading title dropped", "SemSource", []string{"SemSource", "Docker Compose", "Configuration"}, "SemSource § Docker Compose § Configuration"},
+		{"all collapsed", "CLAUDE.md", []string{"CLAUDE.md"}, "CLAUDE.md"},
+		{"no heading", "README", nil, "README § passage 1"},
+	}
+	for _, c := range cases {
+		if got := passageTitle(c.parent, c.path, 0); got != c.want {
+			t.Errorf("%s: passageTitle(%q, %v) = %q, want %q", c.name, c.parent, c.path, got, c.want)
 		}
 	}
 }

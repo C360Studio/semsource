@@ -39,12 +39,37 @@ var defaultBounds = passageBounds{ceiling: 2000, floor: 400, hardMax: 6000}
 // offsets into the original content, and Body is exactly content[Start:End] —
 // passages tile the document with no gap and no overlap, so concatenating every
 // Body in ordinal order reproduces the input byte for byte.
+//
+// Heading is the immediate section heading and feeds everything that must match
+// the document verbatim (the DocSection triple, and through it URL anchors).
+// HeadingPath is the heading's ancestor chain including itself, outermost
+// first, and feeds only the passage title — the identity text the embedding
+// ranks by. The distinction is measured, not cosmetic: for the query "default
+// host port for the NATS monitor in docker compose", README's NATS settings
+// group scored 0.7584 under the title "SemSource § Configuration" and 0.7803
+// under "SemSource § Docker Compose § Configuration", flipping a −0.0009 loss
+// to the workaround passage into a +0.0209 win. The ancestry was always in the
+// document; discarding it made two same-named facts indistinguishable.
 type passage struct {
-	Ordinal int
-	Heading string
-	Start   int
-	End     int
-	Body    string
+	Ordinal     int
+	Heading     string
+	HeadingPath []string
+	Start       int
+	End         int
+	Body        string
+}
+
+// headingPath is HeadingPath with a fallback for passages built without one
+// (frozen fixtures, hand-made test values): a bare Heading is its own
+// single-element path.
+func (p passage) headingPath() []string {
+	if len(p.HeadingPath) > 0 {
+		return p.HeadingPath
+	}
+	if p.Heading != "" {
+		return []string{p.Heading}
+	}
+	return nil
 }
 
 // line is one physical line of the document, carrying its byte span and whether
@@ -79,11 +104,12 @@ func splitPassagesBounded(content []byte, b passageBounds) []passage {
 	for _, s := range sections {
 		for _, span := range subdivide(content, lines, s, b) {
 			out = append(out, passage{
-				Ordinal: len(out),
-				Heading: s.heading,
-				Start:   span[0],
-				End:     span[1],
-				Body:    string(content[span[0]:span[1]]),
+				Ordinal:     len(out),
+				Heading:     s.heading,
+				HeadingPath: s.path,
+				Start:       span[0],
+				End:         span[1],
+				Body:        string(content[span[0]:span[1]]),
 			})
 		}
 	}
@@ -134,9 +160,13 @@ func isFenceDelimiter(trimmed string) bool {
 	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
 }
 
-// section is a heading and the byte span it governs.
+// section is a heading and the byte span it governs. path is the heading's
+// ancestor chain including itself, outermost first — the structural context the
+// document declared with heading levels, preserved here so passage identity can
+// carry it.
 type section struct {
 	heading    string
+	path       []string
 	start, end int
 }
 
@@ -146,21 +176,41 @@ type section struct {
 func sectionsOf(lines []line, total int) []section {
 	type mark struct {
 		lineIdx int
+		level   int
 		heading string
 	}
 	var marks []mark
 	for i := range lines {
-		if text, ok := atxHeading(lines, i); ok {
-			marks = append(marks, mark{lineIdx: i, heading: text})
+		if text, level, ok := atxHeading(lines, i); ok {
+			marks = append(marks, mark{lineIdx: i, level: level, heading: text})
 			continue
 		}
-		if text, ok := setextHeading(lines, i); ok {
-			marks = append(marks, mark{lineIdx: i, heading: text})
+		if text, level, ok := setextHeading(lines, i); ok {
+			marks = append(marks, mark{lineIdx: i, level: level, heading: text})
 		}
 	}
 
 	if len(marks) == 0 {
 		return []section{{start: 0, end: total}}
+	}
+
+	// ancestors is the stack of open headings, strictly increasing in level. A
+	// new mark pops everything at its own level or deeper: a heading's ancestors
+	// are exactly the shallower headings still open above it. Skipped levels
+	// (an H4 directly under an H2) keep whatever is genuinely open — the path
+	// records the document's actual structure, not an idealized outline.
+	var ancestors []mark
+	pathOf := func(m mark) []string {
+		for len(ancestors) > 0 && ancestors[len(ancestors)-1].level >= m.level {
+			ancestors = ancestors[:len(ancestors)-1]
+		}
+		path := make([]string, 0, len(ancestors)+1)
+		for _, a := range ancestors {
+			path = append(path, a.heading)
+		}
+		path = append(path, m.heading)
+		ancestors = append(ancestors, m)
+		return path
 	}
 
 	var out []section
@@ -172,15 +222,15 @@ func sectionsOf(lines []line, total int) []section {
 		if i+1 < len(marks) {
 			end = lines[marks[i+1].lineIdx].start
 		}
-		out = append(out, section{heading: m.heading, start: lines[m.lineIdx].start, end: end})
+		out = append(out, section{heading: m.heading, path: pathOf(m), start: lines[m.lineIdx].start, end: end})
 	}
 	return out
 }
 
-// atxHeading reports a "# Heading" style heading on line i.
-func atxHeading(lines []line, i int) (string, bool) {
+// atxHeading reports a "# Heading" style heading on line i, with its level.
+func atxHeading(lines []line, i int) (string, int, bool) {
 	if lines[i].protected {
-		return "", false
+		return "", 0, false
 	}
 	t := strings.TrimSpace(lines[i].text)
 	hashes := 0
@@ -188,42 +238,47 @@ func atxHeading(lines []line, i int) (string, bool) {
 		hashes++
 	}
 	if hashes == 0 || hashes > 6 {
-		return "", false
+		return "", 0, false
 	}
 	rest := t[hashes:]
 	if rest != "" && !strings.HasPrefix(rest, " ") {
-		return "", false
+		return "", 0, false
 	}
-	return strings.TrimSpace(strings.TrimRight(rest, "#")), true
+	return strings.TrimSpace(strings.TrimRight(rest, "#")), hashes, true
 }
 
 // setextHeading reports a heading underlined by "===" or "---" on the next
-// line. The text line must be ordinary prose: a list marker, block quote, or
-// another heading underneath a rule is a thematic break, not a heading.
-func setextHeading(lines []line, i int) (string, bool) {
+// line, with its level: "===" is H1 and "---" is H2, per CommonMark. The text
+// line must be ordinary prose: a list marker, block quote, or another heading
+// underneath a rule is a thematic break, not a heading.
+func setextHeading(lines []line, i int) (string, int, bool) {
 	if lines[i].protected || i+1 >= len(lines) || lines[i+1].protected {
-		return "", false
+		return "", 0, false
 	}
 	text := strings.TrimSpace(lines[i].text)
 	if text == "" || strings.HasPrefix(text, "#") {
-		return "", false
+		return "", 0, false
 	}
 	switch text[0] {
 	case '-', '*', '+', '>', '|', '=':
-		return "", false
+		return "", 0, false
 	}
 	under := strings.TrimSpace(lines[i+1].text)
 	if len(under) < 2 {
-		return "", false
+		return "", 0, false
 	}
 	c := under[0]
 	if c != '=' && c != '-' {
-		return "", false
+		return "", 0, false
 	}
 	if strings.Trim(under, string(c)) != "" {
-		return "", false
+		return "", 0, false
 	}
-	return text, true
+	level := 1
+	if c == '-' {
+		level = 2
+	}
+	return text, level, true
 }
 
 // mergeSmallSections folds consecutive below-floor sections together so a run of

@@ -125,20 +125,31 @@ func chunkInstance(filePath string, ordinal int) string {
 	return fmt.Sprintf("%s-%04d", entityid.SanitizeInstance(filePath), ordinal)
 }
 
-// passageTitle qualifies a passage's title with its parent's, so a results list
-// does not show six indistinguishable "Usage" entries from six documents.
+// passageTitle qualifies a passage's title with its parent's and the passage's
+// full heading ancestry, so a results list does not show six indistinguishable
+// "Usage" entries from six documents — and so two same-named facts under
+// different parents stay distinguishable to the embedding. The title is the
+// identity text retrieval ranks by; the ancestry is where "Configuration"
+// under "Docker Compose" stops losing to a workaround note that merely says
+// "docker compose" more often.
 //
-// The qualifier is skipped when the section IS the document — a file whose H1
-// repeats its own title (common for CLAUDE.md, AGENTS.md, and any doc named
-// after its subject) otherwise yields "CLAUDE.md § CLAUDE.md". Qualification
-// exists to disambiguate; repeating a name against itself disambiguates nothing
-// and reads as a defect wherever the passage is listed.
-func passageTitle(parentTitle, section string, ordinal int) string {
-	if section != "" {
-		if strings.EqualFold(strings.TrimSpace(section), strings.TrimSpace(parentTitle)) {
-			return parentTitle
-		}
-		return parentTitle + " § " + section
+// Leading path components that repeat the document title are dropped — a file
+// whose H1 is its own name (CLAUDE.md, AGENTS.md, any doc named after its
+// subject) otherwise yields "CLAUDE.md § CLAUDE.md § …". Qualification exists
+// to disambiguate; repeating a name against itself disambiguates nothing and
+// reads as a defect wherever the passage is listed.
+func passageTitle(parentTitle string, path []string, ordinal int) string {
+	trimmed := path
+	for len(trimmed) > 0 && strings.EqualFold(strings.TrimSpace(trimmed[0]), strings.TrimSpace(parentTitle)) {
+		trimmed = trimmed[1:]
+	}
+	if len(trimmed) > 0 {
+		return parentTitle + " § " + strings.Join(trimmed, " § ")
+	}
+	if len(path) > 0 {
+		// Every heading collapsed into the title itself: the section IS the
+		// document, and the bare title says so.
+		return parentTitle
 	}
 	return fmt.Sprintf("%s § passage %d", parentTitle, ordinal+1)
 }
@@ -148,7 +159,7 @@ func newPassageEntity(org, system, parentID, parentTitle, filePath, mimeType str
 	return &PassageEntity{
 		ID:        entityid.Build(org, entityid.PlatformSemsource, "web", system, "chunk", chunkInstance(filePath, p.Ordinal)),
 		ParentID:  parentID,
-		Title:     passageTitle(parentTitle, p.Heading, p.Ordinal),
+		Title:     passageTitle(parentTitle, p.headingPath(), p.Ordinal),
 		Section:   p.Heading,
 		Ordinal:   p.Ordinal,
 		FilePath:  filePath,

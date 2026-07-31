@@ -146,6 +146,52 @@ func TestDilutionMargin(t *testing.T) {
 	}
 }
 
+// TestScorecardAnswerPassagesStayDivided is the splitter-level guard for the
+// graded discrimination answers, and unlike the margin tests it needs no
+// embedder — it runs in every CI pass. It pins the STRUCTURAL half of the fix:
+// each answer literal must sit in a passage divided from the prose that diluted
+// it, small enough to be mostly signal. The margin harness measures whether that
+// passage then wins; this guard catches the splitter regressing before anyone
+// pays for an embedding run.
+func TestScorecardAnswerPassagesStayDivided(t *testing.T) {
+	cases := []struct {
+		name, file, needle string
+		maxBytes           int
+		mustNotContain     string
+	}{
+		{
+			name:   "X02 answer is the isolated docker run fence",
+			file:   "../../configs/tiers/README.md",
+			needle: "-p 8083:8083",
+			// The isolated fence is 180 B today; 400 B (the floor) is the point
+			// past which it is evidently carrying prose again.
+			maxBytes:       400,
+			mustNotContain: "Requires **seminstruct**",
+		},
+		{
+			name:           "X01 answer is the NATS key group",
+			file:           "../../README.md",
+			needle:         "NATS_MONITOR_HOST_PORT=8222",
+			maxBytes:       400,
+			mustNotContain: "SEMSOURCE_CONFIG=",
+		},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			p := passageContaining(t, c.file, c.needle)
+			if len(p.Body) > c.maxBytes {
+				t.Errorf("passage carrying %q is %d B (max %d): it has re-absorbed surrounding prose "+
+					"and its vector is diluting again", c.needle, len(p.Body), c.maxBytes)
+			}
+			if c.mustNotContain != "" && strings.Contains(p.Body, c.mustNotContain) {
+				t.Errorf("passage carrying %q also carries %q: the split that separated them has regressed",
+					c.needle, c.mustNotContain)
+			}
+		})
+	}
+}
+
 // TestDilutionMarginReproducesLiveOrdering is the harness's credibility pin.
 //
 // Three states of configs/tiers/README.md were observed live against the same
@@ -258,11 +304,10 @@ func (e *embedder) margin(t *testing.T, p dilutionPair, answer, distractor doc.P
 // identityText mirrors what graph-embedding embeds: the entity's identity text
 // ahead of the fetched body. Measuring the bare body instead produced the right
 // trend and the wrong ranking, which is precisely the error this reproduces.
+// The title comes from the real passageTitle so this cannot drift from what
+// production actually emits — including the heading ancestry it now carries.
 func identityText(docTitle string, p doc.Passage) string {
-	if p.Heading == "" {
-		return docTitle + "\n\n" + p.Body
-	}
-	return docTitle + " § " + p.Heading + "\n\n" + p.Body
+	return doc.PassageTitle(docTitle, p) + "\n\n" + p.Body
 }
 
 func (e *embedder) embed(t *testing.T, inputs []string) [][]float64 {
