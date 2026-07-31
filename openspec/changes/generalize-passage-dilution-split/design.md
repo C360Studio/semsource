@@ -39,32 +39,55 @@ ordering at all three states including the sign of the margin.
 
 ## Decisions
 
-### D1. Generalize the property, rather than add a second special case
+### D1. The rule is fence ISOLATION, not entry grouping — and the harness overturned the first draft
 
-The tempting fix is a `KEY=VALUE`-style clause for shell commands. That would fix X02 and leave the
-next shape — flag lists, CLI option tables, one-per-line examples — to be discovered by another
-regression.
+This change's first draft proposed generalizing the `KEY=VALUE` rule to "independent peer entries",
+so a block of shell commands would divide by command group. The harness killed it before any code was
+written: **X02's block is two command lines**, and the existing `minKeyGroups = 3` threshold means
+entry grouping never fires on it. The proposed fix would not have fixed the defect it was proposed
+for.
 
-The property that actually matters is **independence**: a block whose lines are self-contained peers
-carries N unrelated facts in one vector, and any single fact is a 1/N fraction of it. `KEY=VALUE` was
-never the cause, only the first observed instance. So the rule becomes "independent peer entries",
-with `KEY=VALUE` and whole shell commands as two recognised forms.
+What does fix it is separating the fenced block from the prose around it. Measured on the unmodified
+document:
 
-### D2. The discriminator is continuation, not language
+| candidate | bytes | cosine | margin vs distractor |
+|---|---|---|---|
+| whole section (today) | 4301 | 0.6116 | −0.0188 |
+| **fence isolated** | **287** | **0.6535** | **+0.0231** |
+| prose only | 4121 | 0.6153 | −0.0150 |
 
-The dangerous mistake is splitting a block whose lines are *not* independent — a Go function body, a
-JSON document, a multi-line pipeline. Splitting those produces fragments that are individually
-meaningless and would damage retrieval rather than help it.
+Isolating the block does not merely restore the pre-#109 margin (+0.0073) — it more than triples it,
+because the isolated passage is almost pure signal. And the prose passage correctly still loses: it
+does not contain the port.
 
-Language tags cannot decide this: 112 of 205 blocks in the corpus carry no tag at all, and a `bash`
-block may still be one continuous pipeline. The signal that survives is **structural continuation** —
-indentation, trailing operators (`{`, `[`, `(`, `,`, `\`, `|`, `&&`), and here-document markers all
-indicate a line that depends on its neighbours.
+This is the workflow the change argues for, applied to the change itself. The cost of being wrong was
+one embedding call.
 
-The rule is therefore conservative by construction: a block divides only when *no* line shows
-continuation and it yields at least three groups. A block we cannot confidently call independent stays
-whole, which preserves today's behaviour for the ~142 continuous blocks and accepts under-splitting
-as the safe failure.
+### D2. Two complementary rules, because isolation does not subsume grouping
+
+Fence isolation and entry grouping solve different halves of the same problem:
+
+- **Isolation** stops a block's facts competing with the *prose around it*. It keeps the block whole.
+- **Grouping** stops a block's entries competing with *each other*. It divides within the block.
+
+X01 needs grouping and isolation would not have fixed it: the whole `§ Configuration` key/value block
+scored 0.6569 where the winning 218-byte key group scored 0.7663. X02 needs isolation and grouping
+cannot reach it. So both stay, and the `KEY=VALUE` grouping rule is generalized to peer entries as a
+secondary improvement rather than as the fix.
+
+### D2b. Isolation triggers on prose volume, not on the ceiling
+
+A fenced block is isolated when the section's non-fence content is at least the floor (400 B) — that
+is, when there is enough prose present to dilute it. Below that there is nothing to separate from and
+isolating would only mint tiny passages.
+
+This is deliberately a different size test from the ceiling. The ceiling asks "is this passage too
+big"; a 4x sweep of it moved no graded outcome, because dilution is about a passage's *contents*. The
+floor here asks "is there competing prose", which is the thing that actually dilutes.
+
+Continuation detection (indentation, trailing operators, here-docs) still governs *grouping*, where
+splitting a continuous construct would produce meaningless fragments. Isolation never splits a block,
+so it carries none of that risk.
 
 ### D3. The harness is admissible because it already predicted a live outcome
 

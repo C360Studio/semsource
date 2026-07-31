@@ -260,6 +260,18 @@ func subdivide(content []byte, lines []line, s section, b passageBounds) [][2]in
 	if spans := splitHomogeneousBlocks(lines, s); spans != nil {
 		return spans
 	}
+	// Isolation is the second size-independent reason, and it is about a
+	// different competition than homogeneity. Homogeneity stops a block's entries
+	// diluting EACH OTHER; isolation stops a block's facts competing with the
+	// PROSE AROUND IT. X02 is the case: its answer is a two-line `docker run`
+	// block, so it yields too few groups for the homogeneous path to touch, and
+	// its section sits under the ceiling so the size path never runs. Measured on
+	// the unmodified document, the section scored 0.6116 against a distractor's
+	// 0.6304 while the isolated block scored 0.6535 — a losing margin of -0.0188
+	// becoming a winning +0.0231.
+	if spans := isolateFencedBlocks(lines, s, b); spans != nil {
+		return spans
+	}
 	if s.end-s.start <= b.ceiling {
 		return [][2]int{{s.start, s.end}}
 	}
@@ -479,6 +491,58 @@ func splitHomogeneousBlocks(lines []line, s section) [][2]int {
 	}
 	if !found {
 		return nil
+	}
+	if cursor < s.end {
+		out = append(out, [2]int{cursor, s.end})
+	}
+	return out
+}
+
+// isolateFencedBlocks gives each fenced block in a section its own span, leaving
+// the prose around it as its own spans, so a command or code sample is not
+// embedded together with paragraphs that dilute it.
+//
+// It NEVER divides a fenced block — a block stays whole, which is what the
+// splitting contract requires and what makes this safe for continuous
+// constructs. It only decides where the block's passage begins and ends.
+//
+// The trigger is prose VOLUME, not the ceiling. A section whose non-fence
+// content is below the floor has nothing substantial to dilute the block, and
+// isolating there would mint tiny passages for no retrieval gain. The ceiling is
+// deliberately not consulted: a 4x sweep of it moved no graded outcome, because
+// dilution is a property of what a passage contains rather than how large it is.
+//
+// Returns nil when the section has no fenced block, or when the surrounding
+// prose is too small to be worth separating — leaving every other path untouched.
+func isolateFencedBlocks(lines []line, s section, b passageBounds) [][2]int {
+	var fenced [][2]int
+	for _, blk := range blocksOf(lines, s) {
+		if blockIsFenced(lines, blk) {
+			fenced = append(fenced, blk)
+		}
+	}
+	if len(fenced) == 0 {
+		return nil
+	}
+
+	var fencedBytes int
+	for _, f := range fenced {
+		fencedBytes += f[1] - f[0]
+	}
+	// Non-fence content is what would dilute the block. Below the floor there is
+	// not enough of it to matter.
+	if (s.end-s.start)-fencedBytes < b.floor {
+		return nil
+	}
+
+	var out [][2]int
+	cursor := s.start
+	for _, f := range fenced {
+		if f[0] > cursor {
+			out = append(out, [2]int{cursor, f[0]})
+		}
+		out = append(out, f)
+		cursor = f[1]
 	}
 	if cursor < s.end {
 		out = append(out, [2]int{cursor, s.end})

@@ -1,17 +1,17 @@
 ## 1. Land the instrument and pin its credibility
 
-- [ ] 1.1 Add the offline cosine harness under `handler/doc` alongside `TestBoundsSweep`: split named
+- [x] 1.1 Add the offline cosine harness under `handler/doc` alongside `TestBoundsSweep`: split named
   documents with the real splitter, embed passages through semembed with the arctic-embed query
   prefix applied to the query only and the `document § heading` identity text prepended to each body,
   and report the signed margin between a named answer and a named distractor.
   - Test: `SCORECARD_EMBED=<url> go test ./handler/doc/ -run TestDilutionMargin -v` reports a margin
     for a declared answer/distractor pair; it skips cleanly when the embedder env is unset.
-- [ ] 1.2 Pin the harness's admissibility with the X02 three-state reproduction: the answer passage at
+- [x] 1.2 Pin the harness's admissibility with the X02 three-state reproduction: the answer passage at
   the pre-#109, post-#109, and current versions of `configs/tiers/README.md` against the ADR-0002
   distractor.
   - Test: the harness reports margins of approximately +0.0074, −0.0021 and −0.0291, i.e. the sign
     flips between the first and second state — matching the observed live ranks 0, 1 and 4.
-- [ ] 1.3 Record the corpus, embedder image digest, and query prefix alongside the harness output, so
+- [x] 1.3 Record the corpus, embedder image digest, and query prefix alongside the harness output, so
   a later run is comparable.
   - Test: the emitted record names all three; a run with a different embedder digest is
     distinguishable from one with the same.
@@ -27,11 +27,11 @@
   groups. `KEY=VALUE` remains a recognised peer form.
   - Test: a fenced block of three or more distinct shell commands divides into one passage per
     command group; the existing `KEY=VALUE` division is unchanged.
-- [ ] 2.3 Guard the failure that matters: a block whose lines form one continuous construct is kept
+- [x] 2.3 Guard the failure that matters: a block whose lines form one continuous construct is kept
   whole.
   - Test: Go function bodies, JSON documents, multi-line pipelines, and here-documents each remain a
     single passage; the corpus's ~142 continuous blocks produce the same boundaries as before.
-- [ ] 2.4 Preserve the tiling and merge invariants under the generalized rule.
+- [x] 2.4 Preserve the tiling and merge invariants under the generalized rule.
   - Test: divided passages still tile the document byte for byte with no gap, overlap, or duplicated
     text including fence markers; below-floor groups are still emitted rather than merged.
 
@@ -47,6 +47,26 @@
     proceeding.
 - [ ] 3.3 Record passage-count growth over the fixed baseline corpus.
   - Test: total passage and entity counts are reported against the 5417-entity baseline.
+
+### Iteration 1 result — fence isolation fixes X02 and REGRESSES X01. Not shippable.
+
+Live A/B on the fixed baseline corpus (5417 -> 5623 entities, +3.8%): **21/22 against a 22/22
+baseline**, with X01 moving `correct` -> `MISLEADING` — the verdict `retrieval-ranking` singles out
+as the worst, because the top evidence argues for the wrong answer.
+
+Cause: **isolation is symmetric.** X01's distractor is itself a fenced `docker compose` block, so
+isolating sharpened the workaround passage exactly as it sharpened X02's answer. Offline margins now
+read X02 `+0.0127` and X01 `-0.0009` — the regression is a thousandth of a point, and real.
+
+Two process findings, both recorded rather than smoothed over:
+
+1. Task 3.2 said to score the other pairs offline BEFORE the live A/B. That step was skipped and the
+   live run paid for it. The X01 pair is now in the harness so the next iteration costs an embedding
+   call.
+2. The harness initially reported X01 `+0.0893` — a false pass — because it selected the distractor by
+   heading, and isolation had split `§ Quick Start` into an 88 B prose fragment and the 463 B fence.
+   Distractors are now selected by literal. This is exactly the disagreement case the spec anticipates:
+   the live result stood and the harness was treated as incomplete.
 
 ## 4. Confirm live, on the fixed baseline corpus
 
