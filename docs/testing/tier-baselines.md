@@ -139,18 +139,53 @@ Stated so the numbers are not over-read:
 
 ## Planned A/B: seminstruct 8b vs Gemini 2.5 Flash Lite
 
-**Not yet run.** Recorded so the setup is not re-derived — and so the known
-Gemini pitfalls are not rediscovered the hard way.
+**Not yet run.** Recorded so the setup is not re-derived — and so the Gemini
+wire-protocol traps are not rediscovered the hard way.
 
-### Use the config shape that already works
+### Verify field names against the pinned SemStreams, not against a sibling
 
-Gemini exposes more than one wire protocol — its native
-`generateContent` API, an OpenAI-compatibility layer, and Vertex AI (different
-host *and* different auth). Only the compatibility layer works with a
-`provider: "openai"` endpoint, and it needs more than a URL.
+`model.EndpointConfig` at `v1.0.0-beta.159` accepts:
 
-SemSpec already runs Gemini this way (`semspec/configs/e2e-gemini.json`). Copy
-its field set rather than the minimum:
+```
+provider  url  model  query_prefix  max_tokens  max_output_tokens
+supports_tools  tool_format  api_key_env  options  stream  reasoning_effort
+input_price_per_*  output_price_per_*  requests_per_minute  max_concurrent
+request_timeout  idle_conn_timeout  response_header_timeout
+disable_keepalives  wire_backend
+```
+
+**An unknown field inside an endpoint is silently ignored** — verified: a bogus
+key at the *top* level fails `semsource validate`, but the same key inside
+`model_registry.endpoints.<name>` is accepted and dropped. A stale or misspelled
+field therefore costs you the setting with no error. Check against the struct
+above before trusting any config you copied.
+
+SemSpec has a working Gemini config (`semspec/configs/e2e-gemini.json`) but it is
+**stale**: last touched 2026-04-04, and it pins SemStreams `v1.0.0-alpha.92`
+against our `v1.0.0-beta.159`. Its field set happens to still validate — treat
+that as luck, not authority.
+
+### `wire_backend` is the Gemini-specific knob
+
+Gemini has more than one wire protocol, and SemStreams models this per endpoint:
+
+| `wire_backend` | Client |
+| --- | --- |
+| `""` / `"sdk"` (default) | `sashabaranov/go-openai` SDK |
+| `"wire"` | Framework-owned `model/wire` (ADR-037) |
+| `"responses"` | OpenAI Responses surface (ADR-051) |
+
+**Gemini is ADR-037's named motivating case.** Its rationale: Gemini 3.x preview
+requires `thought_signature` echo on multi-turn tool flows, the SDK's typed
+`ToolCall` struct cannot carry the field, and Gemini 2.5 has a finite runway. The
+field is per-endpoint precisely so operators "flip Gemini to `wire` first while
+other providers stay on SDK".
+
+Our tier-2 summary path **does** honor it — `graph/llm/openai_client.go:126`
+threads `EndpointConfig.WireBackend` into the client. So `"wire"` is available to
+us if the SDK path misbehaves.
+
+### Starting config
 
 ```json
 "endpoints": {
@@ -160,10 +195,8 @@ its field set rather than the minimum:
     "model": "gemini-2.5-flash-lite",
     "api_key_env": "GEMINI_API_KEY",
     "max_tokens": 1048576,
-    "supports_tools": true,
-    "tool_format": "openai",
-    "stream": true,
-    "reasoning_effort": "low"
+    "reasoning_effort": "low",
+    "wire_backend": "sdk"
   }
 },
 "capabilities": {
@@ -171,17 +204,16 @@ its field set rather than the minimum:
 }
 ```
 
-The model registry resolves the key from the environment via `api_key_env`
-(`model/registry.go:287`), so this is a **config-only** change — no code.
-`reasoning_effort` matters: the 2.5 models are reasoning models, and SemSpec pins
-it low.
+Config-only — the registry resolves the key via `api_key_env`
+(`model/registry.go:287`). `reasoning_effort` matters: the 2.5 models are
+reasoning models. Start on `sdk`; move to `wire` if you hit protocol errors.
 
-### The compatibility layer is STRICTER than OpenAI
+### The compatibility layer is stricter than OpenAI
 
-This is the trap, and SemSpec has three bug reports to show for it
-(`semspec/docs/bugs/gemini-*.md`). The lesson in their own words: *"OpenAI
-silently accepts duplicates; Gemini rejects them."* A request that works against
-OpenAI or a local llama-server can return a hard 400 against Gemini.
+SemSpec has three Gemini bug reports (`semspec/docs/bugs/gemini-*.md`), and the
+lesson in their own words is *"OpenAI silently accepts duplicates; Gemini rejects
+them."* A request that works against OpenAI or a local llama-server can hard-400
+against Gemini.
 
 | SemSpec bug | Status | Shape |
 | --- | --- | --- |
@@ -192,9 +224,8 @@ OpenAI or a local llama-server can return a hard 400 against Gemini.
 **All three are tool-calling failures, and our path does not call tools.**
 Community summarization and answer synthesis issue a plain chat completion —
 `ChatRequest{SystemPrompt, UserPrompt, MaxTokens, Temperature}`
-(`processor/graph-query/answer.go:192`), with no `tools` array. So the known
-blockers should not apply here. Verify that assumption on the first run rather
-than trusting this paragraph.
+(`processor/graph-query/answer.go:192`), no `tools` array. The known blockers
+should not apply. Verify on the first run rather than trusting this paragraph.
 
 ### Do not run it yet
 
