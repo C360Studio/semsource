@@ -2,16 +2,28 @@
 
 ## 1. Make parser selection deterministic — before adding the languages that need it
 
-- [ ] 1.1 Replace the `for lang, parser := range pw.parsers` scan in
+- [x] 1.1 Replace the `for lang, parser := range pw.parsers` scan in
       `processor/ast-source/component.go:592` with resolution in a stable, defined order, applying
-      D1's rule when two declared languages claim one extension.
-- [ ] 1.2 Test that a watch path declaring two languages sharing an extension routes that extension
+      D1's rule when two declared languages claim one extension. Routing moved to
+      `processor/ast-source/routing.go` as a pure `routeExtensions(languages, extensionsFor)`
+      function, resolved **once per watch path** at construction rather than per file, and stored on
+      `pathWatcher.routes`. Taking `extensionsFor` as a parameter is what lets the rule be tested on
+      language pairs the global registry does not contain yet.
+- [x] 1.2 Test that a watch path declaring two languages sharing an extension routes that extension
       to the same parser **over many repetitions** — a single run passes by luck roughly half the
-      time (design — D2).
-- [ ] 1.3 Verify the test by mutating the code: restore the map range and watch 1.2 fail. A
-      determinism test that has never failed is not known to test determinism.
-- [ ] 1.4 Confirm no existing language pair shares an extension today, so this lands as a pure
-      no-op for every current configuration.
+      time (design — D2). 500 repetitions. Also pinned that routing is a function of the language
+      **set**, not its declaration order, since two configs listing the same languages differently
+      must not produce different entity IDs.
+- [x] 1.3 Verify the test by mutating the code: restore the map range and watch 1.2 fail. A
+      determinism test that has never failed is not known to test determinism. Restored the map
+      range and it **failed at iteration 2**: `routed .h to "c", first call routed it to "cpp"`.
+- [x] 1.4 Confirm no existing language pair shares an extension today, so this lands as a pure
+      no-op for every current configuration. Verified against the live registry — `go .go`,
+      `java .java`, `python .py`, `svelte .svelte`, `typescript .ts/.tsx/.mts/.cts`,
+      `javascript .js/.jsx/.mjs/.cjs`; **contested set is empty**. Consequence recorded honestly:
+      the `TestEveryContestedExtensionHasAnExplicitRule` guard passes **vacuously** until C/C++
+      land, so `TestContestedExtensions_DetectsOverlap` proves the detector separately rather than
+      leaving a test that merely looks green.
 
 ## 2. Close the silent language defaults
 
