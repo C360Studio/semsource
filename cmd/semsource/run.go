@@ -902,25 +902,35 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 	// no external service; clustering_llm adds GraphRAG summaries via the
 	// model_registry "community_summary" capability (→ seminstruct).
 	if enableClustering {
+		clusteringConfig := map[string]any{
+			"detection_interval": "30s",
+			"enable_llm":         clusteringLLM,
+			"ports": map[string]any{
+				"inputs": []map[string]any{
+					{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+				},
+				"outputs": []map[string]any{
+					{"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"},
+				},
+			},
+		}
+		// Edge synthesis is passed through only when the operator configured it.
+		// The key is omitted entirely when unset — not sent as an empty object —
+		// because the substrate's block is tri-state and reads absence as "keep
+		// the defaults". The struct's own omitempty tags preserve that per field,
+		// so a nil *bool never marshals as false and never silently disables
+		// synthesis the operator did not ask to disable.
+		if cfg.Graph != nil && cfg.Graph.EntityIDEdges != nil {
+			clusteringConfig["entity_id_edges"] = cfg.Graph.EntityIDEdges
+		}
 		configs["graph-clustering"] = struct {
 			name      string
 			compType  types.ComponentType
 			configMap map[string]any
 		}{
-			name:     "graph-clustering",
-			compType: types.ComponentTypeProcessor,
-			configMap: map[string]any{
-				"detection_interval": "30s",
-				"enable_llm":         clusteringLLM,
-				"ports": map[string]any{
-					"inputs": []map[string]any{
-						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
-					},
-					"outputs": []map[string]any{
-						{"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"},
-					},
-				},
-			},
+			name:      "graph-clustering",
+			compType:  types.ComponentTypeProcessor,
+			configMap: clusteringConfig,
 		}
 	}
 

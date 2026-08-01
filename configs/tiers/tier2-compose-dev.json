@@ -24,7 +24,10 @@
     "index_workers": 4,
     "coalesce_ms": 200,
     "enable_clustering": true,
-    "clustering_llm": true
+    "clustering_llm": true,
+    "entity_id_edges": {
+      "include_system_peers": false
+    }
   },
   "model_registry": {
     "endpoints": {

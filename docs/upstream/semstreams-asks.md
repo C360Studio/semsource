@@ -857,3 +857,48 @@ than in production as a nondeterministic reply.
 **Surfaced by:** semsource `fix-graph-query-summary-collision`, 2026-07-31, against
 `v1.0.0-beta.159`.
 **Filed:** [semstreams#822](https://github.com/C360Studio/semstreams/issues/822).
+
+## Clustering (configurable-clustering-edge-synthesis)
+
+### A community record can outgrow the transport that must carry it, and one oversized record discards the whole detection pass
+
+`graph-clustering` marshals a whole `Community` — members inline — into a single KV value
+(`graph/clustering/storage.go:116-123`). Nothing bounds the member list, and on a graph large enough
+for one community to exceed NATS' `max_payload` the `Put` fails:
+
+```
+detection failed: LPADetector.detectCommunitiesAtLevel: save community failed:
+NATSCommunityStorage.SaveCommunity: put community failed: nats: maximum payload exceeded
+```
+
+`lpa.go:369` returns on that error, so every community that would have been written after it is lost
+too. Measured on a 12,798-entity multi-repo corpus with the substrate's own defaults: **2 communities
+holding 654 entities (4.4%)**, with the component still reporting healthy. Tier 2 simply has no
+communities, and nothing says why except one ERROR line.
+
+Records serialize at ~148 bytes/member, so ~7,070 members is the ceiling. The number that makes this
+urgent for adopters: with `include_system_peers: false` — the setting SemSource now ships — the
+largest record is **886,692 B, 84.6% of the 1 MiB default**, at only 12,798 entities.
+
+**Asks, in order of preference:**
+
+1. Bound the inline member list. The `entity.<level>.<id>` reverse index written at
+   `storage.go:128-132` already makes membership recoverable without it, so chunking or omitting the
+   inline list looks tractable.
+2. Failing that, skip the offending community and continue the pass rather than discarding every
+   community in the level.
+3. Classify the error correctly — `storage.go:124` wraps it `errs.WrapTransient`, but an oversized
+   value cannot succeed on retry, so it reads as a retryable blip while being permanent.
+
+**Related trap:** there is a *second*, independent 1 MiB ceiling — `natsclient/kv.go:39`
+(`MaxValueSize`), enforced at `kv.go:346-350`. It is an application-level check on a different path
+and raising the server's `max_payload` does **not** lift it. The two limits are set independently;
+they probably want one source.
+
+**No configuration seam exists** for either limit from a consumer's side, which is why this is an ask
+rather than a config change. SemSource's local workaround is to raise `max_payload` on the
+measurement stack; the shipped tier-2 config does not, so an adopter on a larger corpus will hit it.
+
+**Surfaced by:** semsource `configurable-clustering-edge-synthesis`, 2026-08-01, against
+`v1.0.0-beta.159`.
+**Filed:** [semstreams#837](https://github.com/C360Studio/semstreams/issues/837).

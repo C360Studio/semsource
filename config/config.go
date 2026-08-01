@@ -57,6 +57,58 @@ type GraphConfig struct {
 	// model_registry with a "community_summary" capability (→ seminstruct).
 	// Ignored when EnableClustering is false.
 	ClusteringLLM bool `json:"clustering_llm,omitempty"`
+
+	// EntityIDEdges overrides graph-clustering's EntityID virtual-edge
+	// synthesis. Omit it to keep the substrate's defaults (siblings and system
+	// peers both ON). Ignored when EnableClustering is false, which is not an
+	// error — a tier config may carry the block and enable clustering later.
+	EntityIDEdges *EntityIDEdgesConfig `json:"entity_id_edges,omitempty"`
+}
+
+// EntityIDEdgesConfig overrides how graph-clustering synthesizes virtual edges
+// from entity IDs before running community detection. It mirrors semstreams'
+// block of the same name field for field, including its tri-state shape: the
+// two toggles are pointers so that nil means "leave the substrate default
+// alone" and only an explicit true/false overrides. Numeric fields default when
+// zero.
+//
+// Which settings suit a deployment depends on how many distinct systems its
+// entity IDs carry. The system segment comes from the source root's base name
+// (handler/ast/handler.go's pathToSystemSlug and entityid.SystemSlug), so a
+// deployment that ingests one path — /workspace under compose, or one repo —
+// gives every entity the same system. System-peer synthesis then links across
+// the whole graph and label propagation collapses into one community; measured
+// on osh-core sensorhub-core, the largest community held 82% of the graph with
+// this ON and 93 entities with it OFF. A deployment ingesting several source
+// roots has a varying system segment, where the same edges group by repo
+// instead. See docs/testing/tier-baselines.md.
+type EntityIDEdgesConfig struct {
+	// IncludeSiblings synthesizes edges between entities sharing the 5-part
+	// type prefix of their entity ID. Substrate default true.
+	IncludeSiblings *bool `json:"include_siblings,omitempty"`
+
+	// IncludeSystemPeers synthesizes edges between entities sharing the
+	// {system} segment of their entity ID. Substrate default true. This is the
+	// knob that collapses a single-system graph — see the type comment.
+	IncludeSystemPeers *bool `json:"include_system_peers,omitempty"`
+
+	// SiblingWeight is the edge weight for synthesized sibling edges.
+	// Substrate default 0.7.
+	SiblingWeight float64 `json:"sibling_weight,omitempty"`
+
+	// MaxSiblings caps sibling neighbors synthesized per entity. Substrate
+	// default 10.
+	MaxSiblings int `json:"max_siblings,omitempty"`
+
+	// SystemPeerWeight is the edge weight for synthesized system-peer edges.
+	// Substrate default 0.3.
+	SystemPeerWeight float64 `json:"system_peer_weight,omitempty"`
+
+	// MaxSystemPeers caps system-peer neighbors synthesized per entity.
+	// Substrate default 15. The cap is not a safeguard against collapse: 15 is
+	// far more than enough to flood one connected component when every entity
+	// shares a system.
+	MaxSystemPeers int `json:"max_system_peers,omitempty"`
 }
 
 // MetricsConfig configures the Prometheus metrics endpoint.
@@ -204,7 +256,48 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if err := c.validateGraph(); err != nil {
+		return err
+	}
+
 	return c.validateModelRegistry()
+}
+
+// validateGraph checks the graph block's own numerics. Clustering edge
+// synthesis is validated whether or not clustering is enabled: the block is
+// inert on a tier that runs no clustering, but a bad value there is still a
+// mistake worth reporting at load time rather than at the tier switch.
+func (c *Config) validateGraph() error {
+	if c.Graph == nil || c.Graph.EntityIDEdges == nil {
+		return nil
+	}
+	e := c.Graph.EntityIDEdges
+	for _, f := range []struct {
+		name string
+		val  float64
+	}{
+		{"sibling_weight", e.SiblingWeight},
+		{"system_peer_weight", e.SystemPeerWeight},
+	} {
+		if f.val < 0 {
+			return fmt.Errorf("config: graph.entity_id_edges.%s is %g, must not be negative "+
+				"(omit the field to use the substrate default)", f.name, f.val)
+		}
+	}
+	for _, f := range []struct {
+		name string
+		val  int
+	}{
+		{"max_siblings", e.MaxSiblings},
+		{"max_system_peers", e.MaxSystemPeers},
+	} {
+		if f.val < 0 {
+			return fmt.Errorf("config: graph.entity_id_edges.%s is %d, must not be negative "+
+				"(omit the field to use the substrate default, or set include_%s false to disable synthesis)",
+				f.name, f.val, strings.TrimPrefix(f.name, "max_"))
+		}
+	}
+	return nil
 }
 
 // validateNamespaceSegment rejects a namespace that cannot be an entity-ID
