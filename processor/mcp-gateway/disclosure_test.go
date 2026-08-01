@@ -168,39 +168,6 @@ func TestDisclosureNeverFailsOnUnreadableResponse(t *testing.T) {
 	}
 }
 
-// TestDisclosedResultKeepsSubstratePayloadVerbatim: the disclosure sits beside
-// the substrate response, never merged into it, so a future substrate `strategy`
-// value can be preferred over our derived rung without either being corrupted.
-func TestDisclosedResultKeepsSubstratePayloadVerbatim(t *testing.T) {
-	raw := json.RawMessage(respCommunityLLM)
-	out, err := json.Marshal(disclosedResult{Retrieval: deriveDisclosure(raw), Result: raw})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-
-	var round struct {
-		Retrieval json.RawMessage `json:"retrieval"`
-		Result    json.RawMessage `json:"result"`
-	}
-	if err := json.Unmarshal(out, &round); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	var gotResult, wantResult any
-	if err := json.Unmarshal(round.Result, &gotResult); err != nil {
-		t.Fatalf("unmarshal result: %v", err)
-	}
-	if err := json.Unmarshal([]byte(respCommunityLLM), &wantResult); err != nil {
-		t.Fatalf("unmarshal fixture: %v", err)
-	}
-	if !jsonEqual(gotResult, wantResult) {
-		t.Errorf("substrate payload was modified:\n got %s\nwant %s", round.Result, respCommunityLLM)
-	}
-	if len(round.Retrieval) == 0 {
-		t.Error("disclosure missing from the result")
-	}
-}
-
 func jsonEqual(a, b any) bool {
 	left, err := json.Marshal(a)
 	if err != nil {

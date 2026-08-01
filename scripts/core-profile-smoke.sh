@@ -488,6 +488,16 @@ if printf '%s' "$graph_search_body" | grep -q '"isError":true'; then
 	echo "graph_search refused on the default tier: $graph_search_body" >&2
 	exit 1
 fi
+if ! printf '%s' "$graph_search_body" | grep -q '"matches"'; then
+	echo "graph_search returned no ranked match list: $graph_search_body" >&2
+	exit 1
+fi
+# A search verb ranks; it must not ship the entity dump. Triple predicates in the
+# payload mean the bounded shape regressed.
+if printf '%s' "$graph_search_body" | grep -q '"triples"'; then
+	echo "graph_search leaked raw entity triples — the bounded shape regressed: $graph_search_body" >&2
+	exit 1
+fi
 if ! printf '%s' "$graph_search_body" | grep -q '"rung":"entities_only"'; then
 	echo "graph_search did not disclose the entities-only rung: $graph_search_body" >&2
 	exit 1
@@ -500,7 +510,7 @@ if printf '%s' "$graph_search_body" | grep -q '"answer_source":"llm"'; then
 	echo "graph_search claimed an LLM answer on a stack with no LLM: $graph_search_body" >&2
 	exit 1
 fi
-echo "graph_search answers and discloses a non-community, non-LLM retrieval rung"
+echo "graph_search returns a bounded ranked list and discloses a non-community, non-LLM rung"
 
 # --- compose-packaging-hardening assertions ---
 

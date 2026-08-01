@@ -101,15 +101,21 @@ func (c *Component) graphSummary(ctx context.Context, _ *mcp.CallToolRequest, _ 
 // response unchanged when non-empty, adding a labelled semantic fallback only
 // when it is empty — so this one subject covers both.
 //
-// The result is the substrate payload verbatim plus a derived disclosure of the
-// rung reached. Without the disclosure this tool would present semantic
-// similarity hits as thematic community reasoning on any stack without
-// clustering, which is most of them.
+// The result is a RANKED, BOUNDED match list plus a disclosure of the rung the
+// answer reached. It is deliberately not the substrate payload verbatim: on a
+// live 119-entity corpus a 38-hit query returned 197 KB of entity triples whose
+// only "content" was a body-by-reference key — 11x the cost of code_search for
+// an answer an agent cannot read. A search verb's job is to rank so the agent
+// can follow up on the IDs worth reading.
+//
+// summarize_threshold asks the substrate for the compact shape. It is honored on
+// the graphrag strategy and ignored on the semantic one, which is why
+// deriveMatches also reconstructs the list from whatever the response carried.
 func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in GraphSearchInput) (*mcp.CallToolResult, any, error) {
 	if in.Query == "" {
 		return nil, nil, fmt.Errorf("query is required")
 	}
-	data, err := json.Marshal(map[string]string{"query": in.Query})
+	data, err := json.Marshal(map[string]any{"query": in.Query, "summarize_threshold": 1})
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal query: %w", err)
 	}
@@ -117,9 +123,26 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if err != nil {
 		return nil, nil, fmt.Errorf("graph search failed: %w", err)
 	}
-	out, err := json.Marshal(disclosedResult{
-		Retrieval: deriveDisclosure(resp),
-		Result:    json.RawMessage(resp),
+
+	var body graphSearchBody
+	if err := json.Unmarshal(resp, &body); err != nil {
+		// Unreadable payload: report the disclosure's unknown rung rather than
+		// failing the call, and say nothing about matches we cannot see.
+		out, mErr := json.Marshal(graphSearchResult{Retrieval: deriveDisclosure(resp)})
+		if mErr != nil {
+			return nil, nil, fmt.Errorf("marshal graph search result: %w", mErr)
+		}
+		return textResult(out), nil, nil
+	}
+
+	matches, total, truncated := deriveMatches(&body)
+	out, err := json.Marshal(graphSearchResult{
+		Retrieval:          deriveDisclosure(resp),
+		Answer:             body.Answer,
+		Matches:            matches,
+		TotalMatches:       total,
+		Truncated:          truncated,
+		CommunitySummaries: body.CommunitySummaries,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal graph search result: %w", err)

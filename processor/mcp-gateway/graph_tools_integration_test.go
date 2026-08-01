@@ -28,27 +28,35 @@ func graphToolComponent(t *testing.T, client *natsclient.Client) *Component {
 	return c
 }
 
-// TestIntegration_GraphSearchDisclosesAndPassesThrough proves the two guarantees
-// that make this tool safe to ship on a stack without clustering: the substrate
-// payload arrives verbatim, and the answer is labelled as NOT community-backed
-// so an agent cannot read similarity hits as thematic reasoning.
+// TestIntegration_GraphSearchRanksAndDiscloses proves the two guarantees that
+// make this tool worth calling: the answer is labelled NOT community-backed so
+// similarity hits are not read as thematic reasoning, and the result is a
+// bounded ranked list rather than the substrate's entity dump.
 //
-// It also pins that a graph-query success is not rejected for lacking
-// contract_version — that field belongs to the fusion contract, and the
-// substrate does not emit it.
-func TestIntegration_GraphSearchDisclosesAndPassesThrough(t *testing.T) {
+// The stub returns entities WITHOUT digests — the substrate's common
+// sub-threshold shape, and the exact case upstream's own formatter drops
+// (semstreams#823). The match list must still be populated.
+func TestIntegration_GraphSearchRanksAndDiscloses(t *testing.T) {
 	ctx := context.Background()
 	tc := natsclient.NewTestClient(t)
 
-	const substrateBody = `{"entity_digests":[{"id":"acme.semsource.golang.x.function.Foo","relevance":0.7}],"count":1,"duration_ms":9}`
+	const substrateBody = `{"entities":[
+		{"id":"acme.semsource.golang.x.function.Foo","triples":[{"predicate":"dc.terms.title","object":"Foo"},{"predicate":"code.artifact.path","object":"a.go"}]},
+		{"id":"acme.semsource.web.x.chunk.readme-0001","triples":[{"predicate":"dc.terms.title","object":"README chunk"}]}
+	],"count":2,"duration_ms":9}`
 	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.searchGraph",
 		func(_ context.Context, data []byte) ([]byte, error) {
-			var req map[string]string
+			var req map[string]any
 			if err := json.Unmarshal(data, &req); err != nil {
 				return nil, err
 			}
 			if req["query"] != "how does readiness gating work" {
 				t.Errorf("query not forwarded verbatim: %v", req)
+			}
+			// The compact shape is requested, even though the semantic strategy
+			// ignores it — which is why the derivation below must not depend on it.
+			if _, ok := req["summarize_threshold"]; !ok {
+				t.Errorf("summarize_threshold not requested: %v", req)
 			}
 			return []byte(substrateBody), nil
 		})
@@ -63,33 +71,33 @@ func TestIntegration_GraphSearchDisclosesAndPassesThrough(t *testing.T) {
 		t.Fatalf("graph_search returned a tool error: %+v", res)
 	}
 
-	var out struct {
-		Retrieval retrievalDisclosure `json:"retrieval"`
-		Result    json.RawMessage     `json:"result"`
-	}
-	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+	var out graphSearchResult
+	raw := res.Content[0].(*mcp.TextContent).Text
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		t.Fatalf("unmarshal tool result: %v", err)
 	}
 
 	if out.Retrieval.CommunityBacked {
 		t.Errorf("a non-clustered answer was reported as community-backed: %+v", out.Retrieval)
 	}
-	if out.Retrieval.Rung != rungEntitiesOnly {
-		t.Errorf("rung = %q, want %q", out.Retrieval.Rung, rungEntitiesOnly)
-	}
 	if !strings.Contains(out.Retrieval.Note, "NOT community-backed") {
 		t.Errorf("disclosure note does not warn the agent: %q", out.Retrieval.Note)
 	}
 
-	var got, want any
-	if err := json.Unmarshal(out.Result, &got); err != nil {
-		t.Fatalf("unmarshal result: %v", err)
+	// The load-bearing assertion: entities-without-digests must still rank.
+	if len(out.Matches) != 2 || out.TotalMatches != 2 {
+		t.Fatalf("matches lost when the substrate sent entities without digests: %+v", out)
 	}
-	if err := json.Unmarshal([]byte(substrateBody), &want); err != nil {
-		t.Fatalf("unmarshal fixture: %v", err)
+	if out.Matches[0].ID != "acme.semsource.golang.x.function.Foo" || out.Matches[0].Label != "Foo" {
+		t.Errorf("first match lost its ID or label: %+v", out.Matches[0])
 	}
-	if !jsonEqual(got, want) {
-		t.Errorf("substrate payload not verbatim:\n got %s\nwant %s", out.Result, substrateBody)
+	if out.Matches[0].Type != "function" || out.Matches[1].Type != "chunk" {
+		t.Errorf("type segment not derived from the entity ID: %+v", out.Matches)
+	}
+
+	// A ranked list, not an entity dump: no triples should survive.
+	if strings.Contains(raw, "code.artifact.path") {
+		t.Errorf("graph_search leaked entity triples into the result: %s", raw)
 	}
 }
 

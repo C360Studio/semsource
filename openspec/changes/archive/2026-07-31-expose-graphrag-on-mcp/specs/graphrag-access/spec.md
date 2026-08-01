@@ -52,9 +52,14 @@ SHALL be disclosed in the result, never expressed by withholding the tool.
 
 A thematic search result SHALL disclose which rung of the capability ladder produced it: entity hits
 only, community-backed summaries, or an LLM-synthesized answer. The disclosure SHALL be derived from
-fields the substrate returns and SHALL sit alongside the substrate's response rather than replacing
-or rewriting any part of it, so a substrate-reported value always takes precedence over a
-SemSource-derived one.
+fields the substrate returns, and SHALL NOT contradict a value the substrate reported.
+
+The result SHALL be a bounded ranked list, not the substrate's payload in full. A search verb ranks
+so the caller can follow up; transferring every matched entity's triples costs an order of magnitude
+more than the deterministic tools and carries no readable content, since bodies are held by
+reference. SemSource SHALL preserve the substrate's own values — entity IDs, community attribution,
+answer text, model attribution, degradation — and SHALL invent none. Where the list is capped, the
+result SHALL report the true total and that it was truncated.
 
 #### Scenario: A non-community answer says so
 
@@ -70,10 +75,22 @@ SemSource-derived one.
 - **THEN** the result states that the answer is community-backed and carries the community summaries
   the substrate returned
 
-#### Scenario: The substrate payload is not rewritten
+#### Scenario: The result is bounded and honest about it
 
-- **WHEN** a tool adds its disclosure to a result
-- **THEN** the substrate's own response is present unmodified beside it
+- **WHEN** a thematic search matches more entities than the result cap
+- **THEN** the result carries the capped list, the true total, and a truncation flag
+
+#### Scenario: Substrate values are preserved, not restated
+
+- **WHEN** the substrate reports an answer, a model attribution, or community summaries
+- **THEN** those values appear in the result as the substrate gave them
+
+#### Scenario: A ranked list survives a substrate response carrying no digests
+
+- **GIVEN** the substrate returns matched entities without its own digest list
+- **WHEN** an agent calls the thematic search tool
+- **THEN** the result still carries a ranked match list derived from those entities, never an empty
+  one
 
 ### Requirement: A template answer is never presented as an LLM answer
 
