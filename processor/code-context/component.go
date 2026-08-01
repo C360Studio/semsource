@@ -40,7 +40,7 @@ import (
 // here is silently excluded from code_context NL retrieval scope. Note the ID
 // domain is NOT the parser registration name (Go registers as "go" but stamps
 // "golang"), so this list is maintained by hand, not derived from the registry.
-var codeScopeDomains = []string{"golang", "python", "typescript", "javascript", "java", "svelte"}
+var codeScopeDomains = []string{"golang", "python", "typescript", "javascript", "java", "svelte", "c", "cpp"}
 
 // docScopeDomains are the entity-ID domain segments the "docs" lens covers.
 // Doc/prose entities (handler/doc type "doc", handler/url type "page") live

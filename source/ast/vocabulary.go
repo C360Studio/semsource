@@ -32,7 +32,7 @@ func registerArtifactPredicates() {
 		vocabulary.WithIRI(CodeNamespace+"hash"))
 
 	vocabulary.Register(CodeLanguage,
-		vocabulary.WithDescription("Programming language: go, typescript, javascript, java, python, svelte"),
+		vocabulary.WithDescription("Programming language: go, typescript, javascript, java, python, svelte, c, cpp"),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(CodeNamespace+"language"))
 

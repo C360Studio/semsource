@@ -16,6 +16,8 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Register Go and TypeScript/JavaScript language parsers.
+	_ "github.com/c360studio/semsource/source/ast/c"
+	_ "github.com/c360studio/semsource/source/ast/cpp"
 	_ "github.com/c360studio/semsource/source/ast/golang"
 	_ "github.com/c360studio/semsource/source/ast/java"
 	_ "github.com/c360studio/semsource/source/ast/python"

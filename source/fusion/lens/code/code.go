@@ -116,4 +116,6 @@ func (*Lens) Hydrate(_ context.Context, e *fusion.Entity) (*message.StorageRefer
 var codeExtensions = map[string]bool{
 	".go": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true,
 	".mjs": true, ".cjs": true, ".svelte": true, ".java": true, ".py": true,
+	".c": true, ".h": true, ".cpp": true, ".cc": true, ".cxx": true,
+	".hpp": true, ".hh": true, ".hxx": true,
 }

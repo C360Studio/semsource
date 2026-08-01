@@ -11,6 +11,8 @@ import (
 
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Import language parsers to trigger init() registration.
+	_ "github.com/c360studio/semsource/source/ast/c"
+	_ "github.com/c360studio/semsource/source/ast/cpp"
 	_ "github.com/c360studio/semsource/source/ast/golang"
 	_ "github.com/c360studio/semsource/source/ast/java"
 	_ "github.com/c360studio/semsource/source/ast/python"

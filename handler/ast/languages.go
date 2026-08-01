@@ -26,6 +26,8 @@ import (
 // "javascript" all produce "typescript" entities, which is existing behaviour.
 var languageDomains = map[string]string{
 	"go":         handler.DomainGolang,
+	"c":          "c",
+	"cpp":        "cpp",
 	"ts":         "typescript",
 	"typescript": "typescript",
 	"javascript": "typescript",
@@ -37,7 +39,14 @@ var languageDomains = map[string]string{
 // languageExtensions maps a configured language name to the file extensions the
 // watcher should follow for it.
 var languageExtensions = map[string][]string{
-	"go":         {".go"},
+	"go": {".go"},
+	// ".h" appears for both C and C++. Which one reads a given header is decided
+	// per watch path from the declared language set, not here — see
+	// processor/ast-source/routing.go. This list is what the file watcher
+	// follows, so each language must name every extension it can be asked to
+	// parse.
+	"c":          {".c", ".h"},
+	"cpp":        {".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".h"},
 	"ts":         {".ts", ".tsx", ".js", ".jsx"},
 	"typescript": {".ts", ".tsx", ".js", ".jsx"},
 	"javascript": {".ts", ".tsx", ".js", ".jsx"},

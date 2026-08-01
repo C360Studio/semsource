@@ -103,15 +103,31 @@
 
 ## 5. Wire the languages through every surface that enumerates them
 
-- [ ] 5.1 Blank imports in `handler/ast/handler.go` and `processor/ast-source/config.go`.
-- [ ] 5.2 `handler/ast/handler.go` extensions, `handler/ast/mapper.go` domains.
-- [ ] 5.3 `processor/code-context/component.go` `codeScopeDomains` — otherwise symbols are
-      extracted and then invisible to code-scoped retrieval.
-- [ ] 5.4 `source/fusion/lens/code/code.go` extension set.
-- [ ] 5.5 `source/ast/vocabulary.go` language description, `cli/wizard_ast.go` wizard options.
-- [ ] 5.6 A test that walks the registry and asserts every registered language is present at each
+- [x] 5.1 Blank imports in `handler/ast/handler.go` and `processor/ast-source/config.go`. Added
+      **first, deliberately**, to watch the task-2 guard fire on the real thing rather than a
+      synthetic mutation — it named both languages and both tables.
+- [x] 5.2 `handler/ast/handler.go` extensions, `handler/ast/mapper.go` domains — now the
+      `languages.go` tables: domains `c` and `cpp`, extensions `.c/.h` and
+      `.cpp/.cc/.cxx/.hpp/.hh/.hxx/.h`.
+- [x] 5.3 `processor/code-context/component.go` `codeScopeDomains` — otherwise symbols are
+      extracted and then invisible to code-scoped retrieval. Two existing tests pinned the old
+      domain list verbatim (one unit, one on-the-wire integration); both expectations were updated,
+      which is the correct direction since the list is meant to be *every* code-language domain.
+- [x] 5.4 `source/fusion/lens/code/code.go` extension set — all eight C/C++ extensions.
+- [x] 5.5 `source/ast/vocabulary.go` language description, `cli/wizard_ast.go` wizard options.
+- [x] 5.6 A test that walks the registry and asserts every registered language is present at each
       enumeration site — the generalization of 2.3, and the thing that makes 5.3-5.5 impossible to
-      forget next time.
+      forget next time. `TestCodeScopeCoversEveryRegisteredLanguage`, mutation-verified.
+
+**A real defect this task uncovered, which the vacuous guard had hidden.**
+`ParserRegistry.Register` is first-extension-wins, and `GetExtensionsForParser` derived its answer
+from that map — so once C and C++ both claimed `.h`, the registry reported that **C++ does not
+handle `.h` at all** (C registered first). Consequences: the routing table never saw an overlap, so
+D1's rule never fired; and a watch path declaring only `cpp` would have parsed **no headers** —
+Meshtastic's 775 `.h` files, its main content. Nothing errored. The registry now records what each
+parser *declared* separately from the first-wins lookup, with a regression test. Only after that fix
+did `TestEveryContestedExtensionHasAnExplicitRule` stop being vacuous — re-verified by removing the
+`.h` rule and watching it fail.
 
 ## 6. Measure on the real corpus, not a fixture
 
