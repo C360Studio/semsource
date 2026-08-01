@@ -29,7 +29,8 @@ Source Processors → graph.ingest.entity → graph-ingest → ENTITY_STATES KV
                     → graph.query.entity           (fetch entities by ID)
                     → graph.query.batch            (fetch several entities)
                     → graph.query.prefix           (page by ID prefix)
-                    → graph.query.summary          (graph counts)
+                    → graph.query.summary          (substrate graph counts)
+                    → graph.query.sourceSummary    (SemSource source summary)
                     → graph.query.relationships    (traverse the graph)
                     → graph.query.pathSearch       (path queries)
                     → /graphql                     (rich queries; host access via ui profile :3000)
@@ -127,9 +128,28 @@ All endpoints use NATS request/reply. Send a JSON request body; receive a JSON r
 | `graph.query.status` | Current ingestion status (same as HTTP) |
 | `graph.query.sources` | Configured source manifest |
 | `graph.query.predicates` | Predicate schema grouped by source type |
+| `graph.query.sourceSummary` | SemSource source-manifest summary — namespace, phase, entity-ID format, domain counts, predicate schema |
 
 The structural graph subjects are served by `graph-query`. The SemSource-specific status, source,
-and predicate subjects are served by `source-manifest`.
+predicate, and source-summary subjects are served by `source-manifest`.
+
+> **Behavior change (2026-07-31) — read this if you call `graph.query.summary`.**
+> `source-manifest` previously *also* subscribed to `graph.query.summary`, alongside `graph-query`.
+> Both run in one SemSource process, so the reply was a race between two entirely different payload
+> shapes; if you were receiving SemSource's `SummaryPayload` there, you were receiving it by luck,
+> not by contract — this guide has always listed `graph.query.summary` as a `graph-query` subject.
+>
+> `graph.query.summary` now deterministically returns the substrate's `SummaryData` (entity-type
+> aggregation + predicate counts). If you want the SemSource summary — namespace, phase,
+> entity-ID format, per-domain counts, predicate schema — use **`graph.query.sourceSummary`** or the
+> unchanged `GET /source-manifest/summary`.
+
+**Namespace note.** `graph.query.*` is a SemStreams-owned namespace. The four SemSource subjects
+above (`status`, `sources`, `predicates`, `sourceSummary`) name SemSource concepts the substrate does
+not define, so none is contested at the pinned target — and an automated gate now fails CI if any
+SemSource subscription overlaps the declared substrate query surface. They are deliberately left in
+place: they are working documented contracts, and renaming them would be a breaking change bought for
+tidiness rather than correctness.
 
 Compatibility note: SemStreams beta.144 still routes GraphQL `capabilities` queries to
 `graph.query.capabilities`, but the beta.144 graph-query handler table does not register that

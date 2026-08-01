@@ -31,6 +31,28 @@ Consequently the `discrimination 0/2` recorded in
 retrieval result and must not be quoted as one. That summary's *bounds* conclusion
 is unaffected and stands.
 
+## What this does NOT measure
+
+The scorecard grades the **fusion** MCP tools (`code_context`, `code_impact`, `code_search`,
+`doc_context`, `code_changes`) — deterministic, citable retrieval whose answers a string matcher can
+grade the same way twice.
+
+It does **not** grade the **graph-query** tools (`graph_summary`, `graph_search`), even though they
+are now on the MCP surface. Those answers escalate with the stack: on a clustered deployment they
+carry community summaries, and with an LLM they carry synthesized prose. Grading synthesized prose
+needs a judge, and the reason this harness has no judge is stated in `run.sh` — an LLM judge drifts
+between runs, and a drifting judge cannot support an A/B. Adding one here would silently convert
+this from a comparable instrument into an incomparable one.
+
+A GraphRAG answer-quality instrument is therefore a **separate** instrument with its own pass/fail
+reporting, not a section of this file. What *is* pinned deterministically about the graph-query tools
+— that they answer at every tier and disclose the retrieval rung they reached — lives in the
+mcp-gateway unit tests and the core-profile compose smoke.
+
+Keeping the two apart matters beyond tidiness: measuring only the deterministic surface quietly
+redefines "quality" as retrieval precision, which is a metric the product can win while getting worse
+at answering questions.
+
 ## Running it
 
 The harness does not provision anything, so the same script can be pointed at two

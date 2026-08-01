@@ -108,6 +108,22 @@ func (c *Component) buildServer() *mcp.Server {
 		Name:        "code_changes",
 		Description: "What changed between two versions of a source: added / removed / changed / unchanged symbols (counts), with verbatim before/after bodies for changed symbols. Args: project, from, to (versions). A renamed symbol shows as a removed + an added, not a single change.",
 	}, c.codeChanges)
+
+	// Substrate graph-query tool — a second family (ADR-0004 revision). NOT
+	// fusion-backed: it carries the substrate's own values and no
+	// contract_version. Ungated, because graph.query.searchGraph does not need
+	// clustering; what varies by tier is how far the answer escalates, which the
+	// result discloses rather than hiding behind an empty result.
+	//
+	// A graph_summary tool over graph.query.summary was built and cut: this
+	// roster has no tool that accepts an entity type or a predicate, so a graph
+	// overview would hand an agent a vocabulary it cannot spend — and invite
+	// graph-shaped phrasing at tools that want natural language. Upstream's
+	// summarize_graph works because its roster has query_by_type; ours does not.
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "graph_search",
+		Description: "Corpus-wide thematic search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Every result carries a `retrieval` block disclosing how far the answer escalated: entity hits only, community-backed summaries, or an LLM-synthesized answer. A non-community answer is a similarity hit list, not thematic reasoning — read the disclosure before treating results as community evidence. Natural-language query understanding depends on deployment configuration and is not guaranteed.",
+	}, c.graphSearch)
 	return s
 }
 

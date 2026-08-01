@@ -5,7 +5,7 @@ import "time"
 // SummaryPayload provides a comprehensive graph overview for agent bootstrap.
 // Combines status, entity type breakdown by domain, and predicate schema
 // into a single response. Served at GET /source-manifest/summary and
-// via NATS request/reply on graph.query.summary.
+// via NATS request/reply on graph.query.sourceSummary.
 type SummaryPayload struct {
 	Namespace      string                  `json:"namespace"`
 	Phase          string                  `json:"phase"`

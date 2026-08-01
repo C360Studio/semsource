@@ -1,11 +1,5 @@
-# mcp-gateway-contract Specification
+## MODIFIED Requirements
 
-## Purpose
-MCP tool results are honest: downstream ADR-060 handler errors surface as
-`isError` results (RequestClassified, never the plain-Request footgun), argument
-validation stays strict, fusion-backed successes always carry `contract_version`,
-and tool descriptions state exactly what each readiness signal guarantees.
-## Requirements
 ### Requirement: Downstream errors are tool errors
 
 The MCP gateway SHALL map downstream handler failures (ADR-060 error envelopes and X-Status
@@ -58,4 +52,3 @@ deliver.
 - **WHEN** an agent lists the gateway's tools
 - **THEN** a tool that can answer through more than one retrieval path states that its result
   discloses which path answered
-

@@ -41,9 +41,18 @@ This ADR defines the contract for that programmatic add path.
   private to `cmd/semsource/` today, but only because nothing else has
   needed them.
 - **Read-side already exists on `source-manifest`.** That component owns
-  `graph.query.sources`, `graph.query.summary`,
+  `graph.query.sources`, ~~`graph.query.summary`~~,
   `graph.query.predicates`, `graph.query.status` and the
   `/source-manifest/*` HTTP handlers.
+
+  > **Correction (2026-07-31).** The `graph.query.summary` claim was wrong.
+  > SemStreams' `graph-query` serves that subject with a different payload
+  > (`graph.SummaryData`), and both components run in one SemSource process — so
+  > source-manifest subscribing there made the reply a race between two shapes.
+  > The consumer integration guide always assigned `graph.query.summary` to
+  > `graph-query`; this ADR was the outlier. source-manifest now serves its
+  > summary on **`graph.query.sourceSummary`**. See
+  > `fix-graph-query-summary-collision`.
 
 ## Decision
 

@@ -26,7 +26,16 @@ const (
 	querySubject = "graph.query.sources"
 
 	// summaryQuerySubject is the NATS subject for on-demand summary queries.
-	summaryQuerySubject = "graph.query.summary"
+	//
+	// This is graph.query.SOURCE_summary, not graph.query.summary. The substrate's
+	// graph-query serves graph.query.summary with a different payload
+	// (graph.SummaryData), and both components run in one SemSource process — so
+	// while source-manifest also subscribed there, the reply was a race between
+	// two shapes and the subject had no contract. The consumer integration guide
+	// always assigned graph.query.summary to graph-query; SemSource was the
+	// squatter. Consumers wanting this payload use this subject or
+	// GET /source-manifest/summary.
+	summaryQuerySubject = "graph.query.sourceSummary"
 )
 
 // Component implements the source-manifest processor.
@@ -891,4 +900,17 @@ func parseDurationOrDefault(s string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+// RequestSubjects returns every NATS request/reply subject this component
+// serves. It is derived from the same constants Start subscribes with, so the
+// list cannot drift from the subscriptions.
+//
+// It exists so the subject-ownership guard can compare SemSource's claims
+// against the substrate's query surface without copying subject literals. A
+// subject served by both SemSource and the substrate is a race, not a
+// load-balanced pair: the requester takes whichever reply arrives first and
+// discards the other, and the two payloads are different shapes.
+func RequestSubjects() []string {
+	return []string{querySubject, summaryQuerySubject, statusQuerySubject, predicatesQuerySubject}
 }

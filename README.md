@@ -332,7 +332,8 @@ claude mcp add --transport http semsource http://localhost:8080/mcp-gateway/mcp
 
 This is the product surface — the agent then queries the graph with `code_context`, `code_search`,
 `code_impact`, `doc_context`, and `code_changes` (what changed between two versions) instead of
-grepping. Full walkthrough (auth, readiness gating, tool
+grepping. For questions about the corpus as a whole rather than a symbol, `graph_search` answers thematic
+questions across every entity type, disclosing how far each answer escalated. Full walkthrough (auth, readiness gating, tool
 cheat-sheet): [docs/integration/mcp-quickstart.md](docs/integration/mcp-quickstart.md).
 
 ## Config File

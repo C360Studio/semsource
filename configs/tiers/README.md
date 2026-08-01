@@ -203,18 +203,44 @@ task tier2:smoke:dev                          # composition checks only
 SEMSOURCE_TIER2_SMOKE_FULL=1 task tier2:smoke:dev   # also pulls, starts, and polls to ready
 ```
 
-**None of this is on the agent path.** The MCP tools (`code_context`, `code_impact`, `code_search`,
-`doc_context`, `code_changes`) resolve through the fusion gateway and never reach GraphRAG,
-`query_classification`, or `answer_synthesis`. An agent gets ranked, citable evidence and does its
-own reasoning (ADR-0004) — which is why the MVP needs no generative model at all.
+**The MCP surface is two families.** The *fusion* tools (`code_context`, `code_impact`,
+`code_search`, `doc_context`, `code_changes`) resolve through the fusion gateway and never reach
+GraphRAG, `query_classification`, or `answer_synthesis`. An agent gets ranked, citable evidence and
+does its own reasoning (ADR-0004) — which is why the MVP needs no generative model at all.
+
+The *graph-query* tools (`graph_summary`, `graph_search`) reach the substrate's query surface
+directly. Neither is gated, because neither routed subject requires clustering: `graph.query.summary`
+is a discovery resolver, and `graph.query.searchGraph` answers through non-community strategies when
+no community index exists. What changes with the tier is **how far the answer escalates**, and
+`graph_search` discloses the rung it reached in a `retrieval` block:
+
+| Tier | `graph_search` returns | Disclosed rung |
+| ---- | ---------------------- | -------------- |
+| 0 / 1 (no clustering) | Entity hits / digests. No community summaries and **no synthesized answer** — synthesis requires summaries | `entities_only`, `community_backed: false` |
+| Clustering, no LLM | \+ community summaries \+ a **template** answer | `community_summaries`, `answer_source: template` |
+| Clustering \+ LLM | \+ an **LLM-synthesized** answer | `llm_answer`, `answer_source: llm` |
+
+Read the disclosure before treating results as community evidence: a non-community answer is a
+similarity hit list, not thematic reasoning. Note that `answer_source` — not the substrate's
+`degraded` flag — distinguishes a template answer from an LLM one. A deployment with no LLM returns a
+template answer with `degraded: false` deliberately, because the template is the canonical answer
+there; `degraded` means an LLM-*configured* deployment fell back.
+
+**Answering never requires an LLM.** Query classification is a tiered chain whose first tier is a
+deterministic keyword classifier; a keyword match bypasses the LLM tier entirely, and the LLM tier
+engages only when a `model_registry` `query_classification` capability exists — which SemSource does
+not currently expose, so it is off in every deployment.
 
 ## Current state / enablement
 
 - **Tier 0 works now** (BM25, no external service).
 - **Tier 1 is the MVP default** (`configs/mvp.json`) and is what the shipped compose runs.
-- **Tier 2 is wired but ships off** — see the note above: no compose service, both clustering flags
-  `false`, and its GraphRAG path has no in-repo consumer. It is unexercised; do not read its row in
-  the table above as evidence it works end to end.
+- **Tier 2 is wired but ships off** — see the note above: no compose service, and both clustering
+  flags are `false` in `tier2-semantic-instruct.json`. **`tier2-compose-dev.json` is the only shipped
+  config that sets `enable_clustering` and `clustering_llm` true.** Tier 2 is unexercised; do not
+  read its row in the table above as evidence it works end to end. The GraphRAG path now has an
+  in-repo consumer — `graph_search` — but the community-backed and LLM rungs of its disclosure are
+  proven from recorded substrate responses, not from a live clustered stack.
 - Tier 1/2 wiring is real (`config.ModelRegistry` → `ssCfg.ModelRegistry`; `graph.enable_clustering`
   adds graph-clustering). Validated end-to-end against local semembed: http embedder active,
   embeddings generated with 0 errors, `provenance: embedding` on `code_search`.

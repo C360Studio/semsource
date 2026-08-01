@@ -176,6 +176,10 @@ comes from `ast-source`'s existing watch→graph pipeline; readiness from
   same fusion contract for external clients (Cursor / Claude / Codex) — `code_context`,
   `code_search`, `code_impact`, `doc_context`, `code_changes` on the mcp-gateway. It is
   the way in for external agents, not our own Go-registered-tool loop.
+  **Revised by [ADR-0010](0010-graph-query-mcp-tool-family.md)** (2026-07-31): the surface is no
+  longer fusion-only. The tools listed here remain exactly as scoped, and a second family
+  (`graph_summary`, `graph_search`) reaches the substrate's graph-query surface directly. The
+  "thin wrapper over the same fusion contract" description now scopes this family, not the roster.
 
 ## References
 

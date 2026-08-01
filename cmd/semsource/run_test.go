@@ -171,6 +171,10 @@ func TestGraphSubsystemComponents_GraphQueryPortsCoverSemStreamsBeta114(t *testi
 		"global_search":         "graph.query.globalSearch",
 		"query_summary":         "graph.query.summary",
 		"query_search_graph":    "graph.query.searchGraph",
+		// byName is served by the substrate and was missing from this
+		// declaration. The subject-ownership guard compares SemSource's claims
+		// against this list, so an incomplete list is a weaker guard.
+		"query_by_name": "graph.query.byName",
 	}
 	assertPortSubjects(t, inputs, want)
 }

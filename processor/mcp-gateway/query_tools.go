@@ -15,6 +15,12 @@ type QueryInput struct {
 	Query string `json:"query" jsonschema:"the query — a symbol name (e.g. registerProvidedStores) for context/impact, or a natural-language phrase for search"`
 }
 
+// GraphSearchInput is the graph_search argument: a natural-language question
+// about the corpus as a whole, not a symbol name.
+type GraphSearchInput struct {
+	Query string `json:"query" jsonschema:"a natural-language question about the indexed corpus as a whole (e.g. 'how does readiness gating work'), not a symbol name"`
+}
+
 // ChangesInput is the argument for the code_changes tool: a project (source
 // identity) and two version identifiers to compare.
 type ChangesInput struct {
@@ -64,6 +70,60 @@ func (c *Component) codeSearch(ctx context.Context, _ *mcp.CallToolRequest, in Q
 // query — the intended design, not just the code.
 func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in QueryInput) (*mcp.CallToolResult, any, error) {
 	return c.fusionQuery(ctx, "docs.v1.context", in.Query)
+}
+
+// graphSearch answers a corpus-wide thematic question. It routes to
+// graph.query.searchGraph, which delegates to globalSearch and returns that
+// response unchanged when non-empty, adding a labelled semantic fallback only
+// when it is empty — so this one subject covers both.
+//
+// The result is a RANKED, BOUNDED match list plus a disclosure of the rung the
+// answer reached. It is deliberately not the substrate payload verbatim: on a
+// live 119-entity corpus a 38-hit query returned 197 KB of entity triples whose
+// only "content" was a body-by-reference key — 11x the cost of code_search for
+// an answer an agent cannot read. A search verb's job is to rank so the agent
+// can follow up on the IDs worth reading.
+//
+// summarize_threshold asks the substrate for the compact shape. It is honored on
+// the graphrag strategy and ignored on the semantic one, which is why
+// deriveMatches also reconstructs the list from whatever the response carried.
+func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in GraphSearchInput) (*mcp.CallToolResult, any, error) {
+	if in.Query == "" {
+		return nil, nil, fmt.Errorf("query is required")
+	}
+	data, err := json.Marshal(map[string]any{"query": in.Query, "summarize_threshold": 1})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal query: %w", err)
+	}
+	resp, err := c.request(ctx, "graph.query.searchGraph", data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("graph search failed: %w", err)
+	}
+
+	var body graphSearchBody
+	if err := json.Unmarshal(resp, &body); err != nil {
+		// Unreadable payload: report the disclosure's unknown rung rather than
+		// failing the call, and say nothing about matches we cannot see.
+		out, mErr := json.Marshal(graphSearchResult{Retrieval: deriveDisclosure(resp)})
+		if mErr != nil {
+			return nil, nil, fmt.Errorf("marshal graph search result: %w", mErr)
+		}
+		return textResult(out), nil, nil
+	}
+
+	matches, total, truncated := deriveMatches(&body)
+	out, err := json.Marshal(graphSearchResult{
+		Retrieval:          deriveDisclosure(resp),
+		Answer:             body.Answer,
+		Matches:            matches,
+		TotalMatches:       total,
+		Truncated:          truncated,
+		CommunitySummaries: body.CommunitySummaries,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal graph search result: %w", err)
+	}
+	return textResult(out), nil, nil
 }
 
 // fusionQuery sends a fusion.Request ({"query": ...}) to a code-context /
