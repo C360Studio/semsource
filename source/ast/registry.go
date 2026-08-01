@@ -15,14 +15,23 @@ type ParserFactory func(org, project, repoRoot string) FileParser
 type ParserRegistry struct {
 	mu      sync.RWMutex
 	parsers map[string]ParserFactory // name → factory
-	extMap  map[string]string        // extension → parser name
+	extMap  map[string]string        // extension → parser name (first registration wins)
+
+	// parserExts records what each parser DECLARED, which extMap cannot: extMap
+	// keeps only the first claimant of an extension, so once two languages claim
+	// one — C and C++ both claim ".h" — the loser's declaration disappears from
+	// it entirely. Deriving a parser's extensions from extMap therefore reported
+	// that C++ does not handle headers, which would have left a C++ firmware
+	// tree's headers unparsed while looking like a correct registry.
+	parserExts map[string][]string // name → declared extensions
 }
 
 // NewParserRegistry creates a new empty parser registry.
 func NewParserRegistry() *ParserRegistry {
 	return &ParserRegistry{
-		parsers: make(map[string]ParserFactory),
-		extMap:  make(map[string]string),
+		parsers:    make(map[string]ParserFactory),
+		extMap:     make(map[string]string),
+		parserExts: make(map[string][]string),
 	}
 }
 
@@ -35,6 +44,7 @@ func (r *ParserRegistry) Register(name string, extensions []string, factory Pars
 
 	// Register the factory
 	r.parsers[name] = factory
+	r.parserExts[name] = append([]string(nil), extensions...)
 
 	// Map extensions to this parser (first registration wins)
 	for _, ext := range extensions {
@@ -102,18 +112,16 @@ func (r *ParserRegistry) ListExtensions() []string {
 	return extensions
 }
 
-// GetExtensionsForParser returns all extensions mapped to a parser name.
+// GetExtensionsForParser returns the extensions a parser declared at
+// registration — including any also claimed by another parser. Callers that
+// need to know which parser actually reads a shared extension must decide that
+// themselves; the registry deliberately does not, because the answer depends on
+// which languages a given source root declared.
 func (r *ParserRegistry) GetExtensionsForParser(name string) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var extensions []string
-	for ext, parserName := range r.extMap {
-		if parserName == name {
-			extensions = append(extensions, ext)
-		}
-	}
-	return extensions
+	return append([]string(nil), r.parserExts[name]...)
 }
 
 // HasParser returns true if a parser with the given name is registered.

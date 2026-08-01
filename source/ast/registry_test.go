@@ -205,3 +205,36 @@ func TestParserRegistry_ConcurrentAccess(t *testing.T) {
 // Note: Tests for Go/TS/JS parser registration are in
 // processor/ast-indexer/registry_integration_test.go because
 // we can't import language packages here without causing import cycles.
+
+// TestGetExtensionsForParserKeepsSharedExtensions pins the fix for a bug that a
+// vacuous guard let through. extMap keeps only the FIRST claimant of an
+// extension, so deriving a parser's extensions from it silently dropped the
+// shared one from the loser: with C registering before C++, the registry
+// reported that C++ does not handle ".h". Nothing errored — a C++ firmware tree,
+// where headers hold most of the declarations, would simply have gone unparsed.
+func TestGetExtensionsForParserKeepsSharedExtensions(t *testing.T) {
+	r := NewParserRegistry()
+	noop := func(_, _, _ string) FileParser { return nil }
+	r.Register("c", []string{".c", ".h"}, noop)
+	r.Register("cpp", []string{".cpp", ".h"}, noop)
+
+	for name, want := range map[string]string{"c": ".h", "cpp": ".h"} {
+		got := r.GetExtensionsForParser(name)
+		found := false
+		for _, ext := range got {
+			if ext == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("GetExtensionsForParser(%q) = %v, missing the shared %q it declared",
+				name, got, want)
+		}
+	}
+
+	// The first-wins extension→parser map is unchanged; only the per-parser
+	// declaration is now remembered separately.
+	if name, _ := r.GetParserName(".h"); name != "c" {
+		t.Errorf("GetParserName(\".h\") = %q, want the first registrant \"c\"", name)
+	}
+}

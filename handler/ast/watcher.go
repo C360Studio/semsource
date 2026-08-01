@@ -28,7 +28,7 @@ func translateWatchEvent(ev semsourceast.WatchEvent, lang, system string) handle
 	}
 
 	if ev.Result != nil {
-		domain := langToDomain(lang)
+		domain, _ := langToDomain(lang)
 		ce.Entities = mapParseResult(ev.Result, lang, system)
 		// Backfill domain on entities in case mapParseResult used a default.
 		for i := range ce.Entities {

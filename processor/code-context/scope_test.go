@@ -76,6 +76,8 @@ func TestDefaultScope(t *testing.T) {
 				"acme.semsource.javascript",
 				"acme.semsource.java",
 				"acme.semsource.svelte",
+				"acme.semsource.c",
+				"acme.semsource.cpp",
 			},
 		},
 		{

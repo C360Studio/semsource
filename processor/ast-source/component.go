@@ -46,6 +46,7 @@ type pathWatcher struct {
 	scopedSystem string // Pre-computed version-scoped system slug (entityid.ScopedSystemSlug result)
 	watcher      *semsourceast.Watcher
 	parsers      map[string]semsourceast.FileParser // language → parser instance
+	routes       map[string]string                  // file extension → language (see routing.go)
 	excludes     map[string]bool                    // set of excluded directory names
 
 	// parseMu serializes ParseFile across this path's parsers. Parser instances
@@ -198,6 +199,12 @@ func (c *Component) initializeWatchers() error {
 			pw.parsers[lang] = parser
 		}
 
+		// Resolve extension → language once, here, rather than per file: the
+		// answer depends only on the declared language set, and computing it
+		// once is what makes it impossible for two files with the same
+		// extension to be routed differently within one watch path.
+		pw.routes = routeExtensions(languages, semsourceast.DefaultRegistry.GetExtensionsForParser)
+
 		c.watchers = append(c.watchers, pw)
 	}
 
@@ -258,6 +265,18 @@ func (c *Component) Start(ctx context.Context) error {
 		results, err := c.parseDirectory(ctx, pw)
 		if err != nil {
 			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
+		}
+
+		// Resolve cross-file type references now that the whole watch path is
+		// parsed. Languages whose names map deterministically onto paths (Go,
+		// Java, Python) resolve inside the parser; C++ cannot, because nothing
+		// ties `class Foo` to a file without a preprocessor and include paths.
+		// Doing it here — over the complete result set — keeps it deterministic
+		// and independent of walk order.
+		for _, parser := range pw.parsers {
+			if r, ok := parser.(typeRefResolver); ok {
+				r.ResolveTypeRefs(results)
+			}
 		}
 
 		// Publish repo and folder hierarchy entities before file/symbol entities.
@@ -589,22 +608,29 @@ func (c *Component) parseDirectory(ctx context.Context, pw *pathWatcher) ([]*sem
 func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, filePath string) (*semsourceast.ParseResult, error) {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
-	for lang, parser := range pw.parsers {
-		for _, langExt := range semsourceast.DefaultRegistry.GetExtensionsForParser(lang) {
-			if langExt == ext {
-				// Serialize: parser instances hold per-file state (tree-sitter +
-				// import bindings) that the watcher and reindex goroutines must not
-				// interleave. Held only across one file, so reindex releases between
-				// files and watch events still make progress.
-				pw.parseMu.Lock()
-				res, err := parser.ParseFile(ctx, filePath)
-				pw.parseMu.Unlock()
-				return res, err
-			}
-		}
+	// Routed through the precomputed table rather than by scanning pw.parsers.
+	// That scan ranged a map, so once two declared languages claimed one
+	// extension — which C and C++ both do, on ".h" — the parser that read a
+	// given file was chosen by Go's randomized map order. The same header could
+	// then be parsed as a different language from one run to the next, changing
+	// the {domain} segment of every entity ID it produced.
+	lang, ok := pw.routes[ext]
+	if !ok {
+		return nil, nil // Unsupported file type — skip silently
+	}
+	parser, ok := pw.parsers[lang]
+	if !ok {
+		return nil, nil
 	}
 
-	return nil, nil // Unsupported file type — skip silently
+	// Serialize: parser instances hold per-file state (tree-sitter + import
+	// bindings) that the watcher and reindex goroutines must not interleave.
+	// Held only across one file, so reindex releases between files and watch
+	// events still make progress.
+	pw.parseMu.Lock()
+	res, err := parser.ParseFile(ctx, filePath)
+	pw.parseMu.Unlock()
+	return res, err
 }
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.

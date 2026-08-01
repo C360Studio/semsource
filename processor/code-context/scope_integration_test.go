@@ -146,6 +146,8 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 			"acme.semsource.javascript",
 			"acme.semsource.java",
 			"acme.semsource.svelte",
+			"acme.semsource.c",
+			"acme.semsource.cpp",
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("semantic scope = %v, want %v", got, want)

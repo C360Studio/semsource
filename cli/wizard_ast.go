@@ -25,7 +25,7 @@ func (w *astWizard) Prompts(term *Term) (*config.SourceEntry, error) {
 	// Auto-detect language from project files.
 	detectedLang := detectLanguage()
 
-	langOptions := []string{"auto-detect", "go", "typescript", "python", "java", "svelte"}
+	langOptions := []string{"auto-detect", "go", "typescript", "python", "java", "svelte", "c", "cpp"}
 	defaultIdx := 0
 	if detectedLang != "" {
 		for i, opt := range langOptions {

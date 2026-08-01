@@ -12,7 +12,11 @@ func mapParseResult(result *semsourceast.ParseResult, lang, system string) []han
 		return nil
 	}
 
-	domain := langToDomain(lang)
+	// An unknown language leaves the domain empty rather than defaulting to Go.
+	// The handler's entry points validate the language first, so this cannot be
+	// reached in practice; if it ever is, an empty domain fails entity-ID
+	// construction loudly instead of minting entities that claim to be Go.
+	domain, _ := langToDomain(lang)
 	entities := make([]handler.RawEntity, 0, len(result.Entities))
 
 	for _, ce := range result.Entities {
@@ -131,20 +135,4 @@ func codeEntityEdges(ce *semsourceast.CodeEntity) []handler.RawEdge {
 	}
 
 	return edges
-}
-
-// langToDomain maps a language name to the handler domain constant.
-func langToDomain(lang string) string {
-	switch lang {
-	case "ts", "typescript", "javascript":
-		return "typescript"
-	case "java":
-		return "java"
-	case "python":
-		return "python"
-	case "svelte":
-		return "svelte"
-	default: // "go"
-		return handler.DomainGolang
-	}
 }

@@ -16,6 +16,8 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Register Go and TypeScript/JavaScript language parsers.
+	_ "github.com/c360studio/semsource/source/ast/c"
+	_ "github.com/c360studio/semsource/source/ast/cpp"
 	_ "github.com/c360studio/semsource/source/ast/golang"
 	_ "github.com/c360studio/semsource/source/ast/java"
 	_ "github.com/c360studio/semsource/source/ast/python"
@@ -63,6 +65,9 @@ func (h *Handler) Supports(cfg handler.SourceConfig) bool {
 // Respects context cancellation.
 func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handler.RawEntity, error) {
 	lang, org, project, root := resolveConfig(cfg)
+	if err := validateLanguage(lang); err != nil {
+		return nil, err
+	}
 
 	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, org, project, root)
 	if err != nil {
@@ -91,11 +96,17 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 	}
 
 	lang, org, project, root := resolveConfig(cfg)
+	if err := validateLanguage(lang); err != nil {
+		return nil, err
+	}
 
 	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, org, project, root)
 	if err != nil {
 		return nil, fmt.Errorf("asthandler: create %s parser for watch: %w", lang, err)
 	}
+
+	// Validated above, so the language is mappable.
+	exts, _ := langToExtensions(lang)
 
 	wcfg := semsourceast.WatcherConfig{
 		RepoRoot:       root,
@@ -103,7 +114,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 		Project:        project,
 		DebounceDelay:  100 * time.Millisecond,
 		Logger:         h.logger,
-		FileExtensions: langToExtensions(lang),
+		FileExtensions: exts,
 		ExcludeDirs:    []string{"vendor", "node_modules", ".git"},
 	}
 
@@ -208,22 +219,6 @@ func resolveConfig(cfg handler.SourceConfig) (lang, org, project, root string) {
 		}
 	}
 	return
-}
-
-// langToExtensions returns the file extensions for a given language name.
-func langToExtensions(lang string) []string {
-	switch lang {
-	case "ts", "typescript", "javascript":
-		return []string{".ts", ".tsx", ".js", ".jsx"}
-	case "java":
-		return []string{".java"}
-	case "python":
-		return []string{".py"}
-	case "svelte":
-		return []string{".svelte"}
-	default: // "go"
-		return []string{".go"}
-	}
 }
 
 // pathToSystemSlug converts a filesystem path to a NATS-safe system slug.
