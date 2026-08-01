@@ -94,14 +94,21 @@ func resolvePaths(cfg handler.SourceConfig) ([]string, error) {
 	return []string{p}, nil
 }
 
-// extractTitle returns the text of the first markdown H1 heading in content,
-// falling back to the filename (without extension) if none is found.
-func extractTitle(content []byte, filename string) string {
+// extractTitle returns the text of the document's first top-level heading,
+// falling back to the filename (without extension) if none is found. The marker
+// follows the document's format: "# " for markdown, "= " for AsciiDoc — an
+// AsciiDoc spec whose title is "= Connected Systems API" was previously
+// unrecognized and fell back to its filename.
+func extractTitle(content []byte, filename string, f docFormat) string {
+	marker := "# "
+	if f == formatASCIIDoc {
+		marker = "= "
+	}
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "# ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		if strings.HasPrefix(line, marker) {
+			return strings.TrimSpace(strings.TrimPrefix(line, marker))
 		}
 	}
 	// Fallback: strip extension from filename.
@@ -112,6 +119,17 @@ func extractTitle(content []byte, filename string) string {
 func contentHash(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// formatForExt returns the heading syntax to use for a document extension.
+// Everything that is not AsciiDoc reads as markdown, including .txt: a text
+// file with no "#" lines yields no headings under that path anyway, so
+// defaulting to it leaves existing corpora byte-identical.
+func formatForExt(ext string) docFormat {
+	if strings.ToLower(ext) == ".adoc" {
+		return formatASCIIDoc
+	}
+	return formatMarkdown
 }
 
 // mimeForExt returns the MIME type for known document extensions.

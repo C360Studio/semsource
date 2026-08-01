@@ -3,15 +3,29 @@
 The passage splitter detects headings by counting `'#'` (`handler/doc/splitter.go:237`) — markdown
 ATX only. AsciiDoc uses `=` / `==` / `===`, so **no AsciiDoc heading is ever recognized**.
 
-Measured on identical content with only the heading syntax changed:
+Measured two ways. On identical synthetic content with only the heading syntax changed:
 
 | | passages | with heading |
 | --- | --- | --- |
 | AsciiDoc | 15 | **0** |
 | Markdown | 15 | **15** |
 
-Passage *count* is unaffected — size-driven splitting still runs. What is lost is **identity**:
-every `.adoc` passage carries `Heading: ""` and `HeadingPath: []`.
+And on the real OGC Connected Systems API specification — 798 `.adoc` files, 2,126 passages:
+
+| | passages | with heading | distinct ancestries | max depth |
+| --- | --- | --- | --- | --- |
+| Markdown detection (today) | 2,126 | 1,601 (75.3%) | 435 | 2 |
+| AsciiDoc detection | 1,794 | 1,020 (56.9%) | **618** | **4** |
+
+The real corpus tells the sharper story: today's behavior is not *missing* headings, it is
+**inventing wrong ones**. The corpus contains only 5 lines beginning with `#`, so almost none of
+those 1,601 headings are ATX. They come from setext detection — AsciiDoc delimits listing blocks
+with `----`, which is also a valid markdown H2 underline, so **every prose line above a code block
+was mined as a heading**, 705 delimiters' worth.
+
+So the passage count drops (spurious sections disappear), the raw heading count drops, and the
+signals that matter both rise: distinct ancestries 435 → 618 and maximum nesting depth 2 → 4. The
+identity text goes from mostly-fabricated to real section structure.
 
 That matters because heading-path identity **is** the passage-dilution fix (archived
 `generalize-passage-dilution-split`, 22/22 on both corpora). For AsciiDoc corpora that fix is

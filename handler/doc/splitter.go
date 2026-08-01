@@ -82,22 +82,23 @@ type line struct {
 }
 
 // splitPassages divides content into passages on structural boundaries, using
-// the shipped default bounds. It is a pure function of the input bytes: the
-// same content always yields the same boundaries, independent of machine, run
-// order, or wall clock.
-func splitPassages(content []byte) []passage {
-	return splitPassagesBounded(content, defaultBounds)
+// the shipped default bounds. It is a pure function of the input bytes AND the
+// document format: the same content in the same format always yields the same
+// boundaries, independent of machine, run order, or wall clock. Format is an
+// explicit input rather than a hidden dependency precisely to keep that true.
+func splitPassages(content []byte, f docFormat) []passage {
+	return splitPassagesBounded(content, defaultBounds, f)
 }
 
 // splitPassagesBounded is splitPassages parameterized on passageBounds, so a
 // caller can vary the size bounds without touching the shipped defaults.
-func splitPassagesBounded(content []byte, b passageBounds) []passage {
+func splitPassagesBounded(content []byte, b passageBounds, f docFormat) []passage {
 	if len(content) == 0 {
 		return nil
 	}
 
 	lines := scanLines(content)
-	sections := sectionsOf(lines, len(content))
+	sections := sectionsOf(lines, len(content), f)
 	sections = mergeSmallSections(sections, b)
 
 	var out []passage
@@ -173,7 +174,7 @@ type section struct {
 // sectionsOf splits the document at heading boundaries. Content before the
 // first heading becomes a section with an empty heading — that content is why
 // passage identity cannot be heading-derived.
-func sectionsOf(lines []line, total int) []section {
+func sectionsOf(lines []line, total int, f docFormat) []section {
 	type mark struct {
 		lineIdx int
 		level   int
@@ -181,11 +182,7 @@ func sectionsOf(lines []line, total int) []section {
 	}
 	var marks []mark
 	for i := range lines {
-		if text, level, ok := atxHeading(lines, i); ok {
-			marks = append(marks, mark{lineIdx: i, level: level, heading: text})
-			continue
-		}
-		if text, level, ok := setextHeading(lines, i); ok {
+		if text, level, ok := headingAt(lines, i, f); ok {
 			marks = append(marks, mark{lineIdx: i, level: level, heading: text})
 		}
 	}
@@ -225,6 +222,66 @@ func sectionsOf(lines []line, total int) []section {
 		out = append(out, section{heading: m.heading, path: pathOf(m), start: lines[m.lineIdx].start, end: end})
 	}
 	return out
+}
+
+// docFormat selects which heading syntax the splitter recognizes. It is supplied
+// by the caller from the document's extension rather than inferred from the
+// bytes: markdown's setext headings underline text with "=", the same character
+// AsciiDoc prefixes section titles with, so sniffing could read a markdown
+// document as AsciiDoc and mis-detect its headings.
+//
+// Markdown is the zero value and the default for every format that is not
+// AsciiDoc, including .txt — a text file with no "#" lines yields no headings
+// under that path anyway, and defaulting to it keeps existing corpora identical.
+type docFormat int
+
+const (
+	formatMarkdown docFormat = iota
+	formatASCIIDoc
+)
+
+// headingAt reports the heading on line i using the document format's syntax.
+func headingAt(lines []line, i int, f docFormat) (string, int, bool) {
+	if f == formatASCIIDoc {
+		return adocHeading(lines, i)
+	}
+	if text, level, ok := atxHeading(lines, i); ok {
+		return text, level, true
+	}
+	return setextHeading(lines, i)
+}
+
+// adocHeading reports an AsciiDoc "== Section" style section title on line i,
+// with its level.
+//
+// Levels map by MARKER COUNT onto the markdown ladder — "=" is level 1 like "#",
+// "==" is level 2 like "##" — rather than onto AsciiDoc's own numbering, where
+// "= Title" is the level-0 document title and "==" is level 1. That is a
+// deliberate departure from AsciiDoc semantics: equivalent documents in the two
+// formats must produce identical heading ancestry, because the ancestry is the
+// identity text retrieval ranks by, not a rendering instruction. Mapping by
+// AsciiDoc's own numbering would shift every AsciiDoc passage one level relative
+// to its markdown twin.
+//
+// AsciiDoc requires the space after the markers, so "=Title" is not a title.
+// There is no closed form to trim, unlike ATX's optional trailing hashes.
+func adocHeading(lines []line, i int) (string, int, bool) {
+	if lines[i].protected {
+		return "", 0, false
+	}
+	t := strings.TrimSpace(lines[i].text)
+	equals := 0
+	for equals < len(t) && t[equals] == '=' {
+		equals++
+	}
+	if equals == 0 || equals > 6 {
+		return "", 0, false
+	}
+	rest := t[equals:]
+	if !strings.HasPrefix(rest, " ") {
+		return "", 0, false
+	}
+	return strings.TrimSpace(rest), equals, true
 }
 
 // atxHeading reports a "# Heading" style heading on line i, with its level.

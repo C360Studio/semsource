@@ -40,7 +40,7 @@ func TestIsolateFencedBlocks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ps := splitPassages([]byte(tt.content))
+			ps := splitPassages([]byte(tt.content), formatMarkdown)
 			if tt.wantFence == "" {
 				if len(ps) != 1 {
 					t.Fatalf("%s: got %d passages, want 1 — %s", tt.name, len(ps), tt.why)
@@ -82,7 +82,7 @@ func TestIsolateFencedBlocks_NeverDividesABlock(t *testing.T) {
 	for _, c := range continuous {
 		t.Run(c.name, func(t *testing.T) {
 			content := "## Section\n\n" + prose + "\n\n" + c.block + "\n"
-			ps := splitPassages([]byte(content))
+			ps := splitPassages([]byte(content), formatMarkdown)
 
 			var fenceParts int
 			for _, p := range ps {
@@ -115,7 +115,7 @@ func TestIsolateFencedBlocks_TilesExactly(t *testing.T) {
 	prose := strings.Repeat("Prose above the floor so isolation triggers. ", 15)
 	content := "## One\n\n" + prose + "\n\n```bash\ndocker run -d -p 8083:8083 img\n```\n\nTrailing prose after the block.\n"
 
-	ps := splitPassages([]byte(content))
+	ps := splitPassages([]byte(content), formatMarkdown)
 	var rebuilt strings.Builder
 	for _, p := range ps {
 		rebuilt.WriteString(content[p.Start:p.End])

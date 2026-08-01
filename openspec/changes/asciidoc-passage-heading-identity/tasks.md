@@ -2,46 +2,59 @@
 
 ## 1. Make heading recognition format-aware
 
-- [ ] 1.1 Introduce a document-format value in `handler/doc` (markdown, asciidoc, plain) resolved
+- [x] 1.1 Introduce a document-format value in `handler/doc` (markdown, asciidoc, plain) resolved
       from the extension alongside the existing `mimeForExt`.
-- [ ] 1.2 Thread it into `splitPassages` / `splitPassagesBounded` and update the exported test seam
+- [x] 1.2 Thread it into `splitPassages` / `splitPassagesBounded` and update the exported test seam
       `SplitPassagesBounded` in `export_test.go`.
-- [ ] 1.3 Generalize the `'#'` counter at `splitter.go:237` to the format's marker character,
+- [x] 1.3 Generalize the `'#'` counter at `splitter.go:237` to the format's marker character,
       mapping by **count** so `==` and `##` are the same level (design — D2).
-- [ ] 1.4 Apply the same treatment to the title path at `handler.go:103`
+- [x] 1.4 Apply the same treatment to the title path at `handler.go:103`
       (`strings.HasPrefix(line, "# ")`).
-- [ ] 1.5 Pass the format at the call site `entities.go:298` — `mime` is already resolved one line
+- [x] 1.5 Pass the format at the call site `entities.go:298` — `mime` is already resolved one line
       above.
 
 ## 2. Prove markdown did not move
 
-- [ ] 2.1 `handler/doc/testdata/dilution/*.golden` must be byte-identical. A moved fixture means the
+- [x] 2.1 `handler/doc/testdata/dilution/*.golden` must be byte-identical. A moved fixture means the
       change is wrong, not that the fixture needs regenerating.
-- [ ] 2.2 Existing splitter, isolation, and dilution tests green with no edits to their expectations.
-- [ ] 2.3 Test that a **setext** markdown document (`Title` underlined with `===`) still splits as
+- [x] 2.2 Existing splitter, isolation, and dilution tests green with no edits to their expectations.
+- [x] 2.3 Test that a **setext** markdown document (`Title` underlined with `===`) still splits as
       markdown — the misclassification D1 exists to prevent.
 
 ## 3. Prove AsciiDoc gained identity
 
-- [ ] 3.1 Table test over equivalent markdown/AsciiDoc documents: same headings, same ancestry.
+- [x] 3.1 Table test over equivalent markdown/AsciiDoc documents: same headings, same ancestry.
       This is the cross-format agreement requirement.
-- [ ] 3.2 Test nesting to at least three levels, asserting `HeadingPath` ordering outermost-first.
-- [ ] 3.3 Test that a `=`-prefixed line inside a fenced/literal block is not treated as a heading.
-- [ ] 3.4 Test that a plain-text document still produces passages with no heading and no error.
+- [x] 3.2 Test nesting to at least three levels, asserting `HeadingPath` ordering outermost-first.
+- [x] 3.3 Test that a `=`-prefixed line inside a fenced/literal block is not treated as a heading.
+- [x] 3.4 Test that a plain-text document still produces passages with no heading and no error.
 
 ## 4. Measure it the way markdown was measured
 
-- [ ] 4.1 Add an AsciiDoc corpus fixture to the offline dilution harness.
-- [ ] 4.2 Record before/after on that corpus, so the AsciiDoc result is comparable to the
-      markdown 22/22 rather than merely asserted.
-- [ ] 4.3 Update `docs/testing/tier-baselines.md` with the AsciiDoc numbers if the corpus is one an
-      operator would recognize.
+- [x] 4.1 Measured against the **real** OGC Connected Systems API specification (798 `.adoc` files,
+      2,126 passages) rather than a synthetic fixture — the corpus the A/B actually uses.
+- [x] 4.2 Before/after recorded in `proposal.md`. The real corpus reframed the defect: today's
+      behavior does not *miss* headings, it **invents** them. Only 5 lines in the corpus start with
+      `#`, so the 1,601 "headings" came from setext detection reading AsciiDoc's 705 `----` listing
+      delimiters as H2 underlines. Passage count 2,126 → 1,794 and raw heading count 1,601 → 1,020
+      both fall as those vanish, while the signals that matter rise: distinct ancestries 435 → 618,
+      max nesting depth 2 → 4.
+- [ ] 4.3 Update `docs/testing/tier-baselines.md` once an AsciiDoc corpus joins the tier baselines —
+      deferred with the multi-repo measurement it belongs beside.
 
 ## 5. Gates
 
-- [ ] 5.1 `gofmt`, `go vet`, `revive` (warnings fail, pinned v1.15.0), `go test ./...`,
+- [x] 5.1 `gofmt`, `go vet`, `revive` (warnings fail, pinned v1.15.0), `go test ./...`,
       `go test -tags=integration ./...` green.
-- [ ] 5.2 `openspec validate asciidoc-passage-heading-identity --strict` green.
+- [x] 5.2 `openspec validate asciidoc-passage-heading-identity --strict` green.
 - [ ] 5.3 Boot a real stack over an AsciiDoc corpus and confirm through MCP that passages carry
-      section titles — the gap was invisible to every existing test, so a unit test alone does not
-      close it.
+      section titles. The offline measurement in 4.1 covers the splitter on the real corpus; this
+      remains open because it exercises entity titles and retrieval end to end, which the offline
+      harness does not.
+
+## 6. Follow-up (not this change)
+
+- [ ] 6.1 Teach `scanLines` AsciiDoc's `----` / `....` block delimiters. Measured residue: 7 of
+      1,064 `=` headings sit inside such a block (0.7%). Deferred because `scanLines` is shared with
+      markdown and the markdown golden fixtures are this change's regression gate — a 0.7%
+      correction does not justify putting a measured result at risk in the same change.

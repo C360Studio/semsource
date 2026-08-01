@@ -10,8 +10,12 @@ var PassageHardMax = defaultBounds.hardMax
 // SplitPassagesBounded re-exports the parameterized splitter to the external
 // test package, so tuning/scorecard tests can vary the three passage size
 // bounds directly instead of copying the splitting logic.
-func SplitPassagesBounded(content []byte, ceiling, floor, hardMax int) []passage {
-	return splitPassagesBounded(content, passageBounds{ceiling: ceiling, floor: floor, hardMax: hardMax})
+func SplitPassagesBounded(content []byte, ceiling, floor, hardMax int, asciidoc bool) []passage {
+	f := formatMarkdown
+	if asciidoc {
+		f = formatASCIIDoc
+	}
+	return splitPassagesBounded(content, passageBounds{ceiling: ceiling, floor: floor, hardMax: hardMax}, f)
 }
 
 // Passage re-exports the passage type to the external test package so a

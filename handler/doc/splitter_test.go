@@ -79,7 +79,7 @@ func TestSplitPassages_NeverExceedsHardMax(t *testing.T) {
 		if readErr != nil {
 			return nil
 		}
-		for _, p := range splitPassages(content) {
+		for _, p := range splitPassages(content, formatMarkdown) {
 			if size := p.End - p.Start; size > defaultBounds.hardMax {
 				rel, _ := filepath.Rel(root, path)
 				t.Errorf("%s passage %d is %d bytes, above the hard max %d — it would be silently truncated",
@@ -96,9 +96,9 @@ func TestSplitPassages_NeverExceedsHardMax(t *testing.T) {
 func TestSplitPassages_IsDeterministic(t *testing.T) {
 	for name, body := range splitterFixtures() {
 		t.Run(name, func(t *testing.T) {
-			first := splitPassages([]byte(body))
+			first := splitPassages([]byte(body), formatMarkdown)
 			for i := 0; i < 5; i++ {
-				again := splitPassages([]byte(body))
+				again := splitPassages([]byte(body), formatMarkdown)
 				if len(again) != len(first) {
 					t.Fatalf("run %d produced %d passages, first run produced %d", i, len(again), len(first))
 				}
@@ -116,9 +116,9 @@ func TestSplitPassages_IsDeterministic(t *testing.T) {
 // preamble: content above the first heading is a passage of its own, which is
 // why passage identity cannot be derived from heading text.
 func TestSplitPassages_SplitsOnHeadings(t *testing.T) {
-	got := splitPassages([]byte(strings.Repeat("Preamble prose. ", 40) + "\n\n" +
-		"# Alpha\n\n" + strings.Repeat("Alpha body. ", 40) + "\n\n" +
-		"# Beta\n\n" + strings.Repeat("Beta body. ", 40) + "\n"))
+	got := splitPassages([]byte(strings.Repeat("Preamble prose. ", 40)+"\n\n"+
+		"# Alpha\n\n"+strings.Repeat("Alpha body. ", 40)+"\n\n"+
+		"# Beta\n\n"+strings.Repeat("Beta body. ", 40)+"\n"), formatMarkdown)
 
 	if len(got) != 3 {
 		t.Fatalf("expected preamble + 2 headed sections, got %d passages", len(got))
@@ -145,11 +145,11 @@ func TestSplitPassages_SplitsOnHeadings(t *testing.T) {
 // parent section.
 func TestSplitPassages_HeadingPathCarriesAncestry(t *testing.T) {
 	body := strings.Repeat("Filler prose to keep every section above the merge floor. ", 10) // ~580 B
-	got := splitPassages([]byte("# Title\n\n" + body + "\n" +
-		"## Parent\n\n" + body + "\n" +
-		"### Child\n\n" + body + "\n" +
-		"##### Jump\n\n" + body + "\n" + // skips H4: ancestry records real structure, not an idealized outline
-		"## Next\n\n" + body + "\n"))
+	got := splitPassages([]byte("# Title\n\n"+body+"\n"+
+		"## Parent\n\n"+body+"\n"+
+		"### Child\n\n"+body+"\n"+
+		"##### Jump\n\n"+body+"\n"+ // skips H4: ancestry records real structure, not an idealized outline
+		"## Next\n\n"+body+"\n"), formatMarkdown)
 
 	want := map[string][]string{
 		"Title":  {"Title"},
@@ -181,8 +181,8 @@ func TestSplitPassages_HeadingPathCarriesAncestry(t *testing.T) {
 // nests under it as an H2.
 func TestSplitPassages_HeadingPathSetextLevels(t *testing.T) {
 	body := strings.Repeat("Filler prose to keep every section above the merge floor. ", 10)
-	got := splitPassages([]byte("Alpha\n=====\n\n" + body + "\n" +
-		"Beta\n----\n\n" + body + "\n"))
+	got := splitPassages([]byte("Alpha\n=====\n\n"+body+"\n"+
+		"Beta\n----\n\n"+body+"\n"), formatMarkdown)
 
 	want := map[string][]string{
 		"Alpha": {"Alpha"},
@@ -205,7 +205,7 @@ func TestSplitPassages_HeadingPathSetextLevels(t *testing.T) {
 // absorbing "### Fastest — Docker Compose" must stay titled "Quick Start", not
 // inherit the absorbed subsection's deeper path.
 func TestSplitPassages_MergedSectionsKeepFirstPath(t *testing.T) {
-	got := splitPassages([]byte("## Outer\n\nshort\n\n### Absorbed\n\nalso short\n"))
+	got := splitPassages([]byte("## Outer\n\nshort\n\n### Absorbed\n\nalso short\n"), formatMarkdown)
 
 	if len(got) != 1 {
 		t.Fatalf("expected the two small sections to merge into 1 passage, got %d", len(got))
@@ -243,7 +243,7 @@ func TestSplitPassages_KeepsFencedCodeWhole(t *testing.T) {
 	fence := "```go\n" + strings.Repeat("line of code\n\nblank separated\n", 60) + "```\n"
 	content := []byte("# Heading\n\n" + strings.Repeat("prose. ", 100) + "\n\n" + fence)
 
-	for _, p := range splitPassages(content) {
+	for _, p := range splitPassages(content, formatMarkdown) {
 		opens := strings.Count(p.Body, "```")
 		if opens%2 != 0 {
 			t.Fatalf("passage %d splits a fenced block (odd number of fence markers):\n%s", p.Ordinal, p.Body)
@@ -258,7 +258,7 @@ func TestSplitPassages_MergesTrivialSections(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		b.WriteString("## Tiny\n\nshort.\n\n")
 	}
-	got := splitPassages([]byte(b.String()))
+	got := splitPassages([]byte(b.String()), formatMarkdown)
 	if len(got) >= 8 {
 		t.Errorf("expected trivial sections to merge, got %d passages for 8 tiny sections", len(got))
 	}
@@ -271,7 +271,7 @@ func TestSplitPassages_MergesTrivialSections(t *testing.T) {
 // is broken up rather than emitted whole.
 func TestSplitPassages_SubdividesOversizedSection(t *testing.T) {
 	body := "# Big\n\n" + strings.Repeat("This is a sentence of prose. ", 400)
-	got := splitPassages([]byte(body))
+	got := splitPassages([]byte(body), formatMarkdown)
 	if len(got) < 2 {
 		t.Fatalf("expected an oversized section to subdivide, got %d passages", len(got))
 	}
@@ -290,7 +290,7 @@ func TestSplitPassages_SubdividesOversizedSection(t *testing.T) {
 // as a setext H2, making the document's metadata look like a section title.
 func TestSplitPassages_FrontMatterIsNotASetextHeading(t *testing.T) {
 	content := []byte("---\ntitle: Something\nauthor: Someone\n---\n\n# Real Heading\n\nbody\n")
-	got := splitPassages(content)
+	got := splitPassages(content, formatMarkdown)
 	for _, p := range got {
 		if strings.Contains(p.Heading, "title:") || strings.Contains(p.Heading, "author:") {
 			t.Errorf("frontmatter line became a heading: %q", p.Heading)
@@ -308,7 +308,7 @@ func TestSplitPassages_FrontMatterIsNotASetextHeading(t *testing.T) {
 func TestSplitPassages_SetextHeadings(t *testing.T) {
 	content := []byte("Title Here\n==========\n\n" + strings.Repeat("body. ", 100) +
 		"\n\nSubtitle\n--------\n\n" + strings.Repeat("more. ", 100) + "\n")
-	got := splitPassages(content)
+	got := splitPassages(content, formatMarkdown)
 
 	var headings []string
 	for _, p := range got {
@@ -326,7 +326,7 @@ func TestSplitPassages_SetextHeadings(t *testing.T) {
 // a code block does not create a section.
 func TestSplitPassages_HeadingInFenceIsNotAHeading(t *testing.T) {
 	content := []byte("# Real\n\n```sh\n# not a heading\necho hi\n```\n\nbody\n")
-	for _, p := range splitPassages(content) {
+	for _, p := range splitPassages(content, formatMarkdown) {
 		if p.Heading == "not a heading" {
 			t.Fatal("a comment inside a fenced block was treated as a heading")
 		}
@@ -335,10 +335,10 @@ func TestSplitPassages_HeadingInFenceIsNotAHeading(t *testing.T) {
 
 // TestSplitPassages_EmptyInput pins the degenerate case.
 func TestSplitPassages_EmptyInput(t *testing.T) {
-	if got := splitPassages(nil); got != nil {
+	if got := splitPassages(nil, formatMarkdown); got != nil {
 		t.Errorf("expected nil for empty content, got %d passages", len(got))
 	}
-	if got := splitPassages([]byte("")); got != nil {
+	if got := splitPassages([]byte(""), formatMarkdown); got != nil {
 		t.Errorf("expected nil for empty content, got %d passages", len(got))
 	}
 }
@@ -346,7 +346,7 @@ func TestSplitPassages_EmptyInput(t *testing.T) {
 // TestSplitPassages_ShortDocumentIsOnePassage pins that a document below the
 // floor is not fragmented.
 func TestSplitPassages_ShortDocumentIsOnePassage(t *testing.T) {
-	got := splitPassages([]byte("# Small\n\nJust a little prose.\n"))
+	got := splitPassages([]byte("# Small\n\nJust a little prose.\n"), formatMarkdown)
 	if len(got) != 1 {
 		t.Fatalf("expected one passage for a short document, got %d", len(got))
 	}
@@ -357,7 +357,7 @@ func TestSplitPassages_ShortDocumentIsOnePassage(t *testing.T) {
 func TestSplitPassages_MultiByteRunesAreNotCut(t *testing.T) {
 	// One enormous unbroken "sentence" of multi-byte runes forces the hard cut.
 	content := []byte("# Unicode\n\n" + strings.Repeat("日本語テキスト", 2000))
-	got := splitPassages(content)
+	got := splitPassages(content, formatMarkdown)
 	if len(got) < 2 {
 		t.Fatalf("expected the hard cut to engage, got %d passages", len(got))
 	}
@@ -373,7 +373,7 @@ func TestSplitPassages_MultiByteRunesAreNotCut(t *testing.T) {
 
 func assertTiles(t *testing.T, content []byte) {
 	t.Helper()
-	got := splitPassages(content)
+	got := splitPassages(content, formatMarkdown)
 	if len(content) == 0 {
 		return
 	}

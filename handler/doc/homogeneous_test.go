@@ -103,7 +103,7 @@ func TestKeyGroupsSurviveTheFloorMerge(t *testing.T) {
 		"```\n")
 
 	var withNATS, withConfig string
-	for _, p := range splitPassages(content) {
+	for _, p := range splitPassages(content, formatMarkdown) {
 		if strings.Contains(p.Body, "NATS_MONITOR_HOST_PORT=8222") {
 			withNATS = p.Body
 		}
@@ -132,7 +132,7 @@ func TestREADMEConfigurationSeparatesTheNATSDefault(t *testing.T) {
 	}
 
 	var found string
-	for _, p := range splitPassages(content) {
+	for _, p := range splitPassages(content, formatMarkdown) {
 		if strings.Contains(p.Body, "NATS_MONITOR_HOST_PORT=8222") {
 			found = p.Body
 			break
@@ -164,7 +164,7 @@ func TestDividedBlocksStillTileTheDocument(t *testing.T) {
 		t.Skipf("README not readable: %v", err)
 	}
 	var b strings.Builder
-	for _, p := range splitPassages(content) {
+	for _, p := range splitPassages(content, formatMarkdown) {
 		b.WriteString(p.Body)
 	}
 	if b.String() != string(content) {

@@ -293,9 +293,10 @@ func (h *Handler) ingestFileEntityStates(ctx context.Context, path, root, system
 
 	hash := contentHash(content)
 	relPath, _ := filepath.Rel(root, path)
-	title := extractTitle(content, filepath.Base(path))
+	format := formatForExt(filepath.Ext(path))
+	title := extractTitle(content, filepath.Base(path), format)
 	mime := mimeForExt(filepath.Ext(path))
-	passages := splitPassages(content)
+	passages := splitPassages(content, format)
 
 	parent := newEntity(org, title, relPath, mime, hash, system, now)
 	parent.ChunkCount = len(passages)
