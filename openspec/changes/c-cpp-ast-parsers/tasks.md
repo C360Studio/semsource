@@ -74,13 +74,32 @@
 
 ## 4. The C++ parser
 
-- [ ] 4.1 `source/ast/cpp`, same shape, registered as its own language and domain.
-- [ ] 4.2 Extract the C set plus classes, methods, constructors, destructors, namespaces, and
-      templates.
-- [ ] 4.3 Decide and pin the declaration-in-`.h` / definition-in-`.cpp` relationship: one entity or
+- [x] 4.1 `source/ast/cpp`, same shape, registered as its own language and domain (`cpp`), for
+      `.cpp/.cc/.cxx/.hpp/.hh/.hxx` **and `.h`** — the overlap task 1's routing table exists to
+      settle. Grammar shapes probed, not guessed.
+- [x] 4.2 Extract the C set plus classes, methods, constructors, destructors, namespaces, and
+      templates. Scope (namespace + class chain) is carried into identity via
+      `ast.NewScopedCodeEntity`, so two `send()` methods on different classes — or two `Node`
+      classes in different namespaces — stay distinct. **Mutation-verified**: dropping namespace
+      scope collapses both onto `…class.ns-cpp-Node`. A destructor keeps its `~`, or it would
+      collide with the constructor (also mutation-verified). Out-of-line `int Radio::send(...)` is
+      recorded as a method of `Radio`, not a free function. `extern "C" { … }` is unwrapped rather
+      than treated as a scope, which would have put a bogus segment in every wrapped symbol's ID.
+      Namespaces are recorded as `type`, **not** `package`: the package entity type deliberately
+      drops the name from its instance ID, so two namespaces in one file would collide on one
+      identity.
+- [x] 4.3 Decide and pin the declaration-in-`.h` / definition-in-`.cpp` relationship: one entity or
       two related ones. Either is defensible; it must be deterministic and collision-free.
-- [ ] 4.4 Test `.h` resolution both ways — a path declaring `cpp` reads headers as C++, a path
-      declaring only `c` reads them as C (design — D1).
+      **Decided: two distinct entities**, because identity is qualified by the defining file's path
+      (D4) and the two live in different files. Both are typed `method` and both carry the class
+      scope, so they agree on everything except the file. Deterministic and collision-free, which is
+      what the spec requires. Pinned by `TestHeaderDeclarationAndDefinitionStayDistinct`, whose
+      failure message says to update the spec rather than the assertion if this ever becomes
+      intentional. Relating the pair is future work, not a defect.
+- [x] 4.4 Test `.h` resolution both ways — a path declaring `cpp` reads headers as C++, a path
+      declaring only `c` reads them as C (design — D1). Covered by the routing tests added in task 1
+      (`TestRouteExtensions_DeclaredSetDecidesTheHeader`), which now exercise the real registration
+      rather than fakes once task 5 links both parsers in.
 
 ## 5. Wire the languages through every surface that enumerates them
 
