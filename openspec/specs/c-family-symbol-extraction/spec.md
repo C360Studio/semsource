@@ -1,4 +1,17 @@
-## ADDED Requirements
+# c-family-symbol-extraction Specification
+
+## Purpose
+What C and C++ sources contribute to the graph, and the limits that follow from parsing them as
+written. No preprocessor runs: `#include` expansion, macro expansion, and conditional-compilation
+evaluation are not performed, so a symbol reachable only through macro expansion is not extracted —
+a limit stated here rather than discovered on a macro-dense corpus.
+
+Neither language has a module system mapping a name onto a path, so identity is carried by the
+defining file's path (and, for C++, the enclosing namespace and class chain). The same absence is
+why C++ inheritance is resolved after the whole watch path is parsed rather than per file.
+
+## Requirements
+
 
 ### Requirement: C and C++ sources contribute code symbols
 
@@ -63,3 +76,40 @@ otherwise appear to be fully indexed while a substantial share of its symbols is
 
 - **WHEN** a C or C++ reference cannot be resolved to a definition
 - **THEN** no edge is emitted rather than an edge to a guessed target
+
+### Requirement: C++ inheritance is resolved across the parsed set, never guessed
+
+A C++ class's base classes SHALL be emitted as edges to the base's entity ID, so that
+"what derives from this?" is answerable. Because C++ has no convention tying a type name to a
+file — which header defines a class depends on what was included — resolution SHALL happen once
+the whole watch path is parsed, over the complete set of definitions, rather than per file.
+
+Resolution SHALL be a function of the definition set alone: the same tree MUST produce the same
+edges regardless of the order files were parsed, because entity IDs are intrinsic and reproducible.
+
+A base-class name matching more than one definition, or no definition, SHALL yield **no edge**. A
+guessed edge would make impact analysis report a dependent that does not exist, which is worse than
+reporting none: a missing edge is a known gap, a wrong one is a confident falsehood.
+
+#### Scenario: A base class defined in another file
+
+- **GIVEN** a class deriving from a base declared in a different file of the same watch path
+- **WHEN** the watch path is parsed
+- **THEN** the derived class carries an inheritance edge to the base's entity ID
+
+#### Scenario: An ambiguous base-class name
+
+- **GIVEN** two classes of the same name defined in different files
+- **WHEN** a third class derives from that name
+- **THEN** no inheritance edge is emitted for it
+
+#### Scenario: A base class outside the corpus
+
+- **GIVEN** a class deriving from a type no ingested file defines
+- **WHEN** the watch path is parsed
+- **THEN** no inheritance edge is emitted
+
+#### Scenario: Resolution does not depend on parse order
+
+- **WHEN** the same tree is parsed twice with files visited in different orders
+- **THEN** the resulting inheritance edges are identical
