@@ -22,7 +22,7 @@
 - [x] 2.4 Add `graph.query.byName` to `graphQueryInputPorts()` — the substrate serves it and the
       declaration omits it, which narrows the guard for no reason. Update the `run_test.go` pin.
 
-## 3. Restore the graph_summary MCP tool
+## 3. Restore the graph_summary MCP tool — RESTORED, THEN CUT
 
 - [x] 3.1 Re-add `GraphSummaryInput` and the `graphSummary` handler routing to `graph.query.summary`,
       returning the substrate payload verbatim with **no** disclosure block (design — D4).
@@ -34,6 +34,15 @@
       payload decodes to an empty `SummaryData`.
 - [x] 3.4 Extend the tier-0 compose smoke with a real `tools/call` asserting that shape on a live
       stack — the collision was only ever visible with both components running.
+- [x] 3.5 **Tool subsequently CUT before merge.** Restoring it was correct given the subject was
+      uncontested, but a roster review found it would pollute agent context: `graph_summary` emits
+      entity types and predicate names, and **no tool on SemSource's MCP roster accepts either**.
+      Upstream's `summarize_graph` works because its roster has `query_by_type`; ours has no
+      equivalent, so the overview would hand an agent a vocabulary it cannot spend and invite
+      graph-shaped phrasing at tools that want natural language. The orientation need is already met
+      by `source_status`. The collision fix stands on its own — it was a live defect, and
+      `graph_summary` is what found it. `graph.query.summary` remains uncontested, pinned statically
+      by the ownership guard and at runtime by the governance integration test.
 
 ## 4. Correct the record
 

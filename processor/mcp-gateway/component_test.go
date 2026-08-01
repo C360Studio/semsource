@@ -15,7 +15,7 @@ import (
 
 var wantToolNames = []string{
 	"add_source", "code_changes", "code_context", "code_impact", "code_search",
-	"doc_context", "graph_search", "graph_summary", "remove_source", "source_status",
+	"doc_context", "graph_search", "remove_source", "source_status",
 }
 
 func newTestComponent(roots []string) *Component {

@@ -290,7 +290,7 @@ if [ "$mcp_tools_code" != "200" ]; then
 	echo "Body: $(cat "$mcp_tools_body")" >&2
 	exit 1
 fi
-for tool_name in add_source code_changes code_context code_impact code_search doc_context graph_search graph_summary remove_source source_status; do
+for tool_name in add_source code_changes code_context code_impact code_search doc_context graph_search remove_source source_status; do
 	if ! grep -q "\"name\":\"$tool_name\"" "$mcp_tools_body"; then
 		echo "MCP tools/list missing $tool_name: $(cat "$mcp_tools_body")" >&2
 		exit 1
@@ -454,26 +454,11 @@ echo "code_changes returns the honest no-versions note"
 # that, an agent reads a similarity hit list as thematic community reasoning,
 # which is the honesty hole this tool would otherwise open.
 
-# graph_summary must return the SUBSTRATE's shape. source-manifest used to
-# subscribe to graph.query.summary too, and the race is only observable with both
-# components live — which is what a compose run gives us and no unit test does.
-echo "Checking graph_summary returns the substrate shape (not source-manifest's)"
-summary_body=$(mcp_call graph_summary '{}')
-if printf '%s' "$summary_body" | grep -q '"isError":true'; then
-	echo "graph_summary refused: $summary_body" >&2
-	exit 1
-fi
-if ! printf '%s' "$summary_body" | grep -q '"entity_types"'; then
-	echo "graph_summary did not return the substrate entity-type summary: $summary_body" >&2
-	exit 1
-fi
-if printf '%s' "$summary_body" | grep -q '"entity_id_format"'; then
-	echo "graph_summary returned source-manifest's payload — the subject is contested again: $summary_body" >&2
-	exit 1
-fi
-echo "graph_summary returns the substrate graph overview"
-
-echo "Checking graph.query.sourceSummary serves the source-manifest payload over HTTP-equivalent route"
+# The source-manifest summary moved off the contested graph.query.summary; this
+# proves its payload is still served. graph.query.summary itself is now the
+# substrate's alone — pinned statically by the subject-ownership guard and at
+# runtime by the governance integration test, which asserts the substrate shape.
+echo "Checking the source-manifest summary still serves its payload"
 source_summary=$(curl -fsS --max-time 5 "http://127.0.0.1:${SEMSOURCE_HTTP_PORT}/source-manifest/summary") ||
 	fail "source-manifest/summary is not reachable"
 if ! printf '%s' "$source_summary" | grep -q '"entity_id_format"'; then

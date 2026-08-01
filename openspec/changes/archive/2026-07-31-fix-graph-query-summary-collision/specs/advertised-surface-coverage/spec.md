@@ -28,15 +28,3 @@ exercised the contested subject started the substrate component alone, so no han
 - **WHEN** the declared graph-query input-port list omits a subject the pinned substrate serves
 - **THEN** the omission is a known limit of the gate, recorded as an upstream ask, and the list is
   corrected when discovered
-
-### Requirement: The restored graph-overview tool has coverage
-
-The advertised-surface evidence matrix SHALL name a test for the `graph_summary` MCP tool, and that
-evidence SHALL assert the substrate's payload shape — not merely a non-error result — so that a
-regression which reintroduces a competing handler is caught by a wrong-shape failure rather than
-passing silently.
-
-#### Scenario: The wrong handler answering fails the test
-
-- **WHEN** a handler other than the substrate's answers the tool's routed subject
-- **THEN** the tool's coverage fails on the payload shape

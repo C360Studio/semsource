@@ -85,7 +85,7 @@ be authoritative, but request/reply gives the caller no way to see that a second
 it only ever sees one reply. Detecting duplicates would mean scraping subscription counts from NATS
 monitoring — a lot of machinery for a check that a static comparison makes exact.
 
-### D4 — `graph_summary` returns to the roster as a pure passthrough
+### D4 — `graph_summary` returns to the roster as a pure passthrough (later cut, see note)
 
 The tool is restored from `expose-graphrag-on-mcp`, unchanged in intent: route to
 `graph.query.summary`, return the substrate payload verbatim, add **no** retrieval disclosure. The
@@ -95,6 +95,12 @@ rung to report, and attaching a disclosure would imply a path choice that was ne
 Its test asserts the substrate's **shape**, not merely a non-error result. That is deliberate: a
 shape assertion is what turns a future reintroduced collision into a failure instead of a pass, since
 the competing payload would decode to an empty `SummaryData`.
+
+> **Superseded before merge.** The tool was cut on roster grounds: no SemSource MCP tool accepts an
+> entity type or a predicate, so a graph overview emits a vocabulary the agent cannot spend.
+> Upstream's `summarize_graph` is actionable because its roster has `query_by_type`; ours is not.
+> The collision fix is unaffected — it was a live defect independent of any tool, and this tool is
+> what surfaced it. See tasks 3.5.
 
 ## Risks / Trade-offs
 
