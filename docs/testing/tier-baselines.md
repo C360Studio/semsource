@@ -139,38 +139,69 @@ Stated so the numbers are not over-read:
 
 ## Planned A/B: seminstruct 8b vs Gemini 2.5 Flash Lite
 
-**Not yet run.** Recorded so the setup is not re-derived.
+**Not yet run.** Recorded so the setup is not re-derived — and so the known
+Gemini pitfalls are not rediscovered the hard way.
 
-The model registry resolves API keys from the environment
-(`api_key_env`, `model/registry.go:287`) and speaks OpenAI-compatible endpoints,
-so this is a **config-only** change — no code:
+### Use the config shape that already works
+
+Gemini exposes more than one wire protocol — its native
+`generateContent` API, an OpenAI-compatibility layer, and Vertex AI (different
+host *and* different auth). Only the compatibility layer works with a
+`provider: "openai"` endpoint, and it needs more than a URL.
+
+SemSpec already runs Gemini this way (`semspec/configs/e2e-gemini.json`). Copy
+its field set rather than the minimum:
 
 ```json
 "endpoints": {
-  "gemini": {
+  "gemini-flash-lite": {
     "provider": "openai",
     "url": "https://generativelanguage.googleapis.com/v1beta/openai",
     "model": "gemini-2.5-flash-lite",
-    "api_key_env": "GEMINI_API_KEY"
+    "api_key_env": "GEMINI_API_KEY",
+    "max_tokens": 1048576,
+    "supports_tools": true,
+    "tool_format": "openai",
+    "stream": true,
+    "reasoning_effort": "low"
   }
 },
 "capabilities": {
-  "community_summary": { "preferred": ["gemini"] }
+  "community_summary": { "preferred": ["gemini-flash-lite"] }
 }
 ```
 
-Two cautions for whoever runs it:
+The model registry resolves the key from the environment via `api_key_env`
+(`model/registry.go:287`), so this is a **config-only** change — no code.
+`reasoning_effort` matters: the 2.5 models are reasoning models, and SemSpec pins
+it low.
 
-1. **Hold clustering fixed.** With 82% of entities in one community, both models
-   summarize the same degenerate input, and the A/B measures prose style rather
-   than answer quality. Fix granularity first or the result will not mean what it
-   appears to.
-2. **Keep it out of the scorecard.** Grading synthesized prose needs a judge, and
-   a judge drifts between runs. This belongs in a separate instrument with its
-   own reporting.
+### The compatibility layer is STRICTER than OpenAI
 
-Sibling repos already carry Gemini plumbing worth reusing —
-`semspec/ui/docker-compose.e2e-llm.yml` and `taskfiles/e2e.yml` pass
-`GEMINI_API_KEY` and select an `e2e-gemini.json` config — but that drives
-semspec's *agentic loop*, not SemSource's model registry. It is a reference, not
-a drop-in.
+This is the trap, and SemSpec has three bug reports to show for it
+(`semspec/docs/bugs/gemini-*.md`). The lesson in their own words: *"OpenAI
+silently accepts duplicates; Gemini rejects them."* A request that works against
+OpenAI or a local llama-server can return a hard 400 against Gemini.
+
+| SemSpec bug | Status | Shape |
+| --- | --- | --- |
+| `Duplicate function declaration found: graph_summary` | **OPEN** — blocked all Gemini calls | Tool declaration |
+| `Duplicate function declaration found: submit_work` | Fixed | Tool declaration |
+| Planner omits `deliverable.goal`, 18+ retries | Fixed | Tool-schema adherence |
+
+**All three are tool-calling failures, and our path does not call tools.**
+Community summarization and answer synthesis issue a plain chat completion —
+`ChatRequest{SystemPrompt, UserPrompt, MaxTokens, Temperature}`
+(`processor/graph-query/answer.go:192`), with no `tools` array. So the known
+blockers should not apply here. Verify that assumption on the first run rather
+than trusting this paragraph.
+
+### Do not run it yet
+
+With **82% of entities in one community**, both models summarize the same
+degenerate input. The A/B would measure prose style, not answer quality — and an
+8b-vs-Flash-Lite result read off that would be quoted later as though it meant
+something. Fix clustering granularity first.
+
+Keep it out of the retrieval scorecard regardless: grading synthesized prose
+needs a judge, and a judge drifts between runs.
