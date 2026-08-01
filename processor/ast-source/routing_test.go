@@ -1,6 +1,7 @@
 package astsource
 
 import (
+	"strings"
 	"testing"
 
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -154,5 +155,25 @@ func TestEveryContestedExtensionHasAnExplicitRule(t *testing.T) {
 					ext, c, ext)
 			}
 		}
+	}
+}
+
+// TestWatchPathRejectsUnregisteredLanguage confirms the configuration-time guard
+// that task 2.4 called for already exists and works, rather than adding a second
+// one beside it. A declared language with no parser must fail here, not produce a
+// watch path that walks files and extracts nothing.
+func TestWatchPathRejectsUnregisteredLanguage(t *testing.T) {
+	wp := &WatchPathConfig{
+		Path:      "/tmp/x",
+		Org:       "acme",
+		Project:   "proj",
+		Languages: []string{"go", "rust"},
+	}
+	err := wp.Validate()
+	if err == nil {
+		t.Fatal("a watch path declaring an unregistered language must not validate")
+	}
+	if !strings.Contains(err.Error(), "rust") {
+		t.Errorf("error must name the offending language, got %v", err)
 	}
 }

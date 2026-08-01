@@ -27,13 +27,23 @@
 
 ## 2. Close the silent language defaults
 
-- [ ] 2.1 Make `langToDomain` (`handler/ast/mapper.go:137`) total — no `default:` to
-      `DomainGolang`.
-- [ ] 2.2 Make `extensionsForLanguage` (`handler/ast/handler.go:214`) total — no `default:` to
-      `.go`.
-- [ ] 2.3 Test that a registered parser with no domain mapping is **detected**, driven off the
+- [x] 2.1 Make `langToDomain` (`handler/ast/mapper.go:137`) total — no `default:` to
+      `DomainGolang`. Both lookups moved to `handler/ast/languages.go` as **data** (`languageDomains`,
+      `languageExtensions`) rather than switch statements, and now return `(value, ok)`.
+- [x] 2.2 Make `extensionsForLanguage` (`handler/ast/handler.go:214`) total — no `default:` to
+      `.go`. (The function is named `langToExtensions`.) `Ingest` and `Watch` now call
+      `validateLanguage` up front, so an unmappable language stops ingestion at the entry point
+      instead of surfacing later; the two remaining `_`-discarded lookups leave the domain **empty**
+      rather than `golang`, so even an unreachable path fails ID construction loudly.
+- [x] 2.3 Test that a registered parser with no domain mapping is **detected**, driven off the
       registry rather than a hand-written list, so the next language added cannot land half-wired.
-- [ ] 2.4 Reject a declared language with no registered parser at configuration time, naming it.
+      `TestEveryRegisteredParserIsMapped` iterates `DefaultRegistry.ListParsers()`.
+      **Mutation-verified:** removing java's entry fails it with
+      *"parser \"java\" is registered but has no domain mapping"*. Also pinned the existing
+      language→domain mappings, since those are baked into already-published entity IDs.
+- [x] 2.4 Reject a declared language with no registered parser at configuration time, naming it.
+      **Already implemented** — `WatchPathConfig.Validate` (`processor/ast-source/config.go:59`)
+      rejects it and lists the registered parsers. Covered with a test rather than duplicated.
 
 ## 3. The C parser
 
