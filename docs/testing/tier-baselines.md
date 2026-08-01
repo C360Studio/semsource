@@ -154,16 +154,17 @@ request_timeout  idle_conn_timeout  response_header_timeout
 disable_keepalives  wire_backend
 ```
 
-**An unknown field inside an endpoint is silently ignored** — verified: a bogus
-key at the *top* level fails `semsource validate`, but the same key inside
-`model_registry.endpoints.<name>` is accepted and dropped. A stale or misspelled
-field therefore costs you the setting with no error. Check against the struct
-above before trusting any config you copied.
+**Unknown fields fail loudly, at every level.** `config/loader.go` decodes with
+`DisallowUnknownFields`, and it applies inside endpoints too — a bogus key under
+`model_registry.endpoints.<name>` fails `semsource validate` with
+`json: unknown field "..."`. That is the good outcome: a config copied from an
+older SemStreams cannot silently lose a setting, it refuses to load. Run
+`semsource validate` after any config transplant and believe it.
 
 SemSpec has a working Gemini config (`semspec/configs/e2e-gemini.json`) but it is
 **stale**: last touched 2026-04-04, and it pins SemStreams `v1.0.0-alpha.92`
-against our `v1.0.0-beta.159`. Its field set happens to still validate — treat
-that as luck, not authority.
+against our `v1.0.0-beta.159`. Its field set still validates at beta.159, and
+`semsource validate` is what proves that — not inspection.
 
 ### `wire_backend` is the Gemini-specific knob
 
