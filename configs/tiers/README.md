@@ -235,6 +235,11 @@ not currently expose, so it is off in every deployment.
 
 - **Tier 0 works now** (BM25, no external service).
 - **Tier 1 is the MVP default** (`configs/mvp.json`) and is what the shipped compose runs.
+> **Measured baselines:** [`docs/testing/tier-baselines.md`](../../docs/testing/tier-baselines.md)
+> records boot-to-ready timings and answer-quality observations from a real 6,685-entity Java corpus
+> — including the finding that LPA clustering put 82% of entities in one community, which makes
+> tier-2 "community-backed" answers weak on code. Read it before recommending a tier.
+
 - **Tier 2 is wired but ships off** — see the note above: no compose service, and both clustering
   flags are `false` in `tier2-semantic-instruct.json`. **`tier2-compose-dev.json` is the only shipped
   config that sets `enable_clustering` and `clustering_llm` true.** Tier 2 is unexercised; do not
