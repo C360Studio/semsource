@@ -165,18 +165,48 @@ did `TestEveryContestedExtensionHasAnExplicitRule` stop being vacuous — re-ver
 
 ## 7. Runtime acceptance
 
-- [ ] 7.1 Boot a stack over a multi-repo corpus including Meshtastic and query through MCP:
-      `code_search` for a known C++ symbol, `code_context` on it, `code_impact` from it.
-- [ ] 7.2 Confirm the `{domain}` segment is `c` / `cpp` on live entities — the silent-default bug
-      this change closes would show up here and nowhere else.
-- [ ] 7.3 Re-run the docs/testing corpus profile so `docs/testing/tier-baselines.md`'s
-      "1,299 files produce zero entities" line is replaced by a measured number.
+- [x] 7.1 Boot a stack over a multi-repo corpus including Meshtastic and query through MCP:
+      `code_search` for a known C++ symbol, `code_context` on it, `code_impact` from it. Booted over
+      osh-core + Meshtastic + MAVLink + CS API — **57,158 live entities, 0 parse failures, 0 ERROR
+      log lines**. All three tools answered over a real MCP session:
+      `code_search` returned `…cpp.meshtastic-firmware.*` and `…c.mavlink-c.*` nodes;
+      `code_context "RadioInterface"` returned the class plus **two constructor entities** — the
+      overload discriminator visible live; `code_context "mavlink_msg_heartbeat_pack"` resolved the
+      C function.
+
+      **`code_impact` finds C/C++ symbols but reports 0 dependents**, which is the documented
+      non-goal rather than a wiring failure. Proved with a control in the same stack: Java
+      `IModuleProvider` → **9 dependents**, C++ `RadioInterface` → 0, C
+      `mavlink_msg_heartbeat_pack` → 0. Anyone reading "C/C++ works end to end" needs that caveat.
+
+      Also observed and worth keeping: before the gates opened, `code_search` **refused** rather
+      than returning an empty list — `deferred: true, defer_reason: "hard_stop"` with the index
+      state attached. A premature empty answer would have been indistinguishable from a genuine
+      absence.
+- [x] 7.2 Confirm the `{domain}` segment is `c` / `cpp` on live entities — the silent-default bug
+      this change closes would show up here and nowhere else. Read straight from ENTITY_STATES:
+      **`cpp` 32,312** (all `meshtastic-firmware`), **`c` 12,104** (all `mavlink-c`), `java` 8,539,
+      `web` 3,300, `python` 343. **No C or C++ entity carries `golang`.**
+
+      The same run verified **D1 both ways in one deployment**: Meshtastic declares `cpp` and its
+      775 headers parsed as C++; MAVLink declares `c` and its 483 headers parsed as C.
+- [x] 7.3 Re-run the docs/testing corpus profile so `docs/testing/tier-baselines.md`'s
+      "1,299 files produce zero entities" line is replaced by a measured number. Added as a dated
+      note rather than by rewriting the original: the clustering numbers there were measured on the
+      corpus **as it stood**, and silently restating them would misrepresent when they were taken.
+      The note records the new counts and says plainly that a C/C++-heavy graph makes the
+      "one blob per repo" finding unmeasured again rather than carried over.
+
+**Scale observation, not a blocker.** At 57,158 entities the structural index took ~16 minutes to
+reach `ready`, and `indexed_revision` reported stale for most of it (frozen near 18,760 while the
+NAME_INDEX bucket grew past 50,000), so readiness looked stalled when it was progressing. Worth
+knowing before anyone runs the A/B on a corpus this size.
 
 ## 8. Gates
 
-- [ ] 8.1 `gofmt`, `go vet`, `revive` (warnings fail, pinned v1.15.0), `go test ./...`,
-      `go test -tags=integration ./...` green.
-- [ ] 8.2 `openspec validate c-cpp-ast-parsers --strict` green.
+- [x] 8.1 `gofmt`, `go vet`, `revive` (warnings fail, pinned v1.15.0), `go test ./...`,
+      `go test -tags=integration ./...` green (integration run with `-race`).
+- [x] 8.2 `openspec validate c-cpp-ast-parsers --strict` green.
 - [ ] 8.3 The retrieval scorecard is unchanged — it runs on a Go/markdown corpus, so a moved score
       would mean this change altered something it should not have touched.
 

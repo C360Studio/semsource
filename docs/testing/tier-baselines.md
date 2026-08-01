@@ -150,6 +150,15 @@ its **1,299 `.c/.cpp/.h` files produce zero entities**. This is a *multi-system*
 balanced polyglot one — 68% Java symbols, 23% AsciiDoc passages, 8% incidental. It answers the
 question about the `system` segment; it does not establish anything about C/C++ retrieval.
 
+> **Superseded for the corpus, not for the result (2026-08-01).** C and C++ parsers have since
+> landed, so those 1,299 files are no longer invisible: the same Meshtastic tree now yields
+> **32,312 `cpp` entities**, and a MAVLink tree added alongside it yields **12,104 `c`** — both
+> measured on a live stack. The clustering numbers above are left exactly as measured, because they
+> were taken on the corpus as it stood; they are not restated for the new shape. What this does mean
+> is that the corpus is no longer 68% Java — a re-measurement of clustering on a C/C++-heavy graph
+> is unmeasured work, not a footnote, and the "one blob per repo" finding should not be assumed to
+> carry over unchanged.
+
 A second wrinkle: 21 systems appear, not 3. The extra 18 (52 entities at most, ~0.6% combined) come
 from source roots resolving to a nested directory base name. So `system` is not exactly `repo` even
 when configured one root per repo.
