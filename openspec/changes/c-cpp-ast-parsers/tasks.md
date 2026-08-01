@@ -131,17 +131,37 @@ did `TestEveryContestedExtensionHasAnExplicitRule` stop being vacuous — re-ver
 
 ## 6. Measure on the real corpus, not a fixture
 
-- [ ] 6.1 Ingest the **real** Meshtastic firmware tree (775 `.h`, 515 `.cpp`, 9 `.c`) and record
+- [x] 6.1 Ingest the **real** Meshtastic firmware tree (775 `.h`, 515 `.cpp`, 9 `.c`) and record
       entities extracted, parse failures, and wall-clock. Baseline to beat: **zero entities today.**
-- [ ] 6.2 Ingest a real MAVLink tree — pure C, header-only, macro-dense — and record the same.
+      **1,291 files → 33,092 entities, 0 parse failures, 3.1 s.** By type: 14,090 const, 7,903
+      method, 6,212 var, 2,251 function, 1,291 file, plus classes/structs/enums/types.
+- [x] 6.2 Ingest a real MAVLink tree — pure C, header-only, macro-dense — and record the same.
       This is the case that stresses both D1 (`.h` as C) and the no-preprocessor limit.
-- [ ] 6.3 Quantify the preprocessor limit rather than asserting it: sample symbols reachable only
+      `mavlink/c_library_v2`: **483 `.h`, 0 `.c`** — exactly the header-only shape D1 was designed
+      for. **12,522 entities, 0 parse failures, 2.0 s**, of which **7,049 functions** — nearly all
+      prototypes, confirming that extracting them (3.2a) is what makes this repo indexable at all.
+- [x] 6.3 Quantify the preprocessor limit rather than asserting it: sample symbols reachable only
       through macro expansion and report roughly what share is missed, so the A/B is read with the
-      right expectation.
-- [ ] 6.4 Spot-check extraction correctness against the source by hand — a symbol count alone
-      cannot distinguish 10,000 right entities from 10,000 wrong ones.
-- [ ] 6.5 Record parse throughput; the AST source serializes per-file parsing behind `pw.parseMu`,
-      and the C++ grammar is large.
+      right expectation. Measuring it **changed the implementation**: 893 top-level `#ifdef`/`#if`
+      blocks in MAVLink had their entire contents skipped, because only direct children of the root
+      were visited. Both parsers now recurse into every branch — which is the right reading when no
+      preprocessor runs, since which branch compiles is unknowable. Effect: MAVLink
+      **10,185 → 12,522 (+23%)**, Meshtastic **12,582 → 33,092 (2.6×)**, firmware being heavily
+      per-variant `#ifdef`-guarded.
+
+      What remains unreachable, counted rather than asserted: **483 `preproc_call`** nodes in
+      MAVLink and **647** in Meshtastic — file-scope macro invocations that may expand to
+      declarations — plus **308 `ERROR`** nodes in Meshtastic where tree-sitter cannot parse
+      macro-heavy constructs. These are the honest bound on C/C++ coverage.
+- [x] 6.4 Spot-check extraction correctness against the source by hand — a symbol count alone
+      cannot distinguish 10,000 right entities from 10,000 wrong ones. Checked
+      `src/mesh/RadioInterface.h` line by line: typedef at L16, `#define MAX_TX_QUEUE` at L18,
+      `class RadioInterface` at L75, `void deliverToReceiver(meshtastic_MeshPacket *p)` at L122,
+      `~RadioInterface` at L129, and `bool canSleep(bool deepSleep = false)` at L149 — names, kinds,
+      line numbers and signatures all match the source, including the default argument.
+- [x] 6.5 Record parse throughput; the AST source serializes per-file parsing behind `pw.parseMu`,
+      and the C++ grammar is large. **415 files/s C++ (1,291 files in 3.1 s)** and **236 files/s C
+      (483 files in 2.0 s)**. Not a bottleneck beside embedding, which dominates ingest.
 
 ## 7. Runtime acceptance
 

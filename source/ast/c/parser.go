@@ -139,6 +139,22 @@ func (p *Parser) extractTopLevel(node *sitter.Node, content []byte, relPath stri
 		if e := p.macroEntity(node, content, relPath); e != nil {
 			return []*ast.CodeEntity{e}
 		}
+
+	case "preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif",
+		"preproc_ifdef_in_field_declaration_list", "preproc_if_in_field_declaration_list":
+		// No preprocessor runs, so which branch compiles is unknowable. Both are
+		// read: a symbol that exists only under one build flag is still a symbol
+		// someone searches for, and skipping the block would have hidden every
+		// declaration inside it. Measured on MAVLink, 893 top-level conditional
+		// blocks would otherwise contribute nothing at all.
+		//
+		// A symbol declared in two mutually exclusive branches lands on one
+		// entity ID, which is correct: it is one logical symbol.
+		var out []*ast.CodeEntity
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			out = append(out, p.extractTopLevel(node.NamedChild(i), content, relPath)...)
+		}
+		return out
 	}
 	return nil
 }

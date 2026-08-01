@@ -3,6 +3,8 @@ package cpp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +13,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/cpp"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -185,6 +188,13 @@ func (p *Parser) visit(node *sitter.Node, content []byte, relPath string, scope 
 			out(entity, topLevel)
 		}
 
+	case "preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif",
+		"preproc_ifdef_in_field_declaration_list", "preproc_if_in_field_declaration_list":
+		// Both branches are read — see the C parser for why. A symbol appearing
+		// in two mutually exclusive branches is one logical symbol and correctly
+		// shares one entity ID.
+		p.walk(node, content, relPath, scope, out)
+
 	case "linkage_specification":
 		// extern "C" { … } — a linkage wrapper, not a scope.
 		if body := node.ChildByFieldName("body"); body != nil {
@@ -200,6 +210,15 @@ func (p *Parser) classEntity(node *sitter.Node, content []byte, relPath string, 
 	if name == "" {
 		return // anonymous: nothing to find it by
 	}
+	body := node.ChildByFieldName("body")
+	if body == nil {
+		// A forward declaration (`class GpioNotTransformer;`) promises a type
+		// exists; it does not define one. Emitting it produces a second entity
+		// for the same class — with the same identity as the real definition
+		// when both are in one file — and a body-less duplicate is not what a
+		// reader searching for the class wants to find.
+		return
+	}
 
 	entityType := ast.TypeClass
 	if node.Type() != "class_specifier" {
@@ -209,10 +228,7 @@ func (p *Parser) classEntity(node *sitter.Node, content []byte, relPath string, 
 	entity.DocComment = docComment(node, content)
 	entity.Extends = baseClasses(node, content)
 	out(entity, len(scope) == 0)
-
-	if body := node.ChildByFieldName("body"); body != nil {
-		p.walk(body, content, relPath, append(scope, name), out)
-	}
+	p.walk(body, content, relPath, append(scope, name), out)
 }
 
 // callableOrField handles the three nodes that may hold a function or a
@@ -241,6 +257,7 @@ func (p *Parser) callableOrField(node *sitter.Node, content []byte, relPath stri
 		}
 
 		entity := p.newEntity(entityType, name, relPath, effectiveScope, node)
+		entity.ID = p.overloadID(entityType, name, relPath, effectiveScope, fn, content)
 		entity.Signature = functionSignature(node, fn, content)
 		entity.DocComment = docComment(node, content)
 		out(entity, topLevel)
@@ -297,6 +314,29 @@ func baseClasses(node *sitter.Node, content []byte) []string {
 		}
 	}
 	return out
+}
+
+// overloadID builds a callable's entity ID with a discriminator derived from its
+// parameter types.
+//
+// C++ overloading means a name plus a scope is not an identity: Meshtastic has
+// 147 name/scope pairs that occur more than once in a single file — two
+// ConvertToNodeInfo declarations differing only in their parameters, two
+// readBytes, two operator!=. Without this they collapse onto one entity and the
+// graph silently keeps whichever was published last.
+//
+// The discriminator is applied to EVERY callable rather than only to ones that
+// currently collide. Applying it on demand would mean that adding a second
+// overload later changed the identity of the first — re-identifying an entity
+// that had not itself changed.
+func (p *Parser) overloadID(t ast.CodeEntityType, name, relPath string, scope []string, decl *sitter.Node, content []byte) string {
+	instance := ast.BuildScopedInstanceID(relPath, scope, name, t)
+	if params := decl.ChildByFieldName("parameters"); params != nil {
+		sum := sha256.Sum256([]byte(collapseSpace(params.Content(content))))
+		instance += "-" + hex.EncodeToString(sum[:3])
+	}
+	return entityid.Build(p.org, entityid.PlatformSemsource, "cpp",
+		entityid.SystemSlug(p.project), string(t), instance)
 }
 
 // newEntity constructs a scoped entity with the fields every kind shares.
