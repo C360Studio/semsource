@@ -1,6 +1,10 @@
 package astsource
 
-import "sort"
+import (
+	"sort"
+
+	semsourceast "github.com/c360studio/semsource/source/ast"
+)
 
 // extensionPrecedence resolves file extensions that more than one language
 // claims, listing the claimants in winning order.
@@ -95,4 +99,17 @@ func contestedExtensions(languages []string, extensionsFor func(string) []string
 		}
 	}
 	return claimants
+}
+
+// typeRefResolver is implemented by parsers that can only resolve type
+// references once every file in a watch path has been parsed.
+//
+// Most languages do not need it: Go, Java, and Python derive a definition's path
+// from its name through package conventions, so their parsers resolve during
+// ParseFile. C++ has no such convention — which header defines `class Foo`
+// depends on what was included — so its resolution is deferred to the point
+// where the full definition set is known. Mirrors the optional ParseDirectory
+// interface the doc handler already uses.
+type typeRefResolver interface {
+	ResolveTypeRefs(results []*semsourceast.ParseResult)
 }

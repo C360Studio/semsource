@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -184,14 +185,19 @@ namespace b { class Node { public: int id(); }; }
 
 // TestBaseClassIsRecorded checks the inheritance edge, which is what
 // code_impact walks to answer "what derives from this".
+//
+// Straight out of ParseFile the base is a marked NAME, not an entity ID: C++
+// cannot tell which file defines it without the whole watch path. ResolveTypeRefs
+// turns it into an ID later. The marker is asserted here so the intermediate
+// state stays deliberate rather than becoming an accident someone "fixes".
 func TestBaseClassIsRecorded(t *testing.T) {
 	res := parse(t, "radio.cpp", "class Radio : public Base { };")
 	entity := byName(res)["Radio"]
 	if entity == nil {
 		t.Fatal("Radio was not extracted")
 	}
-	if len(entity.Extends) == 0 || entity.Extends[0] != "Base" {
-		t.Errorf("Extends = %v, want [Base]", entity.Extends)
+	if len(entity.Extends) != 1 || entity.Extends[0] != UnresolvedPrefix+"Base" {
+		t.Errorf("Extends = %v, want [%sBase]", entity.Extends, UnresolvedPrefix)
 	}
 }
 
@@ -300,5 +306,147 @@ func TestExternCIsNotAScope(t *testing.T) {
 	}
 	if entity.Type != ast.TypeFunction {
 		t.Errorf("c_entry has type %q, want function — extern \"C\" is not a scope", entity.Type)
+	}
+}
+
+// parseAll parses several files written into one root, as a watch path would.
+func parseAll(t *testing.T, files map[string]string) []*ast.ParseResult {
+	t.Helper()
+	root := t.TempDir()
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic order for the test itself
+	p := NewParser("acme", "proj", root)
+	var out []*ast.ParseResult
+	for _, name := range names {
+		path := writeFile(t, root, name, files[name])
+		res, err := p.ParseFile(context.Background(), path)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		out = append(out, res)
+	}
+	return out
+}
+
+func extendsOf(results []*ast.ParseResult, class string) []string {
+	for _, res := range results {
+		for _, e := range res.Entities {
+			if e.Name == class && e.Type == ast.TypeClass {
+				return e.Extends
+			}
+		}
+	}
+	return nil
+}
+
+// TestResolveTypeRefs_CrossFileBaseClass is the case that matters: 85% of
+// Meshtastic's inheritance references name a base defined in another file. C++
+// cannot predict that file from the name, so resolution runs over the whole
+// parsed set.
+func TestResolveTypeRefs_CrossFileBaseClass(t *testing.T) {
+	results := parseAll(t, map[string]string{
+		"base.h":    "class GpioUnaryTransformer { public: int x; };",
+		"derived.h": "class GpioNotTransformer : public GpioUnaryTransformer { };",
+	})
+
+	before := extendsOf(results, "GpioNotTransformer")
+	if len(before) != 1 || !strings.HasPrefix(before[0], UnresolvedPrefix) {
+		t.Fatalf("before resolution Extends = %v, want one %q entry", before, UnresolvedPrefix)
+	}
+
+	ResolveTypeRefs(results)
+
+	got := extendsOf(results, "GpioNotTransformer")
+	if len(got) != 1 {
+		t.Fatalf("after resolution Extends = %v, want exactly one entry", got)
+	}
+	if strings.HasPrefix(got[0], UnresolvedPrefix) {
+		t.Errorf("base class was left unresolved: %s", got[0])
+	}
+	want := ""
+	for _, res := range results {
+		for _, e := range res.Entities {
+			if e.Name == "GpioUnaryTransformer" && e.Type == ast.TypeClass {
+				want = e.ID
+			}
+		}
+	}
+	if got[0] != want {
+		t.Errorf("Extends = %q, want the base class entity ID %q", got[0], want)
+	}
+}
+
+// TestResolveTypeRefs_AmbiguousNameIsDropped is the honesty rule. 3% of class
+// names in Meshtastic are defined in more than one file; picking one would
+// invent an inheritance edge no compiler agrees with, and code_impact would
+// report a dependent that does not exist.
+func TestResolveTypeRefs_AmbiguousNameIsDropped(t *testing.T) {
+	results := parseAll(t, map[string]string{
+		"a.h": "class MockRouter { public: int a; };",
+		"b.h": "class MockRouter { public: int b; };",
+		"c.h": "class RealRouter : public MockRouter { };",
+	})
+
+	ResolveTypeRefs(results)
+
+	if got := extendsOf(results, "RealRouter"); len(got) != 0 {
+		t.Errorf("ambiguous base resolved to %v; it must be dropped rather than guessed", got)
+	}
+}
+
+// TestResolveTypeRefs_UnknownBaseIsDropped covers a base outside the corpus —
+// an SDK or stdlib type. No entity exists, so no edge should.
+func TestResolveTypeRefs_UnknownBaseIsDropped(t *testing.T) {
+	results := parseAll(t, map[string]string{
+		"only.h": "class Radio : public ArduinoThing { };",
+	})
+	ResolveTypeRefs(results)
+	if got := extendsOf(results, "Radio"); len(got) != 0 {
+		t.Errorf("base outside the corpus resolved to %v; want dropped", got)
+	}
+}
+
+// TestResolveTypeRefs_IsIdempotent guards the incremental path: a single-file
+// re-parse re-runs resolution over results that are already resolved.
+func TestResolveTypeRefs_IsIdempotent(t *testing.T) {
+	results := parseAll(t, map[string]string{
+		"base.h":    "class Base { public: int x; };",
+		"derived.h": "class Derived : public Base { };",
+	})
+	ResolveTypeRefs(results)
+	once := extendsOf(results, "Derived")
+	ResolveTypeRefs(results)
+	twice := extendsOf(results, "Derived")
+
+	if len(once) != 1 || len(twice) != 1 || once[0] != twice[0] {
+		t.Errorf("resolution is not idempotent: %v then %v", once, twice)
+	}
+}
+
+// TestResolveTypeRefs_QualifiedAndTemplatedBases checks the name normalisation,
+// since real C++ writes `public meshtastic::Base` and `public Buffer<int>`.
+func TestResolveTypeRefs_QualifiedAndTemplatedBases(t *testing.T) {
+	results := parseAll(t, map[string]string{
+		"base.h": "namespace meshtastic { class Base { public: int x; }; }",
+		"d.h":    "class Derived : public meshtastic::Base { };",
+	})
+	ResolveTypeRefs(results)
+	if got := extendsOf(results, "Derived"); len(got) != 1 || strings.HasPrefix(got[0], UnresolvedPrefix) {
+		t.Errorf("namespace-qualified base did not resolve: %v", got)
+	}
+}
+
+// TestResolveTypeRefs_SelfReferenceIsDropped guards against a class appearing to
+// derive from itself, which would make impact walks cyclic.
+func TestResolveTypeRefs_SelfReferenceIsDropped(t *testing.T) {
+	results := parseAll(t, map[string]string{
+		"s.h": "class Node : public Node { };",
+	})
+	ResolveTypeRefs(results)
+	if got := extendsOf(results, "Node"); len(got) != 0 {
+		t.Errorf("self-inheritance resolved to %v; want dropped", got)
 	}
 }

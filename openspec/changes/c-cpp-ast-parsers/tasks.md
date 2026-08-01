@@ -214,5 +214,12 @@ knowing before anyone runs the A/B on a corpus this size.
 
 - [ ] 9.1 Rust, C#, and other unparsed languages.
 - [ ] 9.2 A preprocessor, include-path resolution, or build-system awareness.
-- [ ] 9.3 C/C++ call-graph completeness beyond what the existing resolvers give.
+- [x] 9.3 ~~C/C++ call-graph completeness beyond what the existing resolvers give.~~ **Narrowed
+      mid-change after a challenge to the scoping.** Call edges remain out of scope — and are out
+      for Java and TypeScript too, which is the bigger finding. But **C++ inheritance edges are now
+      IN scope and implemented**: `cpp.ResolveTypeRefs` resolves base classes over the fully parsed
+      watch path, **350 of 393 (89%)** on Meshtastic, dropping ambiguous and out-of-corpus names
+      rather than guessing. The original non-goal was a rationalisation — `Extends` was already
+      extracted and only the ID construction was missing.
+      Landscape recorded in `docs/design/code-edges-by-language.md`.
 - [ ] 9.4 Re-running the model A/B — downstream of this landing.

@@ -54,11 +54,20 @@ same `GetLanguage()` the Java and Python parsers already use. No new dependency,
 - **A preprocessor.** `#include` expansion, macro expansion, and conditional compilation are not
   performed. A header is parsed as written. This bounds what call- and reference-edge resolution can
   honestly claim for C/C++ and must be stated rather than discovered later.
-- **C/C++ call-graph and cross-file reference resolution** beyond what falls out of the existing
-  `code-call-graph` and `code-reference-resolution` machinery. C has no module system to resolve
-  against, and doing it properly needs include-path knowledge this change explicitly does not build.
-  If the existing resolvers cannot resolve a C/C++ reference, the requirement that an unresolvable
-  reference **never produces a wrong edge** governs.
+- **C/C++ call-graph edges.** Resolving a call site needs to know what the identifier refers to,
+  which needs macro expansion and include paths — neither of which this change builds. Note this is
+  not a C/C++ peculiarity: **Java and TypeScript emit no call edges either**, so `code_impact`
+  answers from type hierarchy alone for four of seven languages. Tracked as the top item in
+  [`docs/design/code-edges-by-language.md`](../../../docs/design/code-edges-by-language.md).
+
+  **Corrected mid-change.** This non-goal originally covered *all* C/C++ edges, including
+  inheritance, justified by the include-path argument. That was too wide: `Extends` was already
+  being extracted, every other language resolves hierarchy edges, and C++ class names turn out to be
+  nearly unique in practice (3% collide), so an index over the parsed set resolves 89% without
+  guessing. Inheritance edges are therefore **in scope and implemented**; only call edges remain out.
+
+- **C/C++ `References`** — field, parameter, and return type usage. Java and Go answer
+  "what uses this type?"; C++ does not yet. Recorded as debt rather than silently absent.
 - **Build-system awareness** (CMake, PlatformIO, Make). Not needed to extract symbols.
 - **Changing the registry's public shape** beyond what determinism requires.
 - **Re-running the retrieval scorecard or the model A/B.** Both are downstream of this landing.

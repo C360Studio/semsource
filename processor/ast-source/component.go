@@ -267,6 +267,18 @@ func (c *Component) Start(ctx context.Context) error {
 			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
 		}
 
+		// Resolve cross-file type references now that the whole watch path is
+		// parsed. Languages whose names map deterministically onto paths (Go,
+		// Java, Python) resolve inside the parser; C++ cannot, because nothing
+		// ties `class Foo` to a file without a preprocessor and include paths.
+		// Doing it here — over the complete result set — keeps it deterministic
+		// and independent of walk order.
+		for _, parser := range pw.parsers {
+			if r, ok := parser.(typeRefResolver); ok {
+				r.ResolveTypeRefs(results)
+			}
+		}
+
 		// Publish repo and folder hierarchy entities before file/symbol entities.
 		// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
 		c.publishHierarchy(ctx, results, pw.config.Org, pw.scopedSystem)

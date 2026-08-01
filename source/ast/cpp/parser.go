@@ -298,6 +298,85 @@ func callableName(node *sitter.Node, content []byte) (name string, scope []strin
 	return declaratorName(node, content), nil
 }
 
+// UnresolvedPrefix marks a base-class reference that is still a NAME rather than
+// an entity ID. C++ has no package-to-path convention, so unlike Go, Java, and
+// Python a parser cannot predict where `class Foo` is defined from the name
+// alone — the answer depends on which header was included, which needs a
+// preprocessor and include paths. Resolution therefore happens after the whole
+// watch path is parsed, in ResolveTypeRefs, where every definition is known.
+//
+// The marker makes the intermediate state self-describing: an edge that never
+// gets resolved dangles as "unresolved:Base" rather than masquerading as a
+// malformed entity ID, mirroring the "external:" convention the Java parser uses
+// for references it cannot place.
+const UnresolvedPrefix = "unresolved:"
+
+// ResolveTypeRefs rewrites unresolved base-class references into entity IDs,
+// using every class and struct definition found across the parsed set.
+//
+// It is deterministic and order-independent: the index is built from the
+// complete result set before any rewriting happens, so the same tree always
+// produces the same edges regardless of walk order.
+//
+// A name that matches more than one definition is DROPPED rather than guessed.
+// Measured on Meshtastic, 3% of class names are defined in more than one file;
+// picking one would invent an inheritance edge that does not exist, and a wrong
+// edge is worse than a missing one — code_impact would report a dependent that
+// no compiler agrees with.
+func ResolveTypeRefs(results []*ast.ParseResult) {
+	byName := map[string][]string{}
+	for _, res := range results {
+		if res == nil {
+			continue
+		}
+		for _, e := range res.Entities {
+			if e.Type == ast.TypeClass || e.Type == ast.TypeStruct {
+				byName[e.Name] = append(byName[e.Name], e.ID)
+			}
+		}
+	}
+
+	for _, res := range results {
+		if res == nil {
+			continue
+		}
+		for _, e := range res.Entities {
+			if len(e.Extends) == 0 {
+				continue
+			}
+			resolved := e.Extends[:0]
+			for _, ref := range e.Extends {
+				name, ok := strings.CutPrefix(ref, UnresolvedPrefix)
+				if !ok {
+					resolved = append(resolved, ref) // already an ID; idempotent
+					continue
+				}
+				ids := byName[baseName(name)]
+				if len(ids) == 1 && ids[0] != e.ID {
+					resolved = append(resolved, ids[0])
+				}
+				// zero matches, or ambiguous: drop rather than emit a wrong edge
+			}
+			e.Extends = resolved
+		}
+	}
+}
+
+// baseName strips namespace qualification and template arguments so
+// "meshtastic::Buffer<int>" indexes as "Buffer". Both are dropped rather than
+// matched on, because a qualified name cannot be checked without knowing which
+// namespaces are in scope, and a template instantiation has no separate
+// definition to point at.
+func baseName(s string) string {
+	if i := strings.Index(s, "<"); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.LastIndex(s, "::"); i >= 0 {
+		s = s[i+2:]
+	}
+	return strings.TrimSpace(s)
+}
+
 // baseClasses lists the types a class derives from, for the extends edge.
 func baseClasses(node *sitter.Node, content []byte) []string {
 	var out []string
@@ -309,7 +388,7 @@ func baseClasses(node *sitter.Node, content []byte) []string {
 		for j := 0; j < int(child.NamedChildCount()); j++ {
 			base := child.NamedChild(j)
 			if base.Type() == "type_identifier" || base.Type() == "qualified_identifier" {
-				out = append(out, base.Content(content))
+				out = append(out, UnresolvedPrefix+base.Content(content))
 			}
 		}
 	}
