@@ -80,6 +80,7 @@ an agent point SemSource at new sources at runtime; `source_status` is the readi
 | `code_search` | Semantic / natural-language search over code (*"where is the retry-with-backoff logic"*). | Semantic. Reliable once `embedding.ready`. |
 | `code_changes` | See what changed between two versions of a source — added/removed/changed symbols with before/after bodies. Args: `project`, `from`, `to`. | Structural. A rename shows as remove + add. |
 | `doc_context` | Get the intended design from prose — READMEs, ADRs, docs — not just the code. | Structural over the doc graph. |
+| `graph_summary` | See what is in the graph — entity-type counts with example IDs plus the predicate schema. | Substrate graph query, not fusion. Works at every tier. |
 | `graph_search` | Ask a corpus-wide thematic question across **all** entity types (*"how does readiness gating work"*). | Substrate graph query. Every result carries a `retrieval` block saying how far the answer escalated — read it before treating hits as community evidence. |
 | `source_status` | Check readiness: ingest phase, per-source counts, `index` (structural) + `embedding` (semantic). | Poll this before trusting a miss. |
 | `add_source` | Register a new source (repo/git/docs/config/url) to index at runtime. | Path sources must be under an allowlisted root. |

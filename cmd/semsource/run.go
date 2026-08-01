@@ -721,6 +721,7 @@ func graphQueryInputPorts() []map[string]any {
 		{"name": "global_search", "type": "nats-request", "subject": "graph.query.globalSearch"},
 		{"name": "query_summary", "type": "nats-request", "subject": "graph.query.summary"},
 		{"name": "query_search_graph", "type": "nats-request", "subject": "graph.query.searchGraph"},
+		{"name": "query_by_name", "type": "nats-request", "subject": "graph.query.byName"},
 	}
 }
 

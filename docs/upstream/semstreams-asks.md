@@ -802,6 +802,7 @@ that happens to work but is inference over a signal the substrate already has. W
 lands, SemSource prefers it and drops the proxy.
 
 **Surfaced by:** semsource `expose-graphrag-on-mcp`, 2026-07-31, against `v1.0.0-beta.159`.
+**Filed:** [semstreams#819](https://github.com/C360Studio/semstreams/issues/819).
 
 ### `graph-clustering` publishes no `GRAPH_STATUS` readiness envelope
 
@@ -824,3 +825,35 @@ SemSource cannot answer that question truthfully from any substrate signal. This
 precondition for that follow-up, not a nice-to-have.
 
 **Surfaced by:** semsource `expose-graphrag-on-mcp`, 2026-07-31, against `v1.0.0-beta.159`.
+**Filed:** [semstreams#820](https://github.com/C360Studio/semstreams/issues/820) — blocks the deferred `community_context` MCP tool.
+
+## Subject ownership (fix-graph-query-summary-collision)
+
+### `graph-query`'s request-subject list is unexported, so a consumer cannot check for collisions
+
+`setupQueryHandlers` (`processor/graph-query/query.go:30-50`) registers the component's request
+handlers from an unexported literal slice. `InputPorts()` does not substitute for it: it reflects the
+*configured* ports, and in a SemSource deployment that configuration is supplied by SemSource itself.
+
+A consumer that composes graph-query into its own process therefore has no way to ask "which subjects
+does this component answer?" — and cannot detect that one of its own components subscribes to the
+same subject.
+
+That is not hypothetical. SemSource's `source-manifest` subscribed to `graph.query.summary`
+alongside graph-query for an extended period. Both handlers received every request and both replied;
+the requester kept whichever arrived first and discarded the other, and the two payloads
+(`SummaryPayload` vs `graph.SummaryData`) are entirely different shapes. It survived a fully green
+test suite, because the only test touching the subject started graph-query in isolation.
+
+**Ask:** export the request-subject list — a package-level `QuerySubjects() []string`, or a method on
+the component. It exists already; it is simply not reachable.
+
+**Consumer impact.** SemSource has shipped a subject-ownership gate, but it can only compare against
+its own in-repo *declaration* of the substrate surface. A semstreams release that adds a subject a
+consumer already claims will not fail that gate until the declaration is updated by hand. With an
+exported list the gate becomes exact, and a version bump surfaces the collision at CI time rather
+than in production as a nondeterministic reply.
+
+**Surfaced by:** semsource `fix-graph-query-summary-collision`, 2026-07-31, against
+`v1.0.0-beta.159`.
+**Filed:** [semstreams#822](https://github.com/C360Studio/semstreams/issues/822).

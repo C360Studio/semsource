@@ -54,6 +54,20 @@ func TestIntegration_QuerySubjects(t *testing.T) {
 		t.Fatalf("unexpected graph.query.sources response: %+v", manifest)
 	}
 
+	// The summary moved off graph.query.summary, which the substrate's
+	// graph-query owns and answers with a different shape. Requesting the
+	// SemSource subject by its constant pins the move: if the constant ever
+	// reverts, this asserts against a subject two handlers answer and the
+	// payload becomes a coin flip.
+	var summary SummaryPayload
+	requestJSON(t, ctx, tc.Client, summaryQuerySubject, &summary)
+	if summaryQuerySubject != "graph.query.sourceSummary" {
+		t.Fatalf("source-manifest summary subject regressed to %q — graph.query.summary is the substrate's", summaryQuerySubject)
+	}
+	if summary.Namespace != "acme" || summary.EntityIDFormat == "" {
+		t.Fatalf("unexpected %s response: %+v", summaryQuerySubject, summary)
+	}
+
 	var predicates PredicateSchemaPayload
 	requestJSON(t, ctx, tc.Client, predicatesQuerySubject, &predicates)
 	if len(predicates.Sources) != 1 || predicates.Sources[0].SourceType != "ast" {

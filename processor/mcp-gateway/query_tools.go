@@ -15,6 +15,10 @@ type QueryInput struct {
 	Query string `json:"query" jsonschema:"the query — a symbol name (e.g. registerProvidedStores) for context/impact, or a natural-language phrase for search"`
 }
 
+// GraphSummaryInput is empty: graph_summary takes no arguments. The substrate
+// applies its own sample-limit and predicate defaults on an empty request body.
+type GraphSummaryInput struct{}
+
 // GraphSearchInput is the graph_search argument: a natural-language question
 // about the corpus as a whole, not a symbol name.
 type GraphSearchInput struct {
@@ -70,6 +74,26 @@ func (c *Component) codeSearch(ctx context.Context, _ *mcp.CallToolRequest, in Q
 // query — the intended design, not just the code.
 func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in QueryInput) (*mcp.CallToolResult, any, error) {
 	return c.fusionQuery(ctx, "docs.v1.context", in.Query)
+}
+
+// graphSummary returns the substrate's graph overview: entity-type counts with
+// examples plus predicate summary data. It depends on no optional capability —
+// the subject is a discovery resolver over prefix + predicate-list queries — so
+// it answers identically at every tier.
+//
+// Pure passthrough, deliberately: there is no retrieval path here to disclose,
+// and attaching a disclosure would imply a choice of path that was never made.
+//
+// This routes to graph.query.summary, which SemSource's own source-manifest used
+// to subscribe to as well. That collision is why this tool was withdrawn from
+// expose-graphrag-on-mcp; source-manifest has since moved to
+// graph.query.sourceSummary and the subject now has exactly one handler.
+func (c *Component) graphSummary(ctx context.Context, _ *mcp.CallToolRequest, _ GraphSummaryInput) (*mcp.CallToolResult, any, error) {
+	resp, err := c.request(ctx, "graph.query.summary", nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("graph summary failed: %w", err)
+	}
+	return textResult(resp), nil, nil
 }
 
 // graphSearch answers a corpus-wide thematic question. It routes to

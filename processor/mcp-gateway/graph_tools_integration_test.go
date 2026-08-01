@@ -92,3 +92,69 @@ func TestIntegration_GraphSearchDisclosesAndPassesThrough(t *testing.T) {
 		t.Errorf("substrate payload not verbatim:\n got %s\nwant %s", out.Result, substrateBody)
 	}
 }
+
+// TestIntegration_GraphSummaryReturnsTheSubstrateShape asserts the SHAPE, not
+// merely a non-error result — deliberately.
+//
+// graph.query.summary was contested: SemSource's source-manifest subscribed to
+// it alongside the substrate's graph-query, and the two return entirely
+// different payloads. A "did it error?" assertion passes under either handler,
+// which is precisely why the collision survived a full green suite. Asserting
+// the substrate's entity-type/predicate shape means a reintroduced competing
+// handler fails here, because source-manifest's payload decodes to an empty
+// SummaryData.
+func TestIntegration_GraphSummaryReturnsTheSubstrateShape(t *testing.T) {
+	ctx := context.Background()
+	tc := natsclient.NewTestClient(t)
+
+	// The substrate's shape: entity-type aggregation + predicate counts.
+	const substrateBody = `{"total_entities":6,"entity_types":[{"type":"function","count":2,"examples":["acme.semsource.golang.x.function.Foo"]}],"predicates":[{"predicate":"code.artifact.path","entity_count":4}]}`
+	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.summary",
+		func(_ context.Context, data []byte) ([]byte, error) {
+			// An empty body is the contract: the substrate applies its defaults.
+			if len(data) != 0 {
+				t.Errorf("expected an empty request body, got %s", data)
+			}
+			return []byte(substrateBody), nil
+		})
+	if err != nil {
+		t.Fatalf("subscribe stub: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	cs := connect(t, graphToolComponent(t, tc.Client))
+	res := callTool(t, cs, "graph_summary", map[string]any{})
+	if res.IsError {
+		t.Fatalf("graph_summary returned a tool error: %+v", res)
+	}
+
+	got := res.Content[0].(*mcp.TextContent).Text
+	if got != substrateBody {
+		t.Errorf("graph_summary is not a verbatim passthrough:\n got %s\nwant %s", got, substrateBody)
+	}
+
+	// Shape assertion: this is what a competing handler's payload would fail.
+	var summary struct {
+		EntityTypes []struct {
+			Type  string `json:"type"`
+			Count int    `json:"count"`
+		} `json:"entity_types"`
+		Predicates []struct {
+			Predicate string `json:"predicate"`
+		} `json:"predicates"`
+	}
+	if err := json.Unmarshal([]byte(got), &summary); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if len(summary.EntityTypes) == 0 || summary.EntityTypes[0].Type == "" {
+		t.Errorf("no substrate entity-type summary — did a different handler answer? %s", got)
+	}
+	if len(summary.Predicates) == 0 || summary.Predicates[0].Predicate == "" {
+		t.Errorf("no substrate predicate summary — did a different handler answer? %s", got)
+	}
+
+	// A disclosure block here would imply a retrieval path that was never chosen.
+	if strings.Contains(got, `"retrieval"`) {
+		t.Errorf("graph_summary must not carry a retrieval disclosure: %s", got)
+	}
+}

@@ -402,3 +402,9 @@ func (c *Component) Health() component.HealthStatus {
 func (c *Component) DataFlow() component.FlowMetrics {
 	return component.FlowMetrics{}
 }
+
+// RequestSubjects returns every NATS request/reply subject this component
+// serves, for the subject-ownership guard. See sourcemanifest.RequestSubjects.
+func RequestSubjects() []string {
+	return []string{versionDiffSubject}
+}

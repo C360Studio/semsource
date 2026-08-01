@@ -109,11 +109,15 @@ func (c *Component) buildServer() *mcp.Server {
 		Description: "What changed between two versions of a source: added / removed / changed / unchanged symbols (counts), with verbatim before/after bodies for changed symbols. Args: project, from, to (versions). A renamed symbol shows as a removed + an added, not a single change.",
 	}, c.codeChanges)
 
-	// Substrate graph-query tool — a second family (ADR-0004 revision). NOT
-	// fusion-backed: it carries the substrate's own payload and no
-	// contract_version. Ungated, because graph.query.searchGraph does not need
-	// clustering; what varies by tier is how far the answer escalates, which the
-	// result discloses rather than hiding behind an empty result.
+	// Substrate graph-query tools — a second family (ADR-0004 revision). NOT
+	// fusion-backed: they carry the substrate's own payload and no
+	// contract_version. Neither is gated, because neither routed subject needs
+	// clustering; what varies by tier is how far a graph_search answer escalates,
+	// which its result discloses rather than hiding behind an empty result.
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "graph_summary",
+		Description: "What is in this graph: entity-type counts with example IDs plus the predicate schema. A substrate graph query, not a fusion answer. Use it to orient before querying — it answers 'what kinds of things are indexed here', which no code/doc tool answers. Counts reflect what is indexed at call time; check source_status for seed progress.",
+	}, c.graphSummary)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "graph_search",
 		Description: "Corpus-wide thematic search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Every result carries a `retrieval` block disclosing how far the answer escalated: entity hits only, community-backed summaries, or an LLM-synthesized answer. A non-community answer is a similarity hit list, not thematic reasoning — read the disclosure before treating results as community evidence. Natural-language query understanding depends on deployment configuration and is not guaranteed.",
