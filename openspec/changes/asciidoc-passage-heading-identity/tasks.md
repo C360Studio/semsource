@@ -47,10 +47,18 @@
 - [x] 5.1 `gofmt`, `go vet`, `revive` (warnings fail, pinned v1.15.0), `go test ./...`,
       `go test -tags=integration ./...` green.
 - [x] 5.2 `openspec validate asciidoc-passage-heading-identity --strict` green.
-- [ ] 5.3 Boot a real stack over an AsciiDoc corpus and confirm through MCP that passages carry
-      section titles. The offline measurement in 4.1 covers the splitter on the real corpus; this
-      remains open because it exercises entity titles and retrieval end to end, which the offline
-      harness does not.
+- [x] 5.3 Booted a tier-1 compose stack over 173 `.adoc` files of the real OGC Connected Systems
+      API spec (868 entities) and queried through MCP. Confirmed end to end:
+      - Section ancestry reaches passage identity — `clause_0_front_material § Abstract`, and
+        multi-level `clause_13_requirements_class_sampling_features § Requirements Class "Sampling
+        Features" § Dynamic properties`.
+      - A document title from `= ` is extracted rather than falling back to the filename stem —
+        `Standard template in Metanorma`.
+      - Passages above the first heading still name themselves positionally
+        (`clause_0_front_material § passage 1`), the documented headingless behavior.
+      Note `graph_search` labels these as entity-ID instance segments rather than titles: those
+      labels come from the substrate's digest fallback, not from passage identity, and are unrelated
+      to this change.
 
 ## 6. Follow-up (not this change)
 
