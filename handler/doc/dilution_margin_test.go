@@ -404,7 +404,7 @@ func splitFile(t *testing.T, path string) []doc.Passage {
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	return doc.SplitPassagesBounded(content, boundCeiling, boundFloor, boundHardMax)
+	return doc.SplitPassagesBounded(content, boundCeiling, boundFloor, boundHardMax, false)
 }
 
 func firstLine(s string) string {

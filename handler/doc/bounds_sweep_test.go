@@ -44,7 +44,7 @@ func TestBoundsSweep(t *testing.T) {
 	for _, c := range candidates {
 		var sizes []int
 		for _, d := range docs {
-			for _, p := range doc.SplitPassagesBounded(d.content, c.ceiling, c.floor, 6000) {
+			for _, p := range doc.SplitPassagesBounded(d.content, c.ceiling, c.floor, 6000, false) {
 				sizes = append(sizes, p.End-p.Start)
 			}
 		}
@@ -115,7 +115,7 @@ func separates(docs []corpusDoc, rel string, c struct{ ceiling, floor int }, goo
 			continue
 		}
 		var goodAt, badAt = -1, -1
-		for _, p := range doc.SplitPassagesBounded(d.content, c.ceiling, c.floor, 6000) {
+		for _, p := range doc.SplitPassagesBounded(d.content, c.ceiling, c.floor, 6000, false) {
 			if goodAt < 0 && strings.Contains(p.Body, good) {
 				goodAt = p.Ordinal
 			}
