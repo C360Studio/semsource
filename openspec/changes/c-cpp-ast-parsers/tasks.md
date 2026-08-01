@@ -207,8 +207,22 @@ knowing before anyone runs the A/B on a corpus this size.
 - [x] 8.1 `gofmt`, `go vet`, `revive` (warnings fail, pinned v1.15.0), `go test ./...`,
       `go test -tags=integration ./...` green (integration run with `-race`).
 - [x] 8.2 `openspec validate c-cpp-ast-parsers --strict` green.
-- [ ] 8.3 The retrieval scorecard is unchanged — it runs on a Go/markdown corpus, so a moved score
-      would mean this change altered something it should not have touched.
+- [x] 8.3 The retrieval scorecard is unchanged — it runs on a Go/markdown corpus, so a moved score
+      would mean this change altered something it should not have touched. **22/22, and identical
+      beyond the total.** Run on the fixed baseline corpus (`d554bcc`, reproduced exactly at
+      206 md / 336 go, **zero C/C++ files**) so code changes are isolated from corpus drift, with
+      questions.json **v3** — the same version as the baseline, per the comparability rule.
+
+      | | baseline `headingpath-fixed-corpus` | this branch `ccpp-fixed-corpus` |
+      | --- | --- | --- |
+      | score | 22/22 | **22/22** |
+      | entities | 5,623 | **5,623** |
+      | per-question verdicts | — | **all 22 identical** |
+      | node-count drift | — | **0 questions moved** |
+
+      Equal totals can hide two offsetting changes, so the comparison is per question: every verdict
+      matched and no answer returned a different number of nodes. Gates run first —
+      `test-matcher.sh` green and `check-discrimination.py` ok on both discrimination questions.
 
 ## 9. Not this change
 
