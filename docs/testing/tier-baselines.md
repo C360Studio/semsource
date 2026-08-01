@@ -126,6 +126,98 @@ tier 2.** Do not present tier 2 as the quality tier until clustering granularity
 is addressed. The `qwen3-0.6b` model size is a plausible contributor to summary
 quality, but the 82% cluster is a clustering problem no model size fixes.
 
+## Clustering edge synthesis, measured on a multi-repo corpus
+
+The 82% cluster above was measured on a **single repo**, where every entity shares one `system`
+segment. That made system-peer edge synthesis degenerate by construction, so the obvious question
+was whether a multi-repo graph — where `system` actually varies — behaves differently. It does not
+behave *better*; it fails a different way.
+
+### The corpus
+
+Three repos, one source root each, so `system` varies. osh-core is scoped to `sensorhub-core` +
+README, matching the single-repo baseline above, so the added repos are the only new variable.
+
+| repo | contributes | entities |
+| --- | --- | --- |
+| `opensensorhub/osh-core` | 499 `.java`, 8 `.md` | 8,725 (68%) |
+| `opengeospatial/ogcapi-connected-systems` | 798 `.adoc`, 19 `.md` | 2,994 (23%) |
+| `meshtastic/firmware` | 40 `.py`, 37 `.md` | 981 (8%) |
+| | | **12,798 total** |
+
+**Parser-coverage skew, stated plainly:** Meshtastic is a C/C++ codebase and we parse neither, so
+its **1,299 `.c/.cpp/.h` files produce zero entities**. This is a *multi-system* corpus, not a
+balanced polyglot one — 68% Java symbols, 23% AsciiDoc passages, 8% incidental. It answers the
+question about the `system` segment; it does not establish anything about C/C++ retrieval.
+
+A second wrinkle: 21 systems appear, not 3. The extra 18 (52 entities at most, ~0.6% combined) come
+from source roots resolving to a nested directory base name. So `system` is not exactly `repo` even
+when configured one root per repo.
+
+### The result — one blob per repo
+
+Level 0 of the community hierarchy, one variable changed per run, entity count and community count
+both stable before reading:
+
+| `include_system_peers` | communities | largest community | single-system communities |
+| --- | --- | --- | --- |
+| `true` (substrate default), max 15 | 14 | **8,823 — 66.1%** | 13 of 14 |
+| `true`, `max_system_peers: 3` | 22 | 6,067 — 47.4% | 21 of 22 |
+| **`false`** (what tier 2 now ships) | 19 | 6,069 — 47.4% | 14 of 19 |
+
+With the default, **every one of osh-core's 8,725 entities lands in one community, and every one of
+ogcapi's 2,994 in another.** Multi-repo does not rescue the default — it partitions the collapse
+along repo lines, which a `system` filter would give without running label propagation at all.
+
+Capping peers to 3 recovers the entire benefit of turning them off, so the harm is in the *number*
+of synthesized peers rather than in the concept.
+
+### Two honest limits on this result
+
+- **It does not reproduce the single-repo "largest 93".** There, turning peers off left almost no
+  edges. Here the remaining 6,069-entity community is held together by **sibling** synthesis
+  (same 5-part type prefix — every `…java.osh-core.class.*`), which both arms leave at its default.
+  Off is an improvement and the right default; it is not a fix for clustering granularity.
+- **Summary quality is untouched by any of this**
+  ([semstreams#829](https://github.com/C360Studio/semstreams/issues/829)). Better clusters are not
+  better answers.
+
+### It also hits a hard ceiling — [semstreams#837](https://github.com/C360Studio/semstreams/issues/837)
+
+On stock NATS (1 MiB `max_payload`) the **default configuration cannot complete a detection pass on
+this corpus**: LPA builds a community whose serialized member list exceeds the limit,
+`SaveCommunity` fails, and the whole pass is discarded — 2 communities holding 654 entities (4.4%),
+with the component still reporting healthy.
+
+Community records serialize at ~148 bytes/member, so ~7,070 members is the ceiling. Worth knowing
+even with peers off: the largest record in that arm is 886,692 B — **84.6% of the 1 MiB limit** at
+only 12,798 entities. Measurements above therefore ran with `max_payload: 33554432` on both arms.
+
+### Reproducing it
+
+Build the corpus with one directory per repo, point one source root at each (that is what makes
+`system` vary), and run tier 2 over it:
+
+```bash
+mkdir -p /tmp/multi && cd /tmp/multi
+git clone --depth 1 https://github.com/opensensorhub/osh-core            # keep sensorhub-core + README
+git clone --depth 1 https://github.com/meshtastic/firmware               meshtastic-firmware
+git clone --depth 1 https://github.com/opengeospatial/ogcapi-connected-systems
+rm -rf ogcapi-connected-systems/swagger-ui ogcapi-connected-systems/redoc  # vendored minified bundles
+```
+
+Then read the result:
+
+```bash
+go run ./scripts/measure-communities -nats nats://localhost:4222 -label mine
+```
+
+It prints entities per system, the size distribution for one hierarchy level, and each community's
+system mix. Two traps it exists to avoid: `COMMUNITY_INDEX` stores every level plus an
+`entity.<level>.<id>` reverse index, so reading all keys double-counts entities once per level; and
+a detection pass writes progressively, so an early read catches a partial result — wait for the key
+count to hold steady.
+
 ## What this does NOT establish
 
 Stated so the numbers are not over-read:

@@ -196,6 +196,48 @@ Two things the overlay is deliberate about:
 Treat 0.6b output as evidence the wiring works, never as evidence the answers are good — community
 summaries and NL-search quality need the 8b image.
 
+### Clustering edge synthesis — why this config turns system peers off
+
+`tier2-compose-dev.json` sets:
+
+```json
+"entity_id_edges": { "include_system_peers": false }
+```
+
+Before running label propagation, `graph-clustering` synthesizes virtual edges from entity IDs.
+Two kinds, both ON in the substrate's defaults: **siblings** (entities sharing the 5-part type
+prefix) and **system peers** (entities sharing the `{system}` segment, up to 15 each).
+
+**Whether system peers help depends on how many distinct systems your graph has, and SemSource's
+`system` segment is coarse.** It is the source root's base name, so:
+
+| Deployment shape | What `system` looks like | System peers |
+| --- | --- | --- |
+| One source root — `/workspace` under Compose, or one repo | **the same value for every entity** | Links across the whole graph; LPA collapses |
+| One root per repo | one value per repo | Groups by repo — which is not a topic |
+
+Measured both ways on a three-repo, 12,798-entity corpus (see
+[`docs/testing/tier-baselines.md`](../../docs/testing/tier-baselines.md)):
+
+| `max_system_peers` | communities | largest community |
+| --- | --- | --- |
+| 15 (substrate default) | 14 | **8,823 — 66.1%**, holding *every* osh-core entity |
+| 3 | 22 | 6,067 — 47.4% |
+| off | 19 | 6,069 — 47.4% |
+
+Capping to 3 already recovers the whole benefit, so the harm comes from the *number* of peers, not
+from the idea. Off is what ships because it is the simplest setting with that outcome and the only
+one that stays right when a deployment has a single source root.
+
+**Two things this does not claim.** Turning system peers off does not make clustering *good* — the
+largest community still holds 47% of the graph, and that residue is **sibling** synthesis, which
+this config leaves at its default. And it does not improve community *summaries*: those are weak for
+an unrelated reason ([semstreams#829](https://github.com/C360Studio/semstreams/issues/829) — the
+summarizer is never given entity content), so better clusters are not better answers.
+
+To override, set the block yourself; omitting it entirely restores the substrate defaults, and
+omission is a true no-op rather than an implicit `false`.
+
 Check the overlay's composition, image pins, and config wiring without pulling anything:
 
 ```bash
