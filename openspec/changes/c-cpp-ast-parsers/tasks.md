@@ -47,13 +47,30 @@
 
 ## 3. The C parser
 
-- [ ] 3.1 `source/ast/c` following the `source/ast/java` shape: `init()` registration, tree-sitter
-      walk, entity construction via `entityid.*`.
-- [ ] 3.2 Extract functions, structs, unions, enums, typedefs, macro definitions, and file-scope
-      variables.
-- [ ] 3.3 Qualify entity IDs by defining-file path (design — D4), and test that two files defining
-      a same-named `static` function produce two distinct IDs.
-- [ ] 3.4 Test that re-ingesting an unchanged tree produces byte-identical IDs.
+- [x] 3.1 `source/ast/c` following the `source/ast/java` shape: `init()` registration, tree-sitter
+      walk, entity construction via `entityid.*`. Registered for `.c` and `.h`. Node shapes were
+      confirmed by probing the real grammar rather than guessed.
+- [x] 3.2 Extract functions, structs, unions, enums, typedefs, macro definitions, and file-scope
+      variables. Plus three things the shape of C forced:
+      **(a) function prototypes are extracted, not just definitions** — a header-only C library
+      (MAVLink is exactly this) declares its whole API as prototypes and defines almost nothing, so
+      skipping them would index such a repo as nearly empty;
+      **(b) `typedef struct Tag {…} Alias;` yields both names** — both are usable in C source and
+      they cannot collide because the entity type is its own ID segment;
+      **(c) Doxygen comment forms** (`///`, `//!`, `/*! */`) are recognised, not just the shared
+      helper's Javadoc `/** */`. Doc comments are embedded and ranked, so leaving the dominant C
+      convention unparsed would have been a retrieval-quality loss. Unions record as `struct` —
+      there is no union entity type, and a named record is the right shape for retrieval.
+- [x] 3.3 Qualify entity IDs by defining-file path (design — D4), and test that two files defining
+      a same-named `static` function produce two distinct IDs. **No new machinery was needed** —
+      `ast.BuildScopedInstanceID` already prefixes the path slug, so D4 falls out of the existing
+      helper. Verified rather than assumed, and **mutation-verified**: removing the path prefix
+      collapses both onto `acme.semsource.c.proj.function.helper`.
+- [x] 3.4 Test that re-ingesting an unchanged tree produces byte-identical IDs. Also covered: the
+      six-part ID shape and that C claims domain `c` rather than borrowing another language's;
+      file-entity containment; both `#include` spellings; anonymous specifiers skipped rather than
+      emitted nameless; and a detached comment is **not** attributed to the next symbol (a real bug
+      this test caught — adjacency was only checked inside the line-comment run).
 
 ## 4. The C++ parser
 
