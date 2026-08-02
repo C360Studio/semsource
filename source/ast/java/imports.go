@@ -2,6 +2,7 @@ package java
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -130,7 +131,14 @@ func (p *Parser) typeRefID(name, fromRelPath string) string {
 // external:fqn); and ("", "", false) when the name is unknown (caller may assume
 // same-file). Import binding takes precedence over same-package layout.
 func (p *Parser) resolveJavaType(name, fromRelPath string) (relPath, external string, ok bool) {
-	if fqn, imported := p.importMap[name]; imported {
+	return p.resolveJavaTypeIn(name, fromRelPath, p.importMap)
+}
+
+// resolveJavaTypeIn is resolveJavaType against an explicit import map, so a name
+// written in another file (an ancestor's `extends` clause) is bound by THAT
+// file's imports rather than the imports of the file currently being parsed.
+func (p *Parser) resolveJavaTypeIn(name, fromRelPath string, importMap map[string]string) (relPath, external string, ok bool) {
+	if fqn, imported := importMap[name]; imported {
 		if rel, found := p.fqnToRelPath(fqn, fromRelPath); found {
 			return rel, "", true
 		}
@@ -158,17 +166,133 @@ func (p *Parser) resolveJavaType(name, fromRelPath string) (relPath, external st
 // path from its directory (so `src/main/java/a/B.java` in package `a` yields the
 // prefix `src/main/java/`); the FQN's dotted path is joined under that prefix,
 // with a repoRoot-relative probe as a fallback.
+//
+// A multi-module repo (Gradle/Maven) has one source root PER MODULE, so a type
+// imported from a sibling module lives under a root the referrer's own prefix
+// never reaches. Measured on OSH Core, that left 4,682 call targets marked
+// `external:` despite naming an in-repo package. Sibling roots are therefore
+// probed too — after the referrer's own root, which still wins outright, and
+// only when the FQN is found under exactly ONE of them.
 func (p *Parser) fqnToRelPath(fqn, fromRelPath string) (string, bool) {
+	// One file resolves the same FQN once per call site, and each miss costs a
+	// stat per source root. Memoized for this ParseFile only, so the filesystem
+	// is still re-read on the next parse.
+	//
+	// The key includes the REFERRER, because the first probe is relative to the
+	// referrer's own source root: an ancestor walk resolves names as written in
+	// another file, and in a repo where two modules declare the same FQN each
+	// referrer must legitimately get its own module's copy.
+	key := fqn + "\x00" + fromRelPath
+	if hit, ok := p.fqnMemo[key]; ok {
+		return hit.relPath, hit.ok
+	}
+	relPath, found, ambiguous := p.probeFQN(fqn, fromRelPath)
+	if p.fqnMemo == nil {
+		p.fqnMemo = make(map[string]fqnResult)
+	}
+	p.fqnMemo[key] = fqnResult{relPath: relPath, ok: found, ambiguous: ambiguous}
+	if ambiguous {
+		p.ambiguousFQNs[fqn] = true
+	}
+	return relPath, found
+}
+
+// fqnResult is one memoized FQN lookup. `ambiguous` distinguishes "this name is
+// in the tree more than once" from "this name is not in the tree at all" — the
+// two are both unresolved, but only the latter is genuinely external.
+type fqnResult struct {
+	relPath   string
+	ok        bool
+	ambiguous bool
+}
+
+// fqnIsAmbiguous reports whether a previously-probed FQN matched several source
+// roots. Tracked by FQN alone — independent of which file asked — because the
+// question "is this name in the tree more than once?" is a property of the tree.
+// Valid only after fqnToRelPath has been called for that FQN.
+func (p *Parser) fqnIsAmbiguous(fqn string) bool {
+	return p.ambiguousFQNs[fqn]
+}
+
+// probeFQN does the actual filesystem probing behind fqnToRelPath.
+func (p *Parser) probeFQN(fqn, fromRelPath string) (relPath string, found, ambiguous bool) {
 	fqnPath := filepath.FromSlash(strings.ReplaceAll(fqn, ".", "/")) + ".java"
 	for _, cand := range []string{
 		filepath.Join(p.sourceRootPrefix(fromRelPath), fqnPath),
 		fqnPath,
 	} {
 		if ast.FileExists(filepath.Join(p.repoRoot, cand)) {
-			return cand, true
+			return cand, true, false
 		}
 	}
-	return "", false
+	var hit string
+	matches := 0
+	for _, root := range p.siblingSourceRoots(fromRelPath) {
+		cand := filepath.Join(root, fqnPath)
+		if ast.FileExists(filepath.Join(p.repoRoot, cand)) {
+			matches++
+			hit = cand
+		}
+	}
+	if matches == 1 {
+		return hit, true, false
+	}
+	// Zero matches, or the same FQN path under several roots — the latter is
+	// ambiguous, so it stays unresolved rather than resolving to an arbitrary
+	// module, and callers must not mistake it for a third-party type.
+	return "", false, matches > 1
+}
+
+// siblingSourceRoots lists the repo's other source roots that share the
+// referrer's layout convention (e.g. every `*/src/main/java`). It is discovered
+// by bounded globbing rather than a tree walk, and memoized for the duration of
+// one ParseFile so the result cannot go stale across a watch-mode re-parse.
+// A repo with no recognised layout yields none, leaving behavior unchanged.
+func (p *Parser) siblingSourceRoots(fromRelPath string) []string {
+	if p.sourceRootsDone {
+		return p.sourceRoots
+	}
+	p.sourceRootsDone = true
+
+	layout := layoutSuffix(p.sourceRootPrefix(fromRelPath))
+	if layout == "" {
+		return nil
+	}
+	var roots []string
+	// Modules sit one or two levels below the repo root in practice
+	// (`sensorhub-core/...`, `lib-ogc/swe-common-core/...`).
+	for _, depth := range []string{"*", "*/*"} {
+		pattern := filepath.Join(p.repoRoot, filepath.FromSlash(depth+"/"+layout))
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			continue
+		}
+		for _, m := range matches {
+			if rel, relErr := filepath.Rel(p.repoRoot, m); relErr == nil {
+				roots = append(roots, rel)
+			}
+		}
+	}
+	// Sorted so resolution never depends on filesystem enumeration order.
+	sort.Strings(roots)
+	p.sourceRoots = roots
+	return roots
+}
+
+// layoutSuffix returns a glob for the build-tool layout a source root ends with,
+// or "" for a flat layout. The middle segment stays a wildcard so a referrer
+// under `src/test/java` still reaches `src/main/java` roots — the common case of
+// a test calling the code it exercises.
+func layoutSuffix(sourceRoot string) string {
+	parts := strings.Split(filepath.ToSlash(sourceRoot), "/")
+	if len(parts) < 3 {
+		return ""
+	}
+	tail := parts[len(parts)-3:]
+	if tail[0] == "src" && tail[2] == "java" {
+		return "src/*/java"
+	}
+	return ""
 }
 
 // sourceRootPrefix returns the referrer's directory with its package path suffix

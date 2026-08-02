@@ -33,6 +33,23 @@ type Parser struct {
 	pkg        string                        // current file's package (dotted)
 	importMap  map[string]string             // simpleName -> fully-qualified import
 	localKinds map[string]ast.CodeEntityType // same-file type name -> kind (D5)
+
+	// Call-resolution state (see calls.go). selfMembers/selfByScope index the file
+	// being parsed and are refreshed each ParseFile. memberCache holds other files'
+	// type indexes across the run, keyed by content hash so an edited file is
+	// re-parsed rather than served stale. classFields is the enclosing class's
+	// field types, saved and restored around nested class bodies.
+	sourceRoots     []string             // sibling module source roots (multi-module repos)
+	sourceRootsDone bool                 // discovery is lazy and once per ParseFile
+	fqnMemo         map[string]fqnResult // (FQN, referrer) -> file, this ParseFile only
+	ambiguousFQNs   map[string]bool      // FQNs found under several source roots
+
+	selfRel     string
+	selfMembers map[string][]*classMembers
+	selfByScope map[string]*classMembers
+	memberCache map[string]cachedMembers
+	classMemo   map[string]classResolution // type-name resolution, this ParseFile only
+	classFields map[string]string
 }
 
 // NewParser creates a new Java AST parser.
@@ -81,6 +98,16 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	p.pkg = packageName
 	p.importMap = extractImportMap(rootNode, content)
 	p.localKinds = extractLocalKinds(rootNode, content)
+
+	// Refresh call-resolution state (calls.go). The memo is reallocated, not
+	// reused, so an edited file is re-read rather than served from cache.
+	p.selfRel = relPath
+	p.selfMembers, p.selfByScope = p.collectFileMembers(rootNode, content)
+	p.classFields = nil
+	p.classMemo = make(map[string]classResolution)
+	p.sourceRoots, p.sourceRootsDone = nil, false
+	p.fqnMemo = make(map[string]fqnResult)
+	p.ambiguousFQNs = make(map[string]bool)
 
 	result := &ast.ParseResult{
 		Path:     relPath,
@@ -365,6 +392,13 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 	if body := node.ChildByFieldName("body"); body != nil {
 		childIDs := make([]string, 0)
 		childScope := extendScope(scope, name)
+
+		// An interface declares constants, not instance fields; scoping the table
+		// to this body keeps an enclosing class's fields out of a default
+		// method's receiver resolution.
+		prevFields := p.classFields
+		p.classFields = p.collectFieldTypes(body, content)
+		defer func() { p.classFields = prevFields }()
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
 			if child.Type() == "method_declaration" {
@@ -469,6 +503,12 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 		}
 	}
 
+	// Extract resolved call edges from the body (see calls.go). Abstract and
+	// interface methods have no body and simply contribute none.
+	if body := node.ChildByFieldName("body"); body != nil {
+		entity.Calls = p.extractCalls(body, content, p.callScopeFor(node, content, filePath, scope))
+	}
+
 	return entity
 }
 
@@ -525,6 +565,13 @@ func (p *Parser) extractFieldDeclaration(node *sitter.Node, content []byte, file
 func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity *ast.CodeEntity, filePath string, scope []string) []*ast.CodeEntity {
 	childIDs := make([]string, 0)
 	allChildEntities := make([]*ast.CodeEntity, 0)
+
+	// This class's field types back call-receiver resolution for its methods
+	// (calls.go). Saved and restored so a nested class body does not leak its
+	// fields to the enclosing class's remaining methods, or vice versa.
+	prevFields := p.classFields
+	p.classFields = p.collectFieldTypes(body, content)
+	defer func() { p.classFields = prevFields }()
 
 	for i := 0; i < int(body.NamedChildCount()); i++ {
 		child := body.NamedChild(i)
@@ -609,6 +656,10 @@ func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath 
 	// Extract parameters
 	if params := node.ChildByFieldName("parameters"); params != nil {
 		entity.Parameters = p.extractParameters(params, content, filePath)
+	}
+
+	if body := node.ChildByFieldName("body"); body != nil {
+		entity.Calls = p.extractCalls(body, content, p.callScopeFor(node, content, filePath, scope))
 	}
 
 	return entity
