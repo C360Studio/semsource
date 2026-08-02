@@ -18,19 +18,76 @@ its value is a resolvable **entity ID**; a raw name dangles and is dropped.
 | Language | Calls | Extends | Implements | Embeds | References | Returns / Params / Receiver | Resolution strategy |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: | --- |
 | **Go** | ✅ | — | — | ✅ | ✅ | ✅ | `typeNameToEntityID` — package ↔ directory is deterministic |
-| **Java** | ❌ | ✅ | ✅ | — | ✅ | ✅ | `hierarchyRefID` — package ↔ path is deterministic; `external:`/`builtin:` for the rest |
+| **Java** | ✅ | ✅ | ✅ | — | ✅ | ✅ | declared receiver types + `resolveJavaType`; ancestor walk for inherited methods |
 | **Python** | ✅ | ✅ | — | — | ✅ | ✅ | `typeNameToEntityID` — module ↔ file is deterministic |
 | **TypeScript/JS** | ❌ | ✅ | ✅ | — | ❌ | ✅ | `hierarchyRefID` via import specifiers |
 | **Svelte** | ❌ | — | — | — | ❌ | — | none — components, not a symbol graph |
 | **C++** | ❌ | ✅ | — | — | ❌ | ❌ | `ResolveTypeRefs` — **post-parse index**, see below |
 | **C** | ❌ | n/a | n/a | n/a | ❌ | ❌ | none — no inheritance to resolve |
 
-**Read the Calls column carefully.** Only Go and Python emit call edges. Java,
-TypeScript, C, and C++ do not — so for those languages `code_impact` answers from
-*type hierarchy alone*. A Java method that is called by fifty others reports the
-callers it inherits from, not the callers that invoke it. That is a much narrower
-question than the tool's name suggests, and it is the single largest gap in this
-table.
+**Read the Calls column carefully.** Go, Python, and now Java emit call edges.
+**TypeScript, C, and C++ still do not** — for those three, `code_impact` answers
+from *type hierarchy alone*: a method called by fifty others reports the callers
+it inherits from, not the callers that invoke it. That is a much narrower question
+than the tool's name suggests, and it remains the largest gap in this table.
+
+## How Java resolves calls, and how well
+
+Java needs no type inference: it *declares* types. A per-method table built from
+class fields, parameters, and locals types the receiver of `x.foo()`; the type
+resolves to a file through the same import/same-package machinery type references
+use; and an edge is emitted only once that file is confirmed to declare the
+method. When it does not, the `extends`/`implements` chain is walked to the
+nearest ancestor that does.
+
+Measured on OSH Core (`opensensorhub/osh-core`, 1,932 files, 313k LOC), where
+71,262 call sites break down as:
+
+| receiver shape | share |
+| --- | ---: |
+| typed variable (`x.foo()`) | 46.0% |
+| bare / `this.` | 19.9% |
+| chained (`a().b()`) | 17.2% |
+| identifier that is not a variable (static call) | 10.4% |
+| field access, `super.`, literals, casts | 6.5% |
+
+Result: **23,566 resolved call edges, 0 dangling**, on 54.3% of all callables.
+8,363 further callees are `external:` markers (third-party APIs), of which 157
+(1.9%) still name an in-repo package. Parse wall-clock for the tree went from
+1.46s to ~8.4s — the cost is parsing each referenced file to confirm the callee,
+which is small next to the embedding pass that dominates ingest.
+
+Verified on a live stack (`lib-ogc/swe-common-core`, 6,317 entities), where
+`code_impact` previously returned a confident empty answer:
+
+- `addToProcessorTree` → **11 callers across 10 files**, plus its own two callees.
+- `errorLocationString`, whose four calls all target `javax.xml.stream` types →
+  the `callee` relation is **absent entirely**. The fail-inert boundary holds
+  end-to-end: `external:` markers dangle and are dropped rather than fabricating
+  an in-tree edge.
+
+The parser counts 61 *declarations* calling `addToProcessorTree` where the graph
+shows 11 *entities*, and the gap is not an error — it is the overload collision in
+debt item 2 made visible. `BinaryDataParser` alone declares six `visit` overloads
+that share one entity ID, so ten files' `visit` plus one `visitRange` is exactly
+11.
+
+Everything unconfirmable emits **nothing**: chained calls, `super.`, `var`
+receivers, static imports, a receiver name declared with two different types in
+one method, a type name matching several files, and — importantly — enum and
+record members, which have no member entities at all, so naming one would dangle.
+
+### Multi-module repos
+
+Gradle and Maven give each module its own source root, and resolution originally
+probed only the referrer's own. On OSH Core's 15 source roots that left 4,682 call
+targets marked `external:` despite naming an in-repo package. Sibling roots of the
+same layout are now probed too; a name found under exactly one resolves, and a
+name found under several is **ambiguous, not external**, so it emits nothing.
+
+This repaired pre-existing hierarchy edges as well — `extends`/`implements`
+resolution on the same corpus went from **53.9% to 70.0%** (+339 edges), a defect
+that predated call edges and was only visible once something measured it.
 
 ## Why C++ resolves differently from everything else
 
@@ -76,29 +133,41 @@ driver"*. Judged against that:
 | Find a C/C++ symbol by name or description | ✅ `code_search`, `code_context` |
 | Read its signature, doc comment, location | ✅ |
 | Navigate file → symbols | ✅ containment |
-| **"What derives from this?"** (C++) | ✅ **new** — 89% of inheritance resolved |
-| **"Who calls this?"** (C++, C, Java, TS) | ❌ **no call edges emitted** |
+| **"What derives from this?"** (C++) | ✅ 89% of inheritance resolved |
+| **"Who calls this?"** (Java) | ✅ **new** — 22,976 edges on OSH Core, 0 dangling |
+| **"Who calls this?"** (C++, C, TS) | ❌ **no call edges emitted** |
 | "What derives from this?" (C) | n/a — C has no inheritance |
 
-So the honest MVP position: **structural navigation and type hierarchy work for
-C++; call-graph does not, for four of seven languages.**
+So the honest MVP position: **Java now answers "who calls this?"; C, C++, and
+TypeScript still do not.** Call-graph coverage is three of seven languages.
 
 ## Known debt, in priority order
 
-1. **Call edges for Java, TypeScript, C++, and C.** The largest gap in the table
+1. **Call edges for TypeScript, C++, and C.** Still the largest gap in the table
    and the one most likely to be mistaken for a working feature, because
    `code_impact` returns a confident empty answer rather than saying it cannot
-   answer. Go and Python already show the shape.
-2. **C++ has no `References`** (field/parameter/return type usage), so
+   answer. Go, Python, and Java now show the shape; TypeScript is closest, since
+   it has import specifiers and declared types.
+2. **Java method entity IDs collide on overloads.** 1,164 of 16,356 method
+   declarations in OSH Core (7.1%) share a `(class, name)` pair, so overloaded
+   methods already share one entity ID — the same defect PR #121 fixed for C++
+   with a parameter-type discriminator. It is *not* fixed here, deliberately:
+   adding a discriminator would require real overload resolution at every call
+   site to choose a target, which is the type inference this design excludes. A
+   call currently resolves to "some overload", the honest answer available
+   without inference. Fixing identity later must treat call edges as a consumer.
+3. **Chained calls are 17.2% of Java call sites** and need return-type
+   propagation — the single biggest remaining recall item for Java.
+4. **C++ has no `References`** (field/parameter/return type usage), so
    "what uses this type?" is unanswerable there even though Java and Go answer it.
-3. **`ResolveTypeRefs` only resolves within one watch path.** A base class in a
+5. **`ResolveTypeRefs` only resolves within one watch path.** A base class in a
    different repo of a multi-repo corpus will not resolve. Acceptable today —
    inheritance rarely crosses repos — but it is a boundary, not a guarantee.
-4. **Ambiguity is silent.** Dropped references are not counted or surfaced
-   anywhere at runtime; the 11%/3% figures above came from an offline probe. A
-   counter would make the honesty measurable in production rather than in a
-   one-off measurement.
-5. **Svelte contributes no symbol edges at all** and is listed here so that is a
+6. **Ambiguity is silent.** Dropped references are not counted or surfaced
+   anywhere at runtime; the figures above came from offline probes. A counter
+   would make the honesty measurable in production rather than in a one-off
+   measurement. This now spans Java too.
+7. **Svelte contributes no symbol edges at all** and is listed here so that is a
    recorded decision rather than an oversight.
 
 ## Keeping this page true
