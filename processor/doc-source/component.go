@@ -23,6 +23,7 @@ import (
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/seedsup"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semsource/workspace"
 )
@@ -74,6 +75,11 @@ type Component struct {
 	running   bool
 	startTime time.Time
 	mu        sync.RWMutex
+
+	// seed supervises the asynchronous initial seed (internal/seedsup): Start
+	// must return promptly or the framework's component-start barrier keeps the
+	// HTTP and metrics listeners from binding (semstreams#867).
+	seed seedsup.Supervisor
 
 	// phase is the lifecycle phase the periodic reporter publishes; atomic
 	// because the reporter goroutine samples it while Start mutates it.
@@ -212,6 +218,29 @@ func (c *Component) Start(ctx context.Context) error {
 		"org", c.config.Org,
 		"watch_enabled", c.config.WatchEnabled)
 
+	// Everything from here is unbounded — the path retry alone is ~30
+	// attempts — so it runs in a supervised goroutine and Start returns.
+	// Holding the lifecycle hook across it blocks the framework's
+	// component-start barrier, which prevents the HTTP status and metrics
+	// listeners from binding at all (semstreams#867).
+	c.markRunning()
+	c.seed.Start(ctx, c.logger, c.runSeed)
+	return nil
+}
+
+// markRunning marks the component live. Running means STARTED, not
+// seeded — `phase` is what distinguishes those.
+func (c *Component) markRunning() {
+	c.mu.Lock()
+	c.running = true
+	c.startTime = time.Now()
+	c.mu.Unlock()
+}
+
+// runSeed performs the initial ingest and everything sequenced after it.
+// It runs in its own goroutine; a failure surfaces through the source's
+// last_error and a WARN, because there is no longer a Start to fail.
+func (c *Component) runSeed(ctx context.Context) error {
 	// Retry initial ingest — paths may not exist yet if a git clone is still
 	// in progress (repo expansion pattern). We check IsPathReady rather than
 	// just os.Stat because git clone creates the directory before populating it.
@@ -246,8 +275,6 @@ func (c *Component) Start(ctx context.Context) error {
 		c.cancelFuncs = append(c.cancelFuncs, cancel)
 	}
 	// The status reporter is already running (started before the seed).
-	c.running = true
-	c.startTime = time.Now()
 	c.mu.Unlock()
 
 	return nil
@@ -539,6 +566,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal int64            `json:"publish_total,omitempty"`
 		ErrorCount   int64            `json:"error_count"`
 		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+		LastError    *seedsup.Error   `json:"last_error,omitempty"`
 		Timestamp    time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
@@ -548,6 +576,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal: c.entitiesPublished.Load(),
 		ErrorCount:   c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:   c.distinct.TypeCounts(),
+		LastError:    c.seed.LastError(),
 		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)
@@ -590,13 +619,23 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 }
 
 // Stop gracefully stops the component within the given timeout.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(timeout time.Duration) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	running := c.running
+	c.mu.Unlock()
 
-	if !c.running {
+	if !running {
 		return nil
 	}
+
+	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and
+	// the seed itself takes it, so waiting under the lock deadlocks. Draining
+	// first also keeps shutdown safe — stopping the publisher closes its
+	// buffer, and a live seed would publish into a closed one.
+	c.seed.Stop(timeout, c.logger)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.logger.Info("entity publisher stats",
 		"published", c.publisher.Published(),

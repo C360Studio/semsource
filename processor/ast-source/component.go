@@ -26,6 +26,7 @@ import (
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/seedsup"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
 	"github.com/c360studio/semsource/workspace"
@@ -90,6 +91,9 @@ type Component struct {
 	pathsUnavailable degraded.Condition
 	// lifecycleFailing: staleness marking has stopped working.
 	lifecycleFailing degraded.Condition
+
+	// seed supervises the asynchronous initial seed (internal/seedsup).
+	seed seedsup.Supervisor
 
 	// phase is the lifecycle phase the periodic reporter publishes. Held as an
 	// atomic because the reporter goroutine samples it while Start mutates it.
@@ -263,6 +267,21 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.startProgressReporting(ctx)
 
+	// Everything from here is unbounded — the path retry alone is ~30 attempts —
+	// so it runs in a supervised goroutine and Start returns. Holding the
+	// lifecycle hook across it blocks the framework's component-start barrier,
+	// which in turn prevents the HTTP status and metrics listeners from binding
+	// at all (semstreams#867): the surfaces stay dark for the whole seed, which
+	// is exactly when an operator needs them.
+	c.markRunning()
+	c.seed.Start(ctx, c.logger, c.runSeed)
+	return nil
+}
+
+// seed performs the initial index and everything sequenced after it. It runs in
+// its own goroutine; failures surface through the source's error count and a
+// WARN rather than as a Start error, because there is no longer a Start to fail.
+func (c *Component) runSeed(ctx context.Context) error {
 	// Initialize watchers with retry — paths may not exist yet if a git
 	// clone is still in progress (repo expansion pattern).
 	err := retry.Do(ctx, retry.Persistent(), func() error {
@@ -360,12 +379,20 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	c.mu.Lock()
-	c.cancelFuncs = cancels
-	c.running = true
-	c.startTime = time.Now()
+	c.cancelFuncs = append(c.cancelFuncs, cancels...)
 	c.mu.Unlock()
 
 	return nil
+}
+
+// markRunning marks the component live. "Running" means started, NOT seeded —
+// those are now genuinely different states, and `phase` is what distinguishes
+// them (ingesting vs watching).
+func (c *Component) markRunning() {
+	c.mu.Lock()
+	c.running = true
+	c.startTime = time.Now()
+	c.mu.Unlock()
 }
 
 // startWatcher starts the file system watcher for a specific path.
@@ -844,6 +871,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		ErrorCount   int64            `json:"error_count"`
 		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 		Backpressure bool             `json:"backpressure,omitempty"`
+		LastError    *seedsup.Error   `json:"last_error,omitempty"`
 		Timestamp    time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
@@ -863,6 +891,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		// failures, and no errors while being functionally stalled. Surfacing the
 		// condition is what separates "slow" from "stalled" without reading logs.
 		Backpressure: c.publisher.InBackpressure(),
+		LastError:    c.seed.LastError(),
 		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)
@@ -908,13 +937,26 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 }
 
 // Stop gracefully stops the component within the given timeout.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(timeout time.Duration) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	running := c.running
+	c.mu.Unlock()
 
-	if !c.running {
+	if !running {
 		return nil
 	}
+
+	// Cancel the seed and WAIT for it BEFORE taking the lock, for two reasons:
+	// this mutex is not reentrant and stopSeed takes it, and — the subtler one —
+	// the seed's own tail locks c.mu to register its cancel funcs, so waiting on
+	// the seed while holding the lock would deadlock against it.
+	//
+	// Draining first is also what makes shutdown safe: publisher.Stop() closes
+	// the buffer, so a seed still running would publish into a closed publisher.
+	c.seed.Stop(timeout, c.logger)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.logger.Info("entity publisher stats",
 		"published", c.publisher.Published(),

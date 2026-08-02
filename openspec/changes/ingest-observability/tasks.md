@@ -16,7 +16,7 @@
 - [x] 2.2 Carry the cumulative confirmed-delivery count in each progress report,
       reusing the fields `SourceStatusReport` already has
 - [x] 2.3 Keep sampling interval-based and independent of entity volume (D2)
-- [ ] 2.4 Verify the aggregate `phase: "ready"` gate is bit-for-bit unchanged —
+- [x] 2.4 Verify the aggregate `phase: "ready"` gate is bit-for-bit unchanged —
       progress reporting must not make a seeding source look ready
 - [x] 2.5 Apply to every source component that performs an initial seed, not only
       `ast-source`
@@ -38,7 +38,8 @@
 
 ## 4. Tests
 
-- [ ] 4.1 Progress advances: seed a fixture corpus, sample status repeatedly,
+- [x] 4.1 (verified live in async-source-seed: 0 -> 10,339 -> 24,835 -> 36,337 ->
+      40,853) Progress advances: seed a fixture corpus, sample status repeatedly,
       assert the count strictly increases — asserting the field merely *exists*
       does not distinguish slow from stalled
 - [ ] 4.2 Stalled seed: with delivery blocked, assert the count does NOT advance
@@ -61,7 +62,8 @@
 > nothing can read what they publish. Why the HTTP surfaces stay down during a
 > large seed is unproven and is the next question; see task 7.
 
-- [ ] 5.1 Boot a stack on a corpus large enough that seeding takes minutes; poll
+- [x] 5.1 (done via async-source-seed acceptance: status answered in 5s, count
+      advanced 0 -> 40,853) Boot a stack on a corpus large enough that seeding takes minutes; poll
       the status surface during the seed and record the advancing count
 - [x] 5.2 Scrape the metrics endpoint and record the publish counters — 15
       SemSource series served where there were previously zero, per source
@@ -73,16 +75,21 @@
 
 ## 7. Blocked on an unproven cause — the surfaces themselves
 
-- [ ] 7.1 Determine why `:8080` (status) and `:9091` (metrics) are both
+- [x] 7.1 SOLVED: unbounded `startComponentsBarrier` + a synchronous seed in
+      `Start()`; `Manager.StartAll` is sequential and binds HTTP only afterwards.
+      Fixed our half in `async-source-seed`; framework half is semstreams#867.
+      Original text: Determine why `:8080` (status) and `:9091` (metrics) are both
       unreachable while a large seed runs. Component starts are concurrent and
       `source-manifest` IS running (its heartbeat goroutine is live in the dump),
       so "a blocking Start() starves the others" is NOT the explanation
-- [ ] 7.2 Until 7.1 is answered, the progress data added by this change is
+- [x] 7.2 RESOLVED — the progress data is now readable (5s to first response).
+      Original text: Until 7.1 is answered, the progress data added by this change is
       unreadable in exactly the scenario that motivated it — state that plainly
       rather than claiming the incident is closed
-- [ ] 7.3 Investigate `hashBody` in the seed hot path: the container takes 600s+
-      where a parse-only benchmark of the same corpus takes 8.4s, and body-store
-      hashing is where the dump caught it
+- [ ] 7.3 STILL OPEN — carried forward. Investigate `hashBody` in the seed hot
+      path: the container takes 600s+ where a parse-only benchmark of the same
+      corpus takes 8.4s, and two goroutine dumps caught it in body-store hashing.
+      Related: the publish-count plateau in `async-source-seed` task 5.7
 
 ## 6. Documentation
 
