@@ -76,9 +76,11 @@
 
 - [x] 6.1 Note in `docs/upstream/semstreams-asks.md` that SemSource no longer
       trips semstreams#867, while the framework trap itself remains open
-- [ ] 6.2 Record the follow-up: source status over a last-value KV bucket
+- [x] 6.2 Record the follow-up: source status over a last-value KV bucket
       (the `graph/readiness` pattern) so seed progress survives an HTTP outage —
       today it is core-NATS fire-and-forget aggregated in memory behind an HTTP
       route, so nothing can read it when that route is down (D6)
-- [ ] 6.3 Close out the `ingest-observability` change: its section 7 blocker is
-      resolved by this change, so it can be verified and archived
+- [x] 6.3 Close out the `ingest-observability` change: section 7 is resolved and
+      its live-acceptance items are closed by this change's acceptance run. Only
+      7.3 (body-store hashing performance) remains, carried forward as its own
+      follow-up rather than blocking the archive
