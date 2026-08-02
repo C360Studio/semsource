@@ -24,6 +24,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
@@ -80,6 +81,20 @@ type Component struct {
 	mu        sync.RWMutex
 
 	// Metrics - aggregated across all watchers
+	// statusPublishFailing is edge-triggered (ADR-0011): status reporting IS the
+	// readiness surface, so a failure must be visible at the default level
+	// without logging once per interval while it persists.
+	statusPublishFailing degraded.Condition
+	// pathsUnavailable: a source that cannot reach its configured paths seeds
+	// nothing, silently, for the whole retry window.
+	pathsUnavailable degraded.Condition
+	// lifecycleFailing: staleness marking has stopped working.
+	lifecycleFailing degraded.Condition
+
+	// phase is the lifecycle phase the periodic reporter publishes. Held as an
+	// atomic because the reporter goroutine samples it while Start mutates it.
+	phase atomic.Value
+
 	entitiesIndexed atomic.Int64
 	parseFailures   atomic.Int64
 	errors          atomic.Int64
@@ -119,7 +134,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger())
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+		// Publish-boundary telemetry, keyed by instance so one stalled source
+		// cannot hide behind healthy siblings. Registry is nil in tests.
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
@@ -220,6 +238,13 @@ func (c *Component) Initialize() error {
 	return nil
 }
 
+// statusReportInterval is how often a source republishes its status. It applies
+// during the initial seed as well as the watch phase, so "is this moving?" is
+// answerable on a fixed cadence regardless of corpus size — a per-entity or
+// per-file signal would scale its own cost with the corpus and emit nothing at
+// all in the pathological case where no entities are moving.
+const statusReportInterval = 30 * time.Second
+
 // Start begins AST indexing: initial pass, file watchers, and periodic reindex.
 // Watch paths may not exist yet (e.g., when a git clone is in progress), so
 // watcher initialization is retried with exponential backoff.
@@ -236,15 +261,22 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publishStatusReport(ctx, "ingesting")
 
+	c.startProgressReporting(ctx)
+
 	// Initialize watchers with retry — paths may not exist yet if a git
 	// clone is still in progress (repo expansion pattern).
 	err := retry.Do(ctx, retry.Persistent(), func() error {
 		initErr := c.initializeWatchers()
 		if initErr != nil {
-			c.logger.Debug("waiting for watch paths to become available",
-				"error", initErr)
+			// Bounded by retry.Persistent (~30 attempts), but a source that never
+			// reaches its paths seeds nothing at all — surface it once rather than
+			// leaving the whole wait at Debug, where it was invisible.
+			c.pathsUnavailable.Enter(c.logger,
+				"source paths are not available yet — seeding cannot start", "error", initErr)
+			return initErr
 		}
-		return initErr
+		c.pathsUnavailable.Clear(c.logger, "source paths became available")
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("initialize watchers: %w", err)
@@ -306,9 +338,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.publishStatusReport(ctx, "watching")
 
 	// Collect cancel funcs locally, then assign under lock to avoid races with Stop.
+	// The status reporter is already running (started before the seed).
 	var cancels []context.CancelFunc
-
-	cancels = append(cancels, c.startStatusReporter(ctx))
 
 	if c.config.WatchEnabled {
 		for _, pw := range c.watchers {
@@ -553,8 +584,13 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, pw *pathWatcher, re
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
 		defer cancel()
 		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
-			c.logger.Debug("lifecycle trigger failed (staleness marking degraded, not fatal)",
+			// "degraded" is in the original message: when this fails, staleness
+			// marking stops and retracted entities linger. Edge-triggered (ADR-0011).
+			c.lifecycleFailing.Enter(c.logger,
+				"staleness lifecycle trigger is failing — retractions may linger",
 				"path", pw.root, "reason", reason, "error", err)
+		} else {
+			c.lifecycleFailing.Clear(c.logger, "staleness lifecycle trigger recovered")
 		}
 	}()
 }
@@ -769,8 +805,36 @@ func (c *Component) getFileHash(path string) (string, bool) {
 	return hash, ok
 }
 
+// startProgressReporting starts the periodic status reporter BEFORE the initial
+// index, not after it, so the seed is observable while it runs. The cancel is
+// registered immediately: the initial index can return an error, and a reporter
+// registered only on the success path would leak on that return.
+func (c *Component) startProgressReporting(ctx context.Context) {
+	cancel := c.startStatusReporter(ctx)
+	c.mu.Lock()
+	c.cancelFuncs = append(c.cancelFuncs, cancel)
+	c.mu.Unlock()
+}
+
+// setPhase records the phase the periodic reporter should publish. The reporter
+// samples this rather than taking a fixed phase, so ONE reporter covers both the
+// seed and the watch window (ingest-observability D2).
+func (c *Component) setPhase(phase string) { c.phase.Store(phase) }
+
+// currentPhase returns the phase to report, defaulting to the seeding phase:
+// the reporter starts before the initial index completes.
+func (c *Component) currentPhase() string {
+	if p, ok := c.phase.Load().(string); ok && p != "" {
+		return p
+	}
+	return "ingesting"
+}
+
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
+	// Publishing a phase IS the transition, so the reporter's sampled phase can
+	// never diverge from the last one published.
+	c.setPhase(phase)
 	report := struct {
 		InstanceName string           `json:"instance_name"`
 		SourceType   string           `json:"source_type"`
@@ -779,6 +843,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal int64            `json:"publish_total,omitempty"`
 		ErrorCount   int64            `json:"error_count"`
 		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+		Backpressure bool             `json:"backpressure,omitempty"`
 		Timestamp    time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
@@ -794,7 +859,11 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		// imply entities actually reached the substrate (no-silent-entity-loss).
 		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost(),
 		TypeCounts: c.distinct.TypeCounts(),
-		Timestamp:  time.Now(),
+		// A publisher retrying against a refusing transport reports no drops, no
+		// failures, and no errors while being functionally stalled. Surfacing the
+		// condition is what separates "slow" from "stalled" without reading logs.
+		Backpressure: c.publisher.InBackpressure(),
+		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)
 	if err != nil {
@@ -802,8 +871,15 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		return
 	}
 	if err := c.natsClient.Publish(ctx, "semsource.internal.status", data); err != nil {
-		c.logger.Debug("failed to publish status report", "error", err)
+		// Status reporting IS the readiness surface: if it fails silently the
+		// component looks stalled to every consumer while being healthy, or vice
+		// versa. Reported on the transition into failure so a persistent outage
+		// costs one line, not one per interval.
+		c.statusPublishFailing.Enter(c.logger,
+			"status reporting is failing — readiness will go stale", "error", err)
+		return
 	}
+	c.statusPublishFailing.Clear(c.logger, "status reporting recovered")
 }
 
 // startStatusReporter starts a goroutine that periodically re-publishes the
@@ -812,14 +888,19 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(statusReportInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-rCtx.Done():
 				return
 			case <-ticker.C:
-				c.publishStatusReport(rCtx, "watching")
+				// Sample the CURRENT phase. Before this, the reporter was started
+				// only after the initial index and hardcoded "watching", so a seed
+				// published status exactly twice — at its edges — with the counts
+				// frozen in between. That is what made a stalled seed
+				// indistinguishable from a slow one.
+				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
 	}()
