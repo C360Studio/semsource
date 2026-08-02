@@ -53,21 +53,28 @@
 
 ## 5. Acceptance on a live stack
 
-- [ ] 5.1 Boot on a corpus large enough that seeding takes minutes — the defect
+- [x] 5.1 Boot on a corpus large enough that seeding takes minutes — the defect
       does not reproduce on a small one, so a small-corpus pass proves nothing
-- [ ] 5.2 Poll `/source-manifest/status` within seconds of start: it must ANSWER,
+- [x] 5.2 Poll `/source-manifest/status` within seconds of start: it must ANSWER,
       reporting the seeding phase, where it previously refused the connection
-- [ ] 5.3 Scrape `:9091/metrics` during the seed and confirm the publish counters
+- [x] 5.3 Scrape `:9091/metrics` during the seed and confirm the publish counters
       are served
-- [ ] 5.4 Confirm the progress count ADVANCES between polls — this finally closes
-      the acceptance items left open in `ingest-observability` tasks 4.1/5.1
-- [ ] 5.5 Confirm `phase: "ready"` still appears only after seeding completes
-- [ ] 5.6 Record the time from process start to first successful status response,
-      before and after
+- [x] 5.4 Confirm the progress count ADVANCES between polls — measured
+      0 -> 10,339 -> 24,835 -> 36,337 -> 40,853, which closes
+      `ingest-observability` tasks 4.1/5.1
+- [ ] 5.7 RESIDUAL GAP found during acceptance: the publish count then PLATEAUED
+      for 60s+ while the seed was still working (goroutine dump: body-store
+      `hashBody`). With retries/backpressure/errors all zero we can now tell it is
+      not FAILING, but a plateau still cannot distinguish "parsing, not yet
+      publishing" from "hung". Needs a liveness counter that advances during
+      parsing, not only on publish
+- [x] 5.5 Confirm `phase: "ready"` still appears only after seeding completes
+- [x] 5.6 Record the time from process start to first successful status response:
+      **connection refused for 10+ minutes -> answered in 5 seconds**
 
 ## 6. Documentation
 
-- [ ] 6.1 Note in `docs/upstream/semstreams-asks.md` that SemSource no longer
+- [x] 6.1 Note in `docs/upstream/semstreams-asks.md` that SemSource no longer
       trips semstreams#867, while the framework trap itself remains open
 - [ ] 6.2 Record the follow-up: source status over a last-value KV bucket
       (the `graph/readiness` pattern) so seed progress survives an HTTP outage —

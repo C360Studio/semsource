@@ -950,6 +950,11 @@ return promptly. Fixing it removes our exposure but not the framework trap.
 
 **Surfaced by:** semsource `ingest-observability`, 2026-08-02, against `v1.0.0-beta.159`.
 **Filed:** [semstreams#867](https://github.com/C360Studio/semstreams/issues/867).
+**Consumer status:** SemSource no longer trips this — every source component now seeds
+asynchronously (`async-source-seed`), so no SemSource `Start()` holds the barrier. Measured on the
+same 1,932-file corpus: the status surface went from *connection refused for 10+ minutes* to
+**answering in 5 seconds**. The framework trap itself is unchanged and still catches any adopter
+with a slow component start.
 
 ---
 
