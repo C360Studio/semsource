@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
@@ -46,8 +47,11 @@ const (
 type Component struct {
 	name   string
 	config Config
-	client *natsclient.Client
-	logger *slog.Logger
+	// heartbeatFailing: the heartbeat is the liveness signal, so its loss must
+	// be visible without logging once per interval (ADR-0011).
+	heartbeatFailing degraded.Condition
+	client           *natsclient.Client
+	logger           *slog.Logger
 	// readinessRequest is a test seam for the two bounded index-status probes
 	// used by the workbench capability document. Production leaves it nil and
 	// reads GRAPH_STATUS through graphStatus instead.
@@ -371,7 +375,12 @@ func (c *Component) startHeartbeat(ctx context.Context) context.CancelFunc {
 				c.updateStatusData(status)
 
 				if err := c.publishPayload(hbCtx, StatusType, status, statusSubject); err != nil {
-					c.logger.Debug("heartbeat publish failed", "error", err)
+					// The heartbeat IS the liveness signal; losing it silently
+					// makes a live instance look dead. Edge-triggered (ADR-0011).
+					c.heartbeatFailing.Enter(c.logger,
+						"heartbeat publishing is failing — liveness will look stale", "error", err)
+				} else {
+					c.heartbeatFailing.Clear(c.logger, "heartbeat publishing recovered")
 				}
 			}
 		}

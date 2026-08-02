@@ -67,6 +67,13 @@ type Publisher struct {
 	dropped   atomic.Int64
 	failed    atomic.Int64
 	retries   atomic.Int64
+	metrics   *pubMetrics
+
+	// backpressure tracks whether the publisher is CURRENTLY in sustained
+	// backpressure, so the condition is logged on the transition into and out of
+	// it rather than on every retry. Logging per attempt is what forced this
+	// signal down to Debug in the first place, where it became invisible.
+	backpressure atomic.Bool
 
 	// Lifecycle
 	cancel context.CancelFunc
@@ -106,7 +113,10 @@ func WithSendTimeout(d time.Duration) Option {
 	return func(c *publisherConfig) { c.sendTimeout = d }
 }
 
-// WithMetrics enables buffer metrics export.
+// WithMetrics enables metrics export for this publisher: the buffer's own
+// write/read/overflow series plus the publish-boundary counters in metrics.go.
+// prefix identifies the source instance and becomes the metric subsystem, so one
+// stalled source cannot hide behind its healthy siblings.
 func WithMetrics(registry *metric.MetricsRegistry, prefix string) Option {
 	return func(c *publisherConfig) {
 		c.metricsRegistry = registry
@@ -146,6 +156,7 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		logger:      logger,
 		buf:         buf,
 		sendTimeout: cfg.sendTimeout,
+		metrics:     newPubMetrics(cfg.metricsRegistry, cfg.metricsPrefix),
 		done:        make(chan struct{}),
 	}, nil
 }
@@ -187,6 +198,7 @@ func (p *Publisher) Send(payload *graph.EntityPayload) error {
 	}
 	if err != nil {
 		p.dropped.Add(1)
+		p.metrics.incDropped()
 		p.logger.Warn("entitypub: dropping entity after bounded backpressure",
 			"id", payload.ID,
 			"timeout", p.sendTimeout,
@@ -221,6 +233,35 @@ func (p *Publisher) Pending() int { return p.buf.Size() }
 // Stats returns the underlying buffer statistics.
 func (p *Publisher) Stats() *buffer.Statistics { return p.buf.Stats() }
 
+// InBackpressure reports whether the publisher is currently retrying against a
+// transport that is refusing writes. Surfaced in source status so "stalled" is
+// answerable without reading logs.
+func (p *Publisher) InBackpressure() bool { return p.backpressure.Load() }
+
+// enterBackpressure marks the condition active, logging WARN only on the
+// transition so a sustained stall costs one line rather than one per attempt.
+func (p *Publisher) enterBackpressure(entityID string, backoff time.Duration) {
+	if p.backpressure.Swap(true) {
+		return // already reported
+	}
+	p.metrics.setBackpressure(true)
+	p.logger.Warn("entitypub: publish backpressure — transport refusing writes, retrying",
+		"first_entity", entityID,
+		"backoff", backoff,
+		"note", "entities are not lost while retrying; watch publish_retries_total vs entities_published_total")
+}
+
+// clearBackpressure reports recovery, once, on the transition back to healthy.
+func (p *Publisher) clearBackpressure() {
+	if !p.backpressure.Swap(false) {
+		return // was not in backpressure
+	}
+	p.metrics.setBackpressure(false)
+	p.logger.Info("entitypub: publish backpressure cleared",
+		"retries_total", p.retries.Load(),
+		"published_total", p.published.Load())
+}
+
 // drainLoop reads entities from the buffer and publishes them to NATS.
 // On circuit breaker errors it backs off before retrying.
 func (p *Publisher) drainLoop(ctx context.Context) {
@@ -254,6 +295,7 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 				return
 			}
 			p.failed.Add(1)
+			p.metrics.incFailed()
 			p.logger.Warn("entity publish failed after retries",
 				"id", payload.ID,
 				"error", err)
@@ -278,6 +320,8 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 		err = p.client.PublishToStream(ctx, graphIngestSubject, data)
 		if err == nil {
 			p.published.Add(1)
+			p.metrics.incPublished()
+			p.clearBackpressure()
 			return nil
 		}
 
@@ -287,11 +331,12 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 		}
 
 		p.retries.Add(1)
-		if attempt == 0 {
-			p.logger.Debug("circuit breaker open, backing off",
-				"entity", payload.ID,
-				"backoff", backoff)
-		}
+		p.metrics.incRetries()
+		// Entering sustained backpressure is a state CHANGE an operator must see
+		// at the default level: a publisher retrying every entity reports no
+		// drops, no failures, and no errors while being functionally stalled.
+		// Reported once on entry, not once per attempt.
+		p.enterBackpressure(payload.ID, backoff)
 
 		select {
 		case <-ctx.Done():
