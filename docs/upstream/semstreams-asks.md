@@ -902,3 +902,80 @@ measurement stack; the shipped tier-2 config does not, so an adopter on a larger
 **Surfaced by:** semsource `configurable-clustering-edge-synthesis`, 2026-08-01, against
 `v1.0.0-beta.159`.
 **Filed:** [semstreams#837](https://github.com/C360Studio/semstreams/issues/837).
+
+---
+
+## An unbounded component-start barrier prevents the HTTP and metrics surfaces from ever binding
+
+**Framework-shaped.** A slow component start silently prevents *every* HTTP surface — including
+the readiness endpoint whose entire job is to report "not ready yet" — from binding at all.
+
+`service.(*ComponentManager).startComponentsBarrier` (`service/component_manager.go`, beta.159)
+starts components concurrently but ends with an **unbounded `batch.Wait()`**. `Manager.StartAll`
+then starts services **sequentially** and calls `completeHTTPSetup()` — the function that registers
+handlers and calls `ListenAndServe` — only *after* that loop finishes. Its own comment says "This is
+called after all services have been started".
+
+So one component whose `Start()` takes minutes blocks the whole chain:
+
+```
+Manager.StartAll                       (sequential; component-manager is first)
+  └─ ComponentManager.Start
+      └─ startAllComponents
+          └─ startComponentsBarrier    batch.Wait(), no timeout
+              └─ startComponent        <- one slow component holds everything
+...
+completeHTTPSetup()                    never reached -> :8080 and :9091 never bind
+```
+
+**Measured on semsource, `v1.0.0-beta.159`:** a 1,932-file Java corpus took 10+ minutes to seed on a
+contended machine. Throughout, `wget` **from inside the container** got *connection refused* on both
+the ServiceManager port and the Prometheus port — not a slow handler, nothing listening. A goroutine
+dump confirmed the chain above, with all other components started within ~4.5s and only the seeding
+one outstanding. On a small corpus the barrier releases in ~1s and nothing is noticeable, so this
+only appears at scale — the case where observability matters most.
+
+**Why it is worth fixing upstream even though the consumer can work around it:** the failure is
+perfectly silent and it disables the diagnostic surfaces themselves. An operator sees a live process
+at high CPU with no status, no metrics, and no way to distinguish "slow" from "wedged". Any adopter
+with a slow component start inherits it.
+
+**Possible shapes** (framework's call): bind the HTTP/metrics listeners before the component barrier;
+or give the barrier a timeout that proceeds with a degraded status rather than blocking forever; or
+have `StartAll` not serialise on a service that can block indefinitely.
+
+**SemSource's own half:** our `ast-source.Start()` performs the entire initial seed synchronously,
+which is what trips this. That is product-shaped and ours to fix — a lifecycle `Start()` should
+return promptly. Fixing it removes our exposure but not the framework trap.
+
+**Surfaced by:** semsource `ingest-observability`, 2026-08-02, against `v1.0.0-beta.159`.
+**Filed:** [semstreams#867](https://github.com/C360Studio/semstreams/issues/867).
+
+---
+
+## `graph/readiness` cannot be reused by a non-graph producer
+
+**Framework-shaped, enhancement.** The primitive is good — last-value KV bucket, `Publisher` /
+`Watcher` / `Set`, Prometheus gauges, ADR-083/084 semantics — but it is typed to the graph payload,
+so a consumer with the same shape of state must re-implement it.
+
+`Publisher.Publish` takes `graph.IndexStatusResponse`, and `BucketGraphStatus` / `KeyGraphIndex` /
+`KeyGraphEmbedding` are graph-owned. The **bucket seam is already generic** (`StatusWriter` is a
+one-method `Put`), so the payload type is the only real blocker.
+
+**Why SemSource wants it:** a source's lifecycle is the same shape as a graph producer's — an initial
+build that completes once per process lifetime, then steady state. `BootstrapComplete` is documented
+as "finished its INITIAL BUILD in the current process lifetime", which is almost exactly SemSource's
+definition of a seeded source; `State` (building/ready/degraded) maps just as cleanly.
+
+**What it would have bought during the seed blackout:** SemSource transports source status over
+**core NATS** (`semsource.internal.status`, fire-and-forget, no retention) and aggregates it in
+memory behind an HTTP route. When that route was dark, the data existed — `source-manifest` had
+started and was receiving it, NATS was healthy throughout — but nothing could read it. A last-value
+KV bucket would have been readable the whole time with `nats kv get`.
+
+We can hand-roll one, but that means re-implementing the publisher, watcher, and gauges slightly
+differently, which is worse for both sides than reusing the framework's.
+
+**Surfaced by:** semsource `async-source-seed`, 2026-08-02, against `v1.0.0-beta.159`.
+**Filed:** [semstreams#868](https://github.com/C360Studio/semstreams/issues/868).
