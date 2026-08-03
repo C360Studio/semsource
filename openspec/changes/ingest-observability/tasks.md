@@ -86,10 +86,12 @@
       Original text: Until 7.1 is answered, the progress data added by this change is
       unreadable in exactly the scenario that motivated it — state that plainly
       rather than claiming the incident is closed
-- [ ] 7.3 STILL OPEN — carried forward. Investigate `hashBody` in the seed hot
-      path: the container takes 600s+ where a parse-only benchmark of the same
-      corpus takes 8.4s, and two goroutine dumps caught it in body-store hashing.
-      Related: the publish-count plateau in `async-source-seed` task 5.7
+- [x] 7.3 DONE (PR #125). It was never hashing — sha256 over the same 25,960
+      bodies is 43ms and the whole CPU side is 7.5s. The cost was one SYNCHRONOUS
+      object-store Put per body-bearing entity. Deduped (12.3% of Puts rewrote an
+      identical content-addressed key) plus bounded concurrency: initial index
+      1,087s -> 474s (2.3x), identical 77,802 entities and 0 parse failures on
+      both sides. Lesson recorded: one goroutine sample is not a profile
 
 ## 6. Documentation
 
