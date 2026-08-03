@@ -92,6 +92,10 @@ type Component struct {
 	// lifecycleFailing: staleness marking has stopped working.
 	lifecycleFailing degraded.Condition
 
+	// bodyPuts records body keys already written this process. Bodies are
+	// content-addressed, so a repeat key is byte-identical and its Put is waste.
+	bodyPuts sync.Map
+
 	// seed supervises the asynchronous initial seed (internal/seedsup).
 	seed seedsup.Supervisor
 

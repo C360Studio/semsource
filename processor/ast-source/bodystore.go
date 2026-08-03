@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage/objectstore"
@@ -28,6 +29,13 @@ import (
 
 // bodyKeyPrefix namespaces code bodies within the shared CONTENT bucket.
 const bodyKeyPrefix = "code:"
+
+// bodyPutConcurrency bounds in-flight body writes per file. The offload was one
+// SYNCHRONOUS Put per body-bearing entity: measured against a local NATS at
+// ~875µs each, that is ~23s of pure round-trip for OSH Core's 25,960 bodies,
+// and it degrades with contention. Bounded rather than unbounded so a large file
+// cannot swamp the connection.
+const bodyPutConcurrency = 16
 
 // containerTypes are entity types with no verbatim body of their own (repo,
 // folder, file, package) — their "body" would be a whole tree/file, not a symbol.
@@ -83,7 +91,16 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 	}
 	lines := strings.Split(string(content), "\n")
 
-	out := make(map[string]codeBody)
+	// Slice and hash first — pure CPU, and cheap: measured over OSH Core's 25,960
+	// bodies, slicing is 11ms and sha256 43ms. The cost is entirely in the Puts
+	// below, which is why they are deduped and issued concurrently rather than
+	// one blocking round trip per entity.
+	type pending struct {
+		entity string
+		key    string
+		body   string
+	}
+	work := make([]pending, 0, len(result.Entities))
 	for _, e := range result.Entities {
 		if e == nil || containerTypes[e.Type] {
 			continue
@@ -92,26 +109,66 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 		if body == "" {
 			continue
 		}
-		key := bodyKeyPrefix + hashBody(body)
-		if err := c.bodyStore.Put(ctx, key, []byte(body)); err != nil {
-			c.logger.Warn("offload code body failed", "entity", e.ID, "error", err)
-			continue
-		}
-		out[e.ID] = codeBody{
+		work = append(work, pending{entity: e.ID, key: bodyKeyPrefix + hashBody(body), body: body})
+	}
+
+	var mu sync.Mutex
+	out := make(map[string]codeBody, len(work))
+	attach := func(w pending) {
+		mu.Lock()
+		defer mu.Unlock()
+		out[w.entity] = codeBody{
 			triples: []message.Triple{
-				{Subject: e.ID, Predicate: semsourceast.CodeBodyStore, Object: graph.BodyStoreInstance},
-				{Subject: e.ID, Predicate: semsourceast.CodeBodyKey, Object: key},
+				{Subject: w.entity, Predicate: semsourceast.CodeBodyStore, Object: graph.BodyStoreInstance},
+				{Subject: w.entity, Predicate: semsourceast.CodeBodyKey, Object: w.key},
 			},
 			ref: &message.StorageReference{
 				StorageInstance: graph.BodyStoreInstance,
-				Key:             key,
+				Key:             w.key,
 				ContentType:     "text/plain; charset=utf-8",
-				Size:            int64(len(body)),
+				Size:            int64(len(w.body)),
 			},
 		}
 	}
+
+	sem := make(chan struct{}, bodyPutConcurrency)
+	var wg sync.WaitGroup
+	for _, w := range work {
+		// Bodies are content-addressed, so a key already written this run holds
+		// byte-identical content and re-Putting it is pure waste — 12.3% of all
+		// Puts on OSH Core. Skipping the WRITE must NOT skip the ATTACHMENT: the
+		// entity still needs its handle triples, or it silently loses its body.
+		if c.bodyPutDone(w.key) {
+			attach(w)
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(w pending) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := c.bodyStore.Put(ctx, w.key, []byte(w.body)); err != nil {
+				c.logger.Warn("offload code body failed", "entity", w.entity, "error", err)
+				return // degrade this entity to no body, as before
+			}
+			c.markBodyPut(w.key)
+			attach(w)
+		}(w)
+	}
+	wg.Wait()
 	return out
 }
+
+// bodyPutDone reports whether this key has already been written in this process.
+func (c *Component) bodyPutDone(key string) bool {
+	_, ok := c.bodyPuts.Load(key)
+	return ok
+}
+
+// markBodyPut records a key as written. The set is bounded by the number of
+// DISTINCT bodies in the watched tree (22,772 on OSH Core, ~1.5 MB of keys), and
+// a re-parse of unchanged files hits it rather than growing it.
+func (c *Component) markBodyPut(key string) { c.bodyPuts.Store(key, struct{}{}) }
 
 // sliceLines returns the verbatim source for the inclusive 1-based [start,end]
 // range, or "" when the range is invalid or out of bounds.
