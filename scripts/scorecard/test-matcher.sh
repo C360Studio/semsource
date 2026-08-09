@@ -31,13 +31,18 @@ fi
 
 echo "2. the grader's own invocations all terminate option parsing"
 # Guards the source directly: a future edit that drops `--` reintroduces a bug
-# whose only symptom is a permanently wrong verdict.
-if grep -nE 'grep -qF "\$' "$here/run.sh" >/dev/null 2>&1; then
-	fail "run.sh has a 'grep -qF \"\$...\"' without '--':"
-	grep -nE 'grep -qF "\$' "$here/run.sh" | sed 's/^/       /'
-else
-	ok "no un-terminated 'grep -qF \"\$...\"' in run.sh"
-fi
+# whose only symptom is a permanently wrong verdict. The grader lives in
+# grade.sh (shared by every arm); run.sh stays covered for any matcher use
+# outside the shared function.
+for src in grade.sh run.sh arm-a-grep.sh; do
+	[ -f "$here/$src" ] || continue
+	if grep -nE 'grep -qF "\$' "$here/$src" >/dev/null 2>&1; then
+		fail "$src has a 'grep -qF \"\$...\"' without '--':"
+		grep -nE 'grep -qF "\$' "$here/$src" | sed 's/^/       /'
+	else
+		ok "no un-terminated 'grep -qF \"\$...\"' in $src"
+	fi
+done
 
 echo "3. the evaluability gate catches the bug it exists for"
 corpus="$(mktemp -d)"
