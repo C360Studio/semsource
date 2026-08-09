@@ -26,6 +26,16 @@ This document records the durable interop boundary and experiment gates behind t
 Implementation mechanics belong in bounded OpenSpec changes; this document is not an architecture
 decision record or evidence that the capability has shipped.
 
+**Spec status (2026-08-09):** this document was written against [OKF v0.1][okf-spec]; the upstream
+spec has since moved to v0.2, which adds the `generated`/`verified`/`sources`/`status`/`stale_after`
+trust-field families — a close fit for the lineage metadata this design already requires. Independent
+implementations now exist ([okf-rs](https://github.com/jyjeanne/okf-rs) in Rust, okf-generator in
+Python). They are candidates for conformance validation and foreign-projection fixtures in the
+experiment plan, never producers of SemSource's own projections, which must derive from the governed
+graph with full lineage metadata (see issue
+[#131](https://github.com/C360Studio/semsource/issues/131)). Refresh this document against v0.2 when
+experiment planning starts.
+
 ## Motivation
 
 Agents can already ask natural-language questions through SemSource's graph-backed query surfaces and
