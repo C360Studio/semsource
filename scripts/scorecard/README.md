@@ -101,6 +101,57 @@ retrieval.
 The `down -v` matters. Doc identity and body handles changed in the passage-chunking
 work, and a graph carried over from the other side is neither one thing nor the other.
 
+## The arms — measuring cost, not only recall
+
+The product's claim to agent consumers is a **cost** claim: querying the graph is
+supposed to be cheaper than reading source. Recall alone cannot test that, so the
+harness runs the same question set through competing retrieval procedures ("arms")
+and records, per question, the **context bytes ingested** — everything the caller
+would have had to read. Bytes are the measured figure; tokens are `bytes/4`, an
+estimate, and labeled as one. See issue #130 for the methodology's provenance and
+the decision that this harness owns the offline arms while semdev stays the live
+two-arm harness.
+
+- **Arm A — `arm-a-grep.sh <corpus-dir> <label>`.** A deterministic grep-and-read
+  floor: stopword-filtered query terms, files ranked by grep hits, read in rank
+  order until every term found anywhere has been seen (cap 5 files), charged at
+  **full file size**. Retrieval consumes only `args.query` — the `expect_*` fields
+  are read solely by the grader, after the read set is fixed. Whole-file charging
+  biases the comparison *against* arm B's competitor (it inflates grep's cost);
+  per-file bytes land in the results so a match-window variant can be derived
+  later without re-running. It is a floor, not a simulation: real agentic grep
+  iterates, re-greps, and costs more on hard questions. No repeats — the arm is a
+  pure function of the corpus.
+- **Arm B — `run.sh <label>`.** The MCP surface, as before. `context_bytes` is the
+  full decoded result of each question's **first** call, charged whether it
+  succeeded or returned `isError` — an error still costs an agent its bytes.
+  Repeat calls are instability instrumentation, never charged.
+- **Arm C — `arm-c-cosine.sh <label>`.** Embeddings without the query machinery:
+  embed `args.query` against semembed directly, cosine-rank the product's own
+  stored vectors, grade the top-K bodies. Ranking never consults the graph — the
+  graph serves bytes for grading only, after ranking, so the C-vs-B delta
+  isolates what the query/fusion layer adds over raw cosine. Read the doc bands
+  with care: `doc_context` ranking is already nearly pure cosine order *after*
+  candidate recall, so doc-band deltas measure the recall stage and salience
+  terms; the code bands (vs the structural name index) are the discriminating
+  ones.
+
+`compare.sh <results.json> [...]` joins any set of same-version result files into
+the per-band × per-arm table and refuses mismatched `questions_version` values.
+
+**Schema overhead is reported separately, never amortized.** Registering an MCP
+tool surface costs a session its schema bytes whether the tools are used or not.
+`run.sh` measures `tools/list` once and records it as a session-fixed figure next
+to — never inside — the per-question costs. The honest accounting is "fixed cost F
+plus marginal cost per question"; folding F into the questions would hide F. This
+is the measurement side of issue #126.
+
+**Cost comparability adds two rules to the score rules above:** cross-arm figures
+are only comparable for runs over the same corpus checkout (and, for arms B/C, the
+same stack), and `stopwords.txt` is part of arm A's procedure — changing it
+invalidates cost comparison against earlier arm A runs, exactly as a
+`questions.json` bump invalidates score comparison.
+
 ## Why grading is deterministic
 
 Substring matching, case-insensitive, no model in the loop. An LLM judge drifts

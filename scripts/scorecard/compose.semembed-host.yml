@@ -1,0 +1,10 @@
+# Compose override for arm C: publish semembed to the host so
+# arm-c-cosine.sh can embed queries/passages directly. The core profile keeps
+# semembed internal on purpose; this mapping exists only for scorecard runs.
+#
+#   docker compose -f docker-compose.yml \
+#     -f scripts/scorecard/compose.semembed-host.yml up -d
+services:
+  semembed:
+    ports:
+      - "${SEMEMBED_HOST_PORT:-28081}:8081"
