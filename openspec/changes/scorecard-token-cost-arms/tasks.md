@@ -50,10 +50,10 @@
 - [x] 4.2 Update `scripts/scorecard/README.md`: arm procedures, blindness rule, whole-file-charging
       bias direction, doc-band C-vs-B interpretation caveat, cost comparability rules (same corpus,
       same stack for B/C, stopword list versioning), schema-overhead framing (fixed F + marginal)
-- [ ] 4.3 Run all three arms against a live stack on the dogfood corpus (isolated
+- [x] 4.3 Run all three arms against a live stack on the dogfood corpus (isolated
       `COMPOSE_PROJECT_NAME`, high ports); commit results under `scripts/scorecard/results/` with a
       `SUMMARY-token-cost-baseline.md` recording the first per-band × per-arm table
-- [ ] 4.4 Post the measured baseline (schema overhead + per-band table) to #130, and the
+- [x] 4.4 Post the measured baseline (schema overhead + per-band table) to #130, and the
       `tools/list` measurement to #126
 
 ## 5. Follow-ups (file, do not implement here)
