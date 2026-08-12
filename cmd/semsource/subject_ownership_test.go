@@ -22,18 +22,41 @@ import (
 // ever competed. It took booting a real stack to see it.
 //
 // LIMIT, stated rather than assumed: this compares SemSource's subscriptions
-// against SemSource's DECLARATION of the substrate surface
-// (graphQueryInputPorts), not against the substrate's own handler
-// registrations, which semstreams keeps unexported (setupQueryHandlers). A
-// substrate release that adds a subject SemSource already claims stays green
-// here until that declaration is updated. Tracked as an upstream ask.
+// against a PINNED declaration of the substrate surface (the per-operation
+// subjects graph-query's setupQueryHandlers registers on beta.160, read from
+// the module source — semstreams keeps the registration unexported). On
+// beta.160 the component's PORT declares the graph.query.* family, but its
+// actual subscriptions are per-operation, so a non-operation subject under
+// graph.query.* (our versionDiff) does not race replies. A substrate release
+// that adds an operation SemSource already claims stays green here until this
+// pin is updated — refresh it on every semstreams bump.
 func TestNoSemSourceSubjectCollidesWithTheSubstrate(t *testing.T) {
+	// Pinned from semstreams@v1.0.0-beta.160 processor/graph-query's
+	// query.go operation table — the COMPLETE admitted set, camelCase
+	// suffixes included. searchGraph and summary SURVIVE the beta.160
+	// query-contract closure (the guide's removals were the aggregate Go
+	// client wrappers and shared agentic tool registrations, not these
+	// operations); an incomplete pin here is a weaker guard.
+	substrateSubjects := []string{
+		"graph.query.batch",
+		"graph.query.byName",
+		"graph.query.entity",
+		"graph.query.entityByAlias",
+		"graph.query.globalSearch",
+		"graph.query.hierarchyStats",
+		"graph.query.localSearch",
+		"graph.query.pathSearch",
+		"graph.query.prefix",
+		"graph.query.relationships",
+		"graph.query.searchGraph",
+		"graph.query.semantic",
+		"graph.query.similar",
+		"graph.query.spatial",
+		"graph.query.summary",
+		"graph.query.temporal",
+	}
 	substrate := make(map[string]bool)
-	for _, port := range graphQueryInputPorts() {
-		subject, ok := port["subject"].(string)
-		if !ok || subject == "" {
-			t.Fatalf("graph-query input port has no subject: %v", port)
-		}
+	for _, subject := range substrateSubjects {
 		substrate[subject] = true
 	}
 	if len(substrate) == 0 {

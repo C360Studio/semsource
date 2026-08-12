@@ -104,7 +104,6 @@ type Config struct {
 	WatchEnabled  bool   `json:"watch_enabled"  schema:"type:bool,description:Enable file watcher for real-time updates,category:basic,default:true"`
 	CoalesceMs    int    `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for file watcher events in ms. 0 uses built-in default (100ms),category:advanced"`
 	IndexInterval string `json:"index_interval" schema:"type:string,description:Full reindex interval (e.g. 60s). Empty string disables periodic reindex.,category:advanced,default:60s"`
-	StreamName    string `json:"stream_name"    schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
 }
 
 // Validate checks the configuration for errors.
@@ -136,10 +135,11 @@ func (c *Config) Validate() error {
 func DefaultConfig() Config {
 	outputDefs := []component.PortDefinition{
 		{
-			Name:        "graph.ingest",
-			Type:        "jetstream",
-			Subject:     "graph.ingest.entity",
-			StreamName:  "GRAPH",
+			Name: "graph.ingest",
+			Config: component.JetStreamPort{
+				StreamName: "GRAPH",
+				Subjects:   []string{"graph.ingest.entity"},
+			},
 			Required:    true,
 			Description: "Entity state updates for graph ingestion",
 		},
@@ -151,6 +151,5 @@ func DefaultConfig() Config {
 		},
 		WatchEnabled:  true,
 		IndexInterval: "60s",
-		StreamName:    "GRAPH",
 	}
 }

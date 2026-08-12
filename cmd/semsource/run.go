@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -137,8 +139,9 @@ func runCmd(args []string) error {
 	}
 	defer nc.Close(context.Background())
 
-	governanceBoot, err := semgovernance.BootstrapStandalone(signalCtx, nc, logger)
-	if err != nil {
+	// Fail-fast projection-intent validation; the contract itself is consumed
+	// where mutations are sent (supersession's typed client), not here.
+	if _, err := semgovernance.BootstrapStandalone(logger); err != nil {
 		return err
 	}
 
@@ -161,7 +164,7 @@ func runCmd(args []string) error {
 	}
 	defer configMgr.Stop(5 * time.Second)
 
-	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, governanceBoot, logger)
+	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, logger)
 	if err != nil {
 		configMgr.Stop(5 * time.Second)
 		return err
@@ -318,7 +321,6 @@ func createServiceManager(
 	registry *component.Registry,
 	payloadReg *payloadregistry.Registry,
 	configMgr *semconfig.Manager,
-	governanceBoot *semgovernance.Bootstrap,
 	logger *slog.Logger,
 ) (*service.Manager, error) {
 	metricsRegistry := metric.NewMetricsRegistry()
@@ -333,11 +335,6 @@ func createServiceManager(
 	}
 
 	manager := service.NewServiceManager(serviceRegistry)
-	if governanceBoot != nil {
-		manager.RegisterInstance("ownership",
-			service.NewOwnershipService(governanceBoot.Registry, governanceBoot.Heartbeater, metricsRegistry, logger))
-	}
-
 	deps := &service.Dependencies{
 		NATSClient:        nc,
 		MetricsRegistry:   metricsRegistry,
@@ -348,22 +345,12 @@ func createServiceManager(
 		PayloadRegistry:   payloadReg,
 	}
 
+	// ConfigureFromServices constructs every enabled configured service
+	// itself on beta.160 — the composition has ONE writer. A second
+	// CreateService pass here would be a duplicate composition writer and
+	// fails with DuplicateServiceError.
 	if err := manager.ConfigureFromServices(ssCfg.Services, deps); err != nil {
 		return nil, fmt.Errorf("configure service manager: %w", err)
-	}
-
-	for name, svcConfig := range ssCfg.Services {
-		if name == "service-manager" {
-			continue
-		}
-		if !svcConfig.Enabled {
-			logger.Info("service disabled, skipping", "name", name)
-			continue
-		}
-		if _, err := manager.CreateService(name, svcConfig.Config, deps); err != nil {
-			return nil, fmt.Errorf("create service %s: %w", name, err)
-		}
-		logger.Debug("created service", "name", name)
 	}
 
 	return manager, nil
@@ -536,7 +523,11 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	}
 
 	ssCfg := &semconfig.Config{
-		Version: "1.0.0",
+		// KV sync control: an equal-or-older version never replaces the
+		// configuration already selected from KV (beta.160 rule). Bump this on
+		// EVERY change to the generated composition — 2.0.0 is the beta.160
+		// foundation cutover (typed ports, defaults-deferral, no ownership).
+		Version: "2.0.0",
 		Platform: semconfig.PlatformConfig{
 			Org:         org,
 			ID:          "semsource",
@@ -662,30 +653,22 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	}
 	raw, err := json.Marshal(map[string]any{
 		"ports": map[string]any{
-			"outputs": []map[string]any{
+			"outputs": []component.PortDefinition{
 				{
-					"name":        "graph.ingest",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.manifest",
-					"stream_name": "GRAPH",
-					"required":    true,
-					"description": "Source manifest broadcast for downstream consumers",
+					Name:        "graph.ingest",
+					Required:    true,
+					Description: "Source manifest broadcast for downstream consumers",
+					Config:      component.JetStreamPort{StreamName: "GRAPH", Subjects: []string{"graph.ingest.manifest"}},
 				},
 				{
-					"name":        "graph.ingest.status",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.status",
-					"stream_name": "GRAPH",
-					"required":    false,
-					"description": "Ingestion status broadcast for downstream consumers",
+					Name:        "graph.ingest.status",
+					Description: "Ingestion status broadcast for downstream consumers",
+					Config:      component.JetStreamPort{StreamName: "GRAPH", Subjects: []string{"graph.ingest.status"}},
 				},
 				{
-					"name":        "graph.ingest.predicates",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.predicates",
-					"stream_name": "GRAPH",
-					"required":    false,
-					"description": "Predicate schema broadcast for downstream consumers",
+					Name:        "graph.ingest.predicates",
+					Description: "Predicate schema broadcast for downstream consumers",
+					Config:      component.JetStreamPort{StreamName: "GRAPH", Subjects: []string{"graph.ingest.predicates"}},
 				},
 			},
 		},
@@ -702,34 +685,6 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 		Enabled: true,
 		Config:  raw,
 	}, nil
-}
-
-func graphQueryInputPorts() []map[string]any {
-	return []map[string]any{
-		{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
-		{"name": "query_entity_by_alias", "type": "nats-request", "subject": "graph.query.entityByAlias"},
-		{"name": "query_batch", "type": "nats-request", "subject": "graph.query.batch"},
-		{"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
-		{"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
-		{"name": "query_hierarchy_stats", "type": "nats-request", "subject": "graph.query.hierarchyStats"},
-		{"name": "query_prefix", "type": "nats-request", "subject": "graph.query.prefix"},
-		{"name": "query_spatial", "type": "nats-request", "subject": "graph.query.spatial"},
-		{"name": "query_temporal", "type": "nats-request", "subject": "graph.query.temporal"},
-		{"name": "query_semantic", "type": "nats-request", "subject": "graph.query.semantic"},
-		{"name": "query_similar", "type": "nats-request", "subject": "graph.query.similar"},
-		{"name": "local_search", "type": "nats-request", "subject": "graph.query.localSearch"},
-		{"name": "global_search", "type": "nats-request", "subject": "graph.query.globalSearch"},
-		{"name": "query_summary", "type": "nats-request", "subject": "graph.query.summary"},
-		{"name": "query_search_graph", "type": "nats-request", "subject": "graph.query.searchGraph"},
-		{"name": "query_by_name", "type": "nats-request", "subject": "graph.query.byName"},
-	}
-}
-
-func graphGatewayOutputPorts() []map[string]any {
-	return []map[string]any{
-		{"name": "queries", "type": "nats-request", "subject": "graph.query.*"},
-		{"name": "mutations", "type": "nats-request", "subject": "graph.mutation.*"},
-	}
 }
 
 // graphSubsystemComponents returns the built-in semstreams graph components:
@@ -777,19 +732,39 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			name:     "graph-ingest",
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
-				"enforce_owner_lease": false,
+				// Our entity_stream differs from graph-ingest's DefaultConfig
+				// (entities arrive on the GRAPH stream's graph.ingest.*
+				// subjects, not the default ENTITY stream). A declared ports
+				// section replaces the defaults wholesale, so the mutation
+				// provider input and entity_states output are restated.
 				"ports": map[string]any{
-					"inputs": []map[string]any{
+					"inputs": []component.PortDefinition{
 						{
-							"name":        "entity_stream",
-							"type":        "jetstream",
-							"subject":     "graph.ingest.entity",
-							"stream_name": "GRAPH",
-							"config":      map[string]any{"deliver_policy": "all"},
+							Name: "entity_stream",
+							Config: component.JetStreamPort{
+								StreamName:    "GRAPH",
+								Subjects:      []string{"graph.ingest.entity"},
+								DeliverPolicy: "all",
+							},
+						},
+						{
+							// The typed mutation provider port (values pinned from
+							// semstreams internal/graphmutation, which is not
+							// importable): a declared ports section replaces the
+							// defaults wholesale, so every required port is restated.
+							Name:     "mutations",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "graph.mutation.>",
+								Interface: &component.InterfaceContract{
+									Type:    "semstreams.graph.mutation",
+									Version: "v1",
+								},
+							},
 						},
 					},
-					"outputs": []map[string]any{
-						{"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"},
+					"outputs": []component.PortDefinition{
+						{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
 					},
 				},
 			},
@@ -802,17 +777,8 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				// workers=0 → graph-index applies its own default (1); raise via
 				// graph.index_workers to parallelize bulk index builds.
 				"workers": indexWorkers,
-				"ports": map[string]any{
-					"inputs": []map[string]any{
-						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
-					},
-					"outputs": []map[string]any{
-						{"name": "outgoing_index", "type": "kv-write", "subject": "OUTGOING_INDEX"},
-						{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
-						{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
-						{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
-					},
-				},
+				// Ports come from graph-index's DefaultConfig; beta.160 declares
+				// the entity watch and every index write itself.
 			},
 		},
 		"graph-embedding": {
@@ -840,25 +806,33 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 					".name", ".body", ".abstract", ".subject",
 					".signature", ".comment",
 				},
-				// graph-embedding declares NO output ports. Its durable writes
-				// (EMBEDDING_INDEX, EMBEDDING_DEDUP, and the GRAPH_STATUS
-				// readiness envelope) are direct bucket writes at Start, never
-				// ports. semstreams beta.159 deleted the EMBEDDINGS_CACHE bucket
-				// this block used to declare and now rejects ANY ports.outputs
-				// here at component creation, so an outputs entry fails boot.
-				"ports": map[string]any{
-					"inputs": []map[string]any{
-						{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
-					},
-				},
+				// Ports come from graph-embedding's DefaultConfig (entity watch +
+				// content_store read); its durable writes are direct bucket
+				// writes at Start, never ports.
 			},
 		},
 		"graph-query": {
 			name:     "graph-query",
 			compType: types.ComponentTypeProcessor,
+			// The ComponentManager path applies no defaults: the single
+			// graph.query.* family request port is restated exactly as
+			// graph-query's DefaultConfig declares it (per-operation ports
+			// are a retired beta.159 shape).
 			configMap: map[string]any{
 				"ports": map[string]any{
-					"inputs": graphQueryInputPorts(),
+					"inputs": []component.PortDefinition{
+						{
+							Name:     "graph_queries",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "graph.query.*",
+								Interface: &component.InterfaceContract{
+									Type:    "graph.query",
+									Version: "v1",
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -866,16 +840,41 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			name:     "graph-gateway",
 			compType: types.ComponentTypeGateway,
 			configMap: map[string]any{
+				// The ComponentManager path applies no defaults: the gateway's
+				// requester outputs are restated exactly as its DefaultConfig
+				// declares them. Identity-free registry admission and the http
+				// input-port shape are retired; bind_address carries the
+				// network identity.
 				"ports": map[string]any{
-					"inputs": []map[string]any{
-						// Subject must encode host:port: the registry parses the
-						// gateway's network port from it (parsePortFromSubject), so a
-						// path like "/graphql" yields port 0 and registration fails.
-						// The GraphQL route is GraphQLPath (default /graphql), served on
-						// ServiceManager's central mux — independent of this subject.
-						{"name": "http", "type": "http", "subject": gatewayBind},
+					"outputs": []component.PortDefinition{
+						{
+							Name:     "graph_queries",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "graph.query.*",
+								Interface: &component.InterfaceContract{
+									Type:    "graph.query",
+									Version: "v1",
+								},
+							},
+						},
+						{
+							Name:     "graph_index_queries",
+							Required: true,
+							Config:   component.NATSRequestPort{Subject: "graph.index.query.*"},
+						},
+						{
+							Name:     "agentic_queries",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "agentic.query.*",
+								Interface: &component.InterfaceContract{
+									Type:    "agentic.query",
+									Version: "v1",
+								},
+							},
+						},
 					},
-					"outputs": graphGatewayOutputPorts(),
 				},
 				"bind_address":      gatewayBind,
 				"enable_playground": enablePlayground,
@@ -905,14 +904,8 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		clusteringConfig := map[string]any{
 			"detection_interval": "30s",
 			"enable_llm":         clusteringLLM,
-			"ports": map[string]any{
-				"inputs": []map[string]any{
-					{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
-				},
-				"outputs": []map[string]any{
-					{"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"},
-				},
-			},
+			// Ports come from graph-clustering's DefaultConfig (entity watch,
+			// index reads, mutation requester, community write).
 		}
 		// Edge synthesis is passed through only when the operator configured it.
 		// The key is omitted entirely when unset — not sent as an empty object —
@@ -1005,25 +998,39 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 
 // websocketComponentConfig builds the WebSocket output component config.
 func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error) {
-	wsAddr := fmt.Sprintf("http://%s%s", cfg.WebSocketBind, cfg.WebSocketPath)
+	bind := cfg.WebSocketBind
+	if bind == "" {
+		// Mirrors config.applyDefaults for callers holding a bare Config.
+		bind = "0.0.0.0:7890"
+	}
+	wsHost, wsPortStr, err := net.SplitHostPort(bind)
+	if err != nil {
+		return types.ComponentConfig{}, fmt.Errorf("parse websocket bind %q: %w", bind, err)
+	}
+	wsPort, err := strconv.Atoi(wsPortStr)
+	if err != nil {
+		return types.ComponentConfig{}, fmt.Errorf("parse websocket port %q: %w", wsPortStr, err)
+	}
+	// beta.160's NetworkPort carries protocol/host/port only — there is no
+	// path field, so cfg.WebSocketPath no longer reaches the component through
+	// its port declaration. The served route is verified at the live
+	// bring-up; a path mismatch there is a consumer-visible change to raise
+	// upstream, not to shim here.
 	raw, err := json.Marshal(map[string]any{
 		"ports": map[string]any{
-			"inputs": []map[string]any{
+			"inputs": []component.PortDefinition{
 				{
-					"name":        "graph_entities",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.>",
-					"stream_name": "GRAPH",
-					"required":    true,
-					"description": "Entity, status, and predicate payloads from source components",
+					Name:        "graph_entities",
+					Required:    true,
+					Description: "Entity, status, and predicate payloads from source components",
+					Config:      component.JetStreamPort{StreamName: "GRAPH", Subjects: []string{"graph.ingest.>"}},
 				},
 			},
-			"outputs": []map[string]any{
+			"outputs": []component.PortDefinition{
 				{
-					"name":        "websocket_server",
-					"type":        "network",
-					"subject":     wsAddr,
-					"description": "WebSocket server for downstream consumers",
+					Name:        "websocket_server",
+					Description: "WebSocket server for downstream consumers",
+					Config:      component.NetworkPort{Protocol: "http", Host: wsHost, Port: wsPort},
 				},
 			},
 		},
@@ -1064,12 +1071,10 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 
 	return types.ServiceConfigs{
 		"service-manager": types.ServiceConfig{
-			Name:    "service-manager",
 			Enabled: true,
 			Config:  smCfgJSON,
 		},
 		"component-manager": types.ServiceConfig{
-			Name:    "component-manager",
 			Enabled: true,
 			// watch_config:true wires the ComponentManager to the
 			// ConfigManager's KV watcher. Without it, runtime writes via
@@ -1079,17 +1084,14 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 			Config: json.RawMessage(`{"watch_config":true}`),
 		},
 		"metrics": types.ServiceConfig{
-			Name:    "metrics",
 			Enabled: true,
 			Config:  metricsCfgJSON,
 		},
 		"heartbeat": types.ServiceConfig{
-			Name:    "heartbeat",
 			Enabled: true,
 			Config:  json.RawMessage(`{}`),
 		},
 		"flow-builder": types.ServiceConfig{
-			Name:    "flow-builder",
 			Enabled: true,
 			Config:  json.RawMessage(`{}`),
 		},

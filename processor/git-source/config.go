@@ -54,9 +54,6 @@ type Config struct {
 	// When non-empty, the system slug in entity IDs includes the branch qualifier.
 	BranchSlug string `json:"branch_slug,omitempty" schema:"type:string,description:Branch slug for multi-branch entity ID scoping,category:advanced"`
 
-	// StreamName is the JetStream stream name for publishing entities.
-	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
-
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
 	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
@@ -94,10 +91,11 @@ func ptrBool(v bool) *bool { return &v }
 func DefaultConfig() Config {
 	outputDefs := []component.PortDefinition{
 		{
-			Name:        "graph.ingest",
-			Type:        "jetstream",
-			Subject:     "graph.ingest.entity",
-			StreamName:  "GRAPH",
+			Name: "graph.ingest",
+			Config: component.JetStreamPort{
+				StreamName: "GRAPH",
+				Subjects:   []string{"graph.ingest.entity"},
+			},
 			Required:    true,
 			Description: "Entity state updates for graph ingestion",
 		},
@@ -111,6 +109,5 @@ func DefaultConfig() Config {
 		PollInterval: "60s",
 		WatchEnabled: ptrBool(true),
 		MaxCommits:   0,
-		StreamName:   "GRAPH",
 	}
 }

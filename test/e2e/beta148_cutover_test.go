@@ -40,14 +40,11 @@ const (
 // deletion boundary. It is order-sensitive — the assertion compares against
 // catalog order, not a sorted set.
 //
-// Reviewed at the beta.158 → beta.159 migration: EMBEDDINGS_CACHE was deleted
-// framework-side, and seven buckets entered the owned set. ENTITY_SUFFIX_INDEX
-// and GRAPH_INGEST_APPLIED_SEQ moved INTO the catalog, so they are no longer
-// deleted by the separate migration-bucket pass below. The four operational
-// entries (GRAPH_STATUS, OWNER_CLAIMS, OWNER_PRESENCE, STORAGE_REPORT) are a
-// deliberate widening: a full cutover re-bootstraps ownership and re-derives
-// readiness. COMPONENT_STATUS is NOT here — it declares open writes, so it stays
-// on the preservation side.
+// Reviewed at the beta.159 → beta.160 migration: the ownership substrate
+// (OWNER_CLAIMS, OWNER_PRESENCE), CONTEXT_INDEX, STRUCTURAL_INDEX, and the
+// COMPONENT_STATUS diagnostic bucket are deleted framework-side with no
+// compatibility surfaces. The list below mirrors the beta.160 framework KV
+// catalog (graph/kvcatalog.go) in catalog order.
 var beta148DefaultFrameworkBuckets = []string{
 	"ENTITY_STATES",
 	"ENTITY_SUFFIX_INDEX",
@@ -56,7 +53,6 @@ var beta148DefaultFrameworkBuckets = []string{
 	"INCOMING_INDEX",
 	"ALIAS_INDEX",
 	"PREDICATE_INDEX",
-	"CONTEXT_INDEX",
 	"NAME_INDEX",
 	"SPATIAL_INDEX",
 	"TEMPORAL_INDEX",
@@ -66,10 +62,7 @@ var beta148DefaultFrameworkBuckets = []string{
 	"COMMUNITY_INDEX",
 	"COMMUNITY_SUMMARIES",
 	"ANOMALY_INDEX",
-	"STRUCTURAL_INDEX",
 	"GRAPH_STATUS",
-	"OWNER_CLAIMS",
-	"OWNER_PRESENCE",
 	"STORAGE_REPORT",
 }
 
@@ -153,13 +146,10 @@ func TestE2E_Beta148CutoverRehearsal(t *testing.T) {
 	beta148WaitForReady(t, httpPort, 90*time.Second)
 	beta148AssertKnownAnswer(t, nc, 45*time.Second)
 
-	statusBucket, err := js.KeyValue(ctx, "COMPONENT_STATUS")
-	if err != nil {
-		t.Fatalf("open COMPONENT_STATUS: %v", err)
-	}
-	if _, err := statusBucket.PutString(ctx, beta148SentinelKey, sentinelValue); err != nil {
-		t.Fatalf("put COMPONENT_STATUS sentinel: %v", err)
-	}
+	// beta.160 removed the COMPONENT_STATUS diagnostic bucket, so no
+	// system-created operational bucket exists to widen the preservation set
+	// with; the operator-owned sentinel buckets above carry the preservation
+	// proof alone.
 
 	// Stop every graph writer before capturing the literal deletion sheet.
 	stopFirst()
@@ -175,8 +165,8 @@ func TestE2E_Beta148CutoverRehearsal(t *testing.T) {
 		t.Fatalf("required observed cutover resources missing: GRAPH=%t semstreams_config=%t PREDICATE_CATALOG=%t",
 			streamSet["GRAPH"], kvSet["semstreams_config"], kvSet["PREDICATE_CATALOG"])
 	}
-	if !kvSet["COMPONENT_STATUS"] || !objectSet[beta148ObjectBucket] {
-		t.Fatalf("preservation inventory missing COMPONENT_STATUS or %s", beta148ObjectBucket)
+	if !objectSet[beta148ObjectBucket] {
+		t.Fatalf("preservation inventory missing object bucket %s", beta148ObjectBucket)
 	}
 	if !streamSet[beta148UnrelatedStream] {
 		t.Fatalf("preservation inventory missing unrelated stream %s", beta148UnrelatedStream)
@@ -239,6 +229,10 @@ func beta148WriteDocsConfig(t *testing.T, workDir, docsDir string, httpPort int)
 	cfg := map[string]any{
 		"namespace": "beta148cutover",
 		"http_port": httpPort,
+		// beta.160 metric servers bind synchronously and fail loudly on a
+		// collision; the fixed 9091 default cannot be shared across tests or
+		// with a developer\'s local stack.
+		"metrics": map[string]any{"port": freePort(t)},
 		"sources": []map[string]any{{
 			"type":  "docs",
 			"paths": []string{docsDir},
@@ -339,11 +333,17 @@ func beta148AssertKnownAnswer(t *testing.T, nc *nats.Conn, timeout time.Duration
 				lastErr = err
 				continue
 			}
-			var entity semgraph.EntityState
-			if err := json.Unmarshal(entityResponse.Data, &entity); err != nil {
+			// beta.160 exact reads return graph.ExactEntity: the entity
+			// wrapped with its authoritative KV revision.
+			var exact semgraph.ExactEntity
+			if err := json.Unmarshal(entityResponse.Data, &exact); err != nil || exact.Entity == nil {
+				if err == nil {
+					err = fmt.Errorf("exact read for %s carried no entity", id)
+				}
 				lastErr = err
 				continue
 			}
+			entity := *exact.Entity
 			for _, triple := range entity.Triples {
 				if triple.Predicate == beta148RetiredPredicate {
 					t.Fatalf("known-answer entity %s contains retired predicate %s", entity.ID, beta148RetiredPredicate)
@@ -408,7 +408,7 @@ func beta148CaptureInventory(t *testing.T, ctx context.Context, js jetstream.Jet
 
 func beta148AssertPreserved(t *testing.T, ctx context.Context, js jetstream.JetStream, want string) {
 	t.Helper()
-	for _, bucket := range append(append([]string{}, beta148PreservedKVBuckets...), "COMPONENT_STATUS") {
+	for _, bucket := range beta148PreservedKVBuckets {
 		kv, err := js.KeyValue(ctx, bucket)
 		if err != nil {
 			t.Errorf("preserved KV %s missing: %v", bucket, err)

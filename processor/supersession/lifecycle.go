@@ -9,22 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
-)
-
-// Mutation-lane subjects the lifecycle pass writes through. Hardcoded here
-// (matching graph.query.* / graph.mutation.* elsewhere in this codebase)
-// rather than importing semstreams/processor/graph-ingest, which no other
-// semsource package depends on.
-const (
-	subjectTripleAddBatch          = "graph.mutation.triple.add_batch"
-	subjectEntityUpdateWithTriples = "graph.mutation.entity.update_with_triples"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/projection"
 )
 
 // lifecycleMutationTimeout bounds each mutation-lane round trip. Generous:
@@ -78,14 +72,14 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 
 	c.mu.RLock()
 	q := c.queryClient
-	client := c.client
+	mut := c.mutClient
 	c.mu.RUnlock()
-	if q == nil || client == nil {
+	if q == nil || mut == nil {
 		return graph.LifecycleRunResponse{}, fmt.Errorf("supersession not started")
 	}
 
 	prefix := req.Org + "." + entityid.PlatformSemsource
-	entities, _, err := q.QueryPrefixAll(ctx, gtypes.PrefixQueryRequest{Prefix: prefix}, c.config.maxEntities())
+	entities, _, err := q.queryPrefixAll(ctx, prefix, c.config.maxEntities())
 	if err != nil {
 		return graph.LifecycleRunResponse{}, fmt.Errorf("enumerate entities: %w", err)
 	}
@@ -112,15 +106,15 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 
 	resp := graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
 
-	if len(toMark) > 0 {
-		if err := markStale(ctx, client, toMark); err != nil {
-			c.logger.Warn("lifecycle pass: mark batch failed", "count", len(toMark), "error", err)
-		} else {
-			resp.Marked = len(toMark)
+	for _, tr := range toMark {
+		if err := markStale(ctx, mut, tr); err != nil {
+			c.logger.Warn("lifecycle pass: mark failed", "id", tr.Subject, "error", err)
+			continue
 		}
+		resp.Marked++
 	}
 	for _, id := range toClear {
-		if err := clearStale(ctx, client, id); err != nil {
+		if err := clearStale(ctx, mut, id); err != nil {
 			c.logger.Warn("lifecycle pass: clear failed", "id", id, "error", err)
 			continue
 		}
@@ -299,46 +293,51 @@ func staleTriple(subject, reason string) message.Triple {
 	}
 }
 
-// markStale batches every triple in one graph.mutation.triple.add_batch
-// request. AddTriples is must-exist (ADR-055) and appends (not
-// replace-by-predicate), which is why callers only include entities not
-// already carrying the marker (decideLifecycleActions) — the pass's own
-// idempotency guard, since a raw append would otherwise duplicate the
-// triple on every re-run against an unchanged-missing file.
-func markStale(ctx context.Context, client *natsclient.Client, triples []message.Triple) error {
-	req := gtypes.AddTriplesBatchRequest{Triples: triples}
-	data, err := json.Marshal(req)
+// markStale reconciles one entity's lifecycle predicate group to exactly the
+// marker triple, through the typed CAS mutation client. Reconcile (not append)
+// makes re-marking idempotent by construction — the old add_batch path needed
+// decideLifecycleActions' dedup guard to avoid duplicating markers; this does
+// not, though the guard still spares round trips. One transport attempt; the
+// framework never retries a mutation for the caller.
+func markStale(ctx context.Context, mut *projection.MutationClient, marker message.Triple) error {
+	_, err := mut.Reconcile(ctx, projection.ReconcileMutation{
+		Contract: graph.SourceEntityContract().Name,
+		Group:    graph.GroupLifecycle,
+		EntityID: marker.Subject,
+		Desired:  []message.Triple{marker},
+		Metadata: projection.MutationMetadata{
+			Source:    lifecycleEdgeSource,
+			Timestamp: marker.Timestamp,
+		},
+	})
 	if err != nil {
-		return fmt.Errorf("marshal add_triples_batch request: %w", err)
-	}
-	reply, err := client.RequestClassified(ctx, subjectTripleAddBatch, data, lifecycleMutationTimeout)
-	if err != nil {
-		return err
-	}
-	var resp gtypes.AddTriplesBatchResponse
-	if err := json.Unmarshal(reply, &resp); err != nil {
-		return fmt.Errorf("decode add_triples_batch response: %w", err)
-	}
-	if len(resp.FailedSubjects) > 0 {
-		return fmt.Errorf("partial batch failure: %v", resp.FailedSubjects)
+		return fmt.Errorf("reconcile lifecycle marker on %s: %w", marker.Subject, err)
 	}
 	return nil
 }
 
-// clearStale removes the entity.lifecycle.stale predicate from one entity via
-// the update lane's RemoveTriples (a pure per-predicate delete — verified
-// against the substrate pre-design; see design.md). Unknown/absent predicates
-// are a silent no-op on the substrate side, so this is safe to call
-// unconditionally on any entity the caller believes is marked.
-func clearStale(ctx context.Context, client *natsclient.Client, id string) error {
-	req := gtypes.UpdateEntityWithTriplesRequest{
-		Entity:        &gtypes.EntityState{ID: id},
-		RemoveTriples: []string{source.EntityLifecycleStale},
-	}
-	data, err := json.Marshal(req)
+// clearStale reconciles one entity's lifecycle predicate group to empty. An
+// entity_not_found outcome is benign here — an entity that no longer exists
+// has nothing to clear — and is skipped without error, mirroring the old
+// update lane's silent no-op on absent predicates. Every other failure
+// surfaces distinctly; nothing is blind-retried.
+func clearStale(ctx context.Context, mut *projection.MutationClient, id string) error {
+	_, err := mut.Reconcile(ctx, projection.ReconcileMutation{
+		Contract: graph.SourceEntityContract().Name,
+		Group:    graph.GroupLifecycle,
+		EntityID: id,
+		Desired:  nil,
+		Metadata: projection.MutationMetadata{
+			Source:    lifecycleEdgeSource,
+			Timestamp: time.Now(),
+		},
+	})
 	if err != nil {
-		return fmt.Errorf("marshal update_with_triples request: %w", err)
+		var ce *errs.ClassifiedError
+		if errors.As(err, &ce) && ce.Code == gtypes.ErrorCodeEntityNotFound {
+			return nil
+		}
+		return fmt.Errorf("reconcile lifecycle clear on %s: %w", id, err)
 	}
-	_, err = client.RequestClassified(ctx, subjectEntityUpdateWithTriples, data, lifecycleMutationTimeout)
-	return err
+	return nil
 }

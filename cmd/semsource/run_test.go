@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/config"
-	semgraph "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/types"
 )
 
@@ -86,7 +85,7 @@ func TestBuildSemstreamsConfig_RequiredComponentSet(t *testing.T) {
 	}
 }
 
-func TestGraphSubsystemComponents_ObserveOnlyOwnerLease(t *testing.T) {
+func TestGraphSubsystemComponents_IngestOverrideIsCanonicalAndLeaseFree(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
@@ -102,12 +101,41 @@ func TestGraphSubsystemComponents_ObserveOnlyOwnerLease(t *testing.T) {
 		t.Fatalf("unmarshal graph-ingest config: %v", err)
 	}
 
-	got, ok := raw["enforce_owner_lease"].(bool)
-	if !ok {
-		t.Fatalf("enforce_owner_lease missing or not bool: %#v", raw["enforce_owner_lease"])
+	// The ownership model is deleted upstream (beta.160); its knob must not
+	// reappear in any form.
+	if _, present := raw["enforce_owner_lease"]; present {
+		t.Fatal("enforce_owner_lease present; the ownership lease model was removed in beta.160")
 	}
-	if got {
-		t.Fatal("enforce_owner_lease should remain false for the first governed migration")
+
+	// A declared ports section replaces defaults wholesale, so the override
+	// must carry BOTH inputs: our entity_stream (canonical envelope, explicit
+	// stream identity) and the restated mutation provider port.
+	ports, _ := raw["ports"].(map[string]any)
+	inputs, _ := ports["inputs"].([]any)
+	if len(inputs) != 2 {
+		t.Fatalf("graph-ingest input override count = %d, want 2 (entity_stream + mutations)", len(inputs))
+	}
+	byName := map[string]map[string]any{}
+	for _, in := range inputs {
+		m, _ := in.(map[string]any)
+		name, _ := m["name"].(string)
+		byName[name] = m
+	}
+	es, ok := byName["entity_stream"]
+	if !ok {
+		t.Fatal("entity_stream input missing")
+	}
+	esCfg, _ := es["config"].(map[string]any)
+	if esCfg["kind"] != "jetstream" || esCfg["stream_name"] != "GRAPH" {
+		t.Fatalf("entity_stream config = %v, want jetstream on GRAPH", esCfg)
+	}
+	mut, ok := byName["mutations"]
+	if !ok {
+		t.Fatal("mutations input missing — a wholesale ports override must restate the mutation provider")
+	}
+	mutCfg, _ := mut["config"].(map[string]any)
+	if mutCfg["kind"] != "nats-request" {
+		t.Fatalf("mutations config kind = %v, want nats-request", mutCfg["kind"])
 	}
 }
 
@@ -138,53 +166,37 @@ func TestGraphSubsystemComponents_ObjectStoreConfigured(t *testing.T) {
 	}
 }
 
-func TestGraphSubsystemComponents_GraphQueryPortsCoverSemStreamsBeta114(t *testing.T) {
+// The ComponentManager path applies no defaults (verified against the real
+// binary: an empty configMap fails with "ports configuration is required"),
+// so graph-query and graph-gateway restate their DefaultConfig ports exactly.
+// These pins keep the restated shapes canonical and stop the retired
+// per-operation port list from coming back.
+func TestGraphSubsystemComponents_GraphQueryDeclaresFamilyPort(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
 	}
-
 	graphQuery, ok := components["graph-query"]
 	if !ok {
 		t.Fatal("graph-query component not configured")
 	}
-
 	var raw map[string]any
 	if err := json.Unmarshal(graphQuery.Config, &raw); err != nil {
 		t.Fatalf("unmarshal graph-query config: %v", err)
 	}
-
-	inputs := portDefinitions(t, raw, "inputs")
-	want := map[string]string{
-		"query_entity":          "graph.query.entity",
-		"query_entity_by_alias": "graph.query.entityByAlias",
-		"query_batch":           "graph.query.batch",
-		"query_relationships":   "graph.query.relationships",
-		"query_path_search":     "graph.query.pathSearch",
-		"query_hierarchy_stats": "graph.query.hierarchyStats",
-		"query_prefix":          "graph.query.prefix",
-		"query_spatial":         "graph.query.spatial",
-		"query_temporal":        "graph.query.temporal",
-		"query_semantic":        "graph.query.semantic",
-		"query_similar":         "graph.query.similar",
-		"local_search":          "graph.query.localSearch",
-		"global_search":         "graph.query.globalSearch",
-		"query_summary":         "graph.query.summary",
-		"query_search_graph":    "graph.query.searchGraph",
-		// byName is served by the substrate and was missing from this
-		// declaration. The subject-ownership guard compares SemSource's claims
-		// against this list, so an incomplete list is a weaker guard.
-		"query_by_name": "graph.query.byName",
+	ports, _ := raw["ports"].(map[string]any)
+	inputs, _ := ports["inputs"].([]any)
+	if len(inputs) != 1 {
+		t.Fatalf("graph-query input count = %d, want exactly the family request port", len(inputs))
 	}
-	assertPortSubjects(t, inputs, want)
+	in, _ := inputs[0].(map[string]any)
+	cfg, _ := in["config"].(map[string]any)
+	if in["name"] != "graph_queries" || cfg["kind"] != "nats-request" || cfg["subject"] != "graph.query.*" {
+		t.Fatalf("family port shape wrong: %v", in)
+	}
 }
 
-// TestGraphSubsystemComponents_GraphGatewayHTTPPortSet guards the fix for the
-// gateway failing registration with "port 0": the registry parses the gateway's
-// network port from the http input port's SUBJECT (parsePortFromSubject), so the
-// subject must encode host:port — a path like "/graphql" parses to 0 and
-// registration fails. The GraphQL route itself is GraphQLPath, not this subject.
-func TestGraphSubsystemComponents_GraphGatewayHTTPPortSet(t *testing.T) {
+func TestGraphSubsystemComponents_GraphGatewayDeclaresRequesterOutputs(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
@@ -198,41 +210,15 @@ func TestGraphSubsystemComponents_GraphGatewayHTTPPortSet(t *testing.T) {
 		t.Fatalf("unmarshal graph-gateway config: %v", err)
 	}
 	ports, _ := raw["ports"].(map[string]any)
-	inputs, _ := ports["inputs"].([]any)
-	if len(inputs) == 0 {
-		t.Fatal("graph-gateway has no input ports")
+	outputs, _ := ports["outputs"].([]any)
+	if len(outputs) != 3 {
+		t.Fatalf("graph-gateway output count = %d, want 3 requester families", len(outputs))
 	}
-	httpPort, _ := inputs[0].(map[string]any)
-	subject, _ := httpPort["subject"].(string)
-	// The default bind is 0.0.0.0:8082, whose trailing :8082 parses to a valid
-	// port. A path-style subject ("/graphql") would parse to 0 and be rejected.
-	if subject != "0.0.0.0:8082" {
-		t.Fatalf("graph-gateway http input port subject = %q, want a host:port the registry can parse to a valid port (e.g. \"0.0.0.0:8082\")", subject)
+	// bind_address replaces the retired http-input-subject shape as the sole
+	// carrier of the gateway's network identity.
+	if raw["bind_address"] != "0.0.0.0:8082" {
+		t.Fatalf("graph-gateway bind_address = %v, want 0.0.0.0:8082", raw["bind_address"])
 	}
-}
-
-func TestGraphSubsystemComponents_GraphGatewayAdvertisesQueriesAndMutations(t *testing.T) {
-	components, err := graphSubsystemComponents(&config.Config{})
-	if err != nil {
-		t.Fatalf("graphSubsystemComponents() error = %v", err)
-	}
-
-	graphGateway, ok := components["graph-gateway"]
-	if !ok {
-		t.Fatal("graph-gateway component not configured")
-	}
-
-	var raw map[string]any
-	if err := json.Unmarshal(graphGateway.Config, &raw); err != nil {
-		t.Fatalf("unmarshal graph-gateway config: %v", err)
-	}
-
-	outputs := portDefinitions(t, raw, "outputs")
-	want := map[string]string{
-		"queries":   "graph.query.*",
-		"mutations": "graph.mutation.*",
-	}
-	assertPortSubjects(t, outputs, want)
 }
 
 // TestGraphStreamConfig_SubjectsExplicit_NoRPCOverlap pins the GRAPH stream's
@@ -369,85 +355,7 @@ func assertPortSubjects(t *testing.T, got, want map[string]string) {
 	}
 }
 
-// kvPortSubjects walks every component's declared ports and returns the subjects
-// of the KV-typed ones, keyed by "<component>/<direction>/<port>" so a failure
-// names the exact declaration site.
-func kvPortSubjects(t *testing.T, components map[string]types.ComponentConfig) map[string]string {
-	t.Helper()
-
-	found := map[string]string{}
-	for compName, comp := range components {
-		var raw map[string]any
-		if err := json.Unmarshal(comp.Config, &raw); err != nil {
-			t.Fatalf("unmarshal %s config: %v", compName, err)
-		}
-		ports, ok := raw["ports"].(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, direction := range []string{"inputs", "outputs"} {
-			entries, ok := ports[direction].([]any)
-			if !ok {
-				continue
-			}
-			for _, entry := range entries {
-				port, ok := entry.(map[string]any)
-				if !ok {
-					t.Fatalf("%s %s port is not an object: %#v", compName, direction, entry)
-				}
-				portType, _ := port["type"].(string)
-				if !strings.HasPrefix(portType, "kv") {
-					continue
-				}
-				subject, _ := port["subject"].(string)
-				portName, _ := port["name"].(string)
-				found[compName+"/"+direction+"/"+portName] = subject
-			}
-		}
-	}
-	return found
-}
-
-// TestGraphSubsystemComponents_KVPortSubjectsResolveToFrameworkCatalog guards the
-// semstreams beta.159 acquisition seam: a KV port subject that does not resolve
-// to a bucket in the framework descriptor catalog now fails the owning
-// component's Start, and therefore boot. Previously a typo silently created a
-// stray bucket that no guard protected and no reader consumed, so there is no
-// compile error and no runtime warning to catch this — only a dead deployment.
-func TestGraphSubsystemComponents_KVPortSubjectsResolveToFrameworkCatalog(t *testing.T) {
-	cases := map[string]*config.Config{
-		"default":            {},
-		"clustering enabled": {Graph: &config.GraphConfig{EnableClustering: true}},
-	}
-
-	for name, cfg := range cases {
-		t.Run(name, func(t *testing.T) {
-			components, err := graphSubsystemComponents(cfg)
-			if err != nil {
-				t.Fatalf("graphSubsystemComponents() error = %v", err)
-			}
-
-			subjects := kvPortSubjects(t, components)
-			if len(subjects) == 0 {
-				t.Fatal("no KV ports discovered; the walker is not seeing the composition")
-			}
-			for site, subject := range subjects {
-				if _, ok := semgraph.SpecFor(subject); !ok {
-					t.Errorf("KV port %s declares subject %q, which resolves to no framework catalog bucket",
-						site, subject)
-				}
-			}
-		})
-	}
-}
-
-// TestGraphSubsystemComponents_GraphEmbeddingDeclaresNoOutputPorts guards the
-// beta.159 EMBEDDINGS_CACHE removal. graph-embedding's durable writes
-// (EMBEDDING_INDEX, EMBEDDING_DEDUP, the GRAPH_STATUS readiness envelope) are
-// direct bucket writes at Start, never ports — so the component now rejects ANY
-// ports.outputs entry at creation. This composition previously declared an
-// output port for the deleted EMBEDDINGS_CACHE bucket, which fails boot.
-func TestGraphSubsystemComponents_GraphEmbeddingDeclaresNoOutputPorts(t *testing.T) {
+func TestGraphSubsystemComponents_GraphEmbeddingDefersToDefaultPorts(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
@@ -462,14 +370,16 @@ func TestGraphSubsystemComponents_GraphEmbeddingDeclaresNoOutputPorts(t *testing
 	if err := json.Unmarshal(embedding.Config, &raw); err != nil {
 		t.Fatalf("unmarshal graph-embedding config: %v", err)
 	}
-	ports, ok := raw["ports"].(map[string]any)
-	if !ok {
-		t.Fatalf("graph-embedding ports missing or not an object: %#v", raw["ports"])
+	// beta.160 defaults declare the entity watch and content_store read; an
+	// override here would drift on every bump, and the beta.159 outputs
+	// rejection this test used to pin is superseded by the strict envelope.
+	if _, present := raw["ports"]; present {
+		t.Fatal("graph-embedding config overrides ports; beta.160 defaults own them")
 	}
-	if outputs, present := ports["outputs"]; present {
-		t.Errorf("graph-embedding declares ports.outputs = %#v; beta.159 rejects any output port here", outputs)
-	}
-	if _, present := ports["inputs"]; !present {
-		t.Error("graph-embedding lost its ENTITY_STATES input port")
+	// text_suffixes stays product-owned: without the code doc predicates,
+	// signatures and docstrings never reach the semantic index (#601).
+	suffixes, _ := raw["text_suffixes"].([]any)
+	if len(suffixes) == 0 {
+		t.Fatal("text_suffixes override missing; code doc predicates would not embed")
 	}
 }

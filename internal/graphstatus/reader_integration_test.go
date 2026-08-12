@@ -76,7 +76,7 @@ func TestReader_OffCatalogKeyIsInvalidNotNotReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err := semgraph.OpenCatalogBucket(ctx, tc.Client, "GRAPH_STATUS_TYPO")
+	_, err := semgraph.OpenCatalogReader(ctx, tc.Client, "GRAPH_STATUS_TYPO")
 	if err == nil {
 		t.Fatal("opening an off-catalog bucket succeeded; a typo must not silently create a stray unguarded bucket")
 	}

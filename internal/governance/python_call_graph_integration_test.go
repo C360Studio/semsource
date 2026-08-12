@@ -37,7 +37,7 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -74,7 +74,6 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 		},
 		"watch_enabled":  false,
 		"index_interval": "",
-		"stream_name":    "GRAPH",
 	})
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)

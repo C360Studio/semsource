@@ -10,7 +10,6 @@ import (
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/graphstatus"
-	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/storage"
@@ -77,7 +76,7 @@ func (c *Component) serveDiff(ctx context.Context, body []byte) ([]byte, error) 
 
 	ready, note := c.indexReady(ctx)
 
-	entities, truncated, err := q.QueryPrefixAll(ctx, gtypes.PrefixQueryRequest{Prefix: c.config.Prefix}, c.config.maxEntities())
+	entities, truncated, err := q.queryPrefixAll(ctx, c.config.Prefix, c.config.maxEntities())
 	if err != nil {
 		return nil, fmt.Errorf("enumerate entities: %w", err)
 	}

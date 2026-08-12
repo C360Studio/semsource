@@ -12,11 +12,10 @@ import (
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semstreams/component"
-	gtypes "github.com/c360studio/semstreams/graph"
-	graphquery "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semstreams/pkg/projection"
 	"github.com/c360studio/semstreams/storage/storeregistry"
 )
 
@@ -39,7 +38,8 @@ type Component struct {
 	running      bool
 	startTime    time.Time
 	publisher    *entitypub.Publisher
-	queryClient  graphquery.Client
+	queryClient  *prefixQuerier
+	mutClient    *projection.MutationClient
 	triggerSub   *natsclient.Subscription
 	diffSub      *natsclient.Subscription
 	lifecycleSub *natsclient.Subscription
@@ -90,20 +90,24 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	pub.Start(ctx)
 
-	q, err := graphquery.NewClient(ctx, c.client, nil)
+	q := &prefixQuerier{client: c.client}
+	mut, err := projection.NewMutationClient(projection.MutationClientConfig{
+		NATS:      c.client,
+		Contracts: []projection.Contract{graph.SourceEntityContract()},
+		Timeout:   lifecycleMutationTimeout,
+	})
 	if err != nil {
 		pub.Stop()
-		return fmt.Errorf("create query client: %w", err)
+		return fmt.Errorf("create mutation client: %w", err)
 	}
 
 	resolver, err := c.buildBodyResolver(ctx)
 	if err != nil {
 		pub.Stop()
-		_ = q.Close()
 		return fmt.Errorf("build body resolver: %w", err)
 	}
 
-	sub, diffSub, lifecycleSub, err := c.subscribeHandlers(ctx, pub, q)
+	sub, diffSub, lifecycleSub, err := c.subscribeHandlers(ctx, pub)
 	if err != nil {
 		return err
 	}
@@ -113,6 +117,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Lock()
 	c.publisher = pub
 	c.queryClient = q
+	c.mutClient = mut
 	c.triggerSub = sub
 	c.diffSub = diffSub
 	c.lifecycleSub = lifecycleSub
@@ -138,7 +143,7 @@ func (c *Component) Start(ctx context.Context) error {
 // staleness lifecycle-run trigger), rolling back pub/q and any subscription
 // already registered on the first failure. Extracted from Start to keep it
 // under revive's function-length limit.
-func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publisher, q graphquery.Client) (sub, diffSub, lifecycleSub *natsclient.Subscription, err error) {
+func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publisher) (sub, diffSub, lifecycleSub *natsclient.Subscription, err error) {
 	subject := c.config.triggerSubject()
 	sub, err = c.client.SubscribeForRequests(ctx, subject, func(reqCtx context.Context, _ []byte) ([]byte, error) {
 		stats, runErr := c.runPass(reqCtx)
@@ -149,7 +154,6 @@ func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publis
 	})
 	if err != nil {
 		pub.Stop()
-		_ = q.Close()
 		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", subject, err)
 	}
 
@@ -159,7 +163,6 @@ func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publis
 		})
 	if err != nil {
 		pub.Stop()
-		_ = q.Close()
 		_ = sub.Unsubscribe()
 		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", versionDiffSubject, err)
 	}
@@ -170,7 +173,6 @@ func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publis
 		})
 	if err != nil {
 		pub.Stop()
-		_ = q.Close()
 		_ = sub.Unsubscribe()
 		_ = diffSub.Unsubscribe()
 		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", graph.LifecycleTriggerSubject, err)
@@ -210,8 +212,7 @@ func (c *Component) runPass(ctx context.Context) (passStats, error) {
 		return passStats{}, fmt.Errorf("supersession not started")
 	}
 
-	req := gtypes.PrefixQueryRequest{Prefix: c.config.Prefix}
-	entities, truncated, err := q.QueryPrefixAll(ctx, req, c.config.maxEntities())
+	entities, truncated, err := q.queryPrefixAll(ctx, c.config.Prefix, c.config.maxEntities())
 	if err != nil {
 		return passStats{}, fmt.Errorf("enumerate entities: %w", err)
 	}
@@ -322,12 +323,8 @@ func (c *Component) Stop(_ time.Duration) error {
 		c.publisher.Stop()
 		c.publisher = nil
 	}
-	if c.queryClient != nil {
-		if err := c.queryClient.Close(); err != nil {
-			c.logger.Warn("failed to close query client", "error", err)
-		}
-		c.queryClient = nil
-	}
+	c.queryClient = nil
+	c.mutClient = nil
 	c.running = false
 	c.logger.Info("supersession stopped")
 	return nil
@@ -355,21 +352,13 @@ func (c *Component) OutputPorts() []component.Port {
 	}
 	ports := make([]component.Port, len(c.config.Ports.Outputs))
 	for i, portDef := range c.config.Ports.Outputs {
-		port := component.Port{
+		ports[i] = component.Port{
 			Name:        portDef.Name,
 			Direction:   component.DirectionOutput,
 			Required:    portDef.Required,
 			Description: portDef.Description,
+			Config:      portDef.Config,
 		}
-		if portDef.Type == "jetstream" {
-			port.Config = component.JetStreamPort{
-				StreamName: portDef.StreamName,
-				Subjects:   []string{portDef.Subject},
-			}
-		} else {
-			port.Config = component.NATSPort{Subject: portDef.Subject}
-		}
-		ports[i] = port
 	}
 	return ports
 }

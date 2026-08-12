@@ -17,7 +17,6 @@ import (
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semstreams/component"
 	semgraph "github.com/c360studio/semstreams/graph"
-	queryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
@@ -48,7 +47,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -89,7 +88,6 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 		},
 		"watch_enabled":  false,
 		"index_interval": "",
-		"stream_name":    "GRAPH",
 	})
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
@@ -107,17 +105,11 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = astComp.Stop(5 * time.Second) })
 
-	qc, err := queryclient.NewClient(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("query client: %v", err)
-	}
-	t.Cleanup(func() { _ = qc.Close() })
-
 	// Wait until all three sources' symbols are queryable, then locate them.
 	var runOld, runNew, stableOld, stableNew, appMain *semgraph.EntityState
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		ents := prefixAll(ctx, qc, "acme.semsource.python")
+		ents := prefixAll(ctx, tc.Client, "acme.semsource.python")
 		runOld = pickByNameVersion(ents, "run", "v1.9.0")
 		runNew = pickByNameVersion(ents, "run", "v1.10.0")
 		stableOld = pickByNameVersion(ents, "stable", "v1.9.0")
@@ -173,13 +165,13 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	}
 
 	// (2) Lineage edges connect the two depA versions with the right direction.
-	waitTriple(t, ctx, qc, runNew.ID, semsourceast.CodeSupersedes, runOld.ID, 15*time.Second)
-	waitTriple(t, ctx, qc, runOld.ID, semsourceast.CodeSupersededBy, runNew.ID, 15*time.Second)
-	waitTriple(t, ctx, qc, runNew.ID, semsourceast.CodeLineageChange, "changed", 15*time.Second)
-	waitTriple(t, ctx, qc, stableNew.ID, semsourceast.CodeLineageChange, "unchanged", 15*time.Second)
+	waitTriple(t, ctx, tc.Client, runNew.ID, semsourceast.CodeSupersedes, runOld.ID, 15*time.Second)
+	waitTriple(t, ctx, tc.Client, runOld.ID, semsourceast.CodeSupersededBy, runNew.ID, 15*time.Second)
+	waitTriple(t, ctx, tc.Client, runNew.ID, semsourceast.CodeLineageChange, "changed", 15*time.Second)
+	waitTriple(t, ctx, tc.Client, stableNew.ID, semsourceast.CodeLineageChange, "unchanged", 15*time.Second)
 
 	// (3) Cross-source isolation: appB's symbol carries no lineage edge to depA.
-	freshApp, _ := fetchEntity(ctx, qc, appMain.ID)
+	freshApp, _ := fetchEntity(ctx, tc.Client, appMain.ID)
 	if freshApp != nil {
 		for _, pred := range []string{semsourceast.CodeSupersedes, semsourceast.CodeSupersededBy} {
 			for i := range freshApp.Triples {
@@ -233,12 +225,31 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 }
 
 // prefixAll fetches every entity under a prefix (bounded), or nil on error.
-func prefixAll(ctx context.Context, qc queryclient.Client, prefix string) []semgraph.EntityState {
-	ents, _, err := qc.QueryPrefixAll(ctx, semgraph.PrefixQueryRequest{Prefix: prefix}, 500)
-	if err != nil {
-		return nil
+// Pages graph.query.prefix directly with the opaque-cursor contract — the
+// beta.160 shape; the aggregate query client no longer exists.
+func prefixAll(ctx context.Context, client *natsclient.Client, prefix string) []semgraph.EntityState {
+	var out []semgraph.EntityState
+	cursor := ""
+	for len(out) < 500 {
+		data, err := json.Marshal(semgraph.PrefixQueryRequest{Prefix: prefix, Cursor: cursor})
+		if err != nil {
+			return nil
+		}
+		raw, err := client.RequestClassified(ctx, "graph.query.prefix", data, 10*time.Second)
+		if err != nil {
+			return nil
+		}
+		var resp semgraph.PrefixQueryResponse
+		if err := json.Unmarshal(raw, &resp); err != nil {
+			return nil
+		}
+		out = append(out, resp.Entities...)
+		if resp.NextCursor == "" {
+			break
+		}
+		cursor = resp.NextCursor
 	}
-	return ents
+	return out
 }
 
 // pickByNameVersion returns the entity whose DcTitle == name and CodeVersion ==

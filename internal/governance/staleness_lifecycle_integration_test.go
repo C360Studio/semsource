@@ -12,7 +12,6 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	semgraph "github.com/c360studio/semstreams/graph"
-	queryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
@@ -48,7 +47,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -82,7 +81,6 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 		},
 		"watch_enabled":  true,
 		"index_interval": "", // manual lifecycle triggering below; no periodic sweep noise
-		"stream_name":    "GRAPH",
 	})
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
@@ -111,11 +109,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = scomp.Stop(5 * time.Second) })
 
-	qc, err := queryclient.NewClient(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("query client: %v", err)
-	}
-	t.Cleanup(func() { _ = qc.Close() })
+	qc := tc.Client
 
 	system := entityid.ScopedSystemSlug(project, "")
 	prefix := org + "." + entityid.PlatformSemsource + ".golang." + system
@@ -215,7 +209,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 
 // waitPredicateAbsent polls until entity id no longer carries predicate, or
 // fails the test after timeout.
-func waitPredicateAbsent(t *testing.T, ctx context.Context, qc queryclient.Client, id, predicate string, timeout time.Duration) {
+func waitPredicateAbsent(t *testing.T, ctx context.Context, qc *natsclient.Client, id, predicate string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

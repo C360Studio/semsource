@@ -511,23 +511,13 @@ func (c *Component) OutputPorts() []component.Port {
 
 // buildPort creates a component.Port from a PortDefinition.
 func buildPort(portDef component.PortDefinition, direction component.Direction) component.Port {
-	port := component.Port{
+	return component.Port{
 		Name:        portDef.Name,
 		Direction:   direction,
 		Required:    portDef.Required,
 		Description: portDef.Description,
+		Config:      portDef.Config,
 	}
-	if portDef.Type == "jetstream" {
-		port.Config = component.JetStreamPort{
-			StreamName: portDef.StreamName,
-			Subjects:   []string{portDef.Subject},
-		}
-	} else {
-		port.Config = component.NATSPort{
-			Subject: portDef.Subject,
-		}
-	}
-	return port
 }
 
 // ConfigSchema returns the configuration schema.

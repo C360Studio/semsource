@@ -16,12 +16,10 @@ import (
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semstreams/component"
 	semgraph "github.com/c360studio/semstreams/graph"
-	graphqueryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/ownership"
 	graphindex "github.com/c360studio/semstreams/processor/graph-index"
 	graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
 	graphquery "github.com/c360studio/semstreams/processor/graph-query"
@@ -38,7 +36,7 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 		}),
 	)
 
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -49,19 +47,34 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	configJSON, err := json.Marshal(map[string]any{
-		"enforce_owner_lease": false,
 		"ports": map[string]any{
-			"inputs": []map[string]any{
+			"inputs": []component.PortDefinition{
 				{
-					"name":        "entity_stream",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.entity",
-					"stream_name": "GRAPH",
-					"config":      map[string]any{"deliver_policy": "all"},
+					Name: "entity_stream",
+					Config: component.JetStreamPort{
+						StreamName:    "GRAPH",
+						Subjects:      []string{"graph.ingest.entity"},
+						DeliverPolicy: "all",
+					},
+				},
+				{
+					// The typed mutation provider port (values pinned from
+					// semstreams internal/graphmutation, which is not
+					// importable): a declared ports section replaces the
+					// defaults wholesale, so every required port is restated.
+					Name:     "mutations",
+					Required: true,
+					Config: component.NATSRequestPort{
+						Subject: "graph.mutation.>",
+						Interface: &component.InterfaceContract{
+							Type:    "semstreams.graph.mutation",
+							Version: "v1",
+						},
+					},
 				},
 			},
-			"outputs": []map[string]any{
-				{"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"},
+			"outputs": []component.PortDefinition{
+				{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
 			},
 		},
 	})
@@ -188,7 +201,7 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 		}),
 	)
 
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -213,14 +226,6 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 	if err != nil {
 		t.Fatalf("BuildSyntheticFixture() error = %v", err)
 	}
-
-	reader, err := ownership.NewClaimReader(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("NewClaimReader() error = %v", err)
-	}
-	assertOwnedPredicate(t, ctx, reader, result.Payload.ID, source.MediaStorageRef)
-	assertOwnedPredicate(t, ctx, reader, result.Payload.ID, source.MediaByteRange)
-	assertOwnedPredicate(t, ctx, reader, result.Payload.ID, source.MediaExtractionFinding)
 
 	reg := payloadregistry.New()
 	if err := semsourcegraph.RegisterPayloads(reg); err != nil {
@@ -269,7 +274,7 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 		}),
 	)
 
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -327,31 +332,10 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 
 	waitForPredicateIndexed(t, ctx, tc.Client, source.DocContent, 2, 5*time.Second)
 
-	predicateClient, err := graphqueryclient.NewClient(ctx, tc.Client, graphqueryclient.DefaultConfig())
-	if err != nil {
-		t.Fatalf("create graph query client: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = predicateClient.Close()
-	})
-	predicateEntities, err := predicateClient.GetEntitiesByPredicate(ctx, source.DocContent)
-	if err != nil {
-		t.Fatalf("query canonical predicate %q: %v", source.DocContent, err)
-	}
-	wantPredicateEntities := map[string]bool{
-		"acme.semsource.web.docs.doc.aaa111": false,
-		"acme.semsource.web.docs.doc.bbb222": false,
-	}
-	for _, entityID := range predicateEntities {
-		if _, ok := wantPredicateEntities[entityID]; ok {
-			wantPredicateEntities[entityID] = true
-		}
-	}
-	for entityID, found := range wantPredicateEntities {
-		if !found {
-			t.Errorf("canonical predicate %q missing known entity %q; got %v", source.DocContent, entityID, predicateEntities)
-		}
-	}
+	// The aggregate client's GetEntitiesByPredicate read did not survive the
+	// beta.160 query-contract closure, and predicate-index correctness is the
+	// framework's property, proven by its own suites. Our side — both doc
+	// entities born, stored, and readable — is asserted above and below.
 
 	firstPage := requestPrefixPage(t, ctx, tc.Client, semgraph.PrefixQueryRequest{
 		Prefix: "acme.semsource.web.docs",
@@ -442,19 +426,34 @@ func startGraphIngest(
 	t.Helper()
 
 	configJSON, err := json.Marshal(map[string]any{
-		"enforce_owner_lease": false,
 		"ports": map[string]any{
-			"inputs": []map[string]any{
+			"inputs": []component.PortDefinition{
 				{
-					"name":        "entity_stream",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.entity",
-					"stream_name": "GRAPH",
-					"config":      map[string]any{"deliver_policy": "all"},
+					Name: "entity_stream",
+					Config: component.JetStreamPort{
+						StreamName:    "GRAPH",
+						Subjects:      []string{"graph.ingest.entity"},
+						DeliverPolicy: "all",
+					},
+				},
+				{
+					// The typed mutation provider port (values pinned from
+					// semstreams internal/graphmutation, which is not
+					// importable): a declared ports section replaces the
+					// defaults wholesale, so every required port is restated.
+					Name:     "mutations",
+					Required: true,
+					Config: component.NATSRequestPort{
+						Subject: "graph.mutation.>",
+						Interface: &component.InterfaceContract{
+							Type:    "semstreams.graph.mutation",
+							Version: "v1",
+						},
+					},
 				},
 			},
-			"outputs": []map[string]any{
-				{"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"},
+			"outputs": []component.PortDefinition{
+				{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
 			},
 		},
 	})
@@ -493,13 +492,13 @@ func startGraphIndex(
 		"startup_interval_ms": 50,
 		"ports": map[string]any{
 			"inputs": []map[string]any{
-				{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+				{"name": "entity_watch", "config": map[string]any{"kind": "kv-watch", "bucket": "ENTITY_STATES"}},
 			},
 			"outputs": []map[string]any{
-				{"name": "outgoing_index", "type": "kv-write", "subject": "OUTGOING_INDEX"},
-				{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
-				{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
-				{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
+				{"name": "outgoing_index", "config": map[string]any{"kind": "kv-write", "bucket": "OUTGOING_INDEX"}},
+				{"name": "incoming_index", "config": map[string]any{"kind": "kv-write", "bucket": "INCOMING_INDEX"}},
+				{"name": "alias_index", "config": map[string]any{"kind": "kv-write", "bucket": "ALIAS_INDEX"}},
+				{"name": "predicate_index", "config": map[string]any{"kind": "kv-write", "bucket": "PREDICATE_INDEX"}},
 			},
 		},
 	})
@@ -537,9 +536,23 @@ func startGraphQuery(
 		"startup_attempts": 1,
 		"startup_interval": time.Millisecond,
 		"recheck_interval": time.Second,
+		// The direct factory path applies no defaults: restate the family
+		// request port exactly as graph-query's DefaultConfig declares it
+		// (values pinned from the beta.160 source; per-operation ports are
+		// retired).
 		"ports": map[string]any{
-			"inputs": []map[string]any{
-				{"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
+			"inputs": []component.PortDefinition{
+				{
+					Name:     "graph_queries",
+					Required: true,
+					Config: component.NATSRequestPort{
+						Subject: "graph.query.*",
+						Interface: &component.InterfaceContract{
+							Type:    "graph.query",
+							Version: "v1",
+						},
+					},
+				},
 			},
 		},
 	})
@@ -619,27 +632,6 @@ func hasPredicate(entity *semgraph.EntityState, predicate string) bool {
 		}
 	}
 	return false
-}
-
-func assertOwnedPredicate(
-	t *testing.T,
-	ctx context.Context,
-	reader *ownership.ClaimReader,
-	entityID string,
-	predicate string,
-) {
-	t.Helper()
-
-	owner, _, ok, err := reader.OwnerOf(ctx, entityID, predicate)
-	if err != nil {
-		t.Fatalf("OwnerOf(%s, %s) error = %v", entityID, predicate, err)
-	}
-	if !ok {
-		t.Fatalf("OwnerOf(%s, %s) ok = false", entityID, predicate)
-	}
-	if owner != OwnerID {
-		t.Fatalf("OwnerOf(%s, %s) owner = %q, want %q", entityID, predicate, owner, OwnerID)
-	}
 }
 
 func assertNoRawBinaryObjects(t *testing.T, entity *semgraph.EntityState, raw []byte) {
