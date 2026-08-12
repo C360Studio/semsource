@@ -181,7 +181,10 @@ jobs:
   publish-ui:
     needs: [test, lint, ui-quality]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Cold buildx cache + QEMU arm64 emulation blew through 15 minutes on the
+    # first publish after six weeks of red mains (run 31630208346, cancelled
+    # at 15:17 elapsed). Same budget class as ui-smoke-dev's cold build.
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
