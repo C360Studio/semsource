@@ -636,6 +636,14 @@ func (p *Parser) classFieldsWithInherited(start classRef, own map[string]string)
 // merge: private never crosses, package-private crosses only within the
 // package (directory is the package proxy — the layout Java tooling
 // enforces), protected and public always cross.
+//
+// Two known-inexact corners of the directory proxy (re-review NIT 2), both
+// accepted: the same package split across multi-module source roots compares
+// as different packages (missing edge, safe direction), and a hierarchy that
+// leaves and re-enters a package compares the END points, reporting a
+// package-private field visible where Java would not inherit it through the
+// foreign middle class (requires that exact shape; the walk's declaring-file
+// binding still types it correctly when it fires).
 func fieldVisibleToSubclass(access fieldAccess, declRel, subclassRel string) bool {
 	switch access {
 	case accessPrivate:

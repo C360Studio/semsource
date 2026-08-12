@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/source/ast"
@@ -261,6 +262,41 @@ func TestExternalAndInertCalls(t *testing.T) {
 	for _, c := range run.Calls {
 		if c != "external:os.getcwd" {
 			t.Errorf("unexpected inert call edge %q in %v (builtin/undefined should be dropped)", c, run.Calls)
+		}
+	}
+}
+
+// A nested def's own parameters and a lambda's parameters shadow like locals:
+// the call walk crosses function boundaries (re-review NIT 1).
+func TestNestedDefParamShadowIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"app.py": "def transform(x):\n    return x\n\n" +
+			"def run():\n    def inner(transform):\n        transform(1)\n    inner(transform)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatal("missing run")
+	}
+	for _, call := range run.Calls {
+		if strings.Contains(call, "transform") {
+			t.Errorf("shadowed nested-def param resolved: %v", run.Calls)
+		}
+	}
+}
+
+func TestLambdaParamShadowIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"handlers.py": "def handler():\n    pass\n",
+		"app.py": "from handlers import handler\n\n" +
+			"def run(hs):\n    return map(lambda handler: handler(), hs)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatal("missing run")
+	}
+	for _, call := range run.Calls {
+		if strings.Contains(call, "handler") {
+			t.Errorf("shadowed lambda param resolved: %v", run.Calls)
 		}
 	}
 }

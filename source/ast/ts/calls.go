@@ -348,6 +348,35 @@ func localValueNames(params, body *sitter.Node, source []byte) map[string]bool {
 	if body == nil {
 		return names
 	}
+	// bindNestedParams binds a nested function-like node's OWN parameters.
+	// The call walk deliberately crosses nested-function boundaries, so a
+	// callback's parameter (`items.map((transform) => transform(1))`) shadows
+	// exactly like a local — leaving it unbound was the one remaining
+	// wrong-edge path (re-review NIT 1; measured 0 of 3,593 ui/ edges, closed
+	// so the spec's "in any language" holds as written, not in-practice).
+	bindNestedParams := func(n *sitter.Node) {
+		switch n.Type() {
+		case "arrow_function":
+			nested := ArrowParamsNode(n)
+			if nested == nil {
+				return
+			}
+			if nested.Type() == "formal_parameters" {
+				for i := 0; i < int(nested.NamedChildCount()); i++ {
+					bindPattern(nested.NamedChild(i).ChildByFieldName("pattern"))
+				}
+				return
+			}
+			bindPattern(nested)
+		case "function_expression", "function_declaration", "method_definition",
+			"generator_function", "generator_function_declaration":
+			if nested := n.ChildByFieldName("parameters"); nested != nil {
+				for i := 0; i < int(nested.NamedChildCount()); i++ {
+					bindPattern(nested.NamedChild(i).ChildByFieldName("pattern"))
+				}
+			}
+		}
+	}
 	var walk func(n *sitter.Node)
 	walk = func(n *sitter.Node) {
 		switch n.Type() {
@@ -367,6 +396,7 @@ func localValueNames(params, body *sitter.Node, source []byte) map[string]bool {
 		case "catch_clause":
 			bindPattern(n.ChildByFieldName("parameter"))
 		}
+		bindNestedParams(n)
 		for i := 0; i < int(n.NamedChildCount()); i++ {
 			walk(n.NamedChild(i))
 		}

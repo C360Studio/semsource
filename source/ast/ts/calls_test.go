@@ -313,6 +313,36 @@ func TestExternalDefaultImportCallEmitsExternalMarker(t *testing.T) {
 // The inline arrow passed to .map() is not its own entity (it is never
 // assigned to a name), so this call site is only ever observed via run's own
 // extractCalls walk, which does not stop at the nested-arrow boundary.
+// A NESTED function-like node's own parameters shadow too — the call walk
+// crosses function boundaries, so a callback param must bind exactly like a
+// local (re-review NIT 1: the last wrong-edge path).
+func TestNestedCallbackParamShadowStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"function run(items) { items.map((transform) => transform(1)); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+func TestNestedFunctionExpressionParamShadowStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"handlers.ts": "export function handler() {}\n",
+		"m.ts": "import { handler } from \"./handlers\";\n" +
+			"function run(hs) { hs.forEach(function (handler) { handler(); }); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+func TestNestedDeclarationParamShadowStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function save(x) { return x; }\n" +
+			"function run() { function inner(save) { save(); } inner(save); }\n",
+	})
+	// inner(save) as an ARGUMENT is a reference, not a call; the only call
+	// edges would be inner (local decl, suppressed) and the shadowed save.
+	assertNoCalls(t, ents, "run")
+}
+
 func TestParamShadowsSameFileFunctionStaysInert(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"m.ts": "function transform(x) { return x; }\n" +

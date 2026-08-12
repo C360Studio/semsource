@@ -175,6 +175,21 @@ func localValueNames(fnNode *sitter.Node, content []byte) map[string]bool {
 			if nameNode := n.ChildByFieldName("name"); nameNode != nil {
 				names[nodeText(nameNode, content)] = true
 			}
+			// A nested def's OWN parameters shadow inside its body, and the
+			// call walk crosses function boundaries — bind them like locals
+			// (re-review NIT 1; the wrong-edge direction otherwise).
+			if params := n.ChildByFieldName("parameters"); params != nil {
+				for i := 0; i < int(params.NamedChildCount()); i++ {
+					collectPyParamNames(params.NamedChild(i), content, names)
+				}
+			}
+		case "lambda":
+			// `map(lambda handler: handler(), hs)` — same rule.
+			if params := n.ChildByFieldName("parameters"); params != nil {
+				for i := 0; i < int(params.NamedChildCount()); i++ {
+					collectPyParamNames(params.NamedChild(i), content, names)
+				}
+			}
 		}
 		for i := 0; i < int(n.NamedChildCount()); i++ {
 			walk(n.NamedChild(i))
