@@ -42,5 +42,12 @@ The read contracts you consume are stable across this migration:
 - Mutations to missing entities fail with `entity_not_found` and never create
   stub entities. If you write to the graph (per ADR-040 curator flows), ensure
   entities are born through their envelope-carrying lane first.
+- **Exact entity reads are wrapped**: `graph.ingest.query.entity` (and the
+  substrate's exact-read operations generally) return `graph.ExactEntity` —
+  `{"entity": {...}, "kvRevision": N}` — not a bare `EntityState`. Decoders
+  reading the old bare shape will silently see zero triples.
+- Metrics servers bind synchronously and fail startup loudly on a port
+  collision (previously swallowed). If you run multiple SemSource processes on
+  one host, give each a distinct `metrics.port`.
 
 Questions: file a SemSource issue and tag it `beta160-adoption`.

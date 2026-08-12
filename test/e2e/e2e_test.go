@@ -360,6 +360,10 @@ func writeConfig(t *testing.T, dir string, httpPort int) string {
 	cfg := map[string]any{
 		"namespace": "e2etest",
 		"http_port": httpPort,
+		// beta.160 metric servers bind synchronously and fail loudly on a
+		// collision; the fixed 9091 default cannot be shared across tests or
+		// with a developer\'s local stack.
+		"metrics": map[string]any{"port": freePort(t)},
 		"sources": []map[string]any{
 			{"type": "ast", "path": root, "language": "go", "watch": false},
 			{"type": "docs", "paths": []string{filepath.Join(root, "docs")}, "watch": false},
@@ -966,6 +970,7 @@ func writeOSHConfig(t *testing.T, dir, workspaceDir string, httpPort int) string
 		"namespace":     "oshtest",
 		"workspace_dir": workspaceDir,
 		"http_port":     httpPort,
+		"metrics":       map[string]any{"port": freePort(t)},
 		"sources": []map[string]any{
 			{
 				"type":     "repo",
@@ -1589,6 +1594,7 @@ func writeRuntimeAddConfig(t *testing.T, dir, namespace string, httpPort, wsPort
 	cfg := map[string]any{
 		"namespace": namespace,
 		"http_port": httpPort,
+		"metrics":   map[string]any{"port": freePort(t)},
 		"sources": []map[string]any{
 			{"type": "docs", "paths": []string{baselineDocs}, "watch": false},
 		},

@@ -44,7 +44,7 @@
       appending; test fails on auto-vivify assumptions
 - [x] 4.2 `response_too_large`: req/reply consumers classify it as a result-size failure distinct
       from timeout, with a unit test on the classification path
-- [ ] 4.3 Full suites green: `go test ./...`, `go test -tags=integration ./...`,
+- [x] 4.3 Full suites green: `go test ./...`, `go test -tags=integration ./...`,
       `go test -race -tags=integration ./...`, `go test -tags=e2e ./test/e2e/`
 
 ## 5. No-shims gate and docs (D4)

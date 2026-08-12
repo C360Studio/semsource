@@ -229,6 +229,10 @@ func beta148WriteDocsConfig(t *testing.T, workDir, docsDir string, httpPort int)
 	cfg := map[string]any{
 		"namespace": "beta148cutover",
 		"http_port": httpPort,
+		// beta.160 metric servers bind synchronously and fail loudly on a
+		// collision; the fixed 9091 default cannot be shared across tests or
+		// with a developer\'s local stack.
+		"metrics": map[string]any{"port": freePort(t)},
 		"sources": []map[string]any{{
 			"type":  "docs",
 			"paths": []string{docsDir},
@@ -329,11 +333,17 @@ func beta148AssertKnownAnswer(t *testing.T, nc *nats.Conn, timeout time.Duration
 				lastErr = err
 				continue
 			}
-			var entity semgraph.EntityState
-			if err := json.Unmarshal(entityResponse.Data, &entity); err != nil {
+			// beta.160 exact reads return graph.ExactEntity: the entity
+			// wrapped with its authoritative KV revision.
+			var exact semgraph.ExactEntity
+			if err := json.Unmarshal(entityResponse.Data, &exact); err != nil || exact.Entity == nil {
+				if err == nil {
+					err = fmt.Errorf("exact read for %s carried no entity", id)
+				}
 				lastErr = err
 				continue
 			}
+			entity := *exact.Entity
 			for _, triple := range entity.Triples {
 				if triple.Predicate == beta148RetiredPredicate {
 					t.Fatalf("known-answer entity %s contains retired predicate %s", entity.ID, beta148RetiredPredicate)
