@@ -67,7 +67,7 @@
 - [ ] 6.2 Record product proof per the upstream guide: tag + migration commit, schema/client
       regeneration, strict validation pass, retired-surface removal (5.1 output), green suites,
       e2e proof — as the PR description's proof section
-- [ ] 6.3 Post adoption status to our remaining open upstream ask #603 thread if the impact facet
+- [x] 6.3 Post adoption status to our remaining open upstream ask #603 thread if the impact facet
       shape changed under beta.160 (verify against the new pin before commenting)
 
 ## 7. Specs
