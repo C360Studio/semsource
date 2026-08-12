@@ -21,12 +21,12 @@
 
 ## 3. TS + Svelte call edges (#149, D3)
 
-- [ ] 3.1 `ts/calls.go`: same-file direct calls + named-import-bound calls through the existing
+- [x] 3.1 `ts/calls.go`: same-file direct calls + named-import-bound calls through the existing
       module→file resolution; `this.m()` own-class only; property chains/computed callees inert —
       table-driven tests for every form
-- [ ] 3.2 Default and namespace import forms with tested inert fallbacks; barrel re-exports one
+- [x] 3.2 Default and namespace import forms with tested inert fallbacks; barrel re-exports one
       hop max
-- [ ] 3.3 Wire the pass into the Svelte parser's script blocks; test a component→module edge and
+- [x] 3.3 Wire the pass into the Svelte parser's script blocks; test a component→module edge and
       the ui/ corpus parses without regression (entity counts stable ± the new edges)
 
 ## 4. C direct calls (#149, D4)
