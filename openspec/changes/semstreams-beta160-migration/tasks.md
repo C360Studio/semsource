@@ -39,7 +39,7 @@
 
 ## 4. Behavioral regression proofs (D5)
 
-- [ ] 4.1 Append-no-stub: regression test proving every SemSource append path whose target may
+- [x] 4.1 Append-no-stub: regression test proving every SemSource append path whose target may
       not pre-exist (supersession relations first) births the entity with its envelope before
       appending; test fails on auto-vivify assumptions
 - [x] 4.2 `response_too_large`: req/reply consumers classify it as a result-size failure distinct
@@ -49,7 +49,7 @@
 
 ## 5. No-shims gate and docs (D4)
 
-- [ ] 5.1 Retired-symbol grep gate — zero hits outside `openspec/changes/archive/` for:
+- [x] 5.1 Retired-symbol grep gate — zero hits outside `openspec/changes/archive/` for:
       `pkg/ownership`, `ModeReplaceOwned`, `ReplaceOwned`, `BindAndHeartbeat`,
       `OpenCatalogBucket`, `OWNER_CLAIMS`, `OWNER_PRESENCE`, `SearchGraph`, `SummarizeGraph`,
       `NATSQuerier`, `StartService`, `StopService`, `RuntimeConfigurable`, and flat

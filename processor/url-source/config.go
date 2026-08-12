@@ -25,9 +25,6 @@ type Config struct {
 	// changes. Accepts Go duration strings (e.g. "60s", "5m"). Default: "300s".
 	PollInterval string `json:"poll_interval" schema:"type:string,description:Polling interval for URL content changes (e.g. 60s 5m),category:advanced,default:300s"`
 
-	// StreamName is the JetStream stream name for publishing entities.
-	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
-
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
 	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
@@ -72,6 +69,5 @@ func DefaultConfig() Config {
 			Outputs: outputDefs,
 		},
 		PollInterval: "300s",
-		StreamName:   "GRAPH",
 	}
 }

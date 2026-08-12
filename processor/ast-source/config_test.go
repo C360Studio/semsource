@@ -54,7 +54,7 @@ func TestConfigSchemaOmitsRemovedASTKeys(t *testing.T) {
 
 func TestDefaultConfigRetainsGlobalDefaults(t *testing.T) {
 	cfg := DefaultConfig()
-	if !cfg.WatchEnabled || cfg.IndexInterval != "60s" || cfg.StreamName != "GRAPH" {
+	if !cfg.WatchEnabled || cfg.IndexInterval != "60s" {
 		t.Fatalf("global defaults changed: %+v", cfg)
 	}
 }

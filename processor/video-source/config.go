@@ -25,9 +25,6 @@ type Config struct {
 	WatchEnabled bool `json:"watch_enabled" schema:"type:bool,description:Enable fsnotify watching for live file changes,category:basic,default:true"`
 	CoalesceMs   int  `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for file watcher events in ms. 0 uses built-in default (200ms),category:advanced"`
 
-	// StreamName is the JetStream stream name for publishing entities.
-	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name,category:advanced,default:GRAPH"`
-
 	// KeyframeMode selects the keyframe extraction strategy.
 	// Valid values: "interval" (default), "scene", "iframes".
 	KeyframeMode string `json:"keyframe_mode" schema:"type:string,description:Keyframe extraction strategy: interval|scene|iframes,category:advanced,default:interval"`
@@ -93,7 +90,6 @@ func DefaultConfig() Config {
 			Outputs: outputDefs,
 		},
 		WatchEnabled:     true,
-		StreamName:       "GRAPH",
 		KeyframeMode:     "interval",
 		KeyframeInterval: "5s",
 		SceneThreshold:   0.3,
