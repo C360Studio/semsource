@@ -56,6 +56,55 @@ done
 	printf '%b\n' "$row"
 } | column -t -s "$(printf '\t')"
 
+# Latency: median/p95 of latency_ms (the FIRST call per question — the one a
+# real caller pays) per band per file. Rendered only when a file has samples,
+# so pre-v4 results tables stay clean. Wall-clock only compares on one
+# machine: the header's host is printed with the figures, and mixing machine
+# classes gets a warning rather than silence (README: Comparability).
+if jq -e '[.results[].latency_ms | select(. != null)] | length > 0' "$1" >/dev/null 2>&1; then
+	echo
+	echo "latency, median/p95 ms per band (first call per question; same-machine comparisons only):"
+	{
+		printf '%b\n' "$hdr"
+		for band in $(jq -r '.results[].band' "$1" | sort -u); do
+			row="$band"
+			for f in "$@"; do
+				row="$row\t$(jq -r --arg b "$band" \
+					'[.results[] | select(.band == $b) | .latency_ms | select(. != null)] | sort |
+					 if length == 0 then "-" else
+					   "\(.[length/2|floor]) / \(.[(length*0.95|ceil)-1]) ms"
+					 end' "$f")"
+			done
+			printf '%b\n' "$row"
+		done
+		row="ALL"
+		for f in "$@"; do
+			row="$row\t$(jq -r \
+				'[.results[].latency_ms | select(. != null)] | sort |
+				 if length == 0 then "-" else
+				   "\(.[length/2|floor]) / \(.[(length*0.95|ceil)-1]) ms"
+				 end' "$f")"
+		done
+		printf '%b\n' "$row"
+	} | column -t -s "$(printf '\t')"
+	for f in "$@"; do
+		jq -r 'if .host then "  \(.label): measured on \(.host.arch)/\(.host.os)" else "  \(.label): host not recorded" end' "$f"
+	done
+	hosts=$(for f in "$@"; do jq -r '.host.arch // "unknown"' "$f"; done | sort -u | wc -l | tr -d ' ')
+	[ "$hosts" -le 1 ] || echo "!!! latency measured on DIFFERENT machine classes — compare recall/cost, not wall-clock"
+fi
+
+# LLM cost: dormant until an arm that uses one exists (arm-D readiness).
+# Rendered only when present so A/B/C tables carry no dead column.
+for f in "$@"; do
+	if jq -e '(.arm_uses_llm == true) or ([.results[].llm_calls | select(. != null)] | length > 0)' "$f" >/dev/null 2>&1; then
+		echo
+		echo "LLM cost ($(jq -r '.label' "$f")):"
+		jq -r '.results[] | select(.llm_calls != null) |
+		       "  \(.id): \(.llm_calls) call(s)\(if .llm_cost_note then " — " + .llm_cost_note else "" end)"' "$f"
+	fi
+done
+
 echo
 echo "session-fixed schema overhead (excluded from figures above):"
 for f in "$@"; do

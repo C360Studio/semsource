@@ -53,6 +53,46 @@ python3 "$here/check-discrimination.py" "$corpus" --simulate-unterminated >/dev/
 [ $? -eq 1 ] && ok "gate fails under the pre-v3 matcher" || fail "gate did NOT fail under the pre-v3 matcher"
 rm -rf "$corpus"
 
+echo "4. the composition gate fires on co-location and stays quiet past the window"
+# The gate's whole value is refusing questions whose facts one passage can
+# carry. Prove both directions against synthetic corpora: --simulate plants a
+# one-window doc (must FAIL), real separation must pass, and the doc-window /
+# whole-code-file asymmetry must hold — two facts far apart in one .go file
+# still FAIL because a single body could span them.
+corpus="$(mktemp -d)"
+printf 'placeholder\n' > "$corpus/README.md"
+python3 "$here/check-composition.py" "$corpus" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "composition gate passes on a clean corpus" || fail "composition gate rejected a clean corpus"
+python3 "$here/check-composition.py" "$corpus" --simulate >/dev/null 2>&1
+[ $? -eq 1 ] && ok "composition gate fires under --simulate" || fail "composition gate did NOT fire under --simulate"
+
+qfile="$corpus/questions-synth.json"
+cat > "$qfile" <<'JSON'
+{"version": 0, "questions": [{"id": "S1", "band": "composition",
+  "expect_all": ["synthetic-fact-alpha", "synthetic-fact-beta"]}]}
+JSON
+# Both facts inside one doc window -> FAIL.
+printf 'synthetic-fact-alpha and synthetic-fact-beta together\n' > "$corpus/close.md"
+python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "co-located doc facts FAIL" || fail "co-located doc facts passed"
+# Facts pushed past the 6000 B doc window -> pass.
+{ printf 'synthetic-fact-alpha\n'; head -c 7000 /dev/zero | tr '\0' 'x'; printf '\nsynthetic-fact-beta\n'; } > "$corpus/close.md"
+python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "doc facts past the window pass" || fail "doc facts past the window failed"
+# Same separation in a CODE file -> still FAIL (whole-file window).
+mv "$corpus/close.md" "$corpus/close.go"
+python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "code-file facts FAIL regardless of distance" || fail "code-file facts passed on distance"
+# A single-fact composition question is not compositional -> FAIL.
+rm -f "$corpus/close.go"
+cat > "$qfile" <<'JSON'
+{"version": 0, "questions": [{"id": "S2", "band": "composition",
+  "expect_all": ["only-one-fact"]}]}
+JSON
+python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "single-fact composition question FAILS" || fail "single-fact composition question passed"
+rm -rf "$corpus"
+
 echo
 if [ "$fails" -eq 0 ]; then
 	echo "matcher tests passed"

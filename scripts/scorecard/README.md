@@ -31,6 +31,24 @@ Consequently the `discrimination 0/2` recorded in
 retrieval result and must not be quoted as one. That summary's *bounds* conclusion
 is unaffected and stands.
 
+**Version 4 adds the composition band and does not compare to version 3.** Every
+v3 question is retained verbatim, so the old bands still grade identically — but
+the totals include four new questions, and quoting a v4 total against a v3 total
+would move a number without retrieval moving. The v3 results remain in `results/`
+under their version.
+
+**Two more comparability rules ship with v4:**
+
+- **Corpora never compare.** The OSH question set (`questions-osh.json`) is its
+  own comparability domain: OSH scores never merge with dogfood scores, in either
+  direction. `compare.sh` enforces this mechanically because the sets carry
+  different `questions_version` values.
+- **Latency figures only compare on one machine class.** Wall-clock is
+  nondeterministic by nature; the results header records the host arch (M3 Pro
+  and the Intel dev mini produce different numbers for identical retrieval), and
+  `compare.sh` warns when joined files disagree on it. Recall and bytes stay
+  comparable across machines; milliseconds do not.
+
 ## What this does NOT measure
 
 The scorecard grades the **fusion** MCP tools (`code_context`, `code_impact`, `code_search`,
@@ -69,12 +87,14 @@ Knobs: `SEMSOURCE_HTTP_PORT` (default 28080), `SEMSOURCE_HOST`,
 `SCORECARD_READY_TIMEOUT`, `SCORECARD_CALL_TIMEOUT`,
 `SCORECARD_QUESTIONS`, `SCORECARD_REPEATS` (default 3 — see *Repeats* below).
 
-Before scoring, validate the question set. This gates both ways a question rots —
-the corpus relationship between a confusable pair, and whether the grader can
-evaluate the literals at all:
+Before scoring, validate the question set. This gates the three ways a question
+rots — the corpus relationship between a confusable pair, the corpus relationship
+between a composition question's facts, and whether the grader can evaluate the
+literals at all:
 
 ```bash
 scripts/scorecard/check-discrimination.py <corpus-dir>
+scripts/scorecard/check-composition.py <corpus-dir>
 scripts/scorecard/test-matcher.sh              # no stack needed
 ```
 
@@ -227,6 +247,7 @@ Bands exist so a score can be read rather than just totalled.
 - **impact** — dependents named, not merely counted.
 - **negative** — must miss.
 - **discrimination** — the top node must answer on its own.
+- **composition** — no single passage can answer; see below.
 
 `doc-early` versus `doc-late` is the load-bearing split for passage chunking. The
 substrate truncates embedding text at 8000 characters, so before chunking a
@@ -306,6 +327,114 @@ A consequence worth stating plainly: this repository's docs contain very few
 well-separated confusable pairs. An automated sweep of every `KEY=VALUE` literal
 found exactly one usable pair beyond the two shipped here. The band is small
 because the corpus supports a small band, not because two questions is a target.
+
+## The composition band — what single-shot retrieval cannot measure
+
+By 2026-08 both product arms had scored 22/22 for three runs straight: the
+instrument was saturated, and a saturated instrument cannot answer the question
+that matters — does the fusion layer's recall actually beat raw cosine (the
+C-parity finding), or is the query machinery not earning its keep? Every v3 band
+rewards finding *one good chunk*, and both arms had become reliably good at that.
+
+A composition question is one whose answer provably does not live in one chunk:
+its `expect_all` facts **do not co-occur within any single ingested passage or
+code file**, so answering requires the graph edge set — a reverse-dependency
+closure whose members live in different files — not retrieval luck. The harness
+stays one-tool-call-per-question and fully deterministic: composition happens
+server-side in the structural tools (`code_impact` names each resolved node's
+direct dependents), while arm C must try to luck the same facts into its top-20
+and arm A must try to grep them into a five-file read set. This is the band
+where arm B must beat arm C on **recall**, or prove — against questions verified
+compositional — that they do not separate, which is itself the decision-grade
+answer.
+
+**The property is about the DATA and it rots silently** — a refactor that moves a
+caller into the callee's file, or a new doc summarizing both sides of a join,
+makes the question single-passage-answerable without anyone noticing. So it gets
+the discrimination treatment: `check-composition.py` scans the corpus before
+every scored run and FAILS any composition question whose full fact set co-occurs
+in one window. Doc windows are 6000 B — the splitter's `hardMax`, not its 2000 B
+ceiling, because a fenced block is kept whole past the ceiling and gating on the
+smaller number would admit a question one oversized passage answers. Code and
+config files are one window each: a symbol body never extends beyond its file,
+so whole-file is a strict, language-neutral upper bound. `--simulate` plants a
+synthetic one-window doc carrying a real question's facts and requires the gate
+to fire; `test-matcher.sh` asserts both directions plus the window arithmetic.
+
+**The band is impact-closure-only, and that is the finding, not an oversight.**
+The other three designed shapes are inadmissible on this corpus, each for a
+reason worth knowing:
+
+- **Version composition** (`code_changes`) needs two ingested versions, and the
+  corpus recipe is `git archive` — no `.git`, no commits, no version entities.
+- **Cross-source joins** are unreachable in one call: `graph_search` matches
+  render only id/type/label, so property values (a dependency's
+  `ConfigDepVersion`, say) never appear in any answer — and Go import syntax
+  puts dependency paths into every consuming file anyway, co-locating the pair.
+- **Caller+callee relation joins** need the caller, the symbol, and the callee in
+  three different files; this codebase keeps helpers beside their callers, and
+  callee-*pair* facts are inadmissible **by construction** — a function's own
+  body co-locates every callee it names.
+
+Authoring rules learned the careful way: the fact pair must be checked with
+**test files included** (tests are ingested and only demoted in ranking, so they
+count toward `code_impact`'s 12-per-role naming cap — a symbol with more than 12
+distinct dependents will have one silently evicted, and a question expecting the
+evicted name fails on every system forever). P01's anchor sits at exactly 12;
+its `why` records the arithmetic. A candidate anchor with 13 was rejected for
+exactly this reason.
+
+## Latency — the dimension the harness never measured
+
+v4 records per-question wall-clock in every arm: `latency_ms` is the **first**
+call's (consistent with first-answer retention — cold starts are visible, not
+hidden), `latency_samples` keeps all repeats. `compare.sh` renders median/p95
+per band per arm. No warm-up special-casing: the first call's latency is the one
+a real caller pays.
+
+What each arm's figure covers: arm B, the MCP round-trip; arm A, the full
+grep-rank-read procedure; arm C, embed + cosine-rank + body fetch (`armc-dump`
+is built once per run so the figure measures retrieval, not `go run`'s
+staleness checks). The shared clock lives in `timing.sh` — perl `Time::HiRes`
+on every machine, so the spawn overhead is identical everywhere it lands.
+
+Rules: same-machine comparisons only (the header records host arch and
+`compare.sh` warns on mixes), never across corpora, and medians/p95 over means —
+three samples on a shared dev machine are spread detection, not a distribution.
+
+## The OSH corpus — the second scale point
+
+`corpus-osh.sh <target-dir>` builds an Open Sensor Hub core checkout at a
+**pinned** SHA (recorded in the script; `master` per the early adopter) via
+`git archive` — the first Java/Gradle-family corpus this project has measured,
+at roughly 3x the dogfood corpus. Score it with:
+
+```bash
+SCORECARD_QUESTIONS=scripts/scorecard/questions-osh.json scripts/scorecard/run.sh <label>
+```
+
+`questions-osh.json` (version 1) is authored against exactly that pin; bumping
+the pin means re-verifying the set with both checkers and bumping its version.
+OSH scores are their own comparability domain and never merge with dogfood
+scores — see Comparability.
+
+The set has **no config band, deliberately**: osh-core is Gradle-only (zero
+`pom.xml`), `gradleDependencyEntity` emits no `dc.terms.title` triple so
+`graph_search` shows gradle dependencies as bare content-hashed IDs, and no
+other MCP tool reads config-entity properties. Dependency facts are therefore
+unreachable through the entire scorecard tool surface — a product finding the
+instrument surfaced, not a question-authoring gap.
+
+## Arm-D readiness — dormant LLM-cost fields
+
+A future research-graph deep-search arm will spend LLM calls at query time. The
+results schema is ready for it without a break: every header carries
+`arm_uses_llm` (false for A/B/C), and per-question `llm_calls` (int) and
+`llm_cost_note` (string) are defined but absent until an arm emits them.
+`compare.sh` renders the LLM column only when a result carries it, so today's
+tables stay clean. Grading for such an arm stays the deterministic matcher over
+whatever evidence its pipeline returns; run variance lands in the existing
+UNSTABLE machinery.
 
 ## Adding questions
 

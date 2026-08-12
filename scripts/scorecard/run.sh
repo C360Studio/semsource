@@ -105,7 +105,9 @@ mcp_call() {
 # Grading lives in grade.sh, shared verbatim with the other arms
 # (arm-a-grep.sh, arm-c-cosine.sh) so every arm scores with identical
 # matcher semantics by construction. See grade.sh for the contract.
+# timing.sh is shared the same way: identical clock, identical overhead.
 . "$here/grade.sh"
+. "$here/timing.sh"
 
 # --- run + grade -----------------------------------------------------------
 # Grading is deterministic substring matching, deliberately. An LLM judge drifts
@@ -138,10 +140,16 @@ for i in $(seq 0 $((n - 1))); do
 	# Ask the question $repeats times, grading each. The FIRST call's answer and
 	# metrics are what get retained — it is the one a real caller's first request
 	# corresponds to, and taking the best of N would be the concealment this
-	# repeat logic exists to prevent.
+	# repeat logic exists to prevent. Every call is timed: latency_ms is the
+	# first call's (consistent with retention — cold-start effects are visible,
+	# not hidden), latency_samples keeps all repeats for spread inspection.
 	seen_verdicts=""
+	lat_samples="[]"
 	for rep in $(seq 1 "$repeats"); do
+		t0=$(now_ms)
 		answer=$(mcp_call "$tool" "$args" || echo "{}")
+		t1=$(now_ms)
+		lat_samples=$(jq -c --argjson ms $((t1 - t0)) '. + [$ms]' <<<"$lat_samples")
 		grade_answer
 		seen_verdicts="$seen_verdicts$verdict
 "
@@ -174,8 +182,9 @@ for i in $(seq 0 $((n - 1))); do
 	jq --arg id "$id" --arg band "$band" --arg tool "$tool" --arg v "$verdict" \
 	   --arg r "$reason" --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "${first_cb:-0}" \
+	   --argjson lat "$lat_samples" \
 	   --arg a "$(printf '%s' "$answer" | head -c 6000)" \
-	   '. += [{id:$id, band:$band, tool:$tool, verdict:$v, reason:$r, nodes:$n, body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb, answer:$a}]' \
+	   '. += [{id:$id, band:$band, tool:$tool, verdict:$v, reason:$r, nodes:$n, body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb, latency_ms:($lat[0] // null), latency_samples:$lat, answer:$a}]' \
 	   "$out.tmp" > "$out.tmp2" && mv "$out.tmp2" "$out.tmp"
 done
 
@@ -183,9 +192,10 @@ qver=$(jq -r '.version // 0' "$questions")
 jq -n --arg label "$label" --argjson score "$correct" --argjson total "$total" \
    --argjson entities "${entities:-0}" --argjson qver "${qver:-0}" \
    --argjson sb "${schema_bytes:-0}" --argjson st "${schema_tools:-0}" \
+   --argjson host "$(host_json)" \
    --slurpfile r "$out.tmp" \
    '{label:$label, arm:"B", questions_version:$qver, score:$score, total:$total,
-     total_entities:$entities,
+     total_entities:$entities, host:$host, arm_uses_llm:false,
      schema_overhead:{bytes:$sb, tools:$st},
      results:$r[0]}' > "$out"
 rm -f "$out.tmp"
@@ -215,6 +225,13 @@ echo
 # Bytes are the measured figure; tokens are bytes/4, an estimate, and labeled
 # as one. The schema overhead line is session-fixed cost, reported next to the
 # per-question figures and never folded into them.
+echo "--- latency (first call per question; same-machine comparisons only) ---"
+jq -r '.results | group_by(.band)[] |
+       ([.[].latency_ms | select(. != null)] | sort) as $l |
+       if ($l | length) == 0 then "\(.[0].band): no samples" else
+       "\(.[0].band): median \($l[($l|length)/2|floor]) ms, p95 \($l[(($l|length)*0.95|ceil)-1]) ms (n=\($l|length))"
+       end' "$out"
+echo
 echo "--- context cost (first call per question; tokens ~ bytes/4, estimate) ---"
 jq -r '.results | group_by(.band)[] |
        "\(.[0].band): total \([.[].context_bytes // 0] | add) B (~\(([.[].context_bytes // 0] | add) / 4 | floor) tok), mean \(([.[].context_bytes // 0] | add) / length | floor) B"' "$out"

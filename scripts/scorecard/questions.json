@@ -1,7 +1,8 @@
 {
-  "version": 3,
+  "version": 4,
   "corpus": "the semsource repository itself",
   "grading": "deterministic substring matching, case-insensitive; see README.md",
+  "composition": "composition-band questions are gated by check-composition.py: their expect_all facts must not co-occur in any single ingested passage or code file, so single-shot retrieval cannot answer them from one chunk; see README.md",
   "questions": [
     {
       "id": "D01",
@@ -297,6 +298,58 @@
         "-p 8081:8081"
       ],
       "why": "configs/tiers/README.md runs semembed on 8081 (Tier 1, ~4.2KB in) and seminstruct on 8083 (Tier 2, ~7.3KB in) via near-identical `docker run -d -p NNNN:NNNN ghcr.io/c360studio/... # OpenAI-compatible ...` lines differing only in the digit and the service, 42 lines / ~3.1KB apart in an 8257 B file. The tighter-separated of the two, so it covers a shorter-range confusion than X01. NOTE: it was expected to be ceiling-sensitive and is NOT — TestBoundsSweep shows both literals separate at every ceiling from 1000 to 6000, because the two commands sit under different headings and section structure splits before size does. Verified by check-discrimination.py."
+    },
+    {
+      "id": "P01",
+      "band": "composition",
+      "tool": "code_impact",
+      "args": {
+        "query": "SanitizeInstance"
+      },
+      "expect_all": [
+        "chunkInstance",
+        "newAuthorEntity"
+      ],
+      "why": "Impact closure across handlers. SanitizeInstance's direct dependents span packages: chunkInstance lives in handler/doc/entities.go, newAuthorEntity in handler/git/entities.go, and no single file carries both names (check-composition.py-verified, tests included). Answering requires the reverse-dependency edge set — a caller from BOTH files must be NAMED — not one lucky chunk. Cap math: 7 production + 5 test callers = 12 distinct dependents, exactly at code_impact's 12-per-role naming cap; a new caller added anywhere silently pushes a name off the list, so re-verify fan-in when this question changes verdict."
+    },
+    {
+      "id": "P02",
+      "band": "composition",
+      "tool": "code_impact",
+      "args": {
+        "query": "PublishLifecycleTrigger"
+      },
+      "expect_all": [
+        "triggerRemovalLifecycleRun",
+        "triggerLifecycleRun"
+      ],
+      "why": "Impact closure across processors. PublishLifecycleTrigger (graph/lifecycle.go) is called by triggerRemovalLifecycleRun in processor/source-manifest/ingest.go and triggerLifecycleRun in processor/ast-source and processor/doc-source; the two names never share a file, and neither is a substring of the other (the grader's substring matcher cannot satisfy one from the other). 5 production + 2 test callers — comfortably inside the naming cap. The safest question in the band: if this one misses, the caller-edge traversal itself is broken."
+    },
+    {
+      "id": "P03",
+      "band": "composition",
+      "tool": "code_impact",
+      "args": {
+        "query": "ScopedSystemSlug"
+      },
+      "expect_all": [
+        "initializeWatchers",
+        "systemsForComponentConfig"
+      ],
+      "why": "Impact closure across the ingest and lifecycle planes. ScopedSystemSlug (entityid/entityid.go) is called from initializeWatchers in processor/ast-source/component.go and systemsForComponentConfig in processor/source-manifest/lifecycle_scope.go — the entity-identity helper joining two subsystems that share no file. ~9 distinct callers including tests, inside the cap."
+    },
+    {
+      "id": "P04",
+      "band": "composition",
+      "tool": "code_impact",
+      "args": {
+        "query": "URLToSlug"
+      },
+      "expect_all": [
+        "expandMultiBranch",
+        "systemSlug"
+      ],
+      "why": "Impact closure across config expansion and the git handler. URLToSlug (workspace/workspace.go) is called by expandMultiBranch in config/expand.go and systemSlug in handler/git/handler.go; the names never co-occur (systemSlug also exists in handler/cfgfile, still never beside expandMultiBranch). 3 production + 2 test callers. NOTE the band is impact-closure-only, and that is the finding, not an oversight: version composition needs two ingested versions (the archive corpus has no .git, so no version entities), a cross-source join is unanswerable in one call because graph_search matches render only id/type/label and drop property values like ConfigDepVersion, and a caller+callee relation join requires three-file separation this codebase's layout (helpers beside callers) does not produce — callee-pair facts are inadmissible BY CONSTRUCTION since a body co-locates every callee it names. See README."
     }
   ]
 }
