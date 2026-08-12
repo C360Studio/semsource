@@ -166,7 +166,7 @@ services:
     # against (its e2e, tiered, and testcontainers harnesses all pin 2.12). A
     # floating major tag would let a server upgrade arrive implicitly under a
     # governed graph the framework has not exercised on that version.
-    image: nats:2.12-alpine
+    image: nats:2.14-alpine
     command: ["-js", "-sd", "/data", "-m", "8222", "--name", "c360-nats"]
     volumes:
       - nats-data:/data

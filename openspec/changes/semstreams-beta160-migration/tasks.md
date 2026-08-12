@@ -32,9 +32,9 @@
 - [x] 3.1 Migrate every shipped config (`configs/*.json`, examples, tier configs): outer
       `services.<name>.enabled` flags, remove message-logger/metrics inner flags if present, bump
       top-level `version` on every touched file
-- [ ] 3.2 Prove strict flow validation passes: fresh compose bring-up reaches
+- [x] 3.2 Prove strict flow validation passes: fresh compose bring-up reaches
       phase=ready + index.ready + embedding.ready on newly provisioned NATS storage
-- [ ] 3.3 Verify `StorageReference` exact-instance resolution: config names the `objectstore`
+- [x] 3.3 Verify `StorageReference` exact-instance resolution: config names the `objectstore`
       registry entry exactly; offloaded-body path proven live (bodies resolve, none excluded)
 
 ## 4. Behavioral regression proofs (D5)
@@ -60,7 +60,7 @@
 
 ## 6. Migration proof (D6)
 
-- [ ] 6.1 Fresh-stack scorecard rerun: all three arms on questions v3 over the same corpus
+- [x] 6.1 Fresh-stack scorecard rerun: all three arms on questions v3 over the same corpus
       commit; commit results + a SUMMARY comparing per band vs the 2026-08-09 baseline
       (annotated with the substrate pin change); recall regression = migration defect — fix
       before proceeding, do not annotate around it
