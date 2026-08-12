@@ -625,3 +625,18 @@ func TestAncestorSupersBindByTheAncestorsOwnImports(t *testing.T) {
 	// import binding.
 	assertCalls(t, ents, "run", "ping")
 }
+
+// Modifier detection must survive real-world formatting: an annotation on its
+// own line with tab indentation (the Eclipse default) must not turn a private
+// field package-private (review finding: substring matching over raw modifier
+// text broke on tab/newline separators).
+func TestTabIndentedAnnotatedPrivateFieldStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"\t@Deprecated\n\tprivate Perms rootPerm = new Perms();\n}\n",
+		"a/SamePkg.java": "package a;\npublic class SamePkg extends BaseSecurity {\n" +
+			"  public void same() { rootPerm.cloneTemplate(); }\n}\n",
+	})
+	assertCallsExactly(t, ents, "same")
+}

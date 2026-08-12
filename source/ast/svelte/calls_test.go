@@ -170,9 +170,27 @@ func TestSvelteScriptImportsAndCallsInTreeFunction(t *testing.T) {
 	}
 }
 
+// The export-aware confirmation fix (ts/calls.go's collectModuleExportedFuncs)
+// is shared, private-package-internal state on ts.Parser (moduleInfoMemo) —
+// not something Svelte's earlier tests exercised at all, since none of them
+// used a target module with BOTH a private local definition and a re-export
+// of the same name. A regression here would only surface via the script pass,
+// so it needs its own coverage rather than trusting the plain-TS test alone.
+func TestSvelteScriptImportPrivateBesideReExportStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/impl.ts": "export function helper() {}\n",
+		"lib/util.ts": "function helper() {}\nexport { helper } from './impl';\n",
+		"Component.svelte": "<script>\n" +
+			"import { helper } from './lib/util';\n" +
+			"function run() { helper(); }\n" +
+			"</script>\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
 // An out-of-tree import target still stays observable via the "external:"
-// marker, mirroring plain TS/JS resolution exactly (calls.go is shared, not
-// reimplemented).
+// marker, module-qualified by the specifier, mirroring plain TS/JS resolution
+// exactly (calls.go is shared, not reimplemented).
 func TestSvelteScriptExternalImportEmitsExternalMarker(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"Component.svelte": "<script>\n" +
@@ -180,7 +198,7 @@ func TestSvelteScriptExternalImportEmitsExternalMarker(t *testing.T) {
 			"function run() { helper(); }\n" +
 			"</script>\n",
 	})
-	assertCallsExactly(t, ents, "run", "external:helper")
+	assertCallsExactly(t, ents, "run", "external:some-package.helper")
 }
 
 func TestSvelteScriptInertPropertyChainCall(t *testing.T) {

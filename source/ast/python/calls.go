@@ -34,9 +34,11 @@ import (
 //
 // Known inert limitations (documented, never wrong — a missing edge, not a bad
 // one): a call in a parameter default (`def f(x=g())`) is outside the body walk;
-// and `from pkg import sub; sub.f()` resolves against pkg's package file (where f
-// is absent → inert) rather than pkg/sub.py. These need submodule probing and are
-// deferred.
+// `from pkg import sub; sub.f()` resolves against pkg's package file (where f
+// is absent → inert) rather than pkg/sub.py; and a class nested inside a
+// method is not descended into at all — its methods have no entities of their
+// own today, and resolving its `self.x()` against the ENCLOSING class would be
+// a fabricated edge, so the whole nested body stays inert.
 
 // extractLocalFunctions collects a module's top-level function definitions into a
 // name set. Used both for the file being parsed (to resolve bare local calls) and,
@@ -260,6 +262,14 @@ func (p *Parser) extractCalls(fnNode, body *sitter.Node, content []byte, filePat
 	seen := make(map[string]bool)
 	var walk func(n *sitter.Node)
 	walk = func(n *sitter.Node) {
+		// A class nested inside this body starts a NEW self: descending with
+		// the enclosing class's method set would resolve the nested class's
+		// `self.x()` against the outer class — a fabricated edge. The nested
+		// class's methods are not separately extracted today, so its calls
+		// stay inert entirely (missing, never wrong).
+		if n.Type() == "class_definition" {
+			return
+		}
 		if n.Type() == "call" {
 			if id := p.callTargetID(n.ChildByFieldName("function"), content, filePath, scope, classMethods, locals); id != "" && !seen[id] {
 				seen[id] = true

@@ -214,3 +214,15 @@ func TestHiddenRootStillIndexes(t *testing.T) {
 	}
 	t.Fatal("hidden-named root must still resolve call edges")
 }
+
+// A corpus containing C++ sources leaves headers OUT of the C index: the
+// router would assign them to the C++ parser (cpp-domain entities), so a
+// c-domain edge to a header definition would dangle. Missing beats dangling.
+func TestMixedCppCorpusSkipsHeaderDefinitions(t *testing.T) {
+	ents := parseCTree(t, map[string]string{
+		"include/u.h":   "static inline int twice(int x) { return x + x; }\n",
+		"src/app.c":     "#include \"u.h\"\nint run(int v) { return twice(v); }\n",
+		"src/other.cpp": "int cppOnly() { return 1; }\n",
+	})
+	assertCCallsExactly(t, ents, "run")
+}

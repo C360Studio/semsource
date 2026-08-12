@@ -300,3 +300,25 @@ func TestLambdaParamShadowIsInert(t *testing.T) {
 		}
 	}
 }
+
+// A class nested inside a method starts a new self: its calls must not
+// resolve against the ENCLOSING class's method set (review finding — the
+// nested body stays inert entirely, since nested-class methods have no
+// entities of their own).
+func TestMethodNestedClassSelfCallIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "class Outer:\n" +
+			"    def render(self):\n        pass\n" +
+			"    def build(self):\n" +
+			"        class Inner:\n" +
+			"            def go(self):\n                self.render()\n" +
+			"        return Inner\n",
+	})
+	build := ents["build"]
+	if build == nil {
+		t.Fatal("missing build")
+	}
+	if len(build.Calls) != 0 {
+		t.Errorf("build.Calls = %v, want empty (Inner's self is not Outer)", build.Calls)
+	}
+}

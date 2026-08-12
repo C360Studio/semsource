@@ -41,6 +41,7 @@ type Parser struct {
 	defIndex     map[string]defIndexEntry
 	defNameFiles map[string]map[string]bool
 	revalidated  map[string]bool
+	hasCPP       *bool
 }
 
 // NewParser creates a new C AST parser.

@@ -212,12 +212,25 @@ func (p *Parser) resolveTSImport(name, fromRelPath string) (relPath, origin stri
 // namespace- and default-import resolution — which key off a raw specifier, not
 // a name bound in importBindings — share the identical probe order instead of a
 // parallel copy that could drift from it.
+//
+// A specifier that resolves OUTSIDE repoRoot (`../../shared/util` walking
+// above the watch root) is rejected before ever reaching FileExists: ast-source
+// only watches paths under repoRoot, so a match there is neither in-tree (it
+// will never be ingested, so any edge to it dangles) nor a package dependency
+// — it could only ever be a coincidental hit against an unrelated file (e.g. a
+// sibling checkout on disk), which is exactly the kind of guess the design
+// forbids. path.Join already fully normalizes `spec` against `dir`, so a
+// single post-join prefix check catches every escaping form regardless of how
+// many intermediate ".." segments were written or how deep `dir` is.
 func (p *Parser) resolveTSModulePath(spec, fromRelPath string) (relPath string, ok bool) {
 	if !strings.HasPrefix(spec, ".") {
 		return "", false
 	}
 	dir := path.Dir(filepath.ToSlash(fromRelPath))
 	joined := path.Join(dir, spec)
+	if joined == ".." || strings.HasPrefix(joined, "../") {
+		return "", false
+	}
 	for _, ext := range tsExtensions {
 		if cand := joined + ext; ast.FileExists(filepath.Join(p.repoRoot, filepath.FromSlash(cand))) {
 			return filepath.FromSlash(cand), true

@@ -540,21 +540,26 @@ func (p *Parser) collectMemberFieldTypes(body *sitter.Node, content []byte) map[
 }
 
 // fieldAccessOf reads a field_declaration's access modifier; no modifier is
-// package-private.
+// package-private. The modifiers node's CHILD TOKENS are compared, never its
+// raw text: substring matching over the text broke on tab- or newline-
+// separated modifiers (`@Deprecated\n\tprivate ...`, the Eclipse-format
+// shape), silently misclassifying private fields as package-private.
 func fieldAccessOf(field *sitter.Node, content []byte) fieldAccess {
 	for i := 0; i < int(field.NamedChildCount()); i++ {
 		child := field.NamedChild(i)
 		if child.Type() != "modifiers" {
 			continue
 		}
-		mods := " " + string(content[child.StartByte():child.EndByte()]) + " "
-		switch {
-		case strings.Contains(mods, " private "):
-			return accessPrivate
-		case strings.Contains(mods, " protected "):
-			return accessProtected
-		case strings.Contains(mods, " public "):
-			return accessPublic
+		// Access-modifier keywords are anonymous tokens, so walk ALL children.
+		for j := 0; j < int(child.ChildCount()); j++ {
+			switch string(content[child.Child(j).StartByte():child.Child(j).EndByte()]) {
+			case "private":
+				return accessPrivate
+			case "protected":
+				return accessProtected
+			case "public":
+				return accessPublic
+			}
 		}
 	}
 	return accessPackagePrivate

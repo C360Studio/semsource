@@ -29,13 +29,33 @@ import (
 // own entity-ID construction.
 
 // moduleCallInfo is the module-level view of another file needed to confirm an
-// import-bound call target: its top-level function names (function_declaration
-// or arrow-function declarator) and, if present, the name its default export
-// points at. Computed once per relPath and reused for every call site that
+// import-bound call target. Two DIFFERENT confirmable sets, deliberately kept
+// apart:
+//
+//   - funcs is EXPORT-AWARE (collectModuleExportedFuncs): keyed by the PUBLIC
+//     exported name (what an importer writes), valued by the INTERNAL
+//     definition name (what the entity's own ID was built from) — these
+//     DIFFER for an aliased export-list entry (`export { helper as h }`: an
+//     importer writes `h`, but the function's own entity ID still uses
+//     "helper", its real source-level name). Used for named- and namespace-
+//     import resolution, where the imported name must be something the
+//     module actually, publicly exports, but the edge must point at the
+//     definition's REAL id, not the alias it was imported under.
+//   - allDefs is every top-level function/arrow definition regardless of
+//     export status (collectModuleFuncNames). Used ONLY to confirm a default
+//     export's identifier-reference form (`export default foo;`): naming foo
+//     as the default IS the export act, so foo need not ALSO appear in a
+//     separate named export — checking it against funcs (as an earlier
+//     version of this code did) wrongly rejected the common `function
+//     foo(){} ... export default foo;` pattern, since foo is rarely also
+//     separately named-exported.
+//
+// Both are computed once per relPath and reused for every call site that
 // references it — one parse serves named-import, namespace-import, and
 // default-import resolution alike.
 type moduleCallInfo struct {
-	funcs       map[string]bool
+	funcs       map[string]string // public exported name -> internal definition name
+	allDefs     map[string]bool
 	defaultName string
 	hasDefault  bool
 }
@@ -50,12 +70,13 @@ func (p *Parser) moduleInfo(relPath string) moduleCallInfo {
 	if cached, ok := p.moduleInfoMemo[relPath]; ok {
 		return cached
 	}
-	info := moduleCallInfo{funcs: map[string]bool{}}
+	info := moduleCallInfo{funcs: map[string]string{}, allDefs: map[string]bool{}}
 	if content, err := os.ReadFile(filepath.Join(p.repoRoot, relPath)); err == nil {
 		mp := sitter.NewParser()
 		mp.SetLanguage(p.getTreeSitterLanguage(relPath))
 		if tree, terr := mp.ParseCtx(context.Background(), nil, content); terr == nil {
-			info.funcs = collectModuleFuncNames(tree.RootNode(), content)
+			info.allDefs = collectModuleFuncNames(tree.RootNode(), content)
+			info.funcs = collectModuleExportedFuncs(tree.RootNode(), content, info.allDefs)
 			info.defaultName, info.hasDefault = findDefaultExportFunc(tree.RootNode(), content)
 			tree.Close()
 		}
@@ -69,10 +90,11 @@ func (p *Parser) moduleInfo(relPath string) moduleCallInfo {
 
 // collectModuleFuncNames collects a module's TOP-LEVEL function names into a
 // name set: function_declaration and arrow-function-valued const/let
-// declarators, exported or not (an import can only bind an actually-exported
-// name, so confirming presence — not export status — is the fail-inert check).
-// Used both for the file being parsed (same-file bare-call resolution) and, via
-// moduleInfo, to confirm an imported callee is a function in its own module.
+// declarators, exported or not. Used for the file being parsed (same-file
+// bare-call resolution, via p.localFuncs) — export status is irrelevant there,
+// since a private function is freely callable from within its own file — and
+// as the local-definition base collectModuleExportedFuncs layers export
+// confirmation on top of for CROSS-file resolution.
 //
 // Deliberately NOT recursive beyond one `export_statement` unwrap: a name
 // declared inside a nested function/block is not module-level and must not be
@@ -128,6 +150,97 @@ func collectTopLevelArrowNames(node *sitter.Node, source []byte, funcs map[strin
 	}
 }
 
+// collectModuleExportedFuncs computes the EXPORT-AWARE confirmable function
+// map for a module: PUBLIC exported name -> INTERNAL definition name. A
+// public name confirms only when THIS FILE both defines it as a
+// function/arrow-function AND exports it under that public name — either an
+// export-wrapped in-place declaration (`export function f(){}` / `export const
+// f = () => {}`, definition and export are the same statement, so public and
+// internal names are identical) or a LOCAL export-list entry (`export { f }` /
+// `export { f as g }`, with no `from` clause) whose internal name resolves to
+// a local definition. The two names DIFFER for an aliased export-list entry:
+// an importer of `g` must still land on `f`'s entity ID, since that is the
+// definition's real, source-level name.
+//
+// A RE-EXPORT (`export { f } from './impl'`) does NOT confirm anything here,
+// even when a same-named PRIVATE local definition happens to exist in this
+// file: the review finding this closes — `export { f } from './impl'` beside a
+// private `function f(){}` was resolving imports of `f` against the wrong,
+// private, in-file definition instead of staying inert. impl's `f` is not
+// this file's `f`, and barrel-chasing past one hop is out of scope (D3); a
+// private (never-exported) definition confirms nothing on its own either — an
+// import naming it would not even compile against the real module. localDefs
+// is the raw definition set (collectModuleFuncNames), passed in rather than
+// recomputed so moduleInfo's single walk serves both this and the default-
+// export check. Used for BOTH named and namespace-qualified resolution
+// (moduleInfo.funcs is shared).
+func collectModuleExportedFuncs(root *sitter.Node, source []byte, localDefs map[string]bool) map[string]string {
+	exported := make(map[string]string)
+	for i := 0; i < int(root.NamedChildCount()); i++ {
+		node := root.NamedChild(i)
+		if node.Type() != "export_statement" {
+			continue
+		}
+		if decl := node.ChildByFieldName("declaration"); decl != nil {
+			// export function f(){} / export const f = () => {} — the export
+			// and the definition are the SAME statement, so whatever name(s)
+			// this contributes are, by construction, already real definitions,
+			// and there is no alias form here: public == internal.
+			names := make(map[string]bool)
+			collectTopLevelFuncNode(decl, source, names)
+			for name := range names {
+				exported[name] = name
+			}
+			continue
+		}
+		if node.ChildByFieldName("source") != nil {
+			continue // re-export — never confirms a local definition (one-hop rule, D3)
+		}
+		clause := findChild(node, "export_clause")
+		if clause == nil {
+			continue
+		}
+		for j := 0; j < int(clause.NamedChildCount()); j++ {
+			spec := clause.NamedChild(j)
+			if spec.Type() != "export_specifier" {
+				continue
+			}
+			nameNode := spec.ChildByFieldName("name")
+			if nameNode == nil {
+				continue
+			}
+			localName := nodeText(nameNode, source)
+			if !localDefs[localName] {
+				continue // names something that isn't a local function definition — not our concern here
+			}
+			publicName := localName
+			if alias := spec.ChildByFieldName("alias"); alias != nil {
+				publicName = nodeText(alias, source)
+			}
+			exported[publicName] = localName
+		}
+	}
+	return exported
+}
+
+// isDefaultExport reports whether an export_statement is `export default ...`
+// rather than a plain `export ...`. The "default" keyword is an ANONYMOUS
+// token in this grammar — invisible to ChildByFieldName and to a NamedChild-
+// only walk — so `export function f(){}` and `export default function f(){}`
+// produce an IDENTICAL `declaration: (function_declaration ...)` shape under
+// NamedChild traversal (confirmed by dumping both and diffing the printed
+// s-expressions: they were byte-identical). Only a full Child scan, which also
+// visits unnamed tokens, can tell them apart — this was the review finding: a
+// plain named export was being fabricated into a default-import's target.
+func isDefaultExport(node *sitter.Node) bool {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if node.Child(i).Type() == "default" {
+			return true
+		}
+	}
+	return false
+}
+
 // findDefaultExportFunc reports the name a module's default export resolves
 // to, when that name can be determined without inference: `export default
 // function foo(){}` names foo directly; `export default foo;` names the
@@ -135,11 +248,13 @@ func collectTopLevelArrowNames(node *sitter.Node, source []byte, funcs map[strin
 // caller via moduleInfo.funcs, since the identifier could equally name a class
 // or const). An anonymous default export (`export default function(){}`,
 // `export default () => {}`, `export default {...}`) has no name to point an
-// edge at and reports ok=false.
+// edge at and reports ok=false. A plain (non-default) `export function f(){}`
+// is EXCLUDED by isDefaultExport — it exports f under its own name, not as the
+// module's default, so it must never confirm a default-import target.
 func findDefaultExportFunc(root *sitter.Node, source []byte) (name string, ok bool) {
 	for i := 0; i < int(root.NamedChildCount()); i++ {
 		node := root.NamedChild(i)
-		if node.Type() != "export_statement" {
+		if node.Type() != "export_statement" || !isDefaultExport(node) {
 			continue
 		}
 		if decl := node.ChildByFieldName("declaration"); decl != nil {
@@ -502,13 +617,29 @@ func (p *Parser) callNameToEntityID(name, filePath, lang string) string {
 		return p.defaultCalleeID(spec, filePath)
 	}
 	if rel, origin, ok := p.resolveTSImport(name, filePath); ok {
-		if p.moduleInfo(rel).funcs[origin] {
-			return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, origin, rel).ID
+		// internalName may differ from origin: an aliased export-list entry
+		// (`export { helper as h }`) is imported by its public name ("h" here,
+		// captured as origin), but the entity ID must use the definition's own
+		// REAL name ("helper") — see moduleCallInfo's doc comment.
+		if internalName, confirmed := p.moduleInfo(rel).funcs[origin]; confirmed {
+			return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, internalName, rel).ID
 		}
-		return "" // resolved module, but origin isn't a top-level function → inert
+		return "" // resolved module, but origin isn't an EXPORTED top-level function → inert
 	}
-	if _, imported := p.importBindings[name]; imported {
-		return "external:" + name // bare specifier or unresolved relative import
+	if b, imported := p.importBindings[name]; imported {
+		if strings.HasPrefix(b.spec, ".") {
+			// A relative specifier that failed to resolve — outside repoRoot
+			// (resolveTSModulePath's escape guard) or simply missing on disk —
+			// names no real package, so it must stay fully inert: never an
+			// "external:" marker, which would misreport a local (if broken or
+			// out-of-root) reference as a third-party dependency.
+			return ""
+		}
+		// Module-qualified by the binding's ORIGIN, not the local alias: for
+		// `import { transform as t } from 'lodash'`, "t" names nothing real in
+		// lodash — "transform" does. This was the review finding: the old
+		// `"external:" + name` used the caller-chosen local alias verbatim.
+		return "external:" + b.spec + "." + b.origin
 	}
 	return ""
 }
@@ -524,12 +655,25 @@ func (p *Parser) namespaceCalleeID(ns, method, filePath string) string {
 	}
 	rel, ok := p.resolveTSModulePath(spec, filePath)
 	if !ok {
-		return "external:" + ns + "." + method
+		if strings.HasPrefix(spec, ".") {
+			// A relative specifier that failed to resolve — outside repoRoot or
+			// simply missing — names no real package: inert, never "external:"
+			// (mirrors callNameToEntityID's identical guard).
+			return ""
+		}
+		// Module-qualified by the SPEC, not `ns` (the caller's own local alias
+		// for the whole namespace) — consistent with callNameToEntityID's
+		// origin-based marker: the marker should name the real package, not an
+		// arbitrary local binding name.
+		return "external:" + spec + "." + method
 	}
-	if p.moduleInfo(rel).funcs[method] {
-		return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, method, rel).ID
+	// internalName may differ from method for the same reason as
+	// callNameToEntityID's named-import path: an aliased export-list entry
+	// exports under a public name that isn't the definition's own.
+	if internalName, confirmed := p.moduleInfo(rel).funcs[method]; confirmed {
+		return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, internalName, rel).ID
 	}
-	return "" // resolved module, but method isn't a top-level function → inert
+	return "" // resolved module, but method isn't an EXPORTED top-level function → inert
 }
 
 // defaultCalleeID resolves a default-import call (`import Def from '...'; Def()`)
@@ -539,11 +683,17 @@ func (p *Parser) namespaceCalleeID(ns, method, filePath string) string {
 func (p *Parser) defaultCalleeID(spec, filePath string) string {
 	rel, ok := p.resolveTSModulePath(spec, filePath)
 	if !ok {
+		if strings.HasPrefix(spec, ".") {
+			return "" // relative specifier that failed to resolve — inert, not external
+		}
 		return "external:" + spec
 	}
 	info := p.moduleInfo(rel)
-	if !info.hasDefault || !info.funcs[info.defaultName] {
-		return "" // no default export, or it isn't a named in-tree function → inert
+	// allDefs, not funcs: naming a local identifier as the default export IS
+	// the export act (`export default foo;`), so foo need not ALSO be a
+	// separate named export to confirm — see moduleCallInfo's doc comment.
+	if !info.hasDefault || !info.allDefs[info.defaultName] {
+		return "" // no default export, or it isn't a real in-tree function → inert
 	}
 	return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, info.defaultName, rel).ID
 }

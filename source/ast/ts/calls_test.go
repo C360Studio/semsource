@@ -175,6 +175,68 @@ func TestMemberCallOnNonNamespaceIdentifierStaysInert(t *testing.T) {
 	assertNoCalls(t, ents, "run")
 }
 
+// --- export-aware confirmation of import targets -----------------------------
+
+// The review finding: `export { helper } from './impl'` is a RE-EXPORT (one
+// hop past D3's limit) beside a PRIVATE local `function helper(){}` of the
+// same name. The old presence-only confirmation (any top-level function,
+// export status ignored) matched the private one and fabricated an edge to
+// it — but importers of util's `helper` get impl's helper, never this file's
+// private one. Must stay fully inert, not resolve to the private definition.
+func TestNamedImportInert_PrivateBesideReExport(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/impl.ts": "export function helper() {}\n",
+		"lib/util.ts": "function helper() {}\nexport { helper } from './impl';\n",
+		"lib/app.ts":  "import { helper } from './util';\nfunction run() { helper(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// An export-wrapped in-place declaration (`export function f(){}`) confirms —
+// this is the same shape TestCrossModuleNamedImportCallResolves already pins,
+// restated here alongside its siblings for the export-awareness contrast.
+func TestNamedImportResolves_ExportedInPlace(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/util.ts": "export function helper() {}\n",
+		"lib/app.ts":  "import { helper } from './util';\nfunction run() { helper(); }\n",
+	})
+	assertCalls(t, ents, "run", "helper")
+}
+
+// A LOCAL export-list entry (`function f(){} ... export { f };`, no `from`
+// clause) confirms too: f is genuinely defined AND exported by this file, just
+// not via the export-wrapped-declaration shorthand.
+func TestNamedImportResolves_ExportListOfLocal(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/util.ts": "function helper() {}\nexport { helper };\n",
+		"lib/app.ts":  "import { helper } from './util';\nfunction run() { helper(); }\n",
+	})
+	assertCalls(t, ents, "run", "helper")
+}
+
+// An aliased LOCAL export-list entry (`export { helper as h }`) resolves under
+// its PUBLIC name — an importer must write `import { h }`, matching what the
+// module actually exports it as.
+func TestNamedImportResolves_AliasedExportListOfLocal(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/util.ts": "function helper() {}\nexport { helper as h };\n",
+		"lib/app.ts":  "import { h } from './util';\nfunction run() { h(); }\n",
+	})
+	assertCalls(t, ents, "run", "helper")
+}
+
+// The namespace-qualified form must inherit the same export-awareness — ns.f()
+// must not resolve against a private definition shadowed by a re-export
+// either, since both forms share moduleInfo.funcs.
+func TestNamespaceImportInert_PrivateBesideReExport(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/impl.ts": "export function helper() {}\n",
+		"lib/util.ts": "function helper() {}\nexport { helper } from './impl';\n",
+		"lib/app.ts":  "import * as util from './util';\nfunction run() { util.helper(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
 func TestDefaultImportCallResolves_NamedDeclaration(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"lib/def.ts": "export default function realName() {}\n",
@@ -212,6 +274,43 @@ func TestDefaultImportCallInert_NonFunctionDefaultExport(t *testing.T) {
 		"lib/app.ts": "import Def from './def';\nfunction run() { Def(); }\n",
 	})
 	assertNoCalls(t, ents, "run")
+}
+
+// The review finding: findDefaultExportFunc used to accept ANY named
+// `export function f(){}` as the default (the "default" keyword is an
+// anonymous grammar token, invisible to a NamedChild-only walk — see
+// isDefaultExport's comment), so a module with only NAMED exports would still
+// fabricate a default-import edge to an arbitrary one of them.
+func TestDefaultImportCallInert_NamedExportsOnlyModule(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/util.ts": "export function helper() {}\nexport function other() {}\n",
+		"lib/app.ts":  "import Def from './util';\nfunction run() { Def(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// `export default class` beside an unrelated named function: Def() must stay
+// inert (the default IS the class, which findDefaultExportFunc already
+// rejects as non-function), never fall through to resolve against the named
+// function just because it happens to be present in the same module.
+func TestDefaultImportCallInert_DefaultClassBesideNamedFunction(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/def.ts": "export default class Thing {}\nexport function bar() {}\n",
+		"lib/app.ts": "import Def from './def';\nfunction run() { Def(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// A genuine default export beside an UNRELATED named export must still
+// resolve to the actual default, not the named one — proving the fix is
+// precise (rejects the false-positive class case above) without breaking the
+// true positive.
+func TestDefaultImportCallResolves_DefaultFunctionBesideNamedFunction(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/def.ts": "export default function realDefault() {}\nexport function bar() {}\n",
+		"lib/app.ts": "import Def from './def';\nfunction run() { Def(); }\n",
+	})
+	assertCalls(t, ents, "run", "realDefault")
 }
 
 // --- this.-method resolution --------------------------------------------------
@@ -282,18 +381,36 @@ func TestUnknownBareCallStaysInert(t *testing.T) {
 
 // --- out-of-tree imports ------------------------------------------------------
 
+// The marker is module-qualified by the SPECIFIER, not the local binding name
+// (matching python's dotted external-marker convention) — for an unaliased
+// import the two happen to coincide ("helper"), so this alone would not catch
+// a regression to the old local-name-only format; the aliased-import test
+// below does.
 func TestExternalNamedImportCallEmitsExternalMarker(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"m.ts": "import { helper } from 'some-package';\nfunction run() { helper(); }\n",
 	})
-	assertCallsExactly(t, ents, "run", "external:helper")
+	assertCallsExactly(t, ents, "run", "external:some-package.helper")
 }
 
+// A local alias must not leak into the marker: "t" names nothing in lodash —
+// "transform" (the ORIGIN, what lodash actually exports it as) does. This is
+// the exact review finding: the marker used to be "external:t".
+func TestExternalNamedImportCallUsesOriginNotLocalAlias(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "import { transform as t } from 'lodash';\nfunction run() { t(); }\n",
+	})
+	assertCallsExactly(t, ents, "run", "external:lodash.transform")
+}
+
+// util (the local namespace alias) is deliberately different from the
+// specifier "some-package" — proving the marker names the SPEC, not the
+// caller's arbitrary local alias for the namespace.
 func TestExternalNamespaceImportCallEmitsExternalMarker(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"m.ts": "import * as util from 'some-package';\nfunction run() { util.helper(); }\n",
 	})
-	assertCallsExactly(t, ents, "run", "external:util.helper")
+	assertCallsExactly(t, ents, "run", "external:some-package.helper")
 }
 
 func TestExternalDefaultImportCallEmitsExternalMarker(t *testing.T) {
@@ -301,6 +418,35 @@ func TestExternalDefaultImportCallEmitsExternalMarker(t *testing.T) {
 		"m.ts": "import Def from 'some-package';\nfunction run() { Def(); }\n",
 	})
 	assertCallsExactly(t, ents, "run", "external:some-package")
+}
+
+// --- relative specifiers escaping repoRoot -----------------------------------
+
+// The review finding: a relative specifier resolving OUTSIDE repoRoot
+// (ast-source's watch root) used to be probed with FileExists anyway — a
+// coincidental match against an unrelated file (e.g. a sibling checkout on
+// disk) would fabricate a dangling edge, since ast-source never ingests
+// anything outside repoRoot. Must be fully inert: not even an "external:"
+// marker, since a relative specifier never names a real package.
+func TestRelativeNamedImportEscapingRootStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"pkg/app.ts": "import { helper } from '../../outside/util';\nfunction run() { helper(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+func TestRelativeNamespaceImportEscapingRootStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"pkg/app.ts": "import * as util from '../../outside/util';\nfunction run() { util.helper(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+func TestRelativeDefaultImportEscapingRootStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"pkg/app.ts": "import Def from '../../outside/def';\nfunction run() { Def(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
 }
 
 // --- local-value shadow suppression (spec: function-typed parameters/locals

@@ -32,12 +32,18 @@ import (
 // #143), a name with zero or multiple in-tree definitions, and anything
 // reached through a macro (invisible post-lex, so self-skipping).
 
-// defIndexEntry caches one file's set of DEFINED function names, validated by
-// content hash on lookup so an edited file is re-read rather than served stale
-// (the java memberCache pattern).
+// defIndexEntry caches one file's set of DEFINED function names. Revalidation
+// is two-tier: a cheap os.Stat (size+mtime) per lookup, with the full
+// read+hash+re-parse only when the stat changed — the initial seed would
+// otherwise re-read every candidate defining file once per ParseFile,
+// O(files × distinct-callee-files) of redundant I/O for freshness that only
+// matters under watch (review finding). Content hash remains the truth on
+// change; the stat is only the change detector.
 type defIndexEntry struct {
-	hash  string
-	names map[string]bool
+	hash    string
+	size    int64
+	modTime int64
+	names   map[string]bool
 }
 
 // defSkipDirs matches handler.DefaultExcludedDirNames() exactly (pinned by
@@ -84,7 +90,17 @@ func (p *Parser) buildDefIndex() {
 			return nil
 		}
 		switch filepath.Ext(path) {
-		case ".c", ".h":
+		case ".c":
+		case ".h":
+			// In a watch path that declares C++ ALONGSIDE C, the router
+			// assigns headers to the C++ parser, whose entities carry the
+			// cpp domain — a c-domain edge to a header-inline definition
+			// would dangle. The parser cannot see the config, so the
+			// corpus itself decides: any C++ source present → headers are
+			// left out of the index (missing edges, never dangling ones).
+			if p.corpusHasCPP() {
+				return nil
+			}
 		default:
 			return nil
 		}
@@ -97,19 +113,64 @@ func (p *Parser) buildDefIndex() {
 	})
 }
 
+// corpusHasCPP reports whether the tree contains C++ sources, computed once
+// per parser. Deterministic for a fixed corpus, so edge sets stay
+// order-independent.
+func (p *Parser) corpusHasCPP() bool {
+	if p.hasCPP != nil {
+		return *p.hasCPP
+	}
+	found := false
+	_ = filepath.Walk(p.repoRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil || found {
+			return filepath.SkipAll
+		}
+		if info.IsDir() {
+			if path != p.repoRoot && (defSkipDirs[info.Name()] || strings.HasPrefix(info.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		switch filepath.Ext(path) {
+		case ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx":
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	p.hasCPP = &found
+	return found
+}
+
 // refreshDefEntry (re)indexes one file's definition names. content may be nil,
-// in which case the file is read from disk. A hash match keeps the cached set.
+// in which case the stat gate runs first and the file is read only on change.
 func (p *Parser) refreshDefEntry(relPath string, content []byte) {
+	abs := filepath.Join(p.repoRoot, relPath)
 	if content == nil {
-		var err error
-		content, err = os.ReadFile(filepath.Join(p.repoRoot, relPath))
+		st, err := os.Stat(abs)
+		if err != nil {
+			p.dropDefEntry(relPath)
+			return
+		}
+		if cached, ok := p.defIndex[relPath]; ok &&
+			cached.size == st.Size() && cached.modTime == st.ModTime().UnixNano() {
+			return
+		}
+		content, err = os.ReadFile(abs)
 		if err != nil {
 			p.dropDefEntry(relPath)
 			return
 		}
 	}
 	hash := ast.ComputeHash(content)
+	st, statErr := os.Stat(abs)
+	var size, mtime int64
+	if statErr == nil {
+		size, mtime = st.Size(), st.ModTime().UnixNano()
+	}
 	if cached, ok := p.defIndex[relPath]; ok && cached.hash == hash {
+		cached.size, cached.modTime = size, mtime
+		p.defIndex[relPath] = cached
 		return
 	}
 	names := make(map[string]bool)
@@ -120,7 +181,7 @@ func (p *Parser) refreshDefEntry(relPath string, content []byte) {
 		tree.Close()
 	}
 	p.dropDefEntry(relPath)
-	p.defIndex[relPath] = defIndexEntry{hash: hash, names: names}
+	p.defIndex[relPath] = defIndexEntry{hash: hash, size: size, modTime: mtime, names: names}
 	for name := range names {
 		if p.defNameFiles[name] == nil {
 			p.defNameFiles[name] = make(map[string]bool)
@@ -163,9 +224,17 @@ func collectDefinitionNames(node *sitter.Node, content []byte, names map[string]
 }
 
 // resolveDefinition returns the single in-tree file defining name, revalidating
-// candidates by content hash (once per ParseFile) so watch edits are honored.
+// candidates (stat-gated, once per ParseFile) so watch edits are honored.
 // Zero or several candidates → inert. A deleted file's lingering entry can only
 // widen a candidate set, which degrades toward fewer edges — the safe direction.
+//
+// Watch-window caveat (accepted): a NEWLY created file joins the index only at
+// its own first parse, so calls resolved in the debounce window between
+// creation and that parse can bind a name as unique when the new file just
+// made it ambiguous. Bounded by the watcher's debounce; edges in files parsed
+// after the new file's parse are correct, and re-deriving earlier files'
+// edges is the pre-existing cross-file staleness class shared with every
+// language pass.
 func (p *Parser) resolveDefinition(name string) (string, bool) {
 	p.buildDefIndex()
 	var candidates []string
