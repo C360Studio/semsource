@@ -26,8 +26,8 @@
 - [x] 3.2 Author `questions-osh.json` v1 (Java/Maven shapes: POM facts, symbol retrieval, impact,
       composition if admissible); run both checkers against the OSH corpus — POM/config facts
       documented unreachable (Gradle-only corpus; gradle dep entities unlabeled in graph_search)
-- [ ] 3.3 Stand up an OSH stack (isolated project name, 25222+ ports — semdev owns 24222) and
-      record the scale report: entities, seed wall-clock to full readiness
+- [x] 3.3 Stand up an OSH stack (isolated project name, 25222+ ports — semdev owns 24222) and
+      record the scale report: 32,157 entities, 1,311 s to full readiness (see SUMMARY-osh-v1)
 
 ## 4. Arm-D readiness (D5)
 
@@ -39,7 +39,9 @@
 - [x] 5.1 Run all three arms on the dogfood corpus (questions v4); commit results + SUMMARY with
       the composition band's B-vs-C recall verdict stated plainly — SEPARATION: B 4/4 vs C 0/4
       (A 0/4), B at ~9x less context on the band; v3 subset still saturated on both
-- [ ] 5.2 Run all three arms on the OSH corpus (questions-osh v1); commit results + scale report
+- [x] 5.2 Run all three arms on the OSH corpus (questions-osh v1); commit results + scale report —
+      B 9/10 > A 8/10 = C 8/10; composition separates B from C via P02; P01 exposed the Java
+      instance-receiver call-graph gap (#141); arm B latency flat at 5x scale (108 ms median)
 - [ ] 5.3 README: composition band rationale, checker usage, latency rules, OSH corpus recipe and
       cross-corpus rule; post the v4 dogfood verdict to #130 and the OSH scale numbers to the OSH
       scale-test tracking context
