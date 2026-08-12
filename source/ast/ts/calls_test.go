@@ -303,6 +303,113 @@ func TestExternalDefaultImportCallEmitsExternalMarker(t *testing.T) {
 	assertCallsExactly(t, ents, "run", "external:some-package")
 }
 
+// --- local-value shadow suppression (spec: function-typed parameters/locals
+// never become callees) -------------------------------------------------------
+
+// The reviewer's motivating shape: `items.map(i => transform(i))` where
+// `transform` is a PARAMETER of the enclosing function must not resolve
+// against an unrelated module-level function of the same name — that would be
+// a call through the parameter's VALUE, not a reference to the definition.
+// The inline arrow passed to .map() is not its own entity (it is never
+// assigned to a name), so this call site is only ever observed via run's own
+// extractCalls walk, which does not stop at the nested-arrow boundary.
+func TestParamShadowsSameFileFunctionStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"function run(items, transform) { items.map(i => transform(i)); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// The control for the previous test: remove the shadowing parameter and the
+// identical call shape must resolve — proving the suppression is surgical to
+// an actual shadow, not a blanket ban on calls reached through a nested arrow.
+func TestNoParamShadowStillResolvesThroughNestedArrow(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"function run(items) { items.map(i => transform(i)); }\n",
+	})
+	assertCalls(t, ents, "run", "transform")
+}
+
+// A local declared MID-BODY (not a parameter) shadows the same way: `const
+// transform = ...` inside run rebinds the name to a local value for the rest
+// of the function.
+func TestLocalConstArrowShadowsModuleFunction(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"function run() {\n" +
+			"  const transform = (x) => x * 2;\n" +
+			"  transform(5);\n" +
+			"}\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// A destructured parameter binds the same way as a plain one — exercises the
+// CollectPatternBindings path inside localValueNames, not just the identifier
+// fast path.
+func TestDestructuredParamShadowsStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"function run({ transform }) { transform(5); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// The unparenthesized single-identifier arrow shorthand (`x => ...`) exposes
+// its parameter under a DIFFERENT tree-sitter field ("parameter", not
+// "parameters") — this pins ArrowParamsNode's fallback, without which this
+// exact shadow would have silently gone undetected.
+func TestShorthandArrowParamShadowsStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"const run = transform => { transform(5); };\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+func TestParamShadowsNamedImportStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/util.ts": "export function transform(x) { return x; }\n",
+		"lib/app.ts": "import { transform } from './util';\n" +
+			"function run(transform) { transform(5); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// The namespace-head form of the same bug: `ns` shadowed by a parameter must
+// not be treated as the namespace-import binding of the same name.
+func TestParamShadowsNamespaceImportStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/util.ts": "export function helper() {}\n",
+		"lib/app.ts": "import * as util from './util';\n" +
+			"function run(util) { util.helper(); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+func TestMethodParamShadowsStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "function transform(x) { return x; }\n" +
+			"class Foo {\n" +
+			"  run(transform) { transform(5); }\n" +
+			"}\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
+// A parameter shadowing an OUT-OF-TREE import must suppress the "external:"
+// marker too, not just a real edge — a shadowed name has nothing to do with
+// the import at all, so it must not produce ANY entry in Calls.
+func TestParamShadowsBareSpecifierImportSuppressesExternalMarker(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"m.ts": "import { transform } from 'some-package';\n" +
+			"function run(transform) { transform(5); }\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
+
 // --- shadowing ---------------------------------------------------------------
 
 // A locally-defined function shadows an import of the same name (mirrors

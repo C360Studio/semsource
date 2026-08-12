@@ -75,6 +75,15 @@ spec scenarios). The change-level acceptance is the scorecard: OSH P01 flips `mi
 
 ## Risks / Trade-offs
 
+- [Inherited fields widen the conflict net] → a local variable shadowing an inherited field of a
+  DIFFERENT type now marks the name conflicted and drops call sites that resolved before the
+  merge existed. Deliberate: the flattened-scope table cannot tell which declaration is live, and
+  inert beats guessing. (Review finding 6 — accepted narrowing.)
+- [C's index cannot see per-source configured excludes] → the registry factory carries no config,
+  so a configured-excluded directory that uniquely defines a name can still produce an edge to an
+  entity the ingester never creates. Dangling (loud at query resolution), never wrong-real;
+  documented at defSkipDirs, which is test-pinned to handler.DefaultExcludedDirNames.
+
 - [Java field-type tables inflate parse cost] → tables are per-file and bounded by the existing
   ancestor cap; measure seed wall-clock on OSH before/after (the 1,311 s baseline exists).
 - [TS default/namespace import edge cases produce wrong bindings] → named imports first;

@@ -455,7 +455,7 @@ func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang,
 
 	// Extract resolved call edges from the body (see calls.go).
 	if bodyNode := node.ChildByFieldName("body"); bodyNode != nil {
-		entity.Calls = p.extractCalls(bodyNode, source, filePath, lang, scope, classMethods)
+		entity.Calls = p.extractCalls(node.ChildByFieldName("parameters"), bodyNode, source, filePath, lang, scope, classMethods)
 	}
 
 	return entity
@@ -571,7 +571,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	// class for a top-level function, so scope/classMethods are nil — this.
 	// calls cannot arise here.
 	if bodyNode := node.ChildByFieldName("body"); bodyNode != nil {
-		entity.Calls = p.extractCalls(bodyNode, source, filePath, lang, nil, nil)
+		entity.Calls = p.extractCalls(node.ChildByFieldName("parameters"), bodyNode, source, filePath, lang, nil, nil)
 	}
 
 	return entity
@@ -712,7 +712,7 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 			// boundaries), so this only under-counts the arrow's OWN entity,
 			// never over-counts or produces a wrong edge.
 			if bodyNode := valueNode.ChildByFieldName("body"); bodyNode != nil {
-				entity.Calls = p.extractCalls(bodyNode, source, filePath, lang, nil, nil)
+				entity.Calls = p.extractCalls(ArrowParamsNode(valueNode), bodyNode, source, filePath, lang, nil, nil)
 			}
 		}
 	} else if kind == "const" {

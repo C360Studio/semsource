@@ -40,9 +40,19 @@ type defIndexEntry struct {
 	names map[string]bool
 }
 
-// defSkipDirs mirrors the ingester's exclusions; indexing a tree the corpus
-// never sees would report collisions nobody can fix.
-var defSkipDirs = map[string]bool{".git": true, "vendor": true, "node_modules": true}
+// defSkipDirs matches handler.DefaultExcludedDirNames() exactly (pinned by
+// TestDefSkipDirsMatchIngester): indexing a tree the ingester never walks
+// would mint edges to entities that are never created, and skipping one it
+// DOES walk (vendored C is deliberately ingested, handler/excludes.go) would
+// silently unbind real definitions.
+//
+// Known limitation: per-source CONFIGURED excludes do not reach this parser
+// (the registry factory carries no config), so a configured-excluded
+// directory that uniquely defines a name can still yield an edge whose target
+// entity the ingester never creates. That failure is a dangling edge — loud
+// at graph-query resolution, the detectable direction — never a wrong real
+// one.
+var defSkipDirs = map[string]bool{".git": true, "node_modules": true}
 
 // buildDefIndex walks the whole tree once and indexes every .c/.h file's
 // function definitions. Eager on first use, deliberately: filling the index
@@ -62,7 +72,13 @@ func (p *Parser) buildDefIndex() {
 			return nil
 		}
 		if info.IsDir() {
-			if defSkipDirs[info.Name()] || strings.HasPrefix(info.Name(), ".") && info.Name() != "." {
+			// Never prune the walk root itself: filepath.Walk hands it to the
+			// callback first, and its BASE name (e.g. a checkout under
+			// ".cache/") must not silently empty the whole index.
+			if path == p.repoRoot {
+				return nil
+			}
+			if defSkipDirs[info.Name()] || strings.HasPrefix(info.Name(), ".") {
 				return filepath.SkipDir
 			}
 			return nil

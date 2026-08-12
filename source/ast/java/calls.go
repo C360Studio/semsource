@@ -47,14 +47,40 @@ type classMembers struct {
 	methods     map[string]bool
 	hasCtor     bool
 	supers      []string // extends + implements, as written
-	// fields maps a class body's field names to declared types, and
-	// privateFields marks the subset invisible to subclasses. Carried here so
-	// an INHERITED field can type a receiver: `rootPerm.m()` in a subclass of
-	// the class declaring `public final ModulePermissions rootPerm` must
-	// resolve like an own field (the OSH P01 gap, #141). Interface constants
-	// stay excluded, same as the own-class table.
-	fields        map[string]string
-	privateFields map[string]bool
+	// fields maps a class body's field names to their declared type and
+	// visibility. Carried here so an INHERITED field can type a receiver:
+	// `rootPerm.m()` in a subclass of the class declaring `public final
+	// ModulePermissions rootPerm` must resolve like an own field (the OSH P01
+	// gap, #141). Interface constants stay excluded, same as the own-class
+	// table.
+	fields map[string]fieldDecl
+}
+
+// fieldAccess is a field's declared visibility, deciding whether an ancestor
+// walk may hand it to a subclass.
+type fieldAccess int
+
+const (
+	accessPackagePrivate fieldAccess = iota // no modifier
+	accessPrivate
+	accessProtected
+	accessPublic
+)
+
+// fieldDecl is one field declaration as its own class wrote it.
+type fieldDecl struct {
+	typeName string
+	access   fieldAccess
+}
+
+// typedField is a receiver-table entry: the declared type name AND the file it
+// was written in. The file matters as much as the name — an ancestor's `Perms`
+// binds through the ANCESTOR file's imports and package, where the same simple
+// name may denote a different type than in the subclass's file (the same
+// hazard cachedMembers.imports documents for the method walk).
+type typedField struct {
+	typeName string
+	declRel  string
 }
 
 // classRef pairs a resolved class with the file that defines it, which is what
@@ -68,8 +94,8 @@ type classRef struct {
 type callScope struct {
 	relPath    string
 	self       classRef
-	vars       map[string]string // receiver name -> declared type
-	conflicted map[string]bool   // names declared with more than one type (inert)
+	vars       map[string]typedField // receiver name -> declared type + declaring file
+	conflicted map[string]bool       // names declared with more than one type (inert)
 }
 
 // collectFileMembers indexes every type declaration in a file by simple name and
@@ -116,7 +142,7 @@ func (p *Parser) collectTypeMembers(node *sitter.Node, content []byte, scope []s
 	}
 	switch node.Type() {
 	case "class_declaration":
-		cm.fields, cm.privateFields = p.collectMemberFieldTypes(body, content)
+		cm.fields = p.collectMemberFieldTypes(body, content)
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
 			switch child.Type() {
@@ -374,20 +400,25 @@ func classKey(cr classRef) string {
 // than one distinct type as conflicted, which makes it inert. Measured on OSH
 // Core, that costs 0.5% of call sites and removes the whole class of mis-typed
 // receivers a flattened table would otherwise admit.
-func (p *Parser) receiverTypes(node *sitter.Node, content []byte) (map[string]string, map[string]bool) {
-	vars := make(map[string]string, len(p.classFields))
+func (p *Parser) receiverTypes(node *sitter.Node, content []byte) (map[string]typedField, map[string]bool) {
+	vars := make(map[string]typedField, len(p.classFields))
 	conflicted := make(map[string]bool)
-	for name, typeName := range p.classFields {
-		vars[name] = typeName
+	for name, decl := range p.classFields {
+		vars[name] = decl
 	}
+	// Params and locals are written in THIS file, so their type names bind
+	// through it; an inherited field's entry keeps its ancestor file instead.
+	// Conflict is judged on the type NAME: a local that shadows a field with
+	// the same simple name and type overwrites it (nearest declaration), one
+	// with a different type marks the name inert.
 	note := func(name, typeName string) {
 		if name == "" || typeName == "" {
 			return
 		}
-		if prev, ok := vars[name]; ok && prev != typeName {
+		if prev, ok := vars[name]; ok && prev.typeName != typeName {
 			conflicted[name] = true
 		}
-		vars[name] = typeName
+		vars[name] = typedField{typeName: typeName, declRel: p.selfRel}
 	}
 	if params := node.ChildByFieldName("parameters"); params != nil {
 		p.collectParamTypes(params, content, note)
@@ -469,18 +500,21 @@ func (p *Parser) catchType(typeNode *sitter.Node, content []byte) string {
 	return p.extractTypeReference(typeNode, content)
 }
 
-// collectFieldTypes maps a class body's field names to their declared types.
+// collectFieldTypes maps a class body's field names to their declared types
+// (the own-class view, where visibility never filters).
 func (p *Parser) collectFieldTypes(body *sitter.Node, content []byte) map[string]string {
-	fields, _ := p.collectMemberFieldTypes(body, content)
+	fields := make(map[string]string)
+	for name, decl := range p.collectMemberFieldTypes(body, content) {
+		fields[name] = decl.typeName
+	}
 	return fields
 }
 
-// collectMemberFieldTypes additionally reports which fields are private —
-// invisible to subclasses, so the inherited-field merge must skip them while
-// the own-class table keeps them.
-func (p *Parser) collectMemberFieldTypes(body *sitter.Node, content []byte) (map[string]string, map[string]bool) {
-	fields := make(map[string]string)
-	private := make(map[string]bool)
+// collectMemberFieldTypes records each field with its declared visibility, so
+// the inherited-field merge can apply Java's access rules: private never
+// crosses to a subclass, package-private crosses only within the package.
+func (p *Parser) collectMemberFieldTypes(body *sitter.Node, content []byte) map[string]fieldDecl {
+	fields := make(map[string]fieldDecl)
 	for i := 0; i < int(body.NamedChildCount()); i++ {
 		child := body.NamedChild(i)
 		if child.Type() != "field_declaration" {
@@ -490,7 +524,7 @@ func (p *Parser) collectMemberFieldTypes(body *sitter.Node, content []byte) (map
 		if typeName == "" {
 			continue
 		}
-		isPrivate := fieldIsPrivate(child, content)
+		access := fieldAccessOf(child, content)
 		for j := 0; j < int(child.NamedChildCount()); j++ {
 			decl := child.NamedChild(j)
 			if decl.Type() != "variable_declarator" {
@@ -498,29 +532,32 @@ func (p *Parser) collectMemberFieldTypes(body *sitter.Node, content []byte) (map
 			}
 			if nameNode := decl.ChildByFieldName("name"); nameNode != nil {
 				name := string(content[nameNode.StartByte():nameNode.EndByte()])
-				fields[name] = typeName
-				if isPrivate {
-					private[name] = true
-				}
+				fields[name] = fieldDecl{typeName: typeName, access: access}
 			}
 		}
 	}
-	return fields, private
+	return fields
 }
 
-// fieldIsPrivate reports whether a field_declaration carries the `private`
-// modifier.
-func fieldIsPrivate(field *sitter.Node, content []byte) bool {
+// fieldAccessOf reads a field_declaration's access modifier; no modifier is
+// package-private.
+func fieldAccessOf(field *sitter.Node, content []byte) fieldAccess {
 	for i := 0; i < int(field.NamedChildCount()); i++ {
 		child := field.NamedChild(i)
 		if child.Type() != "modifiers" {
 			continue
 		}
-		if strings.Contains(" "+string(content[child.StartByte():child.EndByte()])+" ", " private ") {
-			return true
+		mods := " " + string(content[child.StartByte():child.EndByte()]) + " "
+		switch {
+		case strings.Contains(mods, " private "):
+			return accessPrivate
+		case strings.Contains(mods, " protected "):
+			return accessProtected
+		case strings.Contains(mods, " public "):
+			return accessPublic
 		}
 	}
-	return false
+	return accessPackagePrivate
 }
 
 // classFieldsWithInherited merges a class's own field table with the visible
@@ -531,10 +568,10 @@ func fieldIsPrivate(field *sitter.Node, content []byte) bool {
 // table entirely (inert, never guessed). This is what lets an inherited-field
 // receiver resolve: the OSH P01 gap (#141), where `rootPerm` lives on the
 // superclass in another file.
-func (p *Parser) classFieldsWithInherited(start classRef, own map[string]string) map[string]string {
-	merged := make(map[string]string, len(own))
+func (p *Parser) classFieldsWithInherited(start classRef, own map[string]string) map[string]typedField {
+	merged := make(map[string]typedField, len(own))
 	for name, typeName := range own {
-		merged[name] = typeName
+		merged[name] = typedField{typeName: typeName, declRel: start.rel}
 	}
 	if start.cm == nil {
 		return merged
@@ -558,32 +595,56 @@ func (p *Parser) classFieldsWithInherited(start classRef, own map[string]string)
 			}
 		}
 		// Merge one depth level at a time so nearer declarations always win
-		// and same-depth type conflicts are detectable.
-		levelSeen := make(map[string]string)
+		// and same-depth conflicts are detectable. Each entry keeps the
+		// ANCESTOR file it was declared in: its type name binds through that
+		// file's package and imports, not the subclass's (a same-named type
+		// in the subclass's package must not capture it).
+		//
+		// A name two same-depth ancestors declare differently is dropped.
+		// In valid Java this level-conflict path is structurally unreachable
+		// (single class inheritance = one class per BFS level; interfaces
+		// contribute no fields), so it exists as a guard, not a behavior.
+		levelSeen := make(map[string]typedField)
 		levelDrop := make(map[string]bool)
 		for _, cr := range next {
-			for name, typeName := range cr.cm.fields {
-				if cr.cm.privateFields[name] {
+			for name, decl := range cr.cm.fields {
+				if !fieldVisibleToSubclass(decl.access, cr.rel, start.rel) {
 					continue
 				}
 				if _, shadowed := merged[name]; shadowed {
 					continue
 				}
-				if prev, ok := levelSeen[name]; ok && prev != typeName {
+				entry := typedField{typeName: decl.typeName, declRel: cr.rel}
+				if prev, ok := levelSeen[name]; ok && prev != entry {
 					levelDrop[name] = true
 					continue
 				}
-				levelSeen[name] = typeName
+				levelSeen[name] = entry
 			}
 		}
-		for name, typeName := range levelSeen {
+		for name, entry := range levelSeen {
 			if !levelDrop[name] {
-				merged[name] = typeName
+				merged[name] = entry
 			}
 		}
 		level = next
 	}
 	return merged
+}
+
+// fieldVisibleToSubclass applies Java's access rules to the inherited-field
+// merge: private never crosses, package-private crosses only within the
+// package (directory is the package proxy — the layout Java tooling
+// enforces), protected and public always cross.
+func fieldVisibleToSubclass(access fieldAccess, declRel, subclassRel string) bool {
+	switch access {
+	case accessPrivate:
+		return false
+	case accessPackagePrivate:
+		return filepath.Dir(declRel) == filepath.Dir(subclassRel)
+	default:
+		return true
+	}
 }
 
 // extractCalls walks a method or constructor body and returns the entity IDs of
@@ -642,8 +703,11 @@ func (p *Parser) callTargetID(node *sitter.Node, content []byte, cs callScope) s
 	if cs.conflicted[name] {
 		return ""
 	}
-	if declType, ok := cs.vars[name]; ok {
-		cm, rel, external := p.resolveClass(declType, cs.relPath)
+	if decl, ok := cs.vars[name]; ok {
+		// Resolve the type name as written in its DECLARING file — for an
+		// inherited field that is the ancestor's file, whose package and
+		// imports may bind the simple name differently than this one's.
+		cm, rel, external := p.resolveClass(decl.typeName, decl.declRel)
 		if external != "" {
 			return "external:" + external + "." + method
 		}
@@ -691,4 +755,14 @@ func (p *Parser) callScopeFor(node *sitter.Node, content []byte, filePath string
 		vars:       vars,
 		conflicted: conflicted,
 	}
+}
+
+// ownFieldTable lifts an own-class field map into receiver-table entries, all
+// declared in the current file.
+func ownFieldTable(own map[string]string, selfRel string) map[string]typedField {
+	table := make(map[string]typedField, len(own))
+	for name, typeName := range own {
+		table[name] = typedField{typeName: typeName, declRel: selfRel}
+	}
+	return table
 }

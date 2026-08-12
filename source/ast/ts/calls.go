@@ -286,22 +286,115 @@ func thisIsRebound(node, bodyRoot *sitter.Node) bool {
 	return false
 }
 
+// ArrowParamsNode returns an arrow function's parameter node, accounting for
+// the unparenthesized single-identifier shorthand (`x => ...`), which tree-
+// sitter exposes under a DIFFERENT, singular field ("parameter") than the
+// normal parenthesized form ("parameters", wrapping a formal_parameters node).
+// Missing this shape would silently under-suppress the exact class of bug this
+// file guards against — a shorthand arrow's own parameter is a local value.
+// Exported so the Svelte parser's own arrow-function wiring (which drives
+// ExtractCalls the same way parser.go does) uses the identical fallback.
+func ArrowParamsNode(valueNode *sitter.Node) *sitter.Node {
+	if params := valueNode.ChildByFieldName("parameters"); params != nil {
+		return params
+	}
+	return valueNode.ChildByFieldName("parameter")
+}
+
+// localValueNames collects every name a function-like node's parameters and
+// body bind LOCALLY: parameters (including destructured/rest patterns and the
+// unparenthesized arrow shorthand, via arrowParamsNode/CollectPatternBindings),
+// every let/const/var declarator (including destructuring — a classic
+// `for (let i = ...)` initializer is covered for free, since tree-sitter nests
+// it as an ordinary lexical_declaration child), for-in/for-of loop variables,
+// catch-clause parameters, and nested function/class declarations.
+//
+// A bare or namespace-qualified call through any of these names is a call
+// through a LOCAL VALUE — a parameter, a reassigned local, a loop variable —
+// never a reference to the module-level or imported definition of the same
+// name. The spec's "function-typed parameter" rule generalizes to every local
+// binding, not just parameters: `function run(items, transform) {
+// items.map(i => transform(i)) }` must not resolve `transform` against an
+// unrelated module-level or imported function of the same name (mirrors
+// c/calls.go's localValueNames).
+//
+// The set is FLAT across block depth: a name declared in one if/for block
+// shadows the WHOLE enclosing function, not just its own block. This can
+// over-suppress a real, resolvable edge when an unrelated sibling block
+// happens to reuse the name, but it never under-suppresses a genuine shadow —
+// inert is the safe direction the design doctrine already prefers over a
+// wrong edge, so a full scope stack is not required here.
+func localValueNames(params, body *sitter.Node, source []byte) map[string]bool {
+	names := make(map[string]bool)
+	bindPattern := func(pattern *sitter.Node) {
+		if pattern == nil {
+			return
+		}
+		var bindings []*sitter.Node
+		ast.CollectPatternBindings(pattern, &bindings)
+		for _, b := range bindings {
+			names[nodeText(b, source)] = true
+		}
+	}
+	switch {
+	case params == nil:
+	case params.Type() == "formal_parameters":
+		for i := 0; i < int(params.NamedChildCount()); i++ {
+			bindPattern(params.NamedChild(i).ChildByFieldName("pattern"))
+		}
+	default:
+		bindPattern(params) // unparenthesized arrow shorthand: the field IS the pattern
+	}
+	if body == nil {
+		return names
+	}
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		switch n.Type() {
+		case "lexical_declaration", "variable_declaration":
+			for i := 0; i < int(n.NamedChildCount()); i++ {
+				decl := n.NamedChild(i)
+				if decl.Type() == "variable_declarator" {
+					bindPattern(decl.ChildByFieldName("name"))
+				}
+			}
+		case "function_declaration", "class_declaration":
+			if nameNode := n.ChildByFieldName("name"); nameNode != nil {
+				names[nodeText(nameNode, source)] = true
+			}
+		case "for_in_statement":
+			bindPattern(n.ChildByFieldName("left"))
+		case "catch_clause":
+			bindPattern(n.ChildByFieldName("parameter"))
+		}
+		for i := 0; i < int(n.NamedChildCount()); i++ {
+			walk(n.NamedChild(i))
+		}
+	}
+	walk(body)
+	return names
+}
+
 // extractCalls walks a function/method/arrow body for call_expression sites and
 // returns the entity IDs of the callees it can confirm, deduped in encounter
 // order. lang is the domain used only for edges pointing back into the file
 // being resolved (a same-file function, a this.-method call); scope is the
 // enclosing class chain and classMethods the current class's method set (both
-// nil outside a class), used to resolve this.-calls.
-func (p *Parser) extractCalls(body *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods map[string]bool) []string {
+// nil outside a class), used to resolve this.-calls. params is the enclosing
+// function-like node's own parameter node (nil when it has none), used with
+// body to build the local-shadow guard (localValueNames) before any call site
+// is resolved.
+func (p *Parser) extractCalls(params, body *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods map[string]bool) []string {
 	if body == nil {
 		return nil
 	}
+	locals := localValueNames(params, body, source)
 	var calls []string
 	seen := make(map[string]bool)
 	var walk func(n *sitter.Node)
 	walk = func(n *sitter.Node) {
 		if n.Type() == "call_expression" {
-			if id := p.callTargetID(n.ChildByFieldName("function"), body, source, filePath, lang, scope, classMethods); id != "" && !seen[id] {
+			if id := p.callTargetID(n.ChildByFieldName("function"), body, source, filePath, lang, scope, classMethods, locals); id != "" && !seen[id] {
 				seen[id] = true
 				calls = append(calls, id)
 			}
@@ -320,14 +413,22 @@ func (p *Parser) extractCalls(body *sitter.Node, source []byte, filePath, lang s
 // (`this.m()` / `ns.f()`) stays inert: a property chain (`a.b.c()`), a computed
 // callee (`obj[key]()`), and a call/paren-wrapped receiver would all need
 // expression typing to resolve safely, and a guess there is exactly the wrong
-// edge the design forbids.
-func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods map[string]bool) string {
+// edge the design forbids. locals (localValueNames) gates BOTH the bare-
+// identifier and the namespace-head branches: a name shadowed by a parameter
+// or local declaration is a call through that VALUE, not a reference to any
+// module-level/imported definition of the same name, so it must not resolve —
+// not even to an "external:" marker.
+func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods, locals map[string]bool) string {
 	if fn == nil {
 		return ""
 	}
 	switch fn.Type() {
 	case "identifier":
-		return p.callNameToEntityID(nodeText(fn, source), filePath, lang)
+		name := nodeText(fn, source)
+		if locals[name] {
+			return "" // shadowed by a parameter/local — a function-VALUE call, not a definition reference
+		}
+		return p.callNameToEntityID(name, filePath, lang)
 	case "member_expression":
 		obj := fn.ChildByFieldName("object")
 		prop := fn.ChildByFieldName("property")
@@ -342,7 +443,11 @@ func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath
 			}
 			return ast.NewScopedCodeEntity(p.org, lang, p.project, ast.TypeMethod, scope, method, filePath).ID
 		case "identifier":
-			return p.namespaceCalleeID(nodeText(obj, source), method, filePath)
+			ns := nodeText(obj, source)
+			if locals[ns] {
+				return "" // ns is a local value, not a namespace-import binding
+			}
+			return p.namespaceCalleeID(ns, method, filePath)
 		default:
 			return "" // property chain (a.b.c(), this.x.y()) — inert
 		}
@@ -427,13 +532,17 @@ func (p *Parser) PrepareCallResolution(root *sitter.Node, content []byte) {
 }
 
 // ExtractCalls resolves body's call_expression sites to callee entity IDs; see
-// extractCalls. lang is the domain used only for edges that point back into the
-// file being resolved — a plain .ts/.js caller passes its own detected
-// language, while the Svelte parser passes "svelte" so a script-block call's
-// edge byte-matches the component's own entity-ID domain. Cross-module targets
-// are unaffected by lang: they always resolve against the TARGET file's own
-// extension (never a .svelte file — components are not import()-able as named
-// function modules), so cross-module edges are correct regardless of caller.
-func (p *Parser) ExtractCalls(body *sitter.Node, content []byte, filePath, lang string, scope []string, classMethods map[string]bool) []string {
-	return p.extractCalls(body, content, filePath, lang, scope, classMethods)
+// extractCalls. params is the enclosing function-like node's own parameter
+// node (nil when it has none) — required so the local-shadow guard
+// (localValueNames) sees the SAME parameters the caller built the entity's own
+// signature from, not an empty set. lang is the domain used only for edges
+// that point back into the file being resolved — a plain .ts/.js caller passes
+// its own detected language, while the Svelte parser passes "svelte" so a
+// script-block call's edge byte-matches the component's own entity-ID domain.
+// Cross-module targets are unaffected by lang: they always resolve against the
+// TARGET file's own extension (never a .svelte file — components are not
+// import()-able as named function modules), so cross-module edges are correct
+// regardless of caller.
+func (p *Parser) ExtractCalls(params, body *sitter.Node, content []byte, filePath, lang string, scope []string, classMethods map[string]bool) []string {
+	return p.extractCalls(params, body, content, filePath, lang, scope, classMethods)
 }

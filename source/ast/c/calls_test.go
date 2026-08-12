@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -166,4 +167,50 @@ func TestCHeaderInlineDefinitionResolves(t *testing.T) {
 		"src/app.c":   "#include \"u.h\"\nint run(int v) { return twice(v); }\n",
 	})
 	assertCCallsExactly(t, ents, "run", "twice")
+}
+
+// The index and the ingester must agree on corpus membership: a skip set
+// looser than the ingester's mints dangling edges, a tighter one silently
+// unbinds real definitions. handler.DefaultExcludedDirNames is the contract.
+func TestDefSkipDirsMatchIngester(t *testing.T) {
+	want := map[string]bool{}
+	for _, name := range handler.DefaultExcludedDirNames() {
+		want[name] = true
+	}
+	if len(defSkipDirs) != len(want) {
+		t.Fatalf("defSkipDirs = %v, ingester excludes %v", defSkipDirs, want)
+	}
+	for name := range want {
+		if !defSkipDirs[name] {
+			t.Errorf("ingester excludes %q but the call index does not", name)
+		}
+	}
+}
+
+// A repo root whose own base name is hidden (a checkout under ".cache/...")
+// must still index — the prune guard applies to children, not the root.
+func TestHiddenRootStillIndexes(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, ".cache")
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for rel, src := range map[string]string{
+		"src/a.c": "static void helper(void) {}\nvoid run(void) { helper(); }\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, rel), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := NewParser("acme", "test", root)
+	res, err := p.ParseFile(context.Background(), filepath.Join(root, "src/a.c"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range res.Entities {
+		if e.Name == "run" && len(e.Calls) == 1 {
+			return
+		}
+	}
+	t.Fatal("hidden-named root must still resolve call edges")
 }

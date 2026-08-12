@@ -446,7 +446,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	// must byte-match it, not the script-language convention a plain .ts file
 	// would use.
 	if bodyNode := node.ChildByFieldName("body"); bodyNode != nil {
-		entity.Calls = p.callResolver.ExtractCalls(bodyNode, source, filePath, "svelte", nil, nil)
+		entity.Calls = p.callResolver.ExtractCalls(node.ChildByFieldName("parameters"), bodyNode, source, filePath, "svelte", nil, nil)
 	}
 
 	return entity
@@ -603,7 +603,7 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 		// Resolved call edges from the arrow body (design D3), via the shared ts
 		// pass; domain fixed to "svelte" for the same reason as extractFunction.
 		if bodyNode := valueNode.ChildByFieldName("body"); bodyNode != nil {
-			entity.Calls = p.callResolver.ExtractCalls(bodyNode, source, filePath, "svelte", nil, nil)
+			entity.Calls = p.callResolver.ExtractCalls(ts.ArrowParamsNode(valueNode), bodyNode, source, filePath, "svelte", nil, nil)
 		}
 	case kind == "const":
 		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeConst, name, filePath)

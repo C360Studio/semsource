@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/source/ast"
@@ -143,6 +144,63 @@ func TestCallThroughInheritedFieldResolves(t *testing.T) {
 			"  public void setup() { rootPerm.cloneTemplate(); }\n}\n",
 	})
 	assertCalls(t, ents, "setup", "cloneTemplate")
+}
+
+// The P01 shape ACROSS PACKAGES (the review's blocker-2 case): the ancestor
+// and the field's type live in package a, the subclass in package b, which
+// never imports the field's type. The type name must bind through the
+// ANCESTOR file — resolving it from the subclass's file finds nothing (or
+// worse, a decoy).
+func TestCallThroughInheritedFieldResolvesAcrossPackages(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"  public final Perms rootPerm = new Perms();\n}\n",
+		"b/SosSecurity.java": "package b;\nimport a.BaseSecurity;\n" +
+			"public class SosSecurity extends BaseSecurity {\n" +
+			"  public void setup() { rootPerm.cloneTemplate(); }\n}\n",
+	})
+	assertCalls(t, ents, "setup", "cloneTemplate")
+}
+
+// Same layout plus a DECOY: package b has its own Perms with the same method.
+// The inherited field was declared in package a, so its type binds to a.Perms
+// — an edge to b.Perms would be a wrong REAL edge, the worst failure class.
+func TestInheritedFieldTypeBindsInDeclaringFile(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"b/Perms.java": "package b;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"  public final Perms rootPerm = new Perms();\n}\n",
+		"b/SosSecurity.java": "package b;\nimport a.BaseSecurity;\n" +
+			"public class SosSecurity extends BaseSecurity {\n" +
+			"  public void setup() { rootPerm.cloneTemplate(); }\n}\n",
+	})
+	calls := callsOf(t, ents, "setup")
+	if len(calls) != 1 {
+		t.Fatalf("setup calls = %v, want exactly one edge", calls)
+	}
+	if !strings.Contains(calls[0], "a-Perms-java") || strings.Contains(calls[0], "b-Perms-java") {
+		t.Errorf("edge must bind through the declaring file's package (a.Perms), got %q", calls[0])
+	}
+}
+
+// Package-private ancestor fields cross only within the package: visible to a
+// same-package subclass, invisible (inert) to one in another package.
+func TestPackagePrivateInheritedFieldRespectsPackage(t *testing.T) {
+	files := map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"  final Perms rootPerm = new Perms();\n}\n",
+		"a/SamePkg.java": "package a;\npublic class SamePkg extends BaseSecurity {\n" +
+			"  public void same() { rootPerm.cloneTemplate(); }\n}\n",
+		"b/OtherPkg.java": "package b;\nimport a.BaseSecurity;\n" +
+			"public class OtherPkg extends BaseSecurity {\n" +
+			"  public void other() { rootPerm.cloneTemplate(); }\n}\n",
+	}
+	ents := parseTree(t, files)
+	assertCalls(t, ents, "same", "cloneTemplate")
+	assertCallsExactly(t, ents, "other")
 }
 
 // A private ancestor field is invisible to the subclass, so it must not type

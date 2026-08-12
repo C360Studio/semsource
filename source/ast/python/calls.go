@@ -21,12 +21,22 @@ import (
 // (builtins, class instantiations, inherited/mixin methods, attribute calls on a
 // local variable) emits nothing — never a wrong or phantom edge.
 //
+// A bare or `obj.method()` call whose head name is bound by the enclosing
+// function's OWN parameters or by an assignment/def/for-target/with-as/walrus
+// anywhere in its body (localValueNames) is a call through that LOCAL VALUE,
+// never a reference to a module-level or imported definition of the same
+// name, and is suppressed before either resolution path runs (spec: a
+// function-typed parameter — generalized here to any local binding — SHALL
+// NOT produce a call edge). The set is FLAT across block depth: Python has no
+// block scope, so a name assigned in one branch is genuinely visible for the
+// rest of the function — this is not an approximation the way it is for a
+// block-scoped language.
+//
 // Known inert limitations (documented, never wrong — a missing edge, not a bad
 // one): a call in a parameter default (`def f(x=g())`) is outside the body walk;
-// a bare call shadowed by a nested `def`, and a `self.x()` inside a class nested in
-// a method, resolve against the module/outer scope; and `from pkg import sub;
-// sub.f()` resolves against pkg's package file (where f is absent → inert) rather
-// than pkg/sub.py. These need scope tracking or submodule probing and are deferred.
+// and `from pkg import sub; sub.f()` resolves against pkg's package file (where f
+// is absent → inert) rather than pkg/sub.py. These need submodule probing and are
+// deferred.
 
 // extractLocalFunctions collects a module's top-level function definitions into a
 // name set. Used both for the file being parsed (to resolve bare local calls) and,
@@ -113,20 +123,130 @@ func (p *Parser) moduleFuncs(relPath string) map[string]bool {
 	return funcs
 }
 
+// localValueNames collects every name a function's OWN parameters and body
+// bind locally: parameters (plain, defaulted, typed, *args, **kwargs — via
+// collectPyParamNames), every assignment target (including tuple/list
+// unpacking), for-loop targets, with-statement `as` targets, walrus (`:=`)
+// targets, and nested def/class names. A bare or `obj.method()` call whose
+// head name is in this set is a call through that LOCAL VALUE, not a
+// reference to the module-level/imported definition of the same name (mirrors
+// ts/calls.go's localValueNames and c/calls.go's localValueNames — the same
+// rule applied to Python's declaration surface).
+//
+// Deliberately NOT scoped to Python's real block structure: Python has no
+// block scope (an if/for/with body's assignments are visible for the rest of
+// the enclosing function), so a flat set is not an approximation here the way
+// it is for TS/JS — it is the correct scope model.
+func localValueNames(fnNode *sitter.Node, content []byte) map[string]bool {
+	names := make(map[string]bool)
+	if params := fnNode.ChildByFieldName("parameters"); params != nil {
+		for i := 0; i < int(params.NamedChildCount()); i++ {
+			collectPyParamNames(params.NamedChild(i), content, names)
+		}
+	}
+	body := fnNode.ChildByFieldName("body")
+	if body == nil {
+		return names
+	}
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		switch n.Type() {
+		case "assignment":
+			if left := n.ChildByFieldName("left"); left != nil {
+				collectPyAssignTargets(left, content, names)
+			}
+		case "for_statement":
+			if left := n.ChildByFieldName("left"); left != nil {
+				collectPyAssignTargets(left, content, names)
+			}
+		case "named_expression": // walrus: `(transform := get())`
+			if nameNode := n.ChildByFieldName("name"); nameNode != nil {
+				names[nodeText(nameNode, content)] = true
+			}
+		case "as_pattern": // `with open(...) as fh:` / `except E as e:`
+			if alias := n.ChildByFieldName("alias"); alias != nil {
+				for i := 0; i < int(alias.NamedChildCount()); i++ {
+					if alias.NamedChild(i).Type() == "identifier" {
+						names[nodeText(alias.NamedChild(i), content)] = true
+					}
+				}
+			}
+		case "function_definition", "class_definition":
+			if nameNode := n.ChildByFieldName("name"); nameNode != nil {
+				names[nodeText(nameNode, content)] = true
+			}
+		}
+		for i := 0; i < int(n.NamedChildCount()); i++ {
+			walk(n.NamedChild(i))
+		}
+	}
+	walk(body)
+	return names
+}
+
+// collectPyParamNames binds one parameter-list entry, unwrapping the
+// default/typed/splat wrappers tree-sitter-python uses around a plain
+// identifier: default_parameter/typed_default_parameter/typed_parameter carry
+// the identifier under a "name" field (falling back to the first identifier
+// child if a grammar revision drops the field, same defensive pattern
+// imports.go already uses for import specifiers); list_splat_pattern (*args)
+// and dictionary_splat_pattern (**kwargs) wrap it as their one child.
+func collectPyParamNames(node *sitter.Node, content []byte, names map[string]bool) {
+	switch node.Type() {
+	case "identifier":
+		names[nodeText(node, content)] = true
+	case "default_parameter", "typed_default_parameter", "typed_parameter":
+		if nameNode := node.ChildByFieldName("name"); nameNode != nil {
+			collectPyParamNames(nameNode, content, names)
+			return
+		}
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			if node.NamedChild(i).Type() == "identifier" {
+				names[nodeText(node.NamedChild(i), content)] = true
+				return
+			}
+		}
+	case "list_splat_pattern", "dictionary_splat_pattern":
+		if node.NamedChildCount() > 0 {
+			collectPyParamNames(node.NamedChild(0), content, names)
+		}
+	}
+}
+
+// collectPyAssignTargets binds an assignment/for-loop target, descending into
+// tuple/list unpacking (`a, b = 1, 2`) so every unpacked name is bound, not
+// just the first. An attribute or subscript target (`obj.x = 1`, `arr[0] = 1`)
+// is deliberately NOT a binding — it mutates something that already exists
+// rather than introducing a new local name, so it does not shadow anything.
+func collectPyAssignTargets(node *sitter.Node, content []byte, names map[string]bool) {
+	switch node.Type() {
+	case "identifier":
+		names[nodeText(node, content)] = true
+	case "pattern_list", "tuple_pattern", "list_pattern":
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			collectPyAssignTargets(node.NamedChild(i), content, names)
+		}
+	}
+}
+
 // extractCalls walks a function/method body for call sites and returns the entity
 // IDs of the callees it can confirm, deduped. scope is the enclosing class chain
 // and classMethods the current class's method set (both empty for module-level
-// functions), used to resolve self/cls calls.
-func (p *Parser) extractCalls(body *sitter.Node, content []byte, filePath string, scope []string, classMethods map[string]bool) []string {
+// functions), used to resolve self/cls calls. locals (localValueNames) gates
+// bare and obj.method() resolution before either runs — a call through a
+// locally-shadowed name is a call through that VALUE, not a definition
+// reference.
+func (p *Parser) extractCalls(fnNode, body *sitter.Node, content []byte, filePath string, scope []string, classMethods map[string]bool) []string {
 	if body == nil {
 		return nil
 	}
+	locals := localValueNames(fnNode, content)
 	var calls []string
 	seen := make(map[string]bool)
 	var walk func(n *sitter.Node)
 	walk = func(n *sitter.Node) {
 		if n.Type() == "call" {
-			if id := p.callTargetID(n.ChildByFieldName("function"), content, filePath, scope, classMethods); id != "" && !seen[id] {
+			if id := p.callTargetID(n.ChildByFieldName("function"), content, filePath, scope, classMethods, locals); id != "" && !seen[id] {
 				seen[id] = true
 				calls = append(calls, id)
 			}
@@ -140,14 +260,21 @@ func (p *Parser) extractCalls(body *sitter.Node, content []byte, filePath string
 }
 
 // callTargetID resolves a call's `function` node to a callee entity ID, or "" when
-// the target cannot be confirmed (inert).
-func (p *Parser) callTargetID(fn *sitter.Node, content []byte, filePath string, scope []string, classMethods map[string]bool) string {
+// the target cannot be confirmed (inert). locals (localValueNames) gates both
+// the bare-identifier and the obj.method() branches: a shadowed name is a call
+// through that VALUE, not a definition reference — not even to an "external:"
+// marker.
+func (p *Parser) callTargetID(fn *sitter.Node, content []byte, filePath string, scope []string, classMethods, locals map[string]bool) string {
 	if fn == nil {
 		return ""
 	}
 	switch fn.Type() {
 	case "identifier":
-		return p.callNameToEntityID(nodeText(fn, content), filePath)
+		name := nodeText(fn, content)
+		if locals[name] {
+			return "" // shadowed by a parameter/local — a call through that VALUE, not a definition reference
+		}
+		return p.callNameToEntityID(name, filePath)
 	case "attribute":
 		obj := fn.ChildByFieldName("object")
 		attr := fn.ChildByFieldName("attribute")
@@ -157,12 +284,18 @@ func (p *Parser) callTargetID(fn *sitter.Node, content []byte, filePath string, 
 		objText := nodeText(obj, content)
 		method := nodeText(attr, content)
 		// self.method() / cls.method() — resolve only to a method of THIS class;
-		// inherited/mixin methods (defined in another file) stay inert.
+		// inherited/mixin methods (defined in another file) stay inert. self/cls
+		// are fixed receiver names, not subject to the locals shadow check: a
+		// parameter literally named "self" other than the true self parameter
+		// would BE the self parameter, so there is no separate shadow to guard.
 		if objText == "self" || objText == "cls" {
 			if len(scope) > 0 && classMethods[method] {
 				return ast.NewScopedCodeEntity(p.org, "python", p.project, ast.TypeMethod, scope, method, filePath).ID
 			}
 			return ""
+		}
+		if locals[objText] {
+			return "" // objText is a local value, not an imported module/alias
 		}
 		// module.func() where the receiver head is an imported module/alias.
 		return p.resolveImportedCallee(objText+"."+method, filePath)

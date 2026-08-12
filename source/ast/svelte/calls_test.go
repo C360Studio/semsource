@@ -191,3 +191,18 @@ func TestSvelteScriptInertPropertyChainCall(t *testing.T) {
 	})
 	assertNoCalls(t, ents, "run")
 }
+
+// A parameter shadowing a same-script function must stay inert in the script
+// block too — this comes "for free" only if the local-shadow guard
+// (ts/calls.go's localValueNames) is actually threaded through
+// callResolver.ExtractCalls's new params argument; a missed wiring spot here
+// would silently resolve the wrong real edge.
+func TestSvelteScriptParamShadowsScriptFunctionStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"Component.svelte": "<script>\n" +
+			"function transform(x) { return x; }\n" +
+			"function run(items, transform) { items.map(i => transform(i)); }\n" +
+			"</script>\n",
+	})
+	assertNoCalls(t, ents, "run")
+}
