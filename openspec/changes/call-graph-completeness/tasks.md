@@ -2,17 +2,20 @@
 
 ## 1. Go parameter-call suppression (#143, D2)
 
-- [ ] 1.1 Suppress call edges whose callee binds to a function-typed parameter/local in the Go
+- [x] 1.1 Suppress call edges whose callee binds to a function-typed parameter/local in the Go
       extractor; table-driven tests pin the inert forms (param, local, closure-captured) and the
-      still-resolving forms (package function, method)
+      still-resolving forms (package function, method) — also suppresses same-file type
+      conversions (same dangling class)
 - [ ] 1.2 Prove the dogfood signal: seed the dogfood corpus and confirm zero
       `not found: ...lifecycle-go-stat`-class graph-query errors
 
 ## 2. Java declared-type receiver resolution (#141, D1)
 
-- [ ] 2.1 Build per-method declared-type tables (params, locals, fields incl. supers walk) in
+- [x] 2.1 Build per-method declared-type tables (params, locals, fields incl. supers walk) in
       `java/calls.go`; resolve `x.m(...)` via `declaringClass(typeOf(x), m)`; ties, generics,
-      unbindable types drop — tests pin resolving and inert forms
+      unbindable types drop — tests pin resolving and inert forms. (Param/local tables already
+      existed; the real gap was INHERITED fields — classMembers now carries visibility-aware
+      field tables and classFieldsWithInherited merges them nearest-wins)
 - [ ] 2.2 Verify on the OSH corpus: `cloneAsTemplatePermission` impact names ConSysApiSecurity +
       SOSSecurity + SPSSecurity callers (the P01 shape) in a local stack check
 
@@ -28,10 +31,13 @@
 
 ## 4. C direct calls (#149, D4)
 
-- [ ] 4.1 Measure the cross-TU name-collision rate on a real C corpus and record it in the task;
-      pick corpus-unique binding vs file-local-only from the measurement
-- [ ] 4.2 C call pass: name-bound direct calls, function-pointer and multi-definition names
-      inert; tests pin both sides
+- [x] 4.1 Measured on redis via our own parser (collision_measure_test.go, C_MEASURE_CORPUS):
+      src/ = 6,141 defs / 5,596 names / **1.41%** defined in >1 file; with vendored deps 1.80%.
+      Under the 3% C++ precedent → **corpus-unique binding ships**; the colliding tail drops
+- [x] 4.2 C call pass: name-bound direct calls resolving to the DEFINITION (index counts
+      function_definition nodes only — prototypes would self-collide every header-declared
+      function); function-pointer (param/local/member) and multi-definition names inert; eager
+      index for order-independence, hash-revalidated per ParseFile; 7 tests pin both sides
 
 ## 5. Contract, verification, and gates (D5)
 

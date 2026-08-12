@@ -34,6 +34,13 @@ type Parser struct {
 	project  string
 	repoRoot string
 	parser   *sitter.Parser
+
+	// Call-resolution state (calls.go): per-file definition-name sets validated
+	// by content hash, the name→files inversion, and the files revalidated
+	// during the current ParseFile.
+	defIndex     map[string]defIndexEntry
+	defNameFiles map[string]map[string]bool
+	revalidated  map[string]bool
 }
 
 // NewParser creates a new C AST parser.
@@ -69,6 +76,14 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	defer tree.Close()
 
 	root := tree.RootNode()
+
+	// Refresh call-resolution state (calls.go): candidate files revalidate at
+	// most once per ParseFile, and this file's own definitions upsert so a
+	// watch-created file joins the index as soon as it is parsed.
+	p.revalidated = map[string]bool{relPath: true}
+	if p.defIndex != nil {
+		p.refreshDefEntry(relPath, content)
+	}
 
 	result := &ast.ParseResult{
 		Path:     relPath,
@@ -173,6 +188,7 @@ func (p *Parser) functionEntity(node *sitter.Node, content []byte, relPath strin
 	entity := p.newEntity(ast.TypeFunction, name, relPath, node)
 	entity.Signature = functionSignature(node, decl, content)
 	entity.DocComment = docComment(node, content)
+	entity.Calls = p.extractCalls(node, content)
 	return entity
 }
 
