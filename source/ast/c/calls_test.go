@@ -118,8 +118,8 @@ func TestCCrossFileCallResolves(t *testing.T) {
 // binding is ambiguous and the edge drops — never a coin flip.
 func TestCCollidingNameStaysInert(t *testing.T) {
 	ents := parseCTree(t, map[string]string{
-		"a/dup.c": "void frob(void) {}\n",
-		"b/dup.c": "void frob(void) {}\n",
+		"a/dup.c":   "void frob(void) {}\n",
+		"b/dup.c":   "void frob(void) {}\n",
 		"src/app.c": "void frob(void);\nvoid run(void) { frob(); }\n",
 	})
 	assertCCallsExactly(t, ents, "run")
