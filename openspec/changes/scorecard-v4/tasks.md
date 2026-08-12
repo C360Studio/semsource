@@ -2,11 +2,11 @@
 
 ## 1. Composition band and checker (D1, D2)
 
-- [ ] 1.1 Implement `scripts/scorecard/check-composition.py`: windowed co-occurrence scan proving
+- [x] 1.1 Implement `scripts/scorecard/check-composition.py`: windowed co-occurrence scan proving
       no single passage/body carries a composition question's full `expect_all` set; same
       behavioral-gate style as `check-discrimination.py` (including a `--simulate` proof that the
       gate fires)
-- [ ] 1.2 Author composition questions against the dogfood corpus (shapes: impact closure,
+- [x] 1.2 Author composition questions against the dogfood corpus (shapes: impact closure,
       relation join, version composition, cross-source join; `why` names the traversal); admit
       only checker-passing questions; bump `questions.json` to version 4 with all v3 questions
       retained verbatim
