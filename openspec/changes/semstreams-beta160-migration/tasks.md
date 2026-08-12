@@ -64,7 +64,7 @@
       commit; commit results + a SUMMARY comparing per band vs the 2026-08-09 baseline
       (annotated with the substrate pin change); recall regression = migration defect — fix
       before proceeding, do not annotate around it
-- [ ] 6.2 Record product proof per the upstream guide: tag + migration commit, schema/client
+- [x] 6.2 Record product proof per the upstream guide: tag + migration commit, schema/client
       regeneration, strict validation pass, retired-surface removal (5.1 output), green suites,
       e2e proof — as the PR description's proof section
 - [x] 6.3 Post adoption status to our remaining open upstream ask #603 thread if the impact facet
