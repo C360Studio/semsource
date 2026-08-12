@@ -42,6 +42,7 @@
 - [x] 5.2 Run all three arms on the OSH corpus (questions-osh v1); commit results + scale report —
       B 9/10 > A 8/10 = C 8/10; composition separates B from C via P02; P01 exposed the Java
       instance-receiver call-graph gap (#141); arm B latency flat at 5x scale (108 ms median)
-- [ ] 5.3 README: composition band rationale, checker usage, latency rules, OSH corpus recipe and
+- [x] 5.3 README: composition band rationale, checker usage, latency rules, OSH corpus recipe and
       cross-corpus rule; post the v4 dogfood verdict to #130 and the OSH scale numbers to the OSH
-      scale-test tracking context
+      scale-test tracking context — posted (issue #130 comment, 2026-08-12); findings filed as
+      #141/#142/#143
