@@ -130,6 +130,50 @@ func TestCallThroughFieldResolvesToDefinition(t *testing.T) {
 	assertCalls(t, ents, "run", "load")
 }
 
+// The OSH P01 shape (#141): the receiver field is declared on a SUPERCLASS in
+// another file (`public final ModulePermissions rootPerm` on ModuleSecurity),
+// and the subclass body calls a method on it bare. The inherited field must
+// type the receiver exactly like an own field.
+func TestCallThroughInheritedFieldResolves(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"  public final Perms rootPerm = new Perms();\n}\n",
+		"a/SosSecurity.java": "package a;\npublic class SosSecurity extends BaseSecurity {\n" +
+			"  public void setup() { rootPerm.cloneTemplate(); }\n}\n",
+	})
+	assertCalls(t, ents, "setup", "cloneTemplate")
+}
+
+// A private ancestor field is invisible to the subclass, so it must not type
+// a receiver there: the bare name in the subclass is either a compile error
+// or something else entirely — inert, never guessed.
+func TestPrivateInheritedFieldStaysInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"  private Perms rootPerm = new Perms();\n}\n",
+		"a/SosSecurity.java": "package a;\npublic class SosSecurity extends BaseSecurity {\n" +
+			"  public void setup() { rootPerm.cloneTemplate(); }\n}\n",
+	})
+	assertCallsExactly(t, ents, "setup")
+}
+
+// An own field shadows an inherited one: nearest declaration wins, and the
+// call resolves against the subclass's own type, not the ancestor's.
+func TestOwnFieldShadowsInherited(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Perms.java": "package a;\npublic class Perms { public void cloneTemplate() {} }\n",
+		"a/Other.java": "package a;\npublic class Other { public void touch() {} }\n",
+		"a/BaseSecurity.java": "package a;\npublic class BaseSecurity {\n" +
+			"  public Perms rootPerm = new Perms();\n}\n",
+		"a/SosSecurity.java": "package a;\npublic class SosSecurity extends BaseSecurity {\n" +
+			"  public Other rootPerm = new Other();\n" +
+			"  public void setup() { rootPerm.touch(); }\n}\n",
+	})
+	assertCalls(t, ents, "setup", "touch")
+}
+
 func TestCallThroughParameterAndLocal(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"a/Repo.java":   "package a;\npublic class Repo { public void load() {} }\n",

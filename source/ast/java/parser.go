@@ -569,8 +569,12 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 	// This class's field types back call-receiver resolution for its methods
 	// (calls.go). Saved and restored so a nested class body does not leak its
 	// fields to the enclosing class's remaining methods, or vice versa.
+	// Inherited (non-private) ancestor fields join the table through the same
+	// supers walk declaringClass uses — a subclass body references them bare,
+	// exactly like own fields (#141, the OSH rootPerm gap).
 	prevFields := p.classFields
-	p.classFields = p.collectFieldTypes(body, content)
+	selfRef := classRef{cm: p.selfByScope[strings.Join(scope, ".")], rel: p.selfRel}
+	p.classFields = p.classFieldsWithInherited(selfRef, p.collectFieldTypes(body, content))
 	defer func() { p.classFields = prevFields }()
 
 	for i := 0; i < int(body.NamedChildCount()); i++ {

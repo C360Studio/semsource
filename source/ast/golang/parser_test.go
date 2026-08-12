@@ -461,6 +461,69 @@ func Main() {
 	}
 }
 
+// Function-typed parameters, locals, and same-file conversions are not
+// definitions: an edge to them dangles by construction and fails graph-query
+// resolution at ERROR level on every seed (#143). The fails-inert contract
+// (code-call-graph spec) requires those call sites to emit nothing, while
+// real function and method calls in the same body keep resolving.
+func TestParseFile_FunctionValuedCalleesStayInert(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	code := `package example
+
+type wrap string
+
+func helper() {}
+
+func decide(path string, stat func(string) bool) {
+	stat(path)          // param: inert
+	check := func(s string) bool { return s != "" }
+	check(path)         // local: inert
+	_ = wrap(path)      // same-file conversion: inert
+	func() {
+		stat(path)      // param through a closure body: inert
+	}()
+	helper()            // real function: resolves
+}
+`
+	filePath := filepath.Join(tmpDir, "main.go")
+	if err := os.WriteFile(filePath, []byte(code), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	p := NewParser("acme", "test", tmpDir)
+	result, err := p.ParseFile(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	var decideFunc *ast.CodeEntity
+	for _, e := range result.Entities {
+		if e.Type == ast.TypeFunction && e.Name == "decide" {
+			decideFunc = e
+			break
+		}
+	}
+	if decideFunc == nil {
+		t.Fatal("decide function not found")
+	}
+
+	var hasHelper bool
+	for _, call := range decideFunc.Calls {
+		for _, inert := range []string{"stat", "check", "wrap"} {
+			if strings.Contains(call, inert) {
+				t.Errorf("call edge to %q must be inert, found %q in %v", inert, call, decideFunc.Calls)
+			}
+		}
+		if strings.Contains(call, "helper") {
+			hasHelper = true
+		}
+	}
+	if !hasHelper {
+		t.Errorf("helper call must still resolve: %v", decideFunc.Calls)
+	}
+}
+
 func TestParseDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 

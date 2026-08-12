@@ -23,6 +23,12 @@ import (
 // a `var`-declared receiver, a receiver name declared with conflicting types in
 // one method, a type name that cannot be bound to exactly one in-tree file, and
 // a resolved target whose class and ancestors declare no such method.
+//
+// Receiver tables include INHERITED fields: the enclosing class's own fields
+// plus every visible (non-private) ancestor field through the same supers walk
+// and cap, nearest declaration winning and same-depth type conflicts dropped
+// (#141 — the OSH `rootPerm` gap, where the field lives on a superclass in
+// another file).
 
 // ancestorDepthCap bounds the extends/implements walk. Java hierarchies are far
 // shallower than this; the cap exists so a malformed or cyclic tree terminates.
@@ -41,6 +47,14 @@ type classMembers struct {
 	methods     map[string]bool
 	hasCtor     bool
 	supers      []string // extends + implements, as written
+	// fields maps a class body's field names to declared types, and
+	// privateFields marks the subset invisible to subclasses. Carried here so
+	// an INHERITED field can type a receiver: `rootPerm.m()` in a subclass of
+	// the class declaring `public final ModulePermissions rootPerm` must
+	// resolve like an own field (the OSH P01 gap, #141). Interface constants
+	// stay excluded, same as the own-class table.
+	fields        map[string]string
+	privateFields map[string]bool
 }
 
 // classRef pairs a resolved class with the file that defines it, which is what
@@ -102,6 +116,7 @@ func (p *Parser) collectTypeMembers(node *sitter.Node, content []byte, scope []s
 	}
 	switch node.Type() {
 	case "class_declaration":
+		cm.fields, cm.privateFields = p.collectMemberFieldTypes(body, content)
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
 			switch child.Type() {
@@ -456,7 +471,16 @@ func (p *Parser) catchType(typeNode *sitter.Node, content []byte) string {
 
 // collectFieldTypes maps a class body's field names to their declared types.
 func (p *Parser) collectFieldTypes(body *sitter.Node, content []byte) map[string]string {
+	fields, _ := p.collectMemberFieldTypes(body, content)
+	return fields
+}
+
+// collectMemberFieldTypes additionally reports which fields are private —
+// invisible to subclasses, so the inherited-field merge must skip them while
+// the own-class table keeps them.
+func (p *Parser) collectMemberFieldTypes(body *sitter.Node, content []byte) (map[string]string, map[string]bool) {
 	fields := make(map[string]string)
+	private := make(map[string]bool)
 	for i := 0; i < int(body.NamedChildCount()); i++ {
 		child := body.NamedChild(i)
 		if child.Type() != "field_declaration" {
@@ -466,17 +490,100 @@ func (p *Parser) collectFieldTypes(body *sitter.Node, content []byte) map[string
 		if typeName == "" {
 			continue
 		}
+		isPrivate := fieldIsPrivate(child, content)
 		for j := 0; j < int(child.NamedChildCount()); j++ {
 			decl := child.NamedChild(j)
 			if decl.Type() != "variable_declarator" {
 				continue
 			}
 			if nameNode := decl.ChildByFieldName("name"); nameNode != nil {
-				fields[string(content[nameNode.StartByte():nameNode.EndByte()])] = typeName
+				name := string(content[nameNode.StartByte():nameNode.EndByte()])
+				fields[name] = typeName
+				if isPrivate {
+					private[name] = true
+				}
 			}
 		}
 	}
-	return fields
+	return fields, private
+}
+
+// fieldIsPrivate reports whether a field_declaration carries the `private`
+// modifier.
+func fieldIsPrivate(field *sitter.Node, content []byte) bool {
+	for i := 0; i < int(field.NamedChildCount()); i++ {
+		child := field.NamedChild(i)
+		if child.Type() != "modifiers" {
+			continue
+		}
+		if strings.Contains(" "+string(content[child.StartByte():child.EndByte()])+" ", " private ") {
+			return true
+		}
+	}
+	return false
+}
+
+// classFieldsWithInherited merges a class's own field table with the visible
+// (non-private) fields of its ancestors, walked breadth-first through the same
+// resolution and cap as declaringClass. Nearest declaration wins — an own
+// field shadows an inherited one, a depth-1 field shadows depth-2 — and a name
+// two SAME-depth ancestors declare with different types is dropped from the
+// table entirely (inert, never guessed). This is what lets an inherited-field
+// receiver resolve: the OSH P01 gap (#141), where `rootPerm` lives on the
+// superclass in another file.
+func (p *Parser) classFieldsWithInherited(start classRef, own map[string]string) map[string]string {
+	merged := make(map[string]string, len(own))
+	for name, typeName := range own {
+		merged[name] = typeName
+	}
+	if start.cm == nil {
+		return merged
+	}
+	visited := map[string]bool{classKey(start): true}
+	level := []classRef{start}
+	for depth := 0; depth < ancestorDepthCap && len(level) > 0; depth++ {
+		var next []classRef
+		for _, cr := range level {
+			for _, super := range cr.cm.supers {
+				scm, srel, _ := p.resolveClass(super, cr.rel)
+				if scm == nil {
+					continue
+				}
+				ref := classRef{cm: scm, rel: srel}
+				if visited[classKey(ref)] {
+					continue
+				}
+				visited[classKey(ref)] = true
+				next = append(next, ref)
+			}
+		}
+		// Merge one depth level at a time so nearer declarations always win
+		// and same-depth type conflicts are detectable.
+		levelSeen := make(map[string]string)
+		levelDrop := make(map[string]bool)
+		for _, cr := range next {
+			for name, typeName := range cr.cm.fields {
+				if cr.cm.privateFields[name] {
+					continue
+				}
+				if _, shadowed := merged[name]; shadowed {
+					continue
+				}
+				if prev, ok := levelSeen[name]; ok && prev != typeName {
+					levelDrop[name] = true
+					continue
+				}
+				levelSeen[name] = typeName
+			}
+		}
+		for name, typeName := range levelSeen {
+			if !levelDrop[name] {
+				merged[name] = typeName
+			}
+		}
+		level = next
+	}
+	return merged
 }
 
 // extractCalls walks a method or constructor body and returns the entity IDs of
