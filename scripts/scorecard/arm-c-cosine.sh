@@ -47,6 +47,7 @@ command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 command -v go >/dev/null || { echo "go is required (armc-dump)" >&2; exit 1; }
 
 . "$here/grade.sh"
+. "$here/timing.sh"
 
 # --- readiness (same gate as run.sh; see its comment for why) --------------
 echo "waiting for phase=ready + index.ready + embedding.ready ..."
@@ -64,8 +65,12 @@ echo "ready — total_entities=$entities"
 # --- vectors: one dump per run ---------------------------------------------
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+# Built once so the per-question latency measures the retrieval procedure,
+# not `go run`'s per-invocation staleness check on the same source.
+echo "building armc-dump ..."
+(cd "$repo" && go build -o "$tmp/armc-dump" ./scripts/scorecard/armc-dump)
 echo "dumping EMBEDDING_INDEX vectors ..."
-(cd "$repo" && go run ./scripts/scorecard/armc-dump -nats "$nats_url" vectors) > "$tmp/vectors.tsv"
+"$tmp/armc-dump" -nats "$nats_url" vectors > "$tmp/vectors.tsv"
 nvec=$(wc -l < "$tmp/vectors.tsv" | tr -d ' ')
 echo "vectors: $nvec"
 [ "$nvec" -gt 0 ] || { echo "no vectors — is the stack seeded?" >&2; exit 1; }
@@ -88,8 +93,14 @@ for i in $(seq 0 $((n - 1))); do
 	band=$(jq -r '.band' <<<"$q")
 	query=$(jq -r '.args.query' <<<"$q")
 
+	# Latency covers the whole per-question procedure a caller of this arm
+	# pays: embed round-trip, cosine ranking over every stored vector, and
+	# top-K body fetch. One sample — the index is fixed for the run, so
+	# repeats would measure caches, not retrieval.
+	t0=$(now_ms)
 	if ! emb=$(embed_query "$query"); then
 		answer='{"isError":true,"error":"embedding request failed"}'
+		lat=$(( $(now_ms) - t0 ))
 		grade_answer
 		context_bytes=0; kids=0
 	else
@@ -113,9 +124,10 @@ for i in $(seq 0 $((n - 1))); do
 		# Bodies, AFTER ranking, in rank order (armc-dump preserves argument
 		# order). An entity with no offloaded body contributes an empty node.
 		# shellcheck disable=SC2046
-		(cd "$repo" && go run ./scripts/scorecard/armc-dump -nats "$nats_url" bodies $(cat "$tmp/top.ids")) \
+		"$tmp/armc-dump" -nats "$nats_url" bodies $(cat "$tmp/top.ids") \
 			> "$tmp/bodies.ndjson"
 		answer=$(jq -sc '{nodes: [.[] | {id: .id, body: ((.body // "") | @base64d)}]}' "$tmp/bodies.ndjson")
+		lat=$(( $(now_ms) - t0 ))
 		grade_answer
 		bodysum=$(jq -s '[.[].bytes // 0] | add // 0' "$tmp/bodies.ndjson")
 		context_bytes=$((bodysum + reqb + respb))
@@ -129,19 +141,22 @@ for i in $(seq 0 $((n - 1))); do
 	jq --arg id "$id" --arg band "$band" --arg v "$verdict" --arg r "$reason" \
 	   --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "$context_bytes" \
+	   --argjson lat "$lat" \
 	   --arg a "$(printf '%s' "$answer" | head -c 6000)" \
 	   '. += [{id:$id, band:$band, tool:"cosine", verdict:$v, reason:$r, nodes:$n,
-	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb, answer:$a}]' \
+	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb,
+	           latency_ms:$lat, latency_samples:[$lat], answer:$a}]' \
 	   "$out.tmp" > "$out.tmp2" && mv "$out.tmp2" "$out.tmp"
 done
 
 qver=$(jq -r '.version // 0' "$questions")
 jq -n --arg label "$label" --argjson score "$correct" --argjson total "$total" \
    --argjson qver "${qver:-0}" --argjson entities "${entities:-0}" \
-   --argjson nvec "$nvec" --argjson topk "$topk" --slurpfile r "$out.tmp" \
+   --argjson nvec "$nvec" --argjson topk "$topk" \
+   --argjson host "$(host_json)" --slurpfile r "$out.tmp" \
    '{label:$label, arm:"C", questions_version:$qver, score:$score, total:$total,
      total_entities:$entities, vector_source:"kv", vectors:$nvec, topk:$topk,
-     results:$r[0]}' > "$out"
+     host:$host, arm_uses_llm:false, results:$r[0]}' > "$out"
 rm -f "$out.tmp"
 
 echo

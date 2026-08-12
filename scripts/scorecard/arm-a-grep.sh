@@ -46,6 +46,7 @@ command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 [ -f "$here/stopwords.txt" ] || { echo "stopwords.txt missing" >&2; exit 1; }
 
 . "$here/grade.sh"
+. "$here/timing.sh"
 
 # Mirrors the ingestion corpus rules (basename-matched): never read VCS
 # internals, dependency trees, or the scorecard itself (which contains the
@@ -72,6 +73,12 @@ for i in $(seq 0 $((n - 1))); do
 	band=$(jq -r '.band' <<<"$q")
 	query=$(jq -r '.args.query' <<<"$q")
 
+	# Latency covers the full retrieval procedure a caller of this arm pays —
+	# term split, grep sweep, ranking, and reading the files — and stops
+	# before grading (grading is the instrument, not the retrieval). One
+	# sample: the procedure is a pure function of the corpus, so repeats
+	# would measure the OS page cache, not the arm.
+	t0=$(now_ms)
 	hits=$(mktemp)
 	terms=$(terms_for "$query")
 	nterms=0
@@ -125,6 +132,7 @@ for i in $(seq 0 $((n - 1))); do
 			'$cur + [{path:$p, bytes:$b}]')
 	done <<<"$files_read"
 	answer=$(jq -nc --argjson nodes "$nodes_json" '{nodes:$nodes}')
+	lat=$(( $(now_ms) - t0 ))
 
 	grade_answer
 
@@ -136,10 +144,12 @@ for i in $(seq 0 $((n - 1))); do
 	jq --arg id "$id" --arg band "$band" --arg v "$verdict" --arg r "$reason" \
 	   --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "$context_bytes" \
+	   --argjson lat "$lat" \
 	   --argjson files "$files_json" \
 	   --arg a "$(printf '%s' "$answer" | head -c 6000)" \
 	   '. += [{id:$id, band:$band, tool:"grep", verdict:$v, reason:$r, nodes:$n,
 	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb,
+	           latency_ms:$lat, latency_samples:[$lat],
 	           files:$files, answer:$a}]' \
 	   "$out.tmp" > "$out.tmp2" && mv "$out.tmp2" "$out.tmp"
 	rm -f "$hits" "$covered"
@@ -147,9 +157,10 @@ done
 
 qver=$(jq -r '.version // 0' "$questions")
 jq -n --arg label "$label" --argjson score "$correct" --argjson total "$total" \
-   --argjson qver "${qver:-0}" --argjson cap "$cap" --slurpfile r "$out.tmp" \
+   --argjson qver "${qver:-0}" --argjson cap "$cap" \
+   --argjson host "$(host_json)" --slurpfile r "$out.tmp" \
    '{label:$label, arm:"A", questions_version:$qver, score:$score, total:$total,
-     file_cap:$cap, results:$r[0]}' > "$out"
+     file_cap:$cap, host:$host, arm_uses_llm:false, results:$r[0]}' > "$out"
 rm -f "$out.tmp"
 
 echo

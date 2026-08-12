@@ -10,14 +10,14 @@
       relation join, version composition, cross-source join; `why` names the traversal); admit
       only checker-passing questions; bump `questions.json` to version 4 with all v3 questions
       retained verbatim
-- [ ] 1.3 Extend `test-matcher.sh` coverage to the new band's literals and the composition checker
+- [x] 1.3 Extend `test-matcher.sh` coverage to the new band's literals and the composition checker
 
 ## 2. Latency dimension (D3)
 
-- [ ] 2.1 Record per-call wall-clock in all three arm scripts (`latency_ms` first-call +
+- [x] 2.1 Record per-call wall-clock in all three arm scripts (`latency_ms` first-call +
       `latency_samples` across repeats); results header records host arch
-- [ ] 2.2 `compare.sh` renders median/p95 latency per band per arm; README comparability rules
-      extended (same-machine rule, never cross-corpus)
+- [x] 2.2 `compare.sh` renders median/p95 latency per band per arm; README comparability rules
+      extended (same-machine rule, never cross-corpus) — README half tracked under 5.3
 
 ## 3. OSH second corpus (D4)
 
@@ -30,7 +30,7 @@
 
 ## 4. Arm-D readiness (D5)
 
-- [ ] 4.1 Add dormant `llm_calls`/`llm_cost_note` fields + `arm_uses_llm` header to the results
+- [x] 4.1 Add dormant `llm_calls`/`llm_cost_note` fields + `arm_uses_llm` header to the results
       schema and `compare.sh` (rendered only when present)
 
 ## 5. Baselines and documentation
