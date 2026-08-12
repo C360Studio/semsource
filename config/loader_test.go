@@ -168,8 +168,8 @@ func TestLoadConfigFromReader_WebSocketDefaults(t *testing.T) {
 	if cfg.WebSocketBind != "0.0.0.0:7890" {
 		t.Errorf("WebSocketBind default: got %q, want %q", cfg.WebSocketBind, "0.0.0.0:7890")
 	}
-	if cfg.WebSocketPath != "/graph" {
-		t.Errorf("WebSocketPath default: got %q, want %q", cfg.WebSocketPath, "/graph")
+	if cfg.WebSocketPath != "/ws" {
+		t.Errorf("WebSocketPath default: got %q, want %q", cfg.WebSocketPath, "/ws")
 	}
 }
 
@@ -195,16 +195,18 @@ func TestLoadConfigFromReader_WebSocketExplicit(t *testing.T) {
 }
 
 func TestLoadConfigFromReader_WebSocketEnvOverride(t *testing.T) {
+	// Bind stays freely overridable; the PATH is pinned to the servable "/ws"
+	// since beta.160 (see TestLoadConfigFromReader_WebSocketPathUnhonorable),
+	// so the env may restate it but not change it.
 	t.Setenv("SEMSOURCE_WS_BIND", "0.0.0.0:8888")
-	t.Setenv("SEMSOURCE_WS_PATH", "/stream")
+	t.Setenv("SEMSOURCE_WS_PATH", "/ws")
 
 	input := `{
   "namespace": "myorg",
   "sources": [
     {"type": "git", "url": "github.com/myorg/repo"}
   ],
-  "websocket_bind": "0.0.0.0:9999",
-  "websocket_path": "/ws"
+  "websocket_bind": "0.0.0.0:9999"
 }`
 	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err != nil {
@@ -213,8 +215,8 @@ func TestLoadConfigFromReader_WebSocketEnvOverride(t *testing.T) {
 	if cfg.WebSocketBind != "0.0.0.0:8888" {
 		t.Errorf("WebSocketBind env override: got %q, want %q", cfg.WebSocketBind, "0.0.0.0:8888")
 	}
-	if cfg.WebSocketPath != "/stream" {
-		t.Errorf("WebSocketPath env override: got %q, want %q", cfg.WebSocketPath, "/stream")
+	if cfg.WebSocketPath != "/ws" {
+		t.Errorf("WebSocketPath: got %q, want %q", cfg.WebSocketPath, "/ws")
 	}
 }
 
@@ -592,6 +594,76 @@ func TestLoadConfigFromReader_SEMSOURCEMODEIsInert(t *testing.T) {
 	_, err := config.LoadConfigFromReader(strings.NewReader(input))
 	if err != nil {
 		t.Fatalf("SEMSOURCE_MODE must not affect configuration: %v", err)
+	}
+}
+
+// A websocket_path the component cannot honor must FAIL validation, never be
+// silently ignored: semstreams beta.160's websocket output serves "/ws" and
+// exposes no path configuration (semsource#147, semstreams#945). The removed
+// "mode" field above is the precedent — a knob that does nothing is a lie.
+func TestLoadConfigFromReader_WebSocketPathUnhonorable(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "websocket_path": "/graph"
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("websocket_path \"/graph\" must be rejected: the component serves /ws and the value cannot be honored")
+	}
+	for _, want := range []string{"/ws", "semstreams", "websocket_path"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("rejection must be actionable (mention %q), got: %v", want, err)
+		}
+	}
+}
+
+func TestLoadConfigFromReader_WebSocketPathExplicitDefault(t *testing.T) {
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "websocket_path": "/ws"
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("explicit \"/ws\" is the servable value and must pass: %v", err)
+	}
+	if cfg.WebSocketPath != "/ws" {
+		t.Errorf("WebSocketPath: got %q, want %q", cfg.WebSocketPath, "/ws")
+	}
+}
+
+// The env override is subject to the same honesty rule as the file field.
+func TestLoadConfigFromReader_SEMSOURCEWSPATHUnhonorable(t *testing.T) {
+	t.Setenv("SEMSOURCE_WS_PATH", "/graph")
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}]
+}`
+	_, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("SEMSOURCE_WS_PATH \"/graph\" must be rejected the same as the config field")
+	}
+}
+
+// Env beats file for websocket_path — the one still-meaningful combination:
+// a legacy config carrying the retired "/graph" is rescued by
+// SEMSOURCE_WS_PATH=/ws without editing the file. This pins the Env > file
+// precedence the WebSocketEnvOverride test can no longer distinguish from
+// the default.
+func TestLoadConfigFromReader_SEMSOURCEWSPATHRescuesLegacyFile(t *testing.T) {
+	t.Setenv("SEMSOURCE_WS_PATH", "/ws")
+	input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "websocket_path": "/graph"
+}`
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("env \"/ws\" must override the file's legacy \"/graph\": %v", err)
+	}
+	if cfg.WebSocketPath != "/ws" {
+		t.Errorf("WebSocketPath: got %q, want %q (env must beat file)", cfg.WebSocketPath, "/ws")
 	}
 }
 

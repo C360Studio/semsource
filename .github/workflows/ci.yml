@@ -306,3 +306,50 @@ jobs:
           name: semsource-ui-image-${{ github.sha }}
           path: release-evidence/semsource-ui-image.md
           if-no-files-found: error
+
+  # Red-main alerting (semsource#148): main CI failed for six straight weeks
+  # (2026-07-21 → 2026-08-12) and nobody saw it, because a failed run notifies
+  # no one by default and the broken job never runs on PRs. This job turns a
+  # red main-branch run into an issue — created on first failure, commented on
+  # repeats — so the breakage lands where work gets triaged.
+  alert-red-main:
+    needs:
+      [
+        test,
+        test-integration,
+        lint,
+        ui-quality,
+        build-and-push,
+        publish-ui,
+        ui-release-smoke,
+      ]
+    # Tag pushes run the same release chain and their failures are exactly the
+    # tag-gate class this alert exists for — alert on both refs. (A run that
+    # dies before jobs start — startup_failure — never evaluates this job; the
+    # scheduled red-main-watchdog workflow covers that class.)
+    if: failure() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or bump the red-main issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = "CI is red on main";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `Main-branch CI failed: ${runUrl}\n\ncommit: ${context.sha}\n\n` +
+              "A red main blocks the tag gate. Triage the failing job before merging more work.";
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: "open", labels: "ci-red-main", per_page: 1,
+            });
+            if (open.length > 0) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: open[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                ...context.repo, title, body, labels: ["ci-red-main"],
+              });
+            }

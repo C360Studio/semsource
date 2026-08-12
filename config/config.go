@@ -181,7 +181,12 @@ type Config struct {
 
 	// WebSocketPath is the URL path for the WebSocket endpoint.
 	// Can also be set via the SEMSOURCE_WS_PATH environment variable.
-	// Defaults to "/graph".
+	//
+	// Since semstreams beta.160 the websocket output component serves its
+	// default "/ws" and exposes no path configuration (semstreams#945), so
+	// any OTHER value here fails validation rather than being silently
+	// ignored — the same contract as the removed "headless" mode. The field
+	// stays so the knob can return if upstream restores the surface.
 	WebSocketPath string `json:"websocket_path,omitempty"`
 
 	// Graph configures graph subsystem components.
@@ -226,7 +231,7 @@ func (c *Config) applyDefaults() {
 		c.WebSocketPath = v
 	}
 	if c.WebSocketPath == "" {
-		c.WebSocketPath = "/graph"
+		c.WebSocketPath = "/ws"
 	}
 	// HTTP API port: env var takes precedence, then config, then default.
 	if v := os.Getenv("SEMSOURCE_HTTP_PORT"); v != "" {
@@ -258,6 +263,14 @@ func (c *Config) Validate() error {
 
 	if err := c.validateGraph(); err != nil {
 		return err
+	}
+
+	// A websocket path we cannot honor must fail loudly, never be silently
+	// ignored: semstreams beta.160's websocket output serves "/ws" and lost
+	// its path configuration (semsource#147, semstreams#945). Accepting any
+	// other value would ship a config knob that does nothing.
+	if c.WebSocketPath != "" && c.WebSocketPath != "/ws" {
+		return fmt.Errorf("config: websocket_path %q cannot be honored: the raw stream serves \"/ws\" (semstreams beta.160 removed path configurability — see semsource#147 / semstreams#945); remove websocket_path or set it to \"/ws\"", c.WebSocketPath)
 	}
 
 	return c.validateModelRegistry()

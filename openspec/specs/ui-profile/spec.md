@@ -10,7 +10,9 @@ evidence while preserving the UI-independent backend as the default deployment.
 The UI profile SHALL expose a Caddy entry point on the configured C360 port that serves the SemSource
 workbench and routes SemSource backend APIs on the same origin. The route map SHALL include `/health`,
 `/graphql`, `/source-manifest/*`, `/code-context/*`, `/doc-context/*`, `/mcp-gateway/*`, `/metrics`, and
-the raw `/graph` WebSocket. It SHALL NOT imply or proxy SemTeams-only routes.
+the raw `/ws` WebSocket. It SHALL NOT imply or proxy SemTeams-only routes. The retired raw-stream
+path `/graph` SHALL return the terminal JSON 404 (the contract moved to `/ws` when semstreams
+beta.160 pinned the websocket output's serving path — semsource#147, upstream ask semstreams#945).
 
 The `/health` route SHALL proxy a SemSource-owned health envelope and return HTTP 200 JSON, including
 at least `component: semsource`, `healthy`, `status`, `message`, `namespace`, `phase`, and

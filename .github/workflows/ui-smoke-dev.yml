@@ -1,0 +1,62 @@
+# PR-side UI-profile smoke (semsource#148).
+#
+# The release smoke (`ui-release-smoke` in ci.yml) verifies the exact published
+# workbench digest and therefore only runs after publish — on main. Both 2026-08
+# smoke regressions (view_revision.coherent, /graph → /ws) merged through green
+# PRs and sat invisible on a red main for weeks, because nothing exercised the
+# UI profile before merge.
+#
+# This job closes that gap: on PRs touching the surfaces that can break the
+# profile, build the UI locally (`task ui:smoke:dev` — no registry, no publish)
+# and run the same ui-profile.spec.cjs the release smoke runs. Path-filtered so
+# docs-only PRs stay fast.
+name: UI smoke (dev)
+
+on:
+  pull_request:
+    branches: [main]
+    # The job builds the semsource image from FULL PR source and the UI from
+    # ui/, so the filter must cover everything that image compiles or the
+    # profile executes — "**/*.go" covers every Go package (config/, graph/,
+    # processor/, handler/, source/, internal/, cmd/, ...), not a curated list
+    # that rots as packages are added.
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - "Caddyfile"
+      - "docker-compose*.yml"
+      - "test/ui/**"
+      - "ui/**"
+      - "configs/**"
+      - "scripts/ui-profile-*.sh"
+      - "Taskfile.yml"
+      - ".github/workflows/ui-smoke-dev.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ui-smoke-dev:
+    runs-on: ubuntu-latest
+    # Cold runner pays two uncached docker builds (Go image + npm ci UI build),
+    # a semembed pull, seeding to ready, and the Playwright suite.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: go-task/setup-task@v2
+
+      - name: Smoke the locally built UI profile
+        run: task ui:smoke:dev
+
+      - name: Upload UI profile failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semsource-ui-smoke-dev-failure-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: test-results/ui-profile/**
+          if-no-files-found: warn

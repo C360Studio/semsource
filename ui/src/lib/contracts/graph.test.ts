@@ -25,6 +25,27 @@ describe("parseGraphProjection", () => {
     expect(graph.edges[1]?.evidence[0]?.confidence).toBeUndefined();
   });
 
+  it("derives coherence when the envelope omits it (beta.157+ ViewRevision)", () => {
+    // semstreams beta.157 removed `coherent` from the fusion envelope; the
+    // live backend has not sent it since. Absent + start === end must parse
+    // as a coherent view; absent + start !== end as an incoherent one.
+    const settled = parseGraphProjection({
+      ...completeGraphResponse.graph,
+      view_revision: { start: 41, end: 41 },
+    });
+    expect(settled.view_revision).toEqual({
+      start: 41,
+      end: 41,
+      coherent: true,
+    });
+
+    const drifting = parseGraphProjection({
+      ...completeGraphResponse.graph,
+      view_revision: { start: 2, end: 3 },
+    });
+    expect(drifting.view_revision.coherent).toBe(false);
+  });
+
   it("preserves every level of positive truncation evidence", () => {
     const value = {
       ...completeGraphResponse.graph,

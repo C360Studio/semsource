@@ -1,0 +1,59 @@
+# Covers the red-main class alert-red-main (ci.yml) cannot see: a run that
+# dies before any job starts (startup_failure from a workflow parse error or a
+# bad `needs` reference) never evaluates in-run alert jobs. This scheduled
+# watchdog asks the API for the latest completed main-branch CI run instead,
+# so even a run with zero executed jobs gets an issue. Same label as the
+# in-run alert so both feed one triage thread. (semsource#148)
+name: Red-main watchdog
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-latest-main-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Alert if the latest main CI run did not succeed
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: "ci.yml",
+              branch: "main",
+              status: "completed",
+              per_page: 1,
+            });
+            const run = data.workflow_runs[0];
+            if (!run) return;
+            if (run.conclusion === "success") return;
+            const body =
+              `Latest completed main CI run did not succeed: ${run.html_url}\n\n` +
+              `conclusion: ${run.conclusion}\ncommit: ${run.head_sha}\n\n` +
+              "A red main blocks the tag gate. Triage the failing run before merging more work.";
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: "open", labels: "ci-red-main", per_page: 1,
+            });
+            if (open.length > 0) {
+              // Bump at most once per watchdog interval; the in-run alert
+              // already comments per failing push.
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: open[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                ...context.repo,
+                title: "CI is red on main",
+                body,
+                labels: ["ci-red-main"],
+              });
+            }

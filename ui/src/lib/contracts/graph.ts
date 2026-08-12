@@ -197,14 +197,22 @@ function parseRevision(value: unknown): ViewRevision {
     typeof item.end !== "number" ||
     !Number.isSafeInteger(item.end) ||
     item.end < 0 ||
-    typeof item.coherent !== "boolean"
+    (item.coherent !== undefined && typeof item.coherent !== "boolean")
   )
     invalid("view revision");
-  if (item.coherent && item.start !== item.end) invalid("view revision");
+  // `coherent` left the envelope in semstreams beta.157 (ViewRevision is
+  // Start/End only since); when absent it is derived from the substance of
+  // the claim — one revision sampled start to end. A present-but-inconsistent
+  // claim is still rejected. See semsource#146.
+  const coherent =
+    typeof item.coherent === "boolean"
+      ? item.coherent
+      : item.start === item.end;
+  if (coherent && item.start !== item.end) invalid("view revision");
   return {
     start: item.start,
     end: item.end,
-    coherent: item.coherent,
+    coherent,
   };
 }
 
