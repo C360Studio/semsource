@@ -6,7 +6,7 @@
       extractor; table-driven tests pin the inert forms (param, local, closure-captured) and the
       still-resolving forms (package function, method) — also suppresses same-file type
       conversions (same dangling class)
-- [ ] 1.2 Prove the dogfood signal: seed the dogfood corpus and confirm zero
+- [x] 1.2 Prove the dogfood signal: seed the dogfood corpus and confirm zero
       `not found: ...lifecycle-go-stat`-class graph-query errors
 
 ## 2. Java declared-type receiver resolution (#141, D1)
@@ -16,7 +16,7 @@
       unbindable types drop — tests pin resolving and inert forms. (Param/local tables already
       existed; the real gap was INHERITED fields — classMembers now carries visibility-aware
       field tables and classFieldsWithInherited merges them nearest-wins)
-- [ ] 2.2 Verify on the OSH corpus: `cloneAsTemplatePermission` impact names ConSysApiSecurity +
+- [x] 2.2 Verify on the OSH corpus: `cloneAsTemplatePermission` impact names ConSysApiSecurity +
       SOSSecurity + SPSSecurity callers (the P01 shape) in a local stack check
 
 ## 3. TS + Svelte call edges (#149, D3)
@@ -41,10 +41,10 @@
 
 ## 5. Contract, verification, and gates (D5)
 
-- [ ] 5.1 Sync the per-language coverage contract into the current-truth `code-call-graph` spec
+- [x] 5.1 Sync the per-language coverage contract into the current-truth `code-call-graph` spec
       (delta already drafted) and the README/docs surface where consumers read coverage
-- [ ] 5.2 Scorecard re-runs, both corpora: OSH P01 flips to correct (expect B 10/10), dogfood
+- [x] 5.2 Scorecard re-runs, both corpora: OSH P01 flips to correct (expect B 10/10), dogfood
       unchanged 26/26; commit results + SUMMARY delta; note OSH seed wall-clock vs the 1,311 s
       baseline (D1 parse-cost check)
-- [ ] 5.3 Review gate: go-component-reviewer + graph-event-reviewer + high-effort code review;
+- [x] 5.3 Review gate: go-component-reviewer + graph-event-reviewer + high-effort code review;
       findings addressed before merge
