@@ -166,13 +166,12 @@ func TestGraphSubsystemComponents_ObjectStoreConfigured(t *testing.T) {
 	}
 }
 
-// The beta.160 query-contract closure moved every query/gateway port into the
-// framework components' own DefaultConfigs: graph-query declares one
-// graph.query.* family request port and graph-gateway declares its requester
-// outputs itself. These tests pin that we DEFER to those defaults — a ports
-// override reappearing here would either duplicate the defaults (drift risk on
-// every bump) or resurrect a retired per-operation shape.
-func TestGraphSubsystemComponents_GraphQueryDefersToDefaultPorts(t *testing.T) {
+// The ComponentManager path applies no defaults (verified against the real
+// binary: an empty configMap fails with "ports configuration is required"),
+// so graph-query and graph-gateway restate their DefaultConfig ports exactly.
+// These pins keep the restated shapes canonical and stop the retired
+// per-operation port list from coming back.
+func TestGraphSubsystemComponents_GraphQueryDeclaresFamilyPort(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
@@ -185,12 +184,19 @@ func TestGraphSubsystemComponents_GraphQueryDefersToDefaultPorts(t *testing.T) {
 	if err := json.Unmarshal(graphQuery.Config, &raw); err != nil {
 		t.Fatalf("unmarshal graph-query config: %v", err)
 	}
-	if _, present := raw["ports"]; present {
-		t.Fatal("graph-query config overrides ports; beta.160 defaults own the family request port")
+	ports, _ := raw["ports"].(map[string]any)
+	inputs, _ := ports["inputs"].([]any)
+	if len(inputs) != 1 {
+		t.Fatalf("graph-query input count = %d, want exactly the family request port", len(inputs))
+	}
+	in, _ := inputs[0].(map[string]any)
+	cfg, _ := in["config"].(map[string]any)
+	if in["name"] != "graph_queries" || cfg["kind"] != "nats-request" || cfg["subject"] != "graph.query.*" {
+		t.Fatalf("family port shape wrong: %v", in)
 	}
 }
 
-func TestGraphSubsystemComponents_GraphGatewayBindsAndDefersToDefaultPorts(t *testing.T) {
+func TestGraphSubsystemComponents_GraphGatewayDeclaresRequesterOutputs(t *testing.T) {
 	components, err := graphSubsystemComponents(&config.Config{})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
@@ -203,8 +209,10 @@ func TestGraphSubsystemComponents_GraphGatewayBindsAndDefersToDefaultPorts(t *te
 	if err := json.Unmarshal(gw.Config, &raw); err != nil {
 		t.Fatalf("unmarshal graph-gateway config: %v", err)
 	}
-	if _, present := raw["ports"]; present {
-		t.Fatal("graph-gateway config overrides ports; beta.160 defaults own the requester outputs")
+	ports, _ := raw["ports"].(map[string]any)
+	outputs, _ := ports["outputs"].([]any)
+	if len(outputs) != 3 {
+		t.Fatalf("graph-gateway output count = %d, want 3 requester families", len(outputs))
 	}
 	// bind_address replaces the retired http-input-subject shape as the sole
 	// carrier of the gateway's network identity.

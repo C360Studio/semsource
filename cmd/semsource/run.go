@@ -345,22 +345,12 @@ func createServiceManager(
 		PayloadRegistry:   payloadReg,
 	}
 
+	// ConfigureFromServices constructs every enabled configured service
+	// itself on beta.160 — the composition has ONE writer. A second
+	// CreateService pass here would be a duplicate composition writer and
+	// fails with DuplicateServiceError.
 	if err := manager.ConfigureFromServices(ssCfg.Services, deps); err != nil {
 		return nil, fmt.Errorf("configure service manager: %w", err)
-	}
-
-	for name, svcConfig := range ssCfg.Services {
-		if name == "service-manager" {
-			continue
-		}
-		if !svcConfig.Enabled {
-			logger.Info("service disabled, skipping", "name", name)
-			continue
-		}
-		if _, err := manager.CreateService(name, svcConfig.Config, deps); err != nil {
-			return nil, fmt.Errorf("create service %s: %w", name, err)
-		}
-		logger.Debug("created service", "name", name)
 	}
 
 	return manager, nil
@@ -824,18 +814,68 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		"graph-query": {
 			name:     "graph-query",
 			compType: types.ComponentTypeProcessor,
-			// graph-query's DefaultConfig declares the single graph.query
-			// subject-family request port; the per-operation port list is a
-			// retired beta.159 shape.
-			configMap: map[string]any{},
+			// The ComponentManager path applies no defaults: the single
+			// graph.query.* family request port is restated exactly as
+			// graph-query's DefaultConfig declares it (per-operation ports
+			// are a retired beta.159 shape).
+			configMap: map[string]any{
+				"ports": map[string]any{
+					"inputs": []component.PortDefinition{
+						{
+							Name:     "graph_queries",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "graph.query.*",
+								Interface: &component.InterfaceContract{
+									Type:    "graph.query",
+									Version: "v1",
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		"graph-gateway": {
 			name:     "graph-gateway",
 			compType: types.ComponentTypeGateway,
 			configMap: map[string]any{
-				// Requester outputs (graph/index/agentic query families) come
-				// from graph-gateway's DefaultConfig; identity-free registry
-				// admission and the http input-port shape are retired.
+				// The ComponentManager path applies no defaults: the gateway's
+				// requester outputs are restated exactly as its DefaultConfig
+				// declares them. Identity-free registry admission and the http
+				// input-port shape are retired; bind_address carries the
+				// network identity.
+				"ports": map[string]any{
+					"outputs": []component.PortDefinition{
+						{
+							Name:     "graph_queries",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "graph.query.*",
+								Interface: &component.InterfaceContract{
+									Type:    "graph.query",
+									Version: "v1",
+								},
+							},
+						},
+						{
+							Name:     "graph_index_queries",
+							Required: true,
+							Config:   component.NATSRequestPort{Subject: "graph.index.query.*"},
+						},
+						{
+							Name:     "agentic_queries",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "agentic.query.*",
+								Interface: &component.InterfaceContract{
+									Type:    "agentic.query",
+									Version: "v1",
+								},
+							},
+						},
+					},
+				},
 				"bind_address":      gatewayBind,
 				"enable_playground": enablePlayground,
 			},
