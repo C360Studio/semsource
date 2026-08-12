@@ -21,10 +21,11 @@
 
 ## 3. OSH second corpus (D4)
 
-- [ ] 3.1 `scripts/scorecard/corpus-osh.sh`: pinned-SHA OSH core corpus build (git archive,
+- [x] 3.1 `scripts/scorecard/corpus-osh.sh`: pinned-SHA OSH core corpus build (git archive,
       exclusions applied, pin recorded)
-- [ ] 3.2 Author `questions-osh.json` v1 (Java/Maven shapes: POM facts, symbol retrieval, impact,
-      composition if admissible); run both checkers against the OSH corpus
+- [x] 3.2 Author `questions-osh.json` v1 (Java/Maven shapes: POM facts, symbol retrieval, impact,
+      composition if admissible); run both checkers against the OSH corpus — POM/config facts
+      documented unreachable (Gradle-only corpus; gradle dep entities unlabeled in graph_search)
 - [ ] 3.3 Stand up an OSH stack (isolated project name, 25222+ ports — semdev owns 24222) and
       record the scale report: entities, seed wall-clock to full readiness
 
@@ -35,9 +36,9 @@
 
 ## 5. Baselines and documentation
 
-- [ ] 5.1 Run all three arms on the dogfood corpus (questions v4); commit results + SUMMARY with
-      the composition band's B-vs-C recall verdict stated plainly — separation or proven parity,
-      either is the deliverable
+- [x] 5.1 Run all three arms on the dogfood corpus (questions v4); commit results + SUMMARY with
+      the composition band's B-vs-C recall verdict stated plainly — SEPARATION: B 4/4 vs C 0/4
+      (A 0/4), B at ~9x less context on the band; v3 subset still saturated on both
 - [ ] 5.2 Run all three arms on the OSH corpus (questions-osh v1); commit results + scale report
 - [ ] 5.3 README: composition band rationale, checker usage, latency rules, OSH corpus recipe and
       cross-corpus rule; post the v4 dogfood verdict to #130 and the OSH scale numbers to the OSH
