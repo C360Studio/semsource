@@ -984,3 +984,24 @@ differently, which is worse for both sides than reusing the framework's.
 
 **Surfaced by:** semsource `async-source-seed`, 2026-08-02, against `v1.0.0-beta.159`.
 **Filed:** [semstreams#868](https://github.com/C360Studio/semstreams/issues/868).
+
+## `output/websocket` lost path configurability in the beta.160 port envelope
+
+### The served WebSocket path is constructor-only, so factory-spawned instances are pinned to `/ws` — framework-shaped — filed [semstreams#945](https://github.com/C360Studio/semstreams/issues/945)
+
+Through beta.156 a downstream service could put its raw stream on a contract path (ours: `/graph`,
+via `WebSocketPath`/`SEMSOURCE_WS_PATH`). beta.160's `NetworkPort` carries protocol/host/port only,
+and `output/websocket`'s JSON `Config` exposes no path — the internal `Path` field (default `/ws`,
+validated non-empty) is reachable only through `ConstructorConfig`, which a `types.ComponentConfig`
+factory spawn never touches. Every factory-spawned instance therefore serves `/ws`, and our
+documented `ws://host:7890/graph` contract 404s.
+
+**Local stopgap:** Caddy rewrite `/graph` → `/ws` in the ui profile (semsource#147); direct-port
+consumers have no proxy, so the contract stays broken for them until the config surface returns.
+The `run.go` migration comment deferred exactly this ask ("raise upstream, not to shim here") —
+it went unfiled for a week because the only detector, `ui-release-smoke`, runs on main alone
+(semsource#148).
+
+**Surfaced by:** semsource `semstreams-beta160-migration` smoke fallout, 2026-08-12, against
+`v1.0.0-beta.160`.
+**Filed:** [semstreams#945](https://github.com/C360Studio/semstreams/issues/945).
