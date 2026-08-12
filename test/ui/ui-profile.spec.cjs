@@ -134,7 +134,7 @@ async function assertGraphWebSocket(page) {
       new Promise((resolve, reject) => {
         let opened = false;
         const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const url = `${scheme}//${window.location.host}/graph`;
+        const url = `${scheme}//${window.location.host}/ws`;
         const socket = new WebSocket(url);
         const timer = window.setTimeout(() => {
           socket.close();
@@ -183,7 +183,7 @@ async function assertGraphWebSocket(page) {
   // handshake (101 Switching Protocols). Reaching `close` proves cleanup too.
   expect(outcome).toEqual({
     opened: true,
-    url: expect.stringMatching(/^ws(s)?:\/\/[^/]+\/graph$/),
+    url: expect.stringMatching(/^ws(s)?:\/\/[^/]+\/ws$/),
   });
 }
 
@@ -222,6 +222,10 @@ test("retired and unknown routes return terminal JSON 404", async ({
     "/api/status",
     "/okf/export",
     "/project-view/summary",
+    // Retired raw-stream path: the contract moved to /ws when semstreams
+    // beta.160 pinned the websocket output's serving path (#147). A clean
+    // break, so the old path must 404 — never resurrect as an SPA fallback.
+    "/graph",
     "/definitely-not-a-route",
   ]) {
     const response = await request.get(path, { failOnStatusCode: false });
@@ -344,10 +348,12 @@ test("workbench exposes real search evidence and keyboard detail", async ({
     graph: {
       nodes: expect.any(Array),
       edges: expect.any(Array),
+      // `coherent` left this envelope in semstreams beta.157 (ViewRevision is
+      // Start/End only since); the start === end assertion below carries the
+      // coherence claim in substance. See #146.
       view_revision: {
         start: expect.any(Number),
         end: expect.any(Number),
-        coherent: true,
       },
       truncated: expect.any(Boolean),
     },

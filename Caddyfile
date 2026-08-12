@@ -15,7 +15,10 @@
 
 :3000 {
 	# Exact non-prefix routes.
-	handle /graph {
+	# /ws is the raw-stream contract path: semstreams beta.160's websocket
+	# output serves its default /ws and no longer accepts a configured path
+	# (semsource#147, upstream ask semstreams#945).
+	handle /ws {
 		reverse_proxy semsource:7890
 	}
 	handle /graphql {

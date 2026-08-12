@@ -32,7 +32,7 @@
 #   http://localhost:3000/health                  — UI-compatible SemSource proxy health
 #   http://localhost:3000/graphql                 — GraphQL gateway
 #   http://localhost:3000/source-manifest/status  — SemSource readiness/status
-#   ws://localhost:3000/graph                     — Raw GRAPH stream
+#   ws://localhost:3000/ws                        — Raw GRAPH stream
 
 services:
   # SemSource — graph ingestion engine

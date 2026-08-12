@@ -1012,10 +1012,11 @@ func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error)
 		return types.ComponentConfig{}, fmt.Errorf("parse websocket port %q: %w", wsPortStr, err)
 	}
 	// beta.160's NetworkPort carries protocol/host/port only — there is no
-	// path field, so cfg.WebSocketPath no longer reaches the component through
-	// its port declaration. The served route is verified at the live
-	// bring-up; a path mismatch there is a consumer-visible change to raise
-	// upstream, not to shim here.
+	// path field, so cfg.WebSocketPath cannot reach the component and the
+	// server serves the upstream default "/ws". Resolved as a clean break:
+	// "/ws" is the documented contract path, config.Validate rejects any
+	// other websocket_path (semsource#147), and the config surface's return
+	// is asked upstream (semstreams#945).
 	raw, err := json.Marshal(map[string]any{
 		"ports": map[string]any{
 			"inputs": []component.PortDefinition{
