@@ -47,19 +47,34 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	configJSON, err := json.Marshal(map[string]any{
-		"enforce_owner_lease": false,
 		"ports": map[string]any{
-			"inputs": []map[string]any{
+			"inputs": []component.PortDefinition{
 				{
-					"name":        "entity_stream",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.entity",
-					"stream_name": "GRAPH",
-					"config":      map[string]any{"deliver_policy": "all"},
+					Name: "entity_stream",
+					Config: component.JetStreamPort{
+						StreamName:    "GRAPH",
+						Subjects:      []string{"graph.ingest.entity"},
+						DeliverPolicy: "all",
+					},
+				},
+				{
+					// The typed mutation provider port (values pinned from
+					// semstreams internal/graphmutation, which is not
+					// importable): a declared ports section replaces the
+					// defaults wholesale, so every required port is restated.
+					Name:     "mutations",
+					Required: true,
+					Config: component.NATSRequestPort{
+						Subject: "graph.mutation.>",
+						Interface: &component.InterfaceContract{
+							Type:    "semstreams.graph.mutation",
+							Version: "v1",
+						},
+					},
 				},
 			},
-			"outputs": []map[string]any{
-				{"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"},
+			"outputs": []component.PortDefinition{
+				{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
 			},
 		},
 	})
@@ -411,19 +426,34 @@ func startGraphIngest(
 	t.Helper()
 
 	configJSON, err := json.Marshal(map[string]any{
-		"enforce_owner_lease": false,
 		"ports": map[string]any{
-			"inputs": []map[string]any{
+			"inputs": []component.PortDefinition{
 				{
-					"name":        "entity_stream",
-					"type":        "jetstream",
-					"subject":     "graph.ingest.entity",
-					"stream_name": "GRAPH",
-					"config":      map[string]any{"deliver_policy": "all"},
+					Name: "entity_stream",
+					Config: component.JetStreamPort{
+						StreamName:    "GRAPH",
+						Subjects:      []string{"graph.ingest.entity"},
+						DeliverPolicy: "all",
+					},
+				},
+				{
+					// The typed mutation provider port (values pinned from
+					// semstreams internal/graphmutation, which is not
+					// importable): a declared ports section replaces the
+					// defaults wholesale, so every required port is restated.
+					Name:     "mutations",
+					Required: true,
+					Config: component.NATSRequestPort{
+						Subject: "graph.mutation.>",
+						Interface: &component.InterfaceContract{
+							Type:    "semstreams.graph.mutation",
+							Version: "v1",
+						},
+					},
 				},
 			},
-			"outputs": []map[string]any{
-				{"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"},
+			"outputs": []component.PortDefinition{
+				{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
 			},
 		},
 	})
@@ -462,13 +492,13 @@ func startGraphIndex(
 		"startup_interval_ms": 50,
 		"ports": map[string]any{
 			"inputs": []map[string]any{
-				{"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"},
+				{"name": "entity_watch", "config": map[string]any{"kind": "kv-watch", "bucket": "ENTITY_STATES"}},
 			},
 			"outputs": []map[string]any{
-				{"name": "outgoing_index", "type": "kv-write", "subject": "OUTGOING_INDEX"},
-				{"name": "incoming_index", "type": "kv-write", "subject": "INCOMING_INDEX"},
-				{"name": "alias_index", "type": "kv-write", "subject": "ALIAS_INDEX"},
-				{"name": "predicate_index", "type": "kv-write", "subject": "PREDICATE_INDEX"},
+				{"name": "outgoing_index", "config": map[string]any{"kind": "kv-write", "bucket": "OUTGOING_INDEX"}},
+				{"name": "incoming_index", "config": map[string]any{"kind": "kv-write", "bucket": "INCOMING_INDEX"}},
+				{"name": "alias_index", "config": map[string]any{"kind": "kv-write", "bucket": "ALIAS_INDEX"}},
+				{"name": "predicate_index", "config": map[string]any{"kind": "kv-write", "bucket": "PREDICATE_INDEX"}},
 			},
 		},
 	})

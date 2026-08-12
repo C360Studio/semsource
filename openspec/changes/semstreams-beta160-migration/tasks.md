@@ -54,7 +54,7 @@
       `OpenCatalogBucket`, `OWNER_CLAIMS`, `OWNER_PRESENCE`, `SearchGraph`, `SummarizeGraph`,
       `NATSQuerier`, `StartService`, `StopService`, `RuntimeConfigurable`, and flat
       `Type:`/`Subject:`/`StreamName:` fields in `PortDefinition` literals
-- [ ] 5.2 Update `CLAUDE.md` roadmap facts (beta.160 pin, fresh-storage adoption) and any README
+- [x] 5.2 Update `CLAUDE.md` roadmap facts (beta.160 pin, fresh-storage adoption) and any README
       deployment notes; draft the consumer adoption note (semspec canary first, then semteams,
       OSH): fresh NATS storage on upgrade, read contracts retained
 
@@ -72,7 +72,7 @@
 
 ## 7. Specs
 
-- [ ] 7.1 Apply the `semstreams-governance` delta (target beta.160; projection-intent
+- [x] 7.1 Apply the `semstreams-governance` delta (target beta.160; projection-intent
       requirement); verify `entity-publish-integrity`, `ingestion-readiness`,
       `compose-deployment`, `runtime-configuration` against code and add deltas ONLY where
       requirement-level behavior changed; `openspec validate --all` green

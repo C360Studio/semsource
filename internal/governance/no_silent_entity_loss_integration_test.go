@@ -77,7 +77,6 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 		},
 		"watch_enabled":  false,
 		"index_interval": "",
-		"stream_name":    "GRAPH",
 	})
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)

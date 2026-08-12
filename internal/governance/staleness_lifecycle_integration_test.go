@@ -81,7 +81,6 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 		},
 		"watch_enabled":  true,
 		"index_interval": "", // manual lifecycle triggering below; no periodic sweep noise
-		"stream_name":    "GRAPH",
 	})
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)

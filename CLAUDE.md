@@ -196,10 +196,17 @@ milestone list in `docs/spec/semsource-spec-v3.md`.
 Current release-candidate shape (the latest public tag is still beta.4):
 
 1. `v1.0.0-beta.4` targets SemStreams `v1.0.0-beta.144`. **`main` now pins SemStreams
-   `v1.0.0-beta.159`** — the sister-lockstep breaking wave (adoption tracked upstream in
-   semstreams gh#753). Readiness is read from the `GRAPH_STATUS` KV bucket, not the removed
-   `graph.index.query.status` subject; the `GRAPH` ingest stream declares `discard: new`; and the
-   Compose NATS server is pinned to `nats:2.12-alpine`.
+   `v1.0.0-beta.160`** — the intentionally breaking graph/foundation refactor checkpoint (no
+   upstream shims; fresh NATS storage mandated on adoption, so deployments upgrade via
+   `docker compose down -v` + reseed — the graph re-derives from source). Ports use the strict
+   `PortDefinition` envelope (typed `config` with `kind`); the ownership substrate is deleted —
+   SemSource declares local `projection.Contract` intent (named reconcile groups `source` +
+   `lifecycle` in `graph/contract.go`) and supersession mutates through the typed CAS client;
+   framework component configs defer to beta.160 DefaultConfigs (a declared `ports` section
+   replaces defaults wholesale); readiness stays on the `GRAPH_STATUS` KV bucket via
+   `OpenCatalogReader`. The `graph.query.searchGraph` and `graph.query.summary` operations
+   SURVIVE the query-contract closure (the removals were aggregate Go wrappers and shared
+   agentic tool registrations).
 2. Core ingestion, governed entity publishing, source manifest/status, fusion
    tools, version diffs, and consumer query integration are present.
 3. The default Compose profile is UI-free: `docker compose up` resolves only

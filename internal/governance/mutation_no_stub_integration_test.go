@@ -54,6 +54,9 @@ func TestIntegration_MutationToMissingEntity_ReturnsNotFoundAndNoStub(t *testing
 	}
 
 	const missingID = "acme.semsource.golang.workspace.function.never-born"
+	// One shared timestamp: the client requires triple and metadata
+	// timestamps to agree (tuple identity).
+	now := time.Now()
 	_, err = mut.Reconcile(ctx, projection.ReconcileMutation{
 		Contract: semsourcegraph.SourceEntityContract().Name,
 		Group:    semsourcegraph.GroupLifecycle,
@@ -63,10 +66,10 @@ func TestIntegration_MutationToMissingEntity_ReturnsNotFoundAndNoStub(t *testing
 			Predicate:  "entity.lifecycle.stale",
 			Object:     "test",
 			Source:     "no-stub-test",
-			Timestamp:  time.Now(),
+			Timestamp:  now,
 			Confidence: 1.0,
 		}},
-		Metadata: projection.MutationMetadata{Source: "no-stub-test", Timestamp: time.Now()},
+		Metadata: projection.MutationMetadata{Source: "no-stub-test", Timestamp: now},
 	})
 	if err == nil {
 		t.Fatal("Reconcile against a missing entity succeeded; want entity_not_found")

@@ -10,15 +10,16 @@ with a toolchain gate, and keeps the current query surfaces available.
 ## Requirements
 ### Requirement: Current SemStreams target is explicit
 
-SemSource MUST target released SemStreams `v1.0.0-beta.159` for this migration and MUST NOT use a
+SemSource MUST target released SemStreams `v1.0.0-beta.160` and MUST NOT use a
 local replacement, fork, vendored substitute, or unreleased commit as compatibility evidence.
 
 #### Scenario: Migration target is pinned to a release
 
-**GIVEN** SemStreams has released `v1.0.0-beta.159`
+**GIVEN** SemStreams has released `v1.0.0-beta.160`
 **WHEN** SemSource completes this migration
-**THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.159`
+**THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.160`
 **AND** the module has no `replace` directive
+
 
 ### Requirement: Toolchain gate precedes compatibility work
 
@@ -61,18 +62,30 @@ diagnostic entity is emitted
 **WHEN** graph-ingest stores the entity
 **THEN** the entity has indexing profile `control` or `trace`
 
-### Requirement: Standalone mode boots ownership before graph-ingest
+### Requirement: Standalone mode declares projection intent before graph-ingest
 
-The SemSource external service MUST create the ownership substrate and bind SemSource projection
-contracts before graph-ingest starts. This behavior is intrinsic to the sole runtime and MUST NOT be
-selected through a compatibility mode field or environment variable.
+The SemSource external service MUST declare its local `projection.Contract` intent for every
+predicate family it writes before graph-ingest starts, using typed CAS mutations with
+`projection.ModeReconcile` for owned current-state predicates and append only for genuinely
+append-only evidence. The removed ownership substrate (registries, tokens, heartbeats,
+`OWNER_CLAIMS`/`OWNER_PRESENCE`) MUST NOT be recreated in any form, and this behavior is intrinsic
+to the sole runtime — never selected through a compatibility mode field or environment variable.
 
-#### Scenario: Graph-ingest sees OWNER_CLAIMS on startup
+#### Scenario: Graph-ingest starts without an ownership substrate
 
-**GIVEN** SemSource starts as an external service
+**GIVEN** SemSource starts as an external service on freshly provisioned NATS storage
 **WHEN** graph-ingest starts
-**THEN** OWNER_CLAIMS and OWNER_PRESENCE already exist
-**AND** SemSource projection contracts have been registered
+**THEN** SemSource's projection contracts are declared locally
+**AND** no ownership registry bucket is created or read
+
+#### Scenario: Mutation outcomes are handled distinctly
+
+**GIVEN** SemSource sends a typed mutation through the `semstreams.graph.mutation/v1` port
+**WHEN** the mutation fails
+**THEN** `entity_not_found`, `revision_mismatch`, and `commit_unknown` are surfaced as distinct
+outcomes
+**AND** SemSource does not blind-retry the mutation
+
 
 ### Requirement: No source relies on triple.add auto-vivify
 
@@ -106,54 +119,29 @@ two MUST NOT be conflated.
 **AND** it is the substrate's handler that answered, deterministically, with no SemSource handler
 competing
 
+
 ### Requirement: Incompatible beta graph state is rebuilt from source
 
-An upgrading deployment MUST stop all writers, capture and review a literal NATS account/resource
-inventory, and delete only observed incompatible graph-derived resources before canonical reseed. It
-MUST derive the framework-owned portion of that deletion set from the SemStreams KV bucket catalog at
-the pinned target under each bucket's resolved name, rather than from a copied or remembered literal
-list. It MUST delete `semstreams_config`; observed `GRAPH`; every enabled, observed catalog bucket;
-and `PREDICATE_CATALOG` only when observed. It MUST preserve authoritative source inputs,
-source/content/media/object stores, component status, and unrelated state. It MUST NOT apply a
-wildcard deletion or a copied default list to a shared account.
+An upgrading deployment MUST start beta.160 adoption on newly provisioned NATS storage, per the
+upstream adoption contract: no release-time migration, preservation, wipe, or reseed procedure
+exists. If retained deployed state is discovered, that adoption MUST stop and come back as a
+separate owner-reviewed migration or recovery design. The graph MUST be re-derived from
+authoritative source inputs, which are preserved outside NATS by construction.
 
-SemSource MUST NOT preserve or rewrite incompatible graph state, run mixed-version writers, or provide
-an in-place converter, alias reader, or dual writer.
+SemSource MUST NOT preserve or rewrite incompatible graph state, run mixed-version writers, or
+provide an in-place converter, alias reader, or dual writer.
 
-#### Scenario: Cutover is rehearsed
+#### Scenario: Adoption starts on fresh storage
 
-- **WHEN** operators rehearse the migration in a disposable real-NATS account
-- **THEN** all writers are stopped before a literal deletion sheet is executed
-- **AND** every removed resource is both observed and in the allowed incompatible set
-- **AND** every authoritative or unrelated resource in the preservation inventory remains
+- **WHEN** operators adopt the beta.160-pinned SemSource on a deployment
+- **THEN** NATS storage is newly provisioned (`docker compose down -v` or equivalent)
+- **AND** the graph is reseeded from source by the normal continuous ingest path
 
-#### Scenario: Configuration and graph state are recreated
+#### Scenario: Retained state stops the adoption
 
-- **WHEN** deletion is complete
-- **THEN** configuration is recreated from the reviewed `semsource.json` through the normal startup
-  path
-- **AND** only migrated writers start and reseed from authoritative source inputs
-- **AND** public status reaches ready and a canonical known-answer query succeeds
+- **WHEN** retained deployed graph state from an earlier beta is discovered during adoption
+- **THEN** that adoption stops rather than migrating, preserving, or wiping in place
 
-#### Scenario: Replay parity is proven after reseed
-
-- **WHEN** the reseeded deployment is restarted once with no intervening write
-- **THEN** the canonical known-answer query returns the same result as before the restart
-
-#### Scenario: A legacy catalog was not observed
-
-- **WHEN** the captured account inventory does not contain `PREDICATE_CATALOG`
-- **THEN** the cutover does not issue a speculative deletion for it
-
-#### Scenario: Entity-state history depth is reconciled destructively
-
-- **GIVEN** a live `ENTITY_STATES` bucket carrying a History depth greater than the catalog
-  declaration
-- **WHEN** the migrated deployment boots for the first time
-- **THEN** the framework reconciles the bucket down to the declared History, discarding stored
-  revisions beyond that depth
-- **AND** any out-of-tree tooling that replays entity-state history has captured what it needs before
-  the upgrade
 
 ### Requirement: KV port declarations conform to the framework bucket catalog
 

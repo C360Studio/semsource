@@ -37,3 +37,26 @@ to the sole runtime — never selected through a compatibility mode field or env
 **THEN** `entity_not_found`, `revision_mismatch`, and `commit_unknown` are surfaced as distinct
 outcomes
 **AND** SemSource does not blind-retry the mutation
+
+
+### Requirement: Incompatible beta graph state is rebuilt from source
+
+An upgrading deployment MUST start beta.160 adoption on newly provisioned NATS storage, per the
+upstream adoption contract: no release-time migration, preservation, wipe, or reseed procedure
+exists. If retained deployed state is discovered, that adoption MUST stop and come back as a
+separate owner-reviewed migration or recovery design. The graph MUST be re-derived from
+authoritative source inputs, which are preserved outside NATS by construction.
+
+SemSource MUST NOT preserve or rewrite incompatible graph state, run mixed-version writers, or
+provide an in-place converter, alias reader, or dual writer.
+
+#### Scenario: Adoption starts on fresh storage
+
+- **WHEN** operators adopt the beta.160-pinned SemSource on a deployment
+- **THEN** NATS storage is newly provisioned (`docker compose down -v` or equivalent)
+- **AND** the graph is reseeded from source by the normal continuous ingest path
+
+#### Scenario: Retained state stops the adoption
+
+- **WHEN** retained deployed graph state from an earlier beta is discovered during adoption
+- **THEN** that adoption stops rather than migrating, preserving, or wiping in place

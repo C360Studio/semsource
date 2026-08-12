@@ -107,23 +107,35 @@ func TestGraphSubsystemComponents_IngestOverrideIsCanonicalAndLeaseFree(t *testi
 		t.Fatal("enforce_owner_lease present; the ownership lease model was removed in beta.160")
 	}
 
-	// The entity_stream override must carry the canonical envelope: a typed
-	// config with kind, explicit stream identity, and subjects.
+	// A declared ports section replaces defaults wholesale, so the override
+	// must carry BOTH inputs: our entity_stream (canonical envelope, explicit
+	// stream identity) and the restated mutation provider port.
 	ports, _ := raw["ports"].(map[string]any)
 	inputs, _ := ports["inputs"].([]any)
-	if len(inputs) != 1 {
-		t.Fatalf("graph-ingest input override count = %d, want 1", len(inputs))
+	if len(inputs) != 2 {
+		t.Fatalf("graph-ingest input override count = %d, want 2 (entity_stream + mutations)", len(inputs))
 	}
-	input, _ := inputs[0].(map[string]any)
-	if input["name"] != "entity_stream" {
-		t.Fatalf("input name = %v, want entity_stream", input["name"])
+	byName := map[string]map[string]any{}
+	for _, in := range inputs {
+		m, _ := in.(map[string]any)
+		name, _ := m["name"].(string)
+		byName[name] = m
 	}
-	config, _ := input["config"].(map[string]any)
-	if config["kind"] != "jetstream" {
-		t.Fatalf("input config kind = %v, want jetstream", config["kind"])
+	es, ok := byName["entity_stream"]
+	if !ok {
+		t.Fatal("entity_stream input missing")
 	}
-	if config["stream_name"] != "GRAPH" {
-		t.Fatalf("input stream_name = %v, want GRAPH", config["stream_name"])
+	esCfg, _ := es["config"].(map[string]any)
+	if esCfg["kind"] != "jetstream" || esCfg["stream_name"] != "GRAPH" {
+		t.Fatalf("entity_stream config = %v, want jetstream on GRAPH", esCfg)
+	}
+	mut, ok := byName["mutations"]
+	if !ok {
+		t.Fatal("mutations input missing — a wholesale ports override must restate the mutation provider")
+	}
+	mutCfg, _ := mut["config"].(map[string]any)
+	if mutCfg["kind"] != "nats-request" {
+		t.Fatalf("mutations config kind = %v, want nats-request", mutCfg["kind"])
 	}
 }
 

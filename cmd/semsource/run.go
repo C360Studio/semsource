@@ -742,10 +742,11 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			name:     "graph-ingest",
 			compType: types.ComponentTypeProcessor,
 			configMap: map[string]any{
-				// Only the entity_stream input differs from graph-ingest's
-				// DefaultConfig (our entities arrive on the GRAPH stream's
-				// graph.ingest.* subjects, not the default ENTITY stream). The
-				// mutations input and entity_states output come from defaults.
+				// Our entity_stream differs from graph-ingest's DefaultConfig
+				// (entities arrive on the GRAPH stream's graph.ingest.*
+				// subjects, not the default ENTITY stream). A declared ports
+				// section replaces the defaults wholesale, so the mutation
+				// provider input and entity_states output are restated.
 				"ports": map[string]any{
 					"inputs": []component.PortDefinition{
 						{
@@ -756,6 +757,24 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 								DeliverPolicy: "all",
 							},
 						},
+						{
+							// The typed mutation provider port (values pinned from
+							// semstreams internal/graphmutation, which is not
+							// importable): a declared ports section replaces the
+							// defaults wholesale, so every required port is restated.
+							Name:     "mutations",
+							Required: true,
+							Config: component.NATSRequestPort{
+								Subject: "graph.mutation.>",
+								Interface: &component.InterfaceContract{
+									Type:    "semstreams.graph.mutation",
+									Version: "v1",
+								},
+							},
+						},
+					},
+					"outputs": []component.PortDefinition{
+						{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
 					},
 				},
 			},

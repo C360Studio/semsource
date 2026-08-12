@@ -31,10 +31,15 @@ import (
 // that adds an operation SemSource already claims stays green here until this
 // pin is updated — refresh it on every semstreams bump.
 func TestNoSemSourceSubjectCollidesWithTheSubstrate(t *testing.T) {
-	// Pinned from semstreams@v1.0.0-beta.160 processor/graph-query (query.go
-	// operation table) plus the prefix operation served from the index side.
+	// Pinned from semstreams@v1.0.0-beta.160 processor/graph-query's
+	// query.go operation table — the COMPLETE admitted set, camelCase
+	// suffixes included. searchGraph and summary SURVIVE the beta.160
+	// query-contract closure (the guide's removals were the aggregate Go
+	// client wrappers and shared agentic tool registrations, not these
+	// operations); an incomplete pin here is a weaker guard.
 	substrateSubjects := []string{
 		"graph.query.batch",
+		"graph.query.byName",
 		"graph.query.entity",
 		"graph.query.entityByAlias",
 		"graph.query.globalSearch",
@@ -43,11 +48,12 @@ func TestNoSemSourceSubjectCollidesWithTheSubstrate(t *testing.T) {
 		"graph.query.pathSearch",
 		"graph.query.prefix",
 		"graph.query.relationships",
+		"graph.query.searchGraph",
 		"graph.query.semantic",
 		"graph.query.similar",
 		"graph.query.spatial",
+		"graph.query.summary",
 		"graph.query.temporal",
-		"graph.query.byName",
 	}
 	substrate := make(map[string]bool)
 	for _, subject := range substrateSubjects {
