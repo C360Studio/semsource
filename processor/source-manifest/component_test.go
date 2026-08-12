@@ -529,8 +529,12 @@ func TestDefaultConfig(t *testing.T) {
 	if len(cfg.Ports.Outputs) != 3 {
 		t.Fatalf("outputs count = %d, want 3", len(cfg.Ports.Outputs))
 	}
-	if cfg.Ports.Outputs[0].Subject != "graph.ingest.manifest" {
-		t.Errorf("output subject = %q, want %q", cfg.Ports.Outputs[0].Subject, "graph.ingest.manifest")
+	js, ok := cfg.Ports.Outputs[0].Config.(component.JetStreamPort)
+	if !ok {
+		t.Fatalf("output config type = %T, want component.JetStreamPort", cfg.Ports.Outputs[0].Config)
+	}
+	if len(js.Subjects) != 1 || js.Subjects[0] != "graph.ingest.manifest" {
+		t.Errorf("output subjects = %v, want [graph.ingest.manifest]", js.Subjects)
 	}
 }
 

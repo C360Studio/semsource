@@ -16,7 +16,6 @@ import (
 	"github.com/c360studio/semsource/source/ontology"
 	"github.com/c360studio/semstreams/component"
 	semgraph "github.com/c360studio/semstreams/graph"
-	queryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
@@ -37,7 +36,7 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -67,11 +66,7 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	stableNew := publishVersioned(t, ctx, pub, "semstreams", "v1.10.0", "pkg/stable.go", "Stable", "stable", "code:stable-same")
 	pub.Stop() // flush buffered publishes
 
-	qc, err := queryclient.NewClient(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("query client: %v", err)
-	}
-	t.Cleanup(func() { _ = qc.Close() })
+	qc := tc.Client
 
 	// Wait until all four entities are queryable.
 	for _, id := range []string{runOld, runNew, stableOld, stableNew} {
@@ -193,11 +188,8 @@ func runPassAndSummary(t *testing.T, ctx context.Context, client *natsclient.Cli
 
 // fetchEntity reads an entity's current state fresh via graph.query.prefix (no
 // client-side entity cache, so it always reflects the latest ingest merge).
-func fetchEntity(ctx context.Context, qc queryclient.Client, id string) (*semgraph.EntityState, bool) {
-	ents, _, err := qc.QueryPrefixAll(ctx, semgraph.PrefixQueryRequest{Prefix: id}, 10)
-	if err != nil {
-		return nil, false
-	}
+func fetchEntity(ctx context.Context, qc *natsclient.Client, id string) (*semgraph.EntityState, bool) {
+	ents := prefixAll(ctx, qc, id)
 	for i := range ents {
 		if ents[i].ID == id {
 			e := ents[i]
@@ -207,7 +199,7 @@ func fetchEntity(ctx context.Context, qc queryclient.Client, id string) (*semgra
 	return nil, false
 }
 
-func waitEntity(t *testing.T, ctx context.Context, qc queryclient.Client, id string, timeout time.Duration) (*semgraph.EntityState, bool) {
+func waitEntity(t *testing.T, ctx context.Context, qc *natsclient.Client, id string, timeout time.Duration) (*semgraph.EntityState, bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -219,7 +211,7 @@ func waitEntity(t *testing.T, ctx context.Context, qc queryclient.Client, id str
 	return nil, false
 }
 
-func waitTriple(t *testing.T, ctx context.Context, qc queryclient.Client, id, predicate, object string, timeout time.Duration) {
+func waitTriple(t *testing.T, ctx context.Context, qc *natsclient.Client, id, predicate, object string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

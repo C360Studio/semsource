@@ -14,7 +14,6 @@ import (
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semstreams/component"
-	queryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
@@ -37,7 +36,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -65,11 +64,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	runNew := publishVersioned(t, ctx, pub, "semstreams", "v1.10.0", "pkg/run.go", "Run", "run", "code:run-new")
 	pub.Stop()
 
-	qc, err := queryclient.NewClient(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("query client: %v", err)
-	}
-	t.Cleanup(func() { _ = qc.Close() })
+	qc := tc.Client
 	for _, id := range []string{runOld, runNew} {
 		if _, ok := waitEntity(t, ctx, qc, id, 20*time.Second); !ok {
 			t.Fatalf("entity never became queryable: %s", id)

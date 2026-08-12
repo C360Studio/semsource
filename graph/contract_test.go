@@ -1,4 +1,4 @@
-package governance
+package graph
 
 import (
 	"strings"

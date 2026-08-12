@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
-	queryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
@@ -37,7 +36,7 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -96,10 +95,7 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = astComp.Stop(5 * time.Second) })
 
-	qc, err := queryclient.NewClient(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("queryclient.NewClient: %v", err)
-	}
+	qc := tc.Client
 
 	// Expected IDs computed through the SAME production constructors the
 	// parsers use — exact-match assertions, no substring guessing.

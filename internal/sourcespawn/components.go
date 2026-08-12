@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/workspace"
+	"github.com/c360studio/semstreams/component"
 )
 
 // contentHashSlug produces a deterministic 6-hex-character slug from the
@@ -54,14 +55,12 @@ func contentHashSlug(src config.SourceEntry) string {
 // 0 connections even though components use DefaultConfig at runtime.
 func outputPorts() map[string]any {
 	return map[string]any{
-		"outputs": []map[string]any{
+		"outputs": []component.PortDefinition{
 			{
-				"name":        "graph.ingest",
-				"type":        "jetstream",
-				"subject":     "graph.ingest.entity",
-				"stream_name": "GRAPH",
-				"required":    true,
-				"description": "Entity state updates for graph ingestion",
+				Name:        "graph.ingest",
+				Required:    true,
+				Description: "Entity state updates for graph ingestion",
+				Config:      component.JetStreamPort{StreamName: "GRAPH", Subjects: []string{"graph.ingest.entity"}},
 			},
 		},
 	}

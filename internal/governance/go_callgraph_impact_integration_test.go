@@ -125,7 +125,7 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 	reg := payloadregistry.New()

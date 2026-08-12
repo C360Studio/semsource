@@ -94,10 +94,11 @@ func ptrBool(v bool) *bool { return &v }
 func DefaultConfig() Config {
 	outputDefs := []component.PortDefinition{
 		{
-			Name:        "graph.ingest",
-			Type:        "jetstream",
-			Subject:     "graph.ingest.entity",
-			StreamName:  "GRAPH",
+			Name: "graph.ingest",
+			Config: component.JetStreamPort{
+				StreamName: "GRAPH",
+				Subjects:   []string{"graph.ingest.entity"},
+			},
 			Required:    true,
 			Description: "Entity state updates for graph ingestion",
 		},

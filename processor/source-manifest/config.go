@@ -59,26 +59,29 @@ func (c *Config) Validate() error {
 func DefaultConfig() Config {
 	outputDefs := []component.PortDefinition{
 		{
-			Name:        "graph.ingest",
-			Type:        "jetstream",
-			Subject:     "graph.ingest.manifest",
-			StreamName:  "GRAPH",
+			Name: "graph.ingest",
+			Config: component.JetStreamPort{
+				StreamName: "GRAPH",
+				Subjects:   []string{"graph.ingest.manifest"},
+			},
 			Required:    true,
 			Description: "Source manifest broadcast for downstream consumers",
 		},
 		{
-			Name:        "graph.ingest.status",
-			Type:        "jetstream",
-			Subject:     "graph.ingest.status",
-			StreamName:  "GRAPH",
+			Name: "graph.ingest.status",
+			Config: component.JetStreamPort{
+				StreamName: "GRAPH",
+				Subjects:   []string{"graph.ingest.status"},
+			},
 			Required:    false,
 			Description: "Ingestion status broadcast for downstream consumers",
 		},
 		{
-			Name:        "graph.ingest.predicates",
-			Type:        "jetstream",
-			Subject:     "graph.ingest.predicates",
-			StreamName:  "GRAPH",
+			Name: "graph.ingest.predicates",
+			Config: component.JetStreamPort{
+				StreamName: "GRAPH",
+				Subjects:   []string{"graph.ingest.predicates"},
+			},
 			Required:    false,
 			Description: "Predicate schema broadcast for downstream consumers",
 		},

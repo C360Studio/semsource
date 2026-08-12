@@ -1,15 +1,13 @@
-package governance
+package graph
 
 import (
 	"sort"
 	"strings"
 
-	"github.com/c360studio/semsource/graph"
 	semast "github.com/c360studio/semsource/source/ast"
-	// Blank import: registers the source predicate vocabulary via its init()
-	// so the predicate-schema projection below sees a fully-seeded registry.
-	_ "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/pkg/ownership"
+	// Also registers the source predicate vocabulary via its init() so the
+	// predicate-schema projection below sees a fully-seeded registry.
+	sourcevocab "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/pkg/projection"
 	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
@@ -20,11 +18,20 @@ const (
 	OwnerID = "semsource.source-service"
 
 	sourceEntityPattern = "*.semsource.*.*.*.*"
+
+	// GroupSource is the reconcile-mode predicate group covering everything
+	// SemSource emits through semsource.entity.v1.
+	GroupSource = "source"
+	// GroupLifecycle is the reconcile-mode predicate group for the
+	// entity.lifecycle.stale marker: reconciling it to one marker triple sets
+	// the marker; reconciling it to empty clears it. Reconcile-not-append makes
+	// both operations idempotent by construction.
+	GroupLifecycle = "lifecycle"
 )
 
 // OwnedPredicates returns the exact predicate strings SemSource currently emits
-// through semsource.entity.v1. Ownership claims reject predicate wildcards, so
-// this list is deliberately expanded before contract binding.
+// through semsource.entity.v1. Contract groups take exact predicates, not
+// wildcards, so this list is deliberately expanded before validation.
 func OwnedPredicates() []string {
 	set := map[string]struct{}{}
 
@@ -60,13 +67,19 @@ func OwnedPredicates() []string {
 // semsource.entity.v1 source entities.
 func SourceEntityContract() projection.Contract {
 	return projection.Contract{
-		Name:          graph.EntityType.Key(),
-		MessageType:   graph.EntityType.Key(),
+		Name:          EntityType.Key(),
+		MessageType:   EntityType.Key(),
 		EntityPattern: sourceEntityPattern,
 		Groups: []projection.PredicateGroup{
 			{
-				Mode:       ownership.ModeReplaceOwned,
+				Name:       GroupSource,
+				Mode:       projection.ModeReconcile,
 				Predicates: OwnedPredicates(),
+			},
+			{
+				Name:       GroupLifecycle,
+				Mode:       projection.ModeReconcile,
+				Predicates: []string{sourcevocab.EntityLifecycleStale},
 			},
 		},
 	}

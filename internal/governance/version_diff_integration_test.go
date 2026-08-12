@@ -18,7 +18,6 @@ import (
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
 	"github.com/c360studio/semstreams/component"
-	queryclient "github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
@@ -41,7 +40,7 @@ func TestIntegration_VersionDiff(t *testing.T) {
 			Subjects: []string{"graph.ingest.entity"},
 		}),
 	)
-	if _, err := BootstrapStandalone(ctx, tc.Client, nil); err != nil {
+	if _, err := BootstrapStandalone(nil); err != nil {
 		t.Fatalf("BootstrapStandalone() error = %v", err)
 	}
 
@@ -92,11 +91,7 @@ func TestIntegration_VersionDiff(t *testing.T) {
 	}
 	pub.Stop()
 
-	qc, err := queryclient.NewClient(ctx, tc.Client, nil)
-	if err != nil {
-		t.Fatalf("query client: %v", err)
-	}
-	t.Cleanup(func() { _ = qc.Close() })
+	qc := tc.Client
 	for _, id := range ids {
 		if _, ok := waitEntity(t, ctx, qc, id, 20*time.Second); !ok {
 			t.Fatalf("entity never became queryable: %s", id)
