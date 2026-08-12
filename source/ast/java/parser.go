@@ -49,7 +49,7 @@ type Parser struct {
 	selfByScope map[string]*classMembers
 	memberCache map[string]cachedMembers
 	classMemo   map[string]classResolution // type-name resolution, this ParseFile only
-	classFields map[string]string
+	classFields map[string]typedField
 }
 
 // NewParser creates a new Java AST parser.
@@ -395,9 +395,10 @@ func (p *Parser) extractInterface(node *sitter.Node, content []byte, filePath st
 
 		// An interface declares constants, not instance fields; scoping the table
 		// to this body keeps an enclosing class's fields out of a default
-		// method's receiver resolution.
+		// method's receiver resolution. No inherited merge here — constants
+		// stay out of receiver typing entirely.
 		prevFields := p.classFields
-		p.classFields = p.collectFieldTypes(body, content)
+		p.classFields = ownFieldTable(p.collectFieldTypes(body, content), p.selfRel)
 		defer func() { p.classFields = prevFields }()
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
@@ -569,8 +570,12 @@ func (p *Parser) extractClassBody(body *sitter.Node, content []byte, classEntity
 	// This class's field types back call-receiver resolution for its methods
 	// (calls.go). Saved and restored so a nested class body does not leak its
 	// fields to the enclosing class's remaining methods, or vice versa.
+	// Inherited (non-private) ancestor fields join the table through the same
+	// supers walk declaringClass uses — a subclass body references them bare,
+	// exactly like own fields (#141, the OSH rootPerm gap).
 	prevFields := p.classFields
-	p.classFields = p.collectFieldTypes(body, content)
+	selfRef := classRef{cm: p.selfByScope[strings.Join(scope, ".")], rel: p.selfRel}
+	p.classFields = p.classFieldsWithInherited(selfRef, p.collectFieldTypes(body, content))
 	defer func() { p.classFields = prevFields }()
 
 	for i := 0; i < int(body.NamedChildCount()); i++ {

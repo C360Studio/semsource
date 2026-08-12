@@ -413,7 +413,7 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 	// entities) — attributing their calls to this function.
 	if body := node.ChildByFieldName("body"); body != nil {
 		entity.DocComment = p.extractBodyDocstring(body, content)
-		entity.Calls = p.extractCalls(body, content, filePath, scope, classMethods)
+		entity.Calls = p.extractCalls(node, body, content, filePath, scope, classMethods)
 	}
 
 	// Check if async

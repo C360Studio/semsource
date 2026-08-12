@@ -460,6 +460,16 @@ func (p *Parser) extractFunctionCalls(block *goast.BlockStmt, filePath string) [
 			localBase := false
 			switch fn := call.Fun.(type) {
 			case *goast.Ident:
+				// A bare callee whose ident resolves to anything but a
+				// function declaration is not a definition we can edge to:
+				// Kind==Var is a function-typed parameter or local (calling
+				// it is the only way a Var appears as a callee), Kind==Typ is
+				// a conversion. Both would mint a dangling function entity ID
+				// (#143's graph.query "not found" class) — inert, per the
+				// fails-inert contract.
+				if fn.Obj != nil && fn.Obj.Kind != goast.Fun {
+					return true
+				}
 				name = fn.Name
 			case *goast.SelectorExpr:
 				if x, ok := fn.X.(*goast.Ident); ok {

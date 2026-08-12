@@ -336,6 +336,22 @@ grepping. For questions about the corpus as a whole rather than a symbol, `graph
 questions across every entity type, disclosing how far each answer escalated. Full walkthrough (auth, readiness gating, tool
 cheat-sheet): [docs/integration/mcp-quickstart.md](docs/integration/mcp-quickstart.md).
 
+#### Call-edge coverage per language
+
+`code_impact` and the caller/callee relations resolve only what static analysis can confirm —
+ambiguity always drops the edge, never guesses it (an empty closure means "no resolvable
+dependents under this contract", and no language pass ever uses a model to invent an edge):
+
+| Language | Resolves | Deliberately dropped |
+| --- | --- | --- |
+| Go | direct, method, cross-package in-repo calls | callees bound to func-typed params/locals; conversions |
+| Python | same-file, imported-function, `self.`/`cls.` own-class calls | shadowed bare names, attribute calls on locals, builtins |
+| Java | static, own-class, declared-receiver calls incl. inherited fields | `var`/generic/ambiguous receivers, chained calls, `super.` |
+| TS / JS | same-file, named/namespace/default import, `this.` own-class calls | property chains, computed callees, shadowed names |
+| Svelte | the TS contract over each component's script block | same as TS |
+| C | direct calls with a unique in-tree definition | function pointers, multi-definition names, macro-generated calls |
+| C++ | — (no call edges: sound resolution needs build integration) | everything, stated rather than approximated |
+
 ## Config File
 
 SemSource uses a JSON config file (`semsource.json`). The wizard creates it for you, but it's fully hand-editable:

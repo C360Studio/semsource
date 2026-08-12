@@ -11,6 +11,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
+	"github.com/c360studio/semsource/source/ast/ts"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/svelte"
 	"github.com/smacker/go-tree-sitter/typescript/typescript"
@@ -28,14 +29,24 @@ type Parser struct {
 	org      string
 	project  string
 	repoRoot string
+
+	// callResolver drives call-graph extraction (design D3) over a component's
+	// script block. A script block parses as its own tree-sitter tree, rooted
+	// exactly like a standalone .ts file's, so the ts package's resolution pass
+	// (ts/calls.go) applies unchanged — this Parser just refreshes it against
+	// the script's root before each script's entities are walked. It is a
+	// single instance reused across every file this Parser parses (matching
+	// ts.Parser's own reuse across a directory walk), not a fresh one per file.
+	callResolver *ts.Parser
 }
 
 // NewParser creates a new Svelte parser
 func NewParser(org, project, repoRoot string) *Parser {
 	return &Parser{
-		org:      org,
-		project:  project,
-		repoRoot: repoRoot,
+		org:          org,
+		project:      project,
+		repoRoot:     repoRoot,
+		callResolver: ts.NewParser(org, project, repoRoot),
 	}
 }
 
@@ -295,6 +306,11 @@ func (p *Parser) parseScriptBlock(ctx context.Context, scriptContent []byte, lan
 
 	rootNode := tree.RootNode()
 
+	// Refresh call-resolution state (design D3) against the script's own root
+	// before entities are walked, exactly like ts.Parser.ParseFile does for a
+	// whole .ts file — see calls.go's field comment on ts.Parser.
+	p.callResolver.PrepareCallResolution(rootNode, scriptContent)
+
 	// Extract imports
 	imports = p.extractImports(rootNode, scriptContent)
 
@@ -423,6 +439,15 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	}
 	entity.DocComment = ast.CombineDocComment(ast.PrecedingJSDoc(node, source), metadata)
 	entity.Signature = ast.RenderTSFunctionSignature(node, source)
+
+	// Resolved call edges from the body (design D3), via the shared ts pass.
+	// lang is fixed to "svelte" (not the script's ts/js lang) because that is
+	// the domain this entity's own ID was just built with above — the edge
+	// must byte-match it, not the script-language convention a plain .ts file
+	// would use.
+	if bodyNode := node.ChildByFieldName("body"); bodyNode != nil {
+		entity.Calls = p.callResolver.ExtractCalls(node.ChildByFieldName("parameters"), bodyNode, source, filePath, "svelte", nil, nil)
+	}
 
 	return entity
 }
@@ -575,6 +600,11 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFunction, name, filePath)
 		metadata = "Arrow function"
 		entity.Signature = ast.RenderTSArrowSignature(name, valueNode, source)
+		// Resolved call edges from the arrow body (design D3), via the shared ts
+		// pass; domain fixed to "svelte" for the same reason as extractFunction.
+		if bodyNode := valueNode.ChildByFieldName("body"); bodyNode != nil {
+			entity.Calls = p.callResolver.ExtractCalls(ts.ArrowParamsNode(valueNode), bodyNode, source, filePath, "svelte", nil, nil)
+		}
 	case kind == "const":
 		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeConst, name, filePath)
 	default:

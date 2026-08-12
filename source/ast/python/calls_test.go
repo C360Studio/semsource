@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/source/ast"
@@ -140,6 +141,111 @@ func TestSelfInheritedMethodIsInert(t *testing.T) {
 	}
 }
 
+// --- local-value shadow suppression (spec: function-typed parameters/locals
+// never become callees) -------------------------------------------------------
+
+// TestParamShadowsModuleLevelFunctionIsInert — the reviewer's motivating shape:
+// `transform` is a PARAMETER of run, so calling it must not resolve against
+// the unrelated module-level `transform` function of the same name — that
+// would be a call through the parameter's VALUE, not a reference to the
+// definition.
+func TestParamShadowsModuleLevelFunctionIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "def transform(x):\n    return x\n\ndef run(transform):\n    transform(5)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatalf("missing run: %v", ents)
+	}
+	if len(run.Calls) != 0 {
+		t.Errorf("run.Calls = %v, want empty (transform is a parameter, not the module-level function)", run.Calls)
+	}
+}
+
+// TestNoParamShadowStillResolves is the control for the previous test: remove
+// the shadowing parameter and an equivalent call (here inside a list
+// comprehension, to also confirm the walk still reaches comprehension bodies)
+// must resolve — proving the suppression is surgical to an actual shadow.
+func TestNoParamShadowStillResolves(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "def transform(x):\n    return x\n\ndef run(items):\n    return [transform(i) for i in items]\n",
+	})
+	transform, run := ents["transform"], ents["run"]
+	if transform == nil || run == nil {
+		t.Fatalf("missing entities: %v", ents)
+	}
+	if !hasCall(run, transform.ID) {
+		t.Errorf("run.Calls = %v, want to contain transform %q", run.Calls, transform.ID)
+	}
+}
+
+// TestLocalReassignmentShadowsModuleFunction — a local assignment MID-BODY
+// (not a parameter) shadows the same way: reassigning `transform` to a lambda
+// rebinds the name to a local value for the rest of the function.
+func TestLocalReassignmentShadowsModuleFunction(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "def transform(x):\n    return x\n\ndef run():\n    transform = lambda x: x * 2\n    transform(5)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatalf("missing run: %v", ents)
+	}
+	if len(run.Calls) != 0 {
+		t.Errorf("run.Calls = %v, want empty (transform is reassigned to a local lambda)", run.Calls)
+	}
+}
+
+// TestTupleUnpackShadowsModuleFunction exercises collectPyAssignTargets'
+// pattern-unpacking path, not just the plain-identifier fast path.
+func TestTupleUnpackShadowsModuleFunction(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "def transform(x):\n    return x\n\ndef run():\n    transform, other = get_pair()\n    transform(5)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatalf("missing run: %v", ents)
+	}
+	if len(run.Calls) != 0 {
+		t.Errorf("run.Calls = %v, want empty (transform is tuple-unpacked to a local)", run.Calls)
+	}
+}
+
+// TestParamShadowsImportIsInert covers the cross-file case: `transform` is
+// imported from pkg.util AND shadowed by run's own parameter of the same
+// name — the parameter must win, not the import.
+func TestParamShadowsImportIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"pkg/__init__.py": "",
+		"pkg/util.py":     "def transform(x):\n    return x\n",
+		"pkg/app.py":      "from pkg.util import transform\n\ndef run(transform):\n    transform(5)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatalf("missing run: %v", ents)
+	}
+	if len(run.Calls) != 0 {
+		t.Errorf("run.Calls = %v, want empty (transform is a parameter, not the imported function)", run.Calls)
+	}
+}
+
+// TestParamShadowsModuleAliasSuppressesExternalMarker — the module-qualified
+// form of the same bug: `os` shadowed by a parameter must not be treated as
+// the imported module of the same name, and must not even produce the
+// "external:" marker a genuine os.getcwd() call would (TestExternalAndInertCalls
+// below pins that unshadowed case).
+func TestParamShadowsModuleAliasSuppressesExternalMarker(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "import os\n\ndef run(os):\n    os.getcwd()\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatalf("missing run: %v", ents)
+	}
+	if len(run.Calls) != 0 {
+		t.Errorf("run.Calls = %v, want empty (os is a parameter, not the imported module)", run.Calls)
+	}
+}
+
 // TestExternalAndInertCalls — an out-of-tree module call stays external; a builtin
 // and a bare undefined name emit no call edge.
 func TestExternalAndInertCalls(t *testing.T) {
@@ -157,5 +263,62 @@ func TestExternalAndInertCalls(t *testing.T) {
 		if c != "external:os.getcwd" {
 			t.Errorf("unexpected inert call edge %q in %v (builtin/undefined should be dropped)", c, run.Calls)
 		}
+	}
+}
+
+// A nested def's own parameters and a lambda's parameters shadow like locals:
+// the call walk crosses function boundaries (re-review NIT 1).
+func TestNestedDefParamShadowIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"app.py": "def transform(x):\n    return x\n\n" +
+			"def run():\n    def inner(transform):\n        transform(1)\n    inner(transform)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatal("missing run")
+	}
+	for _, call := range run.Calls {
+		if strings.Contains(call, "transform") {
+			t.Errorf("shadowed nested-def param resolved: %v", run.Calls)
+		}
+	}
+}
+
+func TestLambdaParamShadowIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"handlers.py": "def handler():\n    pass\n",
+		"app.py": "from handlers import handler\n\n" +
+			"def run(hs):\n    return map(lambda handler: handler(), hs)\n",
+	})
+	run := ents["run"]
+	if run == nil {
+		t.Fatal("missing run")
+	}
+	for _, call := range run.Calls {
+		if strings.Contains(call, "handler") {
+			t.Errorf("shadowed lambda param resolved: %v", run.Calls)
+		}
+	}
+}
+
+// A class nested inside a method starts a new self: its calls must not
+// resolve against the ENCLOSING class's method set (review finding — the
+// nested body stays inert entirely, since nested-class methods have no
+// entities of their own).
+func TestMethodNestedClassSelfCallIsInert(t *testing.T) {
+	ents := parsePyFiles(t, map[string]string{
+		"m.py": "class Outer:\n" +
+			"    def render(self):\n        pass\n" +
+			"    def build(self):\n" +
+			"        class Inner:\n" +
+			"            def go(self):\n                self.render()\n" +
+			"        return Inner\n",
+	})
+	build := ents["build"]
+	if build == nil {
+		t.Fatal("missing build")
+	}
+	if len(build.Calls) != 0 {
+		t.Errorf("build.Calls = %v, want empty (Inner's self is not Outer)", build.Calls)
 	}
 }

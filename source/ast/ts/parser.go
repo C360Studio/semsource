@@ -38,6 +38,17 @@ type Parser struct {
 	// per source path by ast-source's parseFileWithWatcher lock (task #44 design D6).
 	importBindings map[string]tsBinding          // local name -> imported module + origin
 	localKinds     map[string]ast.CodeEntityType // same-file type name -> kind (D5)
+
+	// Call-resolution state (see calls.go). localFuncs/namespaceImports/
+	// defaultImports are refreshed each ParseFile alongside importBindings above.
+	// moduleInfoMemo caches a resolved import target's parsed function set,
+	// reallocated each ParseFile (mirrors python/calls.go's moduleFuncsMemo) so
+	// an edited target module is re-read on the next parse rather than served
+	// stale.
+	localFuncs       map[string]bool   // same-file top-level function names
+	namespaceImports map[string]string // local namespace name -> module specifier
+	defaultImports   map[string]string // local default-import name -> module specifier
+	moduleInfoMemo   map[string]moduleCallInfo
 }
 
 // NewParser creates a new TypeScript/JavaScript parser
@@ -121,6 +132,12 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	// ID of their DEFINITION (same-file or imported module) — see imports.go.
 	p.importBindings = extractImportBindings(rootNode, content)
 	p.localKinds = extractLocalKinds(rootNode, content)
+
+	// Refresh call-resolution state (calls.go).
+	p.localFuncs = collectModuleFuncNames(rootNode, content)
+	p.namespaceImports = extractNamespaceImports(rootNode, content)
+	p.defaultImports = extractDefaultImports(rootNode, content)
+	p.moduleInfoMemo = make(map[string]moduleCallInfo)
 
 	entities := p.extractEntities(rootNode, content, relPath, lang, fileEntity.ID)
 	for _, entity := range entities {
@@ -383,10 +400,15 @@ func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, file
 		return methods
 	}
 
+	// Computed once per class and threaded through so a this.-call inside any
+	// of its methods resolves against the same own-class method set the
+	// entities below were built from (calls.go).
+	classMethods := classMethodNames(bodyNode, source)
+
 	for i := 0; i < int(bodyNode.ChildCount()); i++ {
 		child := bodyNode.Child(i)
 		if child.Type() == "method_definition" {
-			method := p.extractMethod(child, source, filePath, lang, parentID, scope)
+			method := p.extractMethod(child, source, filePath, lang, parentID, scope, classMethods)
 			if method != nil {
 				methods = append(methods, method)
 			}
@@ -396,8 +418,10 @@ func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, file
 	return methods
 }
 
-// extractMethod extracts a method entity
-func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang, parentID string, scope []string) *ast.CodeEntity {
+// extractMethod extracts a method entity. classMethods is the enclosing
+// class's own method-name set (calls.go's classMethodNames), used to resolve
+// this.-calls in the method body.
+func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang, parentID string, scope []string, classMethods map[string]bool) *ast.CodeEntity {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return nil
@@ -428,6 +452,11 @@ func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang,
 
 	// Extract parameters and return type
 	p.extractFunctionSignature(node, source, entity)
+
+	// Extract resolved call edges from the body (see calls.go).
+	if bodyNode := node.ChildByFieldName("body"); bodyNode != nil {
+		entity.Calls = p.extractCalls(node.ChildByFieldName("parameters"), bodyNode, source, filePath, lang, scope, classMethods)
+	}
 
 	return entity
 }
@@ -537,6 +566,13 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 
 	// Extract parameters and return type
 	p.extractFunctionSignature(node, source, entity)
+
+	// Extract resolved call edges from the body (see calls.go). No enclosing
+	// class for a top-level function, so scope/classMethods are nil — this.
+	// calls cannot arise here.
+	if bodyNode := node.ChildByFieldName("body"); bodyNode != nil {
+		entity.Calls = p.extractCalls(node.ChildByFieldName("parameters"), bodyNode, source, filePath, lang, nil, nil)
+	}
 
 	return entity
 }
@@ -669,6 +705,15 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 		if valueNode != nil {
 			p.extractFunctionSignature(valueNode, source, entity)
 			entity.Signature = ast.RenderTSArrowSignature(name, valueNode, source)
+			// Resolved call edges from the arrow body (see calls.go). No class
+			// scope is threaded here regardless of nesting depth: an arrow
+			// declared inside a method is already covered by that method's own
+			// extractCalls walk (which does not stop at nested-function
+			// boundaries), so this only under-counts the arrow's OWN entity,
+			// never over-counts or produces a wrong edge.
+			if bodyNode := valueNode.ChildByFieldName("body"); bodyNode != nil {
+				entity.Calls = p.extractCalls(ArrowParamsNode(valueNode), bodyNode, source, filePath, lang, nil, nil)
+			}
 		}
 	} else if kind == "const" {
 		entity = ast.NewCodeEntity(p.org, lang, p.project, ast.TypeConst, name, filePath)
