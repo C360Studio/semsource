@@ -2,7 +2,11 @@ package mcpgateway
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	gtypes "github.com/c360studio/semstreams/graph"
 
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -74,39 +78,28 @@ type substrateDigest struct {
 	Tags      []string `json:"tags"`
 }
 
-// substrateEntity is the part of an EntityState needed to derive a match when
-// the substrate returned entities but no digests. Object is RawMessage, not
-// string: real entities carry numeric objects (code.metric.start-line,
-// source.doc.chunk-index — measured live), and a string-typed field made the
-// WHOLE response unmarshal fail, silently collapsing every match into the
-// disclosure-only fallback.
-type substrateEntity struct {
-	ID      string `json:"id"`
-	Triples []struct {
-		Predicate string          `json:"predicate"`
-		Object    json.RawMessage `json:"object"`
-	} `json:"triples"`
-}
+// substrateEntity is the substrate's own EntityState wire type. Decoding into
+// the upstream type (Object is `any`) absorbs every scalar shape the wire can
+// carry: a hand-mirrored struct with a string-typed Object failed the WHOLE
+// response unmarshal on real entities (numeric code.metric.start-line,
+// source.doc.chunk-index — measured live), silently collapsing every match
+// into the disclosure-only fallback.
+type substrateEntity = gtypes.EntityState
 
-// objectScalar renders a triple object for match rendering: strings unquote,
-// numbers and booleans render compactly, and composites (objects, arrays) and
-// null are not value-shaped so they render as absent — a null must never
-// become the literal string "null" in an agent-facing property.
-func objectScalar(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	switch raw[0] {
-	case '"':
-		var s string
-		if json.Unmarshal(raw, &s) == nil {
-			return s
-		}
-		return ""
-	case '{', '[', 'n':
-		return ""
+// objectScalar renders a triple object for match rendering: strings pass
+// through, numbers and booleans render compactly, and nil and composites
+// (maps, slices) are not value-shaped so they render as absent — a null must
+// never become the literal string "null" in an agent-facing property.
+func objectScalar(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case float64:
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	case bool:
+		return strconv.FormatBool(x)
 	default:
-		return string(raw)
+		return ""
 	}
 }
 
@@ -145,7 +138,13 @@ func deriveMatches(body *graphSearchBody) (matches []graphMatch, total int, trun
 			})
 		}
 	case len(body.Entities) > 0:
+		// The substrate's own count is the true hit total: entity hydration can
+		// drop not-found IDs (graph-ingest reports them in a `missing` array the
+		// query layer discards), so len(entities) under-reports the hit set.
 		total = len(body.Entities)
+		if body.Count > total {
+			total = body.Count
+		}
 		for _, e := range body.Entities {
 			matches = append(matches, graphMatch{
 				ID: e.ID, Type: entityTypeSegment(e.ID), Label: entityTitle(e),
@@ -206,19 +205,33 @@ func entityProperties(e substrateEntity) map[string]string {
 			}
 			v := objectScalar(t.Object)
 			if v == "" {
-				break // composite or empty value: not renderable, first-wins still holds
-			}
-			if len(v) > maxPropertyValueSize {
-				v = v[:maxPropertyValueSize]
+				// Unrenderable (null/composite/empty): keep scanning — the FIRST
+				// RENDERABLE value wins, so a null residue triple cannot mask a
+				// later real value for the same predicate.
+				continue
 			}
 			if props == nil {
 				props = make(map[string]string, maxMatchProperties)
 			}
-			props[pred] = v
+			props[pred] = truncateValue(v)
 			break
 		}
 	}
 	return props
+}
+
+// truncateValue enforces the per-value byte cap without ever splitting a
+// UTF-8 rune: a mid-rune cut would marshal as U+FFFD — a value that is
+// neither the substrate's triple object nor visibly truncated.
+func truncateValue(v string) string {
+	if len(v) <= maxPropertyValueSize {
+		return v
+	}
+	cut := maxPropertyValueSize
+	for cut > 0 && !utf8.RuneStart(v[cut]) {
+		cut--
+	}
+	return v[:cut]
 }
 
 // graphSearchResult is what graph_search returns: the substrate's own values —

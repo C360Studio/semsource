@@ -372,13 +372,13 @@ reason worth knowing:
 
 - **Version composition** (`code_changes`) needs two ingested versions, and the
   corpus recipe is `git archive` — no `.git`, no commits, no version entities.
-- **Cross-source joins** were unreachable in one call when the band was
-  authored: `graph_search` matches rendered only id/type/label, so property
-  values (a dependency's `ConfigDepVersion`, say) never appeared in any answer.
-  `graph-search-match-properties` (#166) lifted that at name+value level — the
-  OSH v2 config band exercises it — but on THIS corpus the shape stays
-  inadmissible for composition questions regardless: Go import syntax puts
-  dependency paths into every consuming file, co-locating the pair.
+- **Cross-source joins** stay unreachable in one call on the default response
+  path: `graph_search`'s ranked compact shape carries no property values (a
+  dependency's `ConfigDepVersion`, say). Gateway rendering for the full-entity
+  shape shipped with `graph-search-match-properties` (#166), but its
+  default-path enablement is blocked on semstreams#958 — and on THIS corpus
+  the shape stays inadmissible for composition questions regardless: Go import
+  syntax puts dependency paths into every consuming file, co-locating the pair.
 - **Caller+callee relation joins** need the caller, the symbol, and the callee in
   three different files; this codebase keeps helpers beside their callers, and
   callee-*pair* facts are inadmissible **by construction** — a function's own
@@ -427,15 +427,18 @@ OSH scores are their own comparability domain and never merge with dogfood
 scores — see Comparability.
 
 **Version 2 adds the config band** (G01–G03; a new comparability domain — v2
-scores never compare with v1). The band's history is two product findings the
-instrument surfaced: v1 shipped with no config band because gradle dependencies
-were unlabeled (#142; fixed by #157 — titles made *names* reachable), and
-because `graph_search` matches rendered only id/type/label, leaving property
-*values* (versions, configurations) unreachable in one call (#166; fixed by
-`graph-search-match-properties` — matches now carry a bounded allowlist of
-value properties when the substrate response includes entity triples). G01 is
-the name-level control (passes on #157 alone); G02/G03 are the value gate,
-verified failing before the rendering change and passing after. Only
+scores never compare with v1), and the band is **expected red until
+semstreams#958 lands** — deliberately, on the P01/#141 precedent: a red band
+naming a real gap is the instrument working. The trail: v1 had no config band
+because gradle dependencies were unlabeled (#142 → #157 added titles), then
+`graph-search-match-properties` (#166) shipped gateway rendering of labels +
+bounded value properties from entity triples — but the default response path
+requests the substrate's ranked COMPACT shape (the full-entity alternative was
+tried and falsified: no reply-size guard, cache-order truncation, no relevance
+scores), and compact digests label dependencies with hash instances and carry
+no property values. That digest defect is upstream's (semstreams#958). The
+rendering itself is unit-tested and was live-verified 13/13 under the
+threshold-0 experiment (`results/166-pass-after-osh-B.json`, preserved). Only
 configurations the regex parser ingests exist in the graph — see
 `handler/cfgfile/parsers.go`.
 

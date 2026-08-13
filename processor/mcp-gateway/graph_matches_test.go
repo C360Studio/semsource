@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semstreams/message"
+
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -13,11 +15,7 @@ import (
 func entityWithTriples(id string, pairs ...string) substrateEntity {
 	e := substrateEntity{ID: id}
 	for i := 0; i+1 < len(pairs); i += 2 {
-		obj, _ := json.Marshal(pairs[i+1])
-		e.Triples = append(e.Triples, struct {
-			Predicate string          `json:"predicate"`
-			Object    json.RawMessage `json:"object"`
-		}{Predicate: pairs[i], Object: obj})
+		e.Triples = append(e.Triples, message.Triple{Predicate: pairs[i], Object: pairs[i+1]})
 	}
 	return e
 }
@@ -87,46 +85,74 @@ func TestMatchPropertiesExcludeNonAllowlisted(t *testing.T) {
 	}
 }
 
-// TestMatchPropertiesCapsEnforced pins both bounds: entry count and value size.
+// TestMatchPropertiesCapsEnforced pins all three bounds: entry count, value
+// size, and WHICH entries survive the cap. The survivors must be exactly the
+// first maxMatchProperties predicates in allowlist DECLARATION order — the
+// only observable consequence of ordered iteration, so a rewrite that ranges
+// a map (order-random selection) fails here rather than passing silently
+// (json.Marshal sorts keys, so byte-comparing output can never catch it).
 func TestMatchPropertiesCapsEnforced(t *testing.T) {
 	long := strings.Repeat("v", maxPropertyValueSize+50)
 	pairs := []string{source.ConfigDepVersion, long}
-	// More allowlisted predicates than the cap admits.
+	// Every allowlisted predicate present — more than the cap admits.
 	for _, p := range valuePredicates {
-		pairs = append(pairs, p, "x")
+		if p != source.ConfigDepVersion {
+			pairs = append(pairs, p, "x")
+		}
 	}
 	props := entityProperties(entityWithTriples("a.b.config.s.dependency.x", pairs...))
 	if len(props) != maxMatchProperties {
-		t.Errorf("len(properties) = %d, want cap %d", len(props), maxMatchProperties)
+		t.Fatalf("len(properties) = %d, want cap %d", len(props), maxMatchProperties)
+	}
+	for i, pred := range valuePredicates {
+		if _, ok := props[pred]; ok != (i < maxMatchProperties) {
+			t.Errorf("predicate %q (allowlist position %d): present=%v, want the FIRST %d in declaration order to survive the cap",
+				pred, i, ok, maxMatchProperties)
+		}
 	}
 	if got := props[source.ConfigDepVersion]; len(got) != maxPropertyValueSize {
 		t.Errorf("value length = %d, want truncated to %d", len(got), maxPropertyValueSize)
 	}
 }
 
-// TestMatchPropertiesDeterministicAcrossRuns guards the determinism-gate
-// class: rendering must not depend on map iteration, so repeated rendering of
-// the same entity marshals identically.
-func TestMatchPropertiesDeterministicAcrossRuns(t *testing.T) {
-	e := entityWithTriples("a.b.config.s.dependency.x",
-		source.ConfigDepVersion, "1.2.3",
-		source.ConfigDepKind, "gradle",
-		source.ConfigDepName, "g:n",
-		source.ConfigDepScope, "test",
-	)
-	first, err := json.Marshal(entityProperties(e))
-	if err != nil {
-		t.Fatal(err)
+// TestNullResidueNeverMasksARealValue pins first-RENDERABLE-wins: a null
+// residue triple for a predicate must not hide a later real value — the exact
+// fact class this surface exists to deliver.
+func TestNullResidueNeverMasksARealValue(t *testing.T) {
+	e := substrateEntity{ID: "a.b.config.s.dependency.x", Triples: []message.Triple{
+		{Predicate: source.ConfigDepVersion, Object: nil},
+		{Predicate: source.ConfigDepVersion, Object: "32.1.3-jre"},
+	}}
+	props := entityProperties(e)
+	if props[source.ConfigDepVersion] != "32.1.3-jre" {
+		t.Errorf("properties = %v, want the later renderable value, not absence", props)
 	}
-	for i := 0; i < 20; i++ {
-		again, err := json.Marshal(entityProperties(e))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(again) != string(first) {
-			t.Fatalf("run %d rendered %s, first rendered %s", i, again, first)
+}
+
+// TestTruncationNeverSplitsARune pins the byte cap against UTF-8 corruption:
+// a mid-rune cut would marshal as U+FFFD — neither the substrate's value nor
+// visibly truncated.
+func TestTruncationNeverSplitsARune(t *testing.T) {
+	v := strings.Repeat("a", maxPropertyValueSize-1) + "日本語"
+	got := truncateValue(v)
+	if len(got) > maxPropertyValueSize {
+		t.Errorf("len = %d, want <= %d", len(got), maxPropertyValueSize)
+	}
+	if !strings.HasSuffix(got, "a") && got != strings.Repeat("a", maxPropertyValueSize-1) {
+		t.Errorf("unexpected truncation result %q", got)
+	}
+	if !utf8ValidString(got) {
+		t.Errorf("truncated value is not valid UTF-8: %q", got)
+	}
+}
+
+func utf8ValidString(s string) bool {
+	for _, r := range s {
+		if r == '�' {
+			return false
 		}
 	}
+	return true
 }
 
 // TestDeriveMatchesSurvivesNonStringObjects pins the decode-fragility
@@ -160,6 +186,21 @@ func TestDeriveMatchesSurvivesNonStringObjects(t *testing.T) {
 	want := map[string]string{source.ConfigDepVersion: "33.0.0-jre"}
 	if !reflect.DeepEqual(matches[0].Properties, want) {
 		t.Errorf("properties = %v, want %v (numeric non-allowlisted skipped, composite skipped, null never renders as the string \"null\")", matches[0].Properties, want)
+	}
+}
+
+// TestTotalMatchesReportsSubstrateCount pins the true-total rule on the
+// entities path: hydration can drop not-found IDs, so the substrate's own
+// count must win over len(entities) — an agent reasoning "only N things
+// match" must not draw that from an under-reported figure.
+func TestTotalMatchesReportsSubstrateCount(t *testing.T) {
+	body := &graphSearchBody{
+		Count:    100,
+		Entities: []substrateEntity{entityWithTriples("a.b.c.d.dependency.x", source.DcTitle, "x")},
+	}
+	_, total, _ := deriveMatches(body)
+	if total != 100 {
+		t.Errorf("total = %d, want the substrate's count 100, not len(entities)", total)
 	}
 }
 

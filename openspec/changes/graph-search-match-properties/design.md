@@ -87,6 +87,35 @@ zero — no dogfood question invokes `graph_search`, and both edits are
 `graph_search`-only; the 10 shared OSH questions moved −0.3 % (run noise), which is
 the empirical form of the same statement.
 
+## Amendment 3 (high review, 2026-08-13): threshold REVERTED to 1 — the full shape cannot be the default
+
+The independent review verified three structural defects in the threshold-0 decision
+against the pinned substrate source:
+
+1. **No reply-size guard** — tier 1 caps semantic hits at 100 but not bytes; a
+   monorepo-scale entity (one requires-triple per dependency) in the top 100 can push
+   the single NATS reply past max_payload and hard-fail the tool for exactly the broad
+   queries it advertises (513,859 B measured at count=100 on a SMALL-entity corpus).
+2. **Truncation is unstable by contract** — the full shape arrives in cache-warmth
+   order ("non-deterministic by contract", graph-ingest fetchEntitiesConcurrent), so
+   which 25 of 100 matches survive flaps run-to-run → guaranteed eventual UNSTABLE
+   scorecard verdicts and an untrue "deterministic rendering" claim.
+3. **The full shape is unranked** — no relevance scores exist on it, violating the
+   existing ranked-list requirement; the compact digests are the only ranked skeleton.
+
+Decision: default back to `summarize_threshold: 1` (ranked compact). The rendering
+(properties, titles, scalar tolerance) stays — it fires whenever a response carries
+entity triples (semantic-strategy shape today; every shape once upstream fixes
+digests). The blocking ask is semstreams#958 (digest labels from dc.terms.title +
+value properties or scores); #166 stays OPEN, blocked on it. The OSH v2 config band
+stays in the set, expected red, on the P01/#141 precedent. Also fixed from the same
+review: first-RENDERABLE-wins property selection (a null residue triple no longer
+masks a later real value), substrate count as the true total (hydration can drop
+not-found IDs), rune-safe value truncation, decode via the substrate's own
+gtypes.EntityState instead of a hand-mirrored struct, the threshold VALUE pinned in
+the integration test, cap-survivor order made test-observable, and the instrument's
+stale self-descriptions (G01/G02/G03/P02 whys, dogfood P04) corrected.
+
 ## Risks / Trade-offs
 
 - Context growth on config-heavy corpora: bounded by 25 matches × 8 props × ~200 B ≈

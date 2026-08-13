@@ -128,7 +128,7 @@
     "SystemDataProvider",
     "SystemTaskingConnector"
    ],
-   "why": "Impact closure across the SOS and SPS service planes. addIOsFromDataStore (SystemUtils, sensorhub-core) is called from SystemDataProvider (impl/service/sos) and SystemTaskingConnector (impl/service/sps); the names never co-occur. 2 call sites. Like the dogfood band, OSH composition is impact-closure-only: the corpus is Gradle-only with unlabeled dependency entities (see config_band_absent), so cross-source joins are unreachable, and the archive corpus has no .git for version composition."
+   "why": "Impact closure across the SOS and SPS service planes. addIOsFromDataStore (SystemUtils, sensorhub-core) is called from SystemDataProvider (impl/service/sos) and SystemTaskingConnector (impl/service/sps); the names never co-occur. 2 call sites. Like the dogfood band, OSH composition is impact-closure-only: dependency entities carry titles since #157, but property values stay unreachable on the default response path until semstreams#958 (see config_band), so cross-source joins remain inadmissible, and the archive corpus has no .git for version composition."
   },
   {
    "id": "G01",
@@ -140,7 +140,7 @@
    "expect_any": [
     "com.google.guava:guava"
    ],
-   "why": "Name-level control: guava is declared `api 'com.google.guava:guava:32.1.3-jre'` in sensorhub-core/build.gradle. The label (dc.terms.title, added by #157) must surface it in graph_search matches. If G01 misses, ranking never found the entity and G02's failure would be a retrieval gap, not a rendering gap — G01 separates the two."
+   "why": "Name-level control: guava is declared `api 'com.google.guava:guava:32.1.3-jre'` in sensorhub-core/build.gradle and carries dc.terms.title since #157. A miss here is a RESPONSE-SHAPE gap, not a retrieval gap: the FAIL-before run showed the dependency ranked as match #1 but hash-labeled (compact digests ignore dc.terms.title — semstreams#958). Goes green when digests carry titles or the full shape becomes safe to request."
   },
   {
    "id": "G02",
@@ -152,7 +152,7 @@
    "expect_all": [
     "32.1.3-jre"
    ],
-   "why": "Value-level gate: the version string lives ONLY in the ConfigDepVersion property (labels are group:name without version; instance IDs are content hashes), so this can only pass if matches render property values. '32.1.3-jre' is unique across all parser-ingestable deps at the pin — no substring collisions."
+   "why": "Value-level gate: the version string lives ONLY in the ConfigDepVersion property (labels are group:name without version; instance IDs are content hashes), so this passes only when matches render property values — gateway rendering is shipped; the default compact shape carries no properties until semstreams#958. '32.1.3-jre' is unique across all parser-ingestable deps at the pin — no substring collisions."
   },
   {
    "id": "G03",
@@ -165,8 +165,8 @@
     "org.apache.felix.framework",
     "7.0.3"
    ],
-   "why": "Second value anchor on a different build.gradle (sensorhub-core-osgi): felix is the corpus's only `implementation`-configuration dep, version 7.0.3 unique at the pin. expect_all pairs name+version so a stray '7.0.3' elsewhere cannot pass it alone. The configuration VALUE is deliberately not asserted: 'implementation' is a substring of 'testImplementation' (authoring rule: no substring-colliding literals)."
+   "why": "Second value anchor on a different build.gradle (sensorhub-core-osgi): felix is the corpus's only `implementation`-configuration dep, version 7.0.3 unique at the pin. expect_all pairs name+version so a stray '7.0.3' elsewhere cannot pass it alone. The configuration VALUE is deliberately not asserted: 'implementation' is a substring of 'testImplementation' (authoring rule: no substring-colliding literals). Same #958 blocking as G02."
   }
  ],
- "config_band": "added in v2 (new comparability domain — v2 scores NEVER compare with v1): #157 gave gradle/pom entities dc.terms.title (name-level facts reachable via graph_search labels), and graph-search-match-properties renders allowlisted VALUE properties on matches (version/kind/scope/configuration) when the substrate response carries entity triples. G01 isolates name-level (passes on #157 alone); G02/G03 are the value gate — they FAIL before the properties change and PASS after. Only configurations the regex parser ingests (implementation|testImplementation|api|compileOnly|runtimeOnly) exist in the graph."
+ "config_band": "added in v2 (new comparability domain — v2 scores NEVER compare with v1). The band measures a surface that is BLOCKED ON UPSTREAM at the default response path: graph_search requests the substrate's ranked compact shape (the full-entity alternative was falsified — no size guard, cache-order truncation, no scores), and compact digests label dependency entities with hash instances and carry no property values (semstreams#958). Gateway-side rendering of labels + bounded value properties from entity triples is SHIPPED and unit/live-verified (see results/166-pass-after-osh-B.json, threshold-0 experiment: 13/13); the band goes green when #958 lands. Keeping a red band that names a real gap is the instrument working — the P01/#141 precedent. Only configurations the regex parser ingests (implementation|testImplementation|api|compileOnly|runtimeOnly) exist in the graph."
 }
