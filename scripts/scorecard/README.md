@@ -418,12 +418,17 @@ the pin means re-verifying the set with both checkers and bumping its version.
 OSH scores are their own comparability domain and never merge with dogfood
 scores — see Comparability.
 
-The set has **no config band, deliberately**: osh-core is Gradle-only (zero
-`pom.xml`), `gradleDependencyEntity` emits no `dc.terms.title` triple so
-`graph_search` shows gradle dependencies as bare content-hashed IDs, and no
-other MCP tool reads config-entity properties. Dependency facts are therefore
-unreachable through the entire scorecard tool surface — a product finding the
-instrument surfaced, not a question-authoring gap.
+The set has **no config band** (version 1). When it was authored, osh-core's
+gradle dependencies were unlabeled — `gradleDependencyEntity` emitted no
+`dc.terms.title`, so `graph_search` showed bare content-hashed IDs — a product
+finding the instrument surfaced (#142), fixed in #157: gradle dependency and
+pom module entities now emit titles, so dependency *names* are reachable via
+`graph_search`. Dependency property *values* (versions, configurations) remain
+unreachable in one call — `graph_search` matches render only id/type/label, and
+no other MCP tool reads config-entity properties (#142's open half). A config
+band is therefore now authorable for name-level facts, but adding one bumps
+`questions-osh.json` to version 2 and opens a new comparability domain — do it
+deliberately, and re-verify with both checkers.
 
 ## Arm-D readiness — dormant LLM-cost fields
 
