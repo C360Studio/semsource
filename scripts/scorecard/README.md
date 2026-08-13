@@ -429,11 +429,17 @@ colloquial-where (L03), behavior-described symbol hunt (L04 — the twin uses
 `code_context` with the symbol; a human without the symbol necessarily lands on
 the NL tool, so the tool differs by scenario, not by slip), maximally colloquial
 (L05), single-transposition typo (L06), and one twin-less verified single-hop
-fact phrased by effect (L07, `handler/excludes.go`). Arm A is expected to
-collapse on this band — its terms come from the query, and the queries are
-built to share no tokens with the evidence; that collapse is a measurement of
-the grep floor under human phrasing, not a rigged loss (the twins keep A's
-performance on precise phrasings in view).
+fact phrased by effect (L07, `handler/excludes.go`). Arm A's collapse on this
+band was expected at authoring time to be a verdict collapse; the v5 baseline
+(`results/SUMMARY-v5-loose.md`) measured a **cost** collapse instead: 7/7 on
+verdicts but 652 KB for the band — 5.4× arm B's bytes, 93 KB mean per question,
+five-file reads on 4 of 7 — because whole-file fact-presence lets twin-identical
+expect terms ride along, the same weakness that grades A IMPRECISE on
+discrimination. The twins keep the precise-phrasing costs in view: C04 answers
+in 13.7 KB where its loose twin L01 costs grep 153.8 KB. The baseline's gate
+outcome: arm B saturated the band (7/7, 63 ms median), the only
+twin-pass/loose-fail pair landed at the raw-cosine floor (L05 vs D01, arm C),
+and #170 closed measured-no-gap — the T1 classifier stays unfed.
 
 ## Latency — the dimension the harness never measured
 
