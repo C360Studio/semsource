@@ -8,6 +8,7 @@ import (
 
 	gtypes "github.com/c360studio/semstreams/graph"
 
+	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
@@ -52,9 +53,7 @@ var valuePredicates = []string{
 	source.ConfigProjectBuild,
 	source.ConfigImageName,
 	source.ConfigFilePath,
-	// semsourceast.CodeVersion — literal to keep the tree-sitter-heavy AST
-	// package out of the gateway; the constant is pinned by a test.
-	"code.artifact.version",
+	semsourceast.CodeVersion,
 }
 
 // graphMatch is one ranked hit: enough to judge relevance and to follow up with
@@ -138,13 +137,7 @@ func deriveMatches(body *graphSearchBody) (matches []graphMatch, total int, trun
 			})
 		}
 	case len(body.Entities) > 0:
-		// The substrate's own count is the true hit total: entity hydration can
-		// drop not-found IDs (graph-ingest reports them in a `missing` array the
-		// query layer discards), so len(entities) under-reports the hit set.
 		total = len(body.Entities)
-		if body.Count > total {
-			total = body.Count
-		}
 		for _, e := range body.Entities {
 			matches = append(matches, graphMatch{
 				ID: e.ID, Type: entityTypeSegment(e.ID), Label: entityTitle(e),
@@ -159,10 +152,18 @@ func deriveMatches(body *graphSearchBody) (matches []graphMatch, total int, trun
 		}
 	}
 
+	// The substrate's own count is the true hit total when it exceeds what the
+	// shape carried (a summarized response can report more hits than digests,
+	// and a hydrating response can drop not-found IDs). Honesty invariant:
+	// whenever fewer matches render than exist, truncated says so — an agent
+	// must never read a partial list as the complete hit set.
+	if body.Count > total {
+		total = body.Count
+	}
 	if len(matches) > maxGraphMatches {
 		matches = matches[:maxGraphMatches]
-		truncated = true
 	}
+	truncated = len(matches) < total
 	return matches, total, truncated
 }
 
@@ -177,10 +178,15 @@ func entityTypeSegment(id string) string {
 }
 
 // entityTitle reads the entity's human-readable name from its own triples.
+// First RENDERABLE wins, same as entityProperties: a null residue triple must
+// not mask a later real title.
 func entityTitle(e substrateEntity) string {
 	for _, t := range e.Triples {
-		if t.Predicate == titlePredicate {
-			return objectScalar(t.Object)
+		if t.Predicate != titlePredicate {
+			continue
+		}
+		if v := objectScalar(t.Object); v != "" {
+			return v
 		}
 	}
 	return ""
@@ -221,17 +227,19 @@ func entityProperties(e substrateEntity) map[string]string {
 }
 
 // truncateValue enforces the per-value byte cap without ever splitting a
-// UTF-8 rune: a mid-rune cut would marshal as U+FFFD — a value that is
-// neither the substrate's triple object nor visibly truncated.
+// UTF-8 rune, and marks the cut visibly: a truncated value must never be
+// mistakable for the substrate's real triple object — an agent quoting a
+// clean-looking prefix as the actual value is the silent-wrong-value class.
 func truncateValue(v string) string {
 	if len(v) <= maxPropertyValueSize {
 		return v
 	}
-	cut := maxPropertyValueSize
+	const marker = "…" // 3 bytes
+	cut := maxPropertyValueSize - len(marker)
 	for cut > 0 && !utf8.RuneStart(v[cut]) {
 		cut--
 	}
-	return v[:cut]
+	return v[:cut] + marker
 }
 
 // graphSearchResult is what graph_search returns: the substrate's own values —

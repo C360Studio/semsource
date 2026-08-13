@@ -11,10 +11,12 @@
 - [x] 1.3 Unit tests: properties on entities path; absent on digest/ID paths; caps
       enforced (count + value length); non-allowlisted predicates never render;
       deterministic order across runs.
-- [x] 1.4 (amendment 1) `summarize_threshold: 0` — the graphrag rung returned digests
-      whose dependency labels are hash instances; full-entity shape is the surface
-      labels/properties render from. Upstream digest-label gap filed (semstreams#958 +
-      asks-file entry).
+- [x] 1.4 (amendment 1 — SUPERSEDED BY AMENDMENT 3) `summarize_threshold: 0` was tried
+      because the graphrag rung returned digests whose dependency labels are hash
+      instances; the high review then falsified the full-entity default (no size guard,
+      cache-order truncation, no scores) and the SHIPPED value is `1` (ranked compact).
+      Upstream digest-label gap filed (semstreams#958 + asks-file entry) — the blocking
+      dependency for #166's enablement.
 - [x] 1.5 (amendment 2) `Object json.RawMessage` + scalar converter — numeric triple
       objects (code.metric.*, doc chunk-index) failed the whole unmarshal and collapsed
       matches into the disclosure fallback; regression test carries the substrate shape

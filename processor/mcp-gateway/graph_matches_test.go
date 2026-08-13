@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/c360studio/semstreams/message"
 
@@ -110,8 +111,12 @@ func TestMatchPropertiesCapsEnforced(t *testing.T) {
 				pred, i, ok, maxMatchProperties)
 		}
 	}
-	if got := props[source.ConfigDepVersion]; len(got) != maxPropertyValueSize {
-		t.Errorf("value length = %d, want truncated to %d", len(got), maxPropertyValueSize)
+	got := props[source.ConfigDepVersion]
+	if len(got) != maxPropertyValueSize {
+		t.Errorf("value length = %d, want exactly the cap %d", len(got), maxPropertyValueSize)
+	}
+	if want := strings.Repeat("v", maxPropertyValueSize-3) + "…"; got != want {
+		t.Errorf("truncated value = %q, want visible marker suffix", got)
 	}
 }
 
@@ -129,30 +134,21 @@ func TestNullResidueNeverMasksARealValue(t *testing.T) {
 	}
 }
 
-// TestTruncationNeverSplitsARune pins the byte cap against UTF-8 corruption:
-// a mid-rune cut would marshal as U+FFFD — neither the substrate's value nor
-// visibly truncated.
+// TestTruncationNeverSplitsARune pins the byte cap against UTF-8 corruption
+// (a mid-rune cut would marshal as U+FFFD) and requires the visible marker —
+// a truncated value must never look like the substrate's real object.
 func TestTruncationNeverSplitsARune(t *testing.T) {
-	v := strings.Repeat("a", maxPropertyValueSize-1) + "日本語"
+	v := strings.Repeat("a", maxPropertyValueSize-4) + "日本語"
 	got := truncateValue(v)
 	if len(got) > maxPropertyValueSize {
 		t.Errorf("len = %d, want <= %d", len(got), maxPropertyValueSize)
 	}
-	if !strings.HasSuffix(got, "a") && got != strings.Repeat("a", maxPropertyValueSize-1) {
-		t.Errorf("unexpected truncation result %q", got)
-	}
-	if !utf8ValidString(got) {
+	if !utf8.ValidString(got) {
 		t.Errorf("truncated value is not valid UTF-8: %q", got)
 	}
-}
-
-func utf8ValidString(s string) bool {
-	for _, r := range s {
-		if r == '�' {
-			return false
-		}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("truncated value %q lacks the visible truncation marker", got)
 	}
-	return true
 }
 
 // TestDeriveMatchesSurvivesNonStringObjects pins the decode-fragility
@@ -189,29 +185,20 @@ func TestDeriveMatchesSurvivesNonStringObjects(t *testing.T) {
 	}
 }
 
-// TestTotalMatchesReportsSubstrateCount pins the true-total rule on the
-// entities path: hydration can drop not-found IDs, so the substrate's own
-// count must win over len(entities) — an agent reasoning "only N things
-// match" must not draw that from an under-reported figure.
-func TestTotalMatchesReportsSubstrateCount(t *testing.T) {
+// TestTotalMatchesHonestyInvariant pins the pairing the shapes must keep: the
+// substrate's count wins when it exceeds what the shape carried, and whenever
+// fewer matches render than exist, truncated says so — a partial list must
+// never read as the complete hit set.
+func TestTotalMatchesHonestyInvariant(t *testing.T) {
 	body := &graphSearchBody{
 		Count:    100,
 		Entities: []substrateEntity{entityWithTriples("a.b.c.d.dependency.x", source.DcTitle, "x")},
 	}
-	_, total, _ := deriveMatches(body)
+	matches, total, truncated := deriveMatches(body)
 	if total != 100 {
 		t.Errorf("total = %d, want the substrate's count 100, not len(entities)", total)
 	}
-}
-
-// TestCodeVersionLiteralMatchesASTConstant pins the one allowlist entry kept
-// as a literal (to spare the gateway a tree-sitter dependency) to the real
-// constant it mirrors.
-func TestCodeVersionLiteralMatchesASTConstant(t *testing.T) {
-	for _, p := range valuePredicates {
-		if p == semsourceast.CodeVersion {
-			return
-		}
+	if len(matches) != 1 || !truncated {
+		t.Errorf("matches=%d truncated=%v — rendering fewer than total MUST set truncated", len(matches), truncated)
 	}
-	t.Fatalf("valuePredicates does not contain semsourceast.CodeVersion (%q)", semsourceast.CodeVersion)
 }
