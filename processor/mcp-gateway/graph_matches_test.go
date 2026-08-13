@@ -143,6 +143,7 @@ func TestDeriveMatchesSurvivesNonStringObjects(t *testing.T) {
 			{"predicate":"code.metric.start-line","object":16},
 			{"predicate":"source.doc.chunk-index","object":3},
 			{"predicate":"source.config.dependency-version","object":"33.0.0-jre"},
+			{"predicate":"source.config.dependency-scope","object":null},
 			{"predicate":"source.config.dependency-kind","object":{"nested":"composite"}}
 		]}],"count":1}`)
 	var body graphSearchBody
@@ -158,7 +159,7 @@ func TestDeriveMatchesSurvivesNonStringObjects(t *testing.T) {
 	}
 	want := map[string]string{source.ConfigDepVersion: "33.0.0-jre"}
 	if !reflect.DeepEqual(matches[0].Properties, want) {
-		t.Errorf("properties = %v, want %v (numeric non-allowlisted skipped, composite skipped)", matches[0].Properties, want)
+		t.Errorf("properties = %v, want %v (numeric non-allowlisted skipped, composite skipped, null never renders as the string \"null\")", matches[0].Properties, want)
 	}
 }
 

@@ -89,8 +89,9 @@ type substrateEntity struct {
 }
 
 // objectScalar renders a triple object for match rendering: strings unquote,
-// numbers and booleans render compactly, and composites (objects, arrays) are
-// not value-shaped so they render as absent.
+// numbers and booleans render compactly, and composites (objects, arrays) and
+// null are not value-shaped so they render as absent — a null must never
+// become the literal string "null" in an agent-facing property.
 func objectScalar(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -102,7 +103,7 @@ func objectScalar(raw json.RawMessage) string {
 			return s
 		}
 		return ""
-	case '{', '[':
+	case '{', '[', 'n':
 		return ""
 	default:
 		return string(raw)
