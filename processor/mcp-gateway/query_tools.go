@@ -84,9 +84,18 @@ func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in Q
 // an answer an agent cannot read. A search verb's job is to rank so the agent
 // can follow up on the IDs worth reading.
 //
-// summarize_threshold asks the substrate for the compact shape. It is honored on
-// the graphrag strategy and ignored on the semantic one, which is why
-// deriveMatches also reconstructs the list from whatever the response carried.
+// summarize_threshold: 1 keeps the substrate's ranked COMPACT shape as the
+// default, deliberately. Disabling it (0 → full EntityStates) was tried and
+// falsified by review against the pinned substrate: the full shape has no
+// reply-size guard (a monorepo-scale entity set can exceed NATS max_payload
+// and hard-fail the call), arrives in cache-warmth order that is
+// non-deterministic BY CONTRACT (so which matches survive truncation flaps
+// run-to-run), and carries no relevance scores (an unranked default violates
+// the ranked-list requirement). The compact shape's own defect — dependency
+// digests labeled with hash instances, no property values — is upstream's to
+// fix: semstreams#958. Until it lands, value facts render only when a
+// response happens to carry entity triples (the semantic strategy's shape),
+// which deriveMatches handles either way.
 func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in GraphSearchInput) (*mcp.CallToolResult, any, error) {
 	if in.Query == "" {
 		return nil, nil, fmt.Errorf("query is required")

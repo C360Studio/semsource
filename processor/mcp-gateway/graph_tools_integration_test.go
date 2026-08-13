@@ -53,10 +53,14 @@ func TestIntegration_GraphSearchRanksAndDiscloses(t *testing.T) {
 			if req["query"] != "how does readiness gating work" {
 				t.Errorf("query not forwarded verbatim: %v", req)
 			}
-			// The compact shape is requested, even though the semantic strategy
-			// ignores it — which is why the derivation below must not depend on it.
-			if _, ok := req["summarize_threshold"]; !ok {
-				t.Errorf("summarize_threshold not requested: %v", req)
+			// The ranked COMPACT shape is requested — the VALUE is pinned, not
+			// just the field's presence: this single number decides digest-vs-
+			// full-entity shape, and both alternatives were falsified live
+			// (0 → unranked cache-order full entities with no size guard;
+			// absent → upstream default 50 reapplies the digest shape only
+			// above 50 hits). See graphSearch's comment and semstreams#958.
+			if got, ok := req["summarize_threshold"].(float64); !ok || got != 1 {
+				t.Errorf("summarize_threshold = %v, want exactly 1", req["summarize_threshold"])
 			}
 			return []byte(substrateBody), nil
 		})

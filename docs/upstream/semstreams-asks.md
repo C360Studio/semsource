@@ -1025,3 +1025,26 @@ blocked on this ask; the next OSH-scale run names it for free once the handler l
 **Surfaced by:** semsource scorecard-v4 OSH run, 2026-08-12, against `v1.0.0-beta.160`
 (`scripts/scorecard/results/SUMMARY-osh-v1.md`, finding 3).
 **Filed:** [semstreams#950](https://github.com/C360Studio/semstreams/issues/950).
+
+## Digest labels fall back to hash instances
+
+### `EntityDigest.Label` ignores `dc.terms.title` — dependency digests render as bare hashes — framework-shaped — filed [semstreams#958](https://github.com/C360Studio/semstreams/issues/958)
+
+On the graphrag strategy's summarized shape, every `dependency`-type digest labeled itself
+with the entity ID's content-hash instance segment (`"label": "e7190c34"`) even though each
+entity carries `dc.terms.title` in ENTITY_STATES; method/var digests carried path-qualified
+NAME_INDEX keys rather than display names. A match list of bare hashes defeats the compact
+shape's purpose — the caller cannot recover names without N follow-ups.
+
+**No local stopgap ships.** The full-entity shape (`summarize_threshold: 0`) was tried and
+falsified by review against the pinned source: no reply-size guard (NATS max_payload
+hard-fail on monorepo-scale entities), cache-warmth arrival order non-deterministic BY
+CONTRACT (truncation survivors flap), and no relevance scores (unranked default). The
+gateway therefore stays on the ranked compact shape, whose digests carry hash labels and no
+properties — the consumer-side rendering of labels + bounded value properties from entity
+triples is merged and waiting (`graph-search-match-properties`, semsource#166, blocked on
+this ask). Adoption is a pin bump; the expected-red OSH v2 config band flips green with it.
+
+**Surfaced by:** semsource `graph-search-match-properties` FAIL-before run, 2026-08-13,
+against `v1.0.0-beta.160` on the 32k-entity OSH corpus.
+**Filed:** [semstreams#958](https://github.com/C360Studio/semstreams/issues/958).
