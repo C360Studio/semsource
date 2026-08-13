@@ -44,6 +44,13 @@ exposed in the semsource config surface.
 
 ### Enrichment Architecture Clarification
 
+> **Correction (2026-08-12):** `EMBEDDINGS_CACHE` never stored vectors (created by
+> validation, written by nothing). Real vectors live in `EMBEDDING_INDEX` and
+> `EMBEDDING_DEDUP`. SemSource's port declaration was removed in the beta.160 cutover;
+> upstream bucket deletion is tracked in
+> [semstreams#620](https://github.com/C360Studio/semstreams/issues/620). The table row
+> below is historical.
+
 Enrichment components write to **separate KV buckets**, not to ENTITY_STATES:
 
 | Component | Output KV |

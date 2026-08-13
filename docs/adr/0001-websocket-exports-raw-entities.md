@@ -48,6 +48,14 @@ SemSource is a source component. Sources emit facts, not interpretations. Downst
 
 ### Enrichment Architecture (Updated 2026-03-12)
 
+> **Correction (2026-08-12):** `EMBEDDINGS_CACHE` never stored vectors — it was created
+> and required by upstream config validation but written by nothing, a permanently empty
+> diagnostic decoy. Real vectors live in `EMBEDDING_INDEX` (entity-keyed) and
+> `EMBEDDING_DEDUP` (content-hash keyed). SemSource's port declaration for it was removed
+> in the beta.160 cutover; upstream deletion of the bucket itself is tracked in
+> [semstreams#620](https://github.com/C360Studio/semstreams/issues/620). References to
+> `EMBEDDINGS_CACHE` below are historical.
+
 Enrichment components write to **separate KV buckets**, not to ENTITY_STATES:
 
 | Component | Output KV | What It Stores |
