@@ -1,17 +1,23 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.5`,
-running on SemStreams `v1.0.0-beta.153`, including the governed fusion
-graph-projection facet resolved by SemStreams #533.
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.6`,
+running on SemStreams `v1.0.0-beta.160` (the graph/foundation refactor
+checkpoint).
 
-`v1.0.0-beta.5` is the audit-hardening release (2026-07-19 top-to-bottom
-audit): no silent entity loss (sanitized IDs, publish-gate parity, loud
-publisher), honest readiness on every surface (`ready` means seeded;
-HTTP/MCP parity; classified errors as tool errors; distinct-entity counts),
-verifiable source removal (NOT_FOUND, no phantoms), a first-run wizard whose
-defaults actually ingest, and NL retrieval that ranks production code above
-tests and canonical docs above planning artifacts, with the config domain
-reachable through doc_context.
+`v1.0.0-beta.6` is the call-graph-completeness and measurement release. It is
+a **breaking upgrade**: SemStreams beta.160 mandates fresh NATS storage
+(`docker compose down -v` and reseed — the graph re-derives from source), and
+the raw WebSocket stream is now served at **`/ws`** (the former configurable
+`/graph` path is gone; any configured `websocket_path` fails validation;
+SemStreams #945 tracks the surface's return). What the release adds: call-graph
+edges for Java instance receivers, Go function-typed values, and export-aware
+TS/Svelte resolution, plus first C support — with the per-language coverage
+contract published in the README and "a wrong edge is worse than a missing one"
+now spec, not folklore; a CI determinism gate that ingests a fixed corpus twice
+and diffs the entity set; gradle/pom entities fully labeled in search; and a
+committed three-arm scorecard (grep floor / MCP / raw cosine, two corpora) whose
+honest bounds — including where the graph does *not* win — live in
+`scripts/scorecard/results/SUMMARY-rc-beta6.md`.
 
 The promise is simple: SemSource deliberately scrapes the pile of source files
 and turns it into a live, governed semantic knowledge graph (SKG). Humans,
@@ -70,6 +76,15 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Recently Shipped
 
+- `v1.0.0-beta.6`: SemStreams beta.160 cutover (breaking; fresh storage +
+  `/ws`), call-graph completeness across Go/TS/Svelte/Java/Python/C with the
+  README coverage matrix, CI determinism gate, red-main alerting + PR-side UI
+  smoke gate, MCP schema budget gate (7 KB measured, 8 KB cap), and the
+  committed two-corpus three-arm retrieval scorecard at the RC commit.
+- `v1.0.0-beta.5`: the audit-hardening release (2026-07-19 top-to-bottom
+  audit) — no silent entity loss, honest readiness on every surface,
+  verifiable source removal, a first-run wizard whose defaults actually
+  ingest, and role-aware NL retrieval ranking.
 - `v1.0.0-beta.4`: SemTeams UI profile, backend-owned health envelope, Playwright
   UI smoke, and SemStreams `v1.0.0-beta.144`.
 - SemStreams [#490](https://github.com/C360Studio/semstreams/issues/490) was
@@ -103,9 +118,13 @@ confidence and dependency shape. The "why" behind durable choices lives in
   cannot clear a stored body reference in place, so parents would keep their old
   whole-file bodies through an in-place reindex. See
   [`docs/migration/doc-passage-chunking.md`](docs/migration/doc-passage-chunking.md).
-- **Passage bounds are not yet tuned.** Document split sizes are set to sensible
-  defaults, not values chosen by measurement. The architecture is settled; the
-  numbers await an A/B against the graded retrieval set.
+- **The raw WebSocket path is fixed to `/ws`.** SemStreams beta.160 removed
+  path configurability; a configured `websocket_path` fails validation rather
+  than being silently ignored. SemStreams #945 tracks restoring the surface.
+- **C++ call edges are deliberately absent.** C is supported with a
+  corpus-unique binding rule; C++ resolution was deferred whole rather than
+  shipping guessed edges (see the README coverage matrix — a wrong edge is
+  worse than a missing one).
 - **Parent document entities are still embedded from their title.** The framework
   offers no way for a producer to opt an entity out of embedding (ADR-054 Phase 1
   is deliberately lenient), so a body-less navigational node still carries a
