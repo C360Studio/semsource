@@ -58,15 +58,22 @@ func (h *countingHandler) count(level slog.Level, substr string) int {
 	return n
 }
 
-func newTestPublisher(t *testing.T, client NATSPublisher) (*Publisher, *countingHandler) {
+func newTestPublisher(t *testing.T, client NATSPublisher, opts ...Option) (*Publisher, *countingHandler) {
 	t.Helper()
 	h := &countingHandler{}
-	p, err := New(client, slog.New(h))
+	p, err := New(client, slog.New(h), opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return p, h
 }
+
+// fastBackoff keeps retry sequences in the millisecond range so tests that
+// exercise recovery do not real-clock the production 500ms-exponential ladder.
+// Tests that must STAY in backpressure (never recover within the test window)
+// keep the default backoff instead: 20 attempts at fast backoff reach the
+// terminal maxAttempts failure in tens of milliseconds.
+func fastBackoff() Option { return WithRetryBackoff(time.Millisecond, 4*time.Millisecond) }
 
 func payload(id string) *graph.EntityPayload {
 	return &graph.EntityPayload{
@@ -82,7 +89,7 @@ func payload(id string) *graph.EntityPayload {
 // them — is what made a stalled publisher indistinguishable from a healthy one.
 func TestRetryPressureIsDistinctFromFailure(t *testing.T) {
 	client := &breakerPublisher{openCalls: 3}
-	p, _ := newTestPublisher(t, client)
+	p, _ := newTestPublisher(t, client, fastBackoff())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -109,7 +116,7 @@ func TestRetryPressureIsDistinctFromFailure(t *testing.T) {
 // reported. Logging per attempt is what forced this signal down to Debug.
 func TestBackpressureLogsOnceAndReportsRecovery(t *testing.T) {
 	client := &breakerPublisher{openCalls: 3}
-	p, h := newTestPublisher(t, client)
+	p, h := newTestPublisher(t, client, fastBackoff())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -118,7 +125,12 @@ func TestBackpressureLogsOnceAndReportsRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	waitFor(t, func() bool { return p.Published() == 1 }, "entity to publish after retries")
+	// Wait on the condition under test — the recovery LINE — not on the
+	// published counter: the counter becomes visible before the drain goroutine
+	// flips the backpressure state and logs, so waiting on it races every
+	// assertion below (#155's "flake" was exactly that window).
+	waitFor(t, func() bool { return h.count(slog.LevelInfo, "backpressure cleared") >= 1 },
+		"recovery line after retries")
 
 	if p.Retries() < 3 {
 		t.Fatalf("retries = %d, want >= 3; the test would not exercise repetition", p.Retries())
@@ -178,8 +190,8 @@ func TestMetricSubsystemSanitisesInstanceNames(t *testing.T) {
 
 func waitFor(t *testing.T, cond func() bool, what string) {
 	t.Helper()
-	// Backoff is exponential from 500ms (500ms, 1s, 2s, ...), so a handful of
-	// retries takes seconds by design; the deadline must clear that, not race it.
+	// Recovery tests use fastBackoff so conditions arrive in milliseconds; the
+	// deadline stays generous so a loaded CI runner cannot turn slow into failed.
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if cond() {
