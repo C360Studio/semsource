@@ -5,8 +5,9 @@
 > questions: the graph was the only one that could answer *"what breaks if I change this?"* — and
 > it did it at a ninth of the token cost and in a tenth of a second, with zero fabricated answers.
 
-**Last verified:** 2026-08-12 · questions v4 / questions-osh v1 · commit `1694edc` ·
-apples-to-apples method in `scripts/scorecard/` (see *Refreshing this page* below).
+**Last verified:** 2026-08-13 · questions v4 / questions-osh v1 · commit `92b0d9f`
+(v1.0.0-beta.6 RC) · apples-to-apples method in `scripts/scorecard/` (see *Refreshing this
+page* below).
 
 ## 1. There is a class of question the other approaches physically cannot answer
 
@@ -17,7 +18,7 @@ structural, not cherry-picked. On those questions:
 | approach | multi-file questions | context spent on them |
 | --- | --- | --- |
 | grep-and-read (agent floor) | 0/4 | 70.5 KB |
-| vector search, top-20 (RAG) | 0/4 | 72.2 KB |
+| vector search, top-20 (RAG) | 0/4 | 70.8 KB |
 | **SemSource graph** | **4/4** | **7.8 KB** |
 
 Vector search fails even when handed its twenty best results: relationships are stored by the
@@ -31,8 +32,8 @@ Answering the full 26-question set (identical questions, identical grading):
 
 | approach | recall | total context an agent must ingest |
 | --- | --- | --- |
-| grep-and-read | 18/26 | 919 KB (~230k tokens) |
-| vector search | 22/26 | 425 KB (~106k tokens) |
+| grep-and-read | 19/26 | 938 KB (~235k tokens) |
+| vector search | 22/26 | 426 KB (~106k tokens) |
 | **SemSource graph** | **26/26** | **347 KB (~87k tokens)** |
 
 Multiply by your agents' questions per day. On the hard multi-file questions specifically, the
@@ -40,11 +41,14 @@ graph is ~9× cheaper than either alternative — naming edges is smaller than s
 
 ## 3. It scales — proven on a codebase we do not control
 
-Pointed cold at Open Sensor Hub core (1,932 Java files — an early adopter's real workload, not a
-benchmark): **32,157 entities indexed to full readiness in 22 minutes**, 9/10 questions answered
-with **zero fabricated answers on first contact**, and first-call latency **flat at ~108 ms
-median at 5× the entity count** of our own repo. The naive vector-scan alternative degraded
-linearly to ~9 s per question on the same corpus.
+Pointed at Open Sensor Hub core (1,932 Java files — an early adopter's real workload, not a
+benchmark): **32,157 entities indexed to full readiness in 20 minutes**, **10/10 questions
+answered with zero fabricated answers** — its first cold run scored 9/10 and the miss was a
+real bug in our Java parser, fixed and publicly re-verified. First-call latency stayed **near
+flat at ~148 ms median at 5× the entity count** of our own repo (87 ms); the naive vector-scan
+alternative degraded linearly to ~9 s per question on the same corpus. One honest bound: on
+*total* context across this small set, vector search and the graph tie (162 vs 171 KB) — the
+graph's cost advantage is on the multi-file class and the grep comparison, not everywhere.
 
 ## Why the numbers can be believed
 
@@ -83,6 +87,7 @@ scripts/scorecard/arm-a-grep.sh <corpus> <label> # arm A (grep floor)
 scripts/scorecard/compare.sh results/<...>.json  # the per-band table
 ```
 
-Sources of record: `scripts/scorecard/results/SUMMARY-v4-baseline.md` (dogfood) and
-`SUMMARY-osh-v1.md` (OSH scale point). Rules that keep the page honest: never mix corpora, never
-mix question-set versions, latency compares only same-machine runs.
+Source of record: `scripts/scorecard/results/SUMMARY-rc-beta6.md` (both corpora, at the
+beta.6 RC; earlier baselines: `SUMMARY-v4-baseline.md`, `SUMMARY-osh-v1.md`). Rules that keep
+the page honest: never mix corpora, never mix question-set versions, latency compares only
+same-machine runs — and the summary's "do not claim" section binds this page too.
