@@ -1005,3 +1005,23 @@ it went unfiled for a week because the only detector, `ui-release-smoke`, runs o
 **Surfaced by:** semsource `semstreams-beta160-migration` smoke fallout, 2026-08-12, against
 `v1.0.0-beta.160`.
 **Filed:** [semstreams#945](https://github.com/C360Studio/semstreams/issues/945).
+
+## Slow-consumer drops are unattributable at the client
+
+### natsclient's async error handler discards `*nats.Subscription` — framework-shaped — filed [semstreams#950](https://github.com/C360Studio/semstreams/issues/950)
+
+`natsclient/client.go` registers `handleError` as the connection-wide `nats.ErrorHandler` and
+logs only the bare error, discarding the subscription argument — the sole carrier of what
+overflowed (`Subject`, `Queue`, `Dropped()`, `PendingLimits()`). Under seed load the log fills
+with `ERROR nats: slow consumer, messages dropped` lines that cannot be acted on; an ERROR
+nobody can act on trains operators to ignore ERRORs.
+
+**Numbers:** OSH scale run (32,157 entities, ~22 min seed, 2-CPU semembed): ~124 such lines.
+The JetStream data plane was provably unaffected (PubAck'd publishes, zero scored ingest loss),
+so a core-NATS subscription in the fan-out path — KV watcher inbox, req/reply subscriber, or
+status watch — dropped and cannot be named. Attributing *our* overflowing subscription is
+blocked on this ask; the next OSH-scale run names it for free once the handler logs the subject.
+
+**Surfaced by:** semsource scorecard-v4 OSH run, 2026-08-12, against `v1.0.0-beta.160`
+(`scripts/scorecard/results/SUMMARY-osh-v1.md`, finding 3).
+**Filed:** [semstreams#950](https://github.com/C360Studio/semstreams/issues/950).
