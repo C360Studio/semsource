@@ -397,7 +397,7 @@ ranking marker), so we do **not** delete by default. Deletion survives only as a
 graph-aware exception for **mistakes/churn** — and that exception needs *both* halves below
 before it is safe. Logged so they are ready if/when the mistake-cleanup path is built.
 
-**(a) Index cleanup on delete — filed [semstreams#433](https://github.com/C360Studio/semstreams/issues/433) (not by us, OPEN).**
+**(a) Index cleanup on delete — filed [semstreams#433](https://github.com/C360Studio/semstreams/issues/433) (not by us; CLOSED completed 2026-07-17).**
 `Component.DeleteEntity` removes the entity row but leaves `PREDICATE_INDEX` / `NAME_INDEX` /
 `ALIAS_INDEX` / `CONTEXT_INDEX` populated — a deleted entity still answers
 `byName`/predicate/prefix queries.
