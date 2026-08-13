@@ -434,6 +434,8 @@ func newPOMModuleEntity(org, name, filePath, system string, indexedAt time.Time)
 func (e *pomModuleEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
+		// Title makes the entity NAME_INDEX-visible and gives graph_search a label (#142).
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigModulePath, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
@@ -527,6 +529,8 @@ func newGradleDependencyEntity(org, group, name, version, configuration, system 
 func (e *gradleDependencyEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	triples := []message.Triple{
+		// Title makes the entity NAME_INDEX-visible and gives graph_search a label (#142).
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "gradle", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},

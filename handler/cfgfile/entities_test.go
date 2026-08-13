@@ -368,22 +368,102 @@ func TestIngestEntityStates_BuildGradle(t *testing.T) {
 		t.Errorf("project entity missing ConfigProjectBuild=gradle triple")
 	}
 
-	// Dependency entities must carry ConfigDepConfiguration.
+	// Dependency entities must carry ConfigDepConfiguration and a DcTitle label
+	// so graph_search surfaces them as more than a hashed ID (#142).
 	depStates := collectByType(states, "dependency")
 	var hasConfig bool
+	titles := make(map[string]bool, len(depStates))
 	for _, s := range depStates {
 		if tripleObject(s, source.ConfigDepConfiguration) != "" {
 			hasConfig = true
 		}
+		titles[tripleObject(s, source.DcTitle)] = true
 	}
 	if !hasConfig {
 		t.Error("expected at least one dependency entity with ConfigDepConfiguration triple")
+	}
+	if !titles["org.springframework:spring-core"] {
+		t.Errorf("expected a dependency entity titled %q, got titles %v", "org.springframework:spring-core", titles)
 	}
 
 	// Requires relationship triples from project to dependencies.
 	requiresTargets := collectTriplesByPred([]*handler.EntityState{projState}, source.ConfigRequires)
 	if len(requiresTargets) < 2 {
 		t.Errorf("expected at least 2 requires triples on project entity, got %d", len(requiresTargets))
+	}
+}
+
+// TestIngestEntityStates_TitleParity verifies that EVERY cfgfile entity state
+// carries a dc.terms.title triple. graph_search labels matches from that triple
+// alone, and dependency instance segments are content hashes — an untitled
+// entity surfaces as a bare hashed ID and its facts become unreachable over the
+// MCP tool surface (#142).
+func TestIngestEntityStates_TitleParity(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"go.mod": `module github.com/example/myapp
+
+go 1.21
+
+require github.com/some/dep v1.2.3
+`,
+		"package.json": `{
+  "name": "my-app",
+  "version": "2.0.0",
+  "dependencies": {
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  }
+}`,
+		"Dockerfile": `FROM golang:1.21-alpine AS builder
+FROM alpine:3.18
+EXPOSE 8080
+`,
+		"pom.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <modules>
+    <module>core</module>
+  </modules>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13</version>
+    </dependency>
+  </dependencies>
+</project>`,
+		"build.gradle": `dependencies {
+    implementation 'org.springframework:spring-core:5.3.21'
+    testImplementation 'junit:junit:4.13'
+}
+`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	h := cfgfile.New(nil)
+	cfg := &stubSourceConfig{sourceType: "config", path: dir}
+	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	if err != nil {
+		t.Fatalf("IngestEntityStates: %v", err)
+	}
+	if len(states) < 10 {
+		t.Fatalf("expected entity states from all five file types, got %d", len(states))
+	}
+
+	for _, s := range states {
+		if tripleObject(s, source.DcTitle) == "" {
+			t.Errorf("entity %q missing DcTitle triple", s.ID)
+		}
 	}
 }
 
