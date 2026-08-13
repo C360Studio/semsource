@@ -33,9 +33,13 @@
       current main) — value questions must miss. Recorded:
       results/166-fail-before-osh-B.json (G01/G02/G03 all miss — G01's miss exposed the
       digest-shape gap, see design amendment 1).
-- [ ] 2.3 Prove PASS-after: same stack recipe with the change — value questions correct;
-      full v2 set green; record arm B context-bytes delta on OSH and dogfood (v4 set,
-      unchanged) vs the rc-beta6 baselines.
+- [x] 2.3 (RESOLVED AS SUPERSEDED — amendment 3) PASS-after was proven under the
+      threshold-0 experiment: 13/13, G-band correct at byte parity, shared-10 delta
+      −0.3% (results/166-pass-after-osh-B.json, preserved). The review then falsified
+      that default; the SHIPPED default (ranked compact) keeps the G-band expected-red
+      until semstreams#958, which the FAIL-before run already evidences byte-identically
+      (results/166-fail-before-osh-B.json). Rendering correctness stands proven; the
+      shipped-state gate transfers to the #958 pin bump.
 
 ## 3. Docs + closure
 
@@ -44,6 +48,7 @@
       (the v2 config band grades graph_search's DETERMINISTIC match rendering; the
       escalating surfaces stay ungraded).
 - [x] 3.2 Update the `graph_search` tool description (done; budget 7,199/8,192 B).
-- [ ] 3.3 PR referencing #166 ("Closes #166"), with before/after context-bytes table and
-      the FAIL-before/PASS-after evidence; wave-gate review (high /code-review; probes
-      re-run by reviewer); merge on green checks JSON; `/opsx:archive` the change.
+- [x] 3.3 (amended: #166 stays OPEN, blocked on semstreams#958 — no "Closes") PR #167
+      merged at main c9b7819 with the full evidence trail; wave-gate review done twice
+      (high: 10 findings → all fixed; medium closure verification: confirmed F1-F10
+      closed, 8 consistency findings → all fixed); every merge gated on the checks JSON.
