@@ -84,14 +84,22 @@ func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in Q
 // an answer an agent cannot read. A search verb's job is to rank so the agent
 // can follow up on the IDs worth reading.
 //
-// summarize_threshold asks the substrate for the compact shape. It is honored on
-// the graphrag strategy and ignored on the semantic one, which is why
-// deriveMatches also reconstructs the list from whatever the response carried.
+// summarize_threshold is sent as 0 — EXPLICITLY disabled (omitting the field
+// means the upstream default of 50, not "off"). The compact digest shape it
+// would request is a worse agent surface than it looks: dependency digests
+// carry the ID's hash instance as their label (measured live on a 32k-entity
+// Gradle corpus — every dependency match rendered as a bare hash, and no
+// title or property was recoverable), while the full shape carries each
+// entity's own triples, from which deriveMatches renders labels and bounded
+// value properties. Agent-side output stays capped at maxGraphMatches either
+// way; the transfer cost of the full shape is gateway-internal. deriveMatches
+// still reads all three response shapes because the semantic fallback strategy
+// shapes its own response.
 func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in GraphSearchInput) (*mcp.CallToolResult, any, error) {
 	if in.Query == "" {
 		return nil, nil, fmt.Errorf("query is required")
 	}
-	data, err := json.Marshal(map[string]any{"query": in.Query, "summarize_threshold": 1})
+	data, err := json.Marshal(map[string]any{"query": in.Query, "summarize_threshold": 0})
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal query: %w", err)
 	}

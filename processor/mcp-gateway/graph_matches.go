@@ -3,6 +3,8 @@ package mcpgateway
 import (
 	"encoding/json"
 	"strings"
+
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // maxGraphMatches bounds the match list an agent receives. A search verb's job
@@ -13,14 +15,54 @@ const maxGraphMatches = 25
 // titlePredicate carries an entity's human-readable name.
 const titlePredicate = "dc.terms.title"
 
+// Property rendering caps. A match may carry the entity's own VALUE facts
+// (versions, kinds, scopes) so a value question is answerable in one call —
+// but bounded hard, because rendering triples wholesale was measured at 197 KB
+// for a 38-hit query (11x code_search). Ranking, not corpus transfer.
+const (
+	maxMatchProperties   = 8
+	maxPropertyValueSize = 160
+)
+
+// valuePredicates is the explicit allowlist of value-bearing predicates a
+// match may render, in declaration order (rendering follows THIS order, never
+// map iteration — a wrong-ordered output is the determinism-gate class).
+// Relationship edges, bodies, signatures, and wall-clock stamps are excluded
+// by not being listed: the failure mode of omission is the status quo
+// (absence), never bloat.
+var valuePredicates = []string{
+	source.ConfigDepName,
+	source.ConfigDepVersion,
+	source.ConfigDepKind,
+	source.ConfigDepScope,
+	source.ConfigDepConfiguration,
+	source.ConfigDepIndirect,
+	source.ConfigModulePath,
+	source.ConfigModuleGoVer,
+	source.ConfigPkgName,
+	source.ConfigPkgVersion,
+	source.ConfigProjectGroup,
+	source.ConfigProjectArtifact,
+	source.ConfigProjectVersion,
+	source.ConfigProjectPackaging,
+	source.ConfigProjectBuild,
+	source.ConfigImageName,
+	source.ConfigFilePath,
+	// semsourceast.CodeVersion — literal to keep the tree-sitter-heavy AST
+	// package out of the gateway; the constant is pinned by a test.
+	"code.artifact.version",
+}
+
 // graphMatch is one ranked hit: enough to judge relevance and to follow up with
-// a deterministic tool, and nothing else.
+// a deterministic tool, and nothing else — plus the entity's own allowlisted
+// value facts when the substrate response already carried its triples.
 type graphMatch struct {
-	ID        string   `json:"id"`
-	Type      string   `json:"type,omitempty"`
-	Label     string   `json:"label,omitempty"`
-	Relevance float64  `json:"relevance,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type,omitempty"`
+	Label      string            `json:"label,omitempty"`
+	Relevance  float64           `json:"relevance,omitempty"`
+	Tags       []string          `json:"tags,omitempty"`
+	Properties map[string]string `json:"properties,omitempty"`
 }
 
 // substrateDigest mirrors the substrate's EntityDigest.
@@ -33,13 +75,38 @@ type substrateDigest struct {
 }
 
 // substrateEntity is the part of an EntityState needed to derive a match when
-// the substrate returned entities but no digests.
+// the substrate returned entities but no digests. Object is RawMessage, not
+// string: real entities carry numeric objects (code.metric.start-line,
+// source.doc.chunk-index — measured live), and a string-typed field made the
+// WHOLE response unmarshal fail, silently collapsing every match into the
+// disclosure-only fallback.
 type substrateEntity struct {
 	ID      string `json:"id"`
 	Triples []struct {
-		Predicate string `json:"predicate"`
-		Object    string `json:"object"`
+		Predicate string          `json:"predicate"`
+		Object    json.RawMessage `json:"object"`
 	} `json:"triples"`
+}
+
+// objectScalar renders a triple object for match rendering: strings unquote,
+// numbers and booleans render compactly, and composites (objects, arrays) are
+// not value-shaped so they render as absent.
+func objectScalar(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	switch raw[0] {
+	case '"':
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			return s
+		}
+		return ""
+	case '{', '[':
+		return ""
+	default:
+		return string(raw)
+	}
 }
 
 // graphSearchBody is the substrate payload, read for the fields a ranked match
@@ -81,6 +148,7 @@ func deriveMatches(body *graphSearchBody) (matches []graphMatch, total int, trun
 		for _, e := range body.Entities {
 			matches = append(matches, graphMatch{
 				ID: e.ID, Type: entityTypeSegment(e.ID), Label: entityTitle(e),
+				Properties: entityProperties(e),
 			})
 		}
 	case len(body.EntityIDs) > 0:
@@ -112,10 +180,44 @@ func entityTypeSegment(id string) string {
 func entityTitle(e substrateEntity) string {
 	for _, t := range e.Triples {
 		if t.Predicate == titlePredicate {
-			return t.Object
+			return objectScalar(t.Object)
 		}
 	}
 	return ""
+}
+
+// entityProperties renders the entity's allowlisted value facts, bounded by
+// maxMatchProperties and maxPropertyValueSize. Values are the substrate's own
+// triple objects — nothing derived, nothing invented. Iteration follows the
+// allowlist's declaration order so output is deterministic; per predicate the
+// first triple wins, matching entityTitle's semantics. Returns nil (omitted
+// from JSON) when the entity carries no allowlisted facts, so code and doc
+// matches keep today's exact shape.
+func entityProperties(e substrateEntity) map[string]string {
+	var props map[string]string
+	for _, pred := range valuePredicates {
+		if len(props) >= maxMatchProperties {
+			break
+		}
+		for _, t := range e.Triples {
+			if t.Predicate != pred {
+				continue
+			}
+			v := objectScalar(t.Object)
+			if v == "" {
+				break // composite or empty value: not renderable, first-wins still holds
+			}
+			if len(v) > maxPropertyValueSize {
+				v = v[:maxPropertyValueSize]
+			}
+			if props == nil {
+				props = make(map[string]string, maxMatchProperties)
+			}
+			props[pred] = v
+			break
+		}
+	}
+	return props
 }
 
 // graphSearchResult is what graph_search returns: the substrate's own values —

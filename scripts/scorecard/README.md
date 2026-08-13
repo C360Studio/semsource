@@ -55,12 +55,17 @@ The scorecard grades the **fusion** MCP tools (`code_context`, `code_impact`, `c
 `doc_context`, `code_changes`) — deterministic, citable retrieval whose answers a string matcher can
 grade the same way twice.
 
-It does **not** grade the **graph-query** tools (`graph_summary`, `graph_search`), even though they
-are now on the MCP surface. Those answers escalate with the stack: on a clustered deployment they
-carry community summaries, and with an LLM they carry synthesized prose. Grading synthesized prose
-needs a judge, and the reason this harness has no judge is stated in `run.sh` — an LLM judge drifts
-between runs, and a drifting judge cannot support an A/B. Adding one here would silently convert
-this from a comparable instrument into an incomparable one.
+It does **not** grade the graph-query tools' *escalating* surfaces (community summaries,
+LLM-synthesized answers), even though `graph_search` is on the MCP surface. Those answers change
+with the stack tier, grading synthesized prose needs a judge, and the reason this harness has no
+judge is stated in `run.sh` — an LLM judge drifts between runs, and a drifting judge cannot
+support an A/B. Adding one here would silently convert this from a comparable instrument into an
+incomparable one.
+
+One deliberately narrow exception: the OSH v2 config band (G01–G03) grades `graph_search`'s
+**deterministic match-list rendering** — labels and bounded value properties, exact substrings
+over a non-synthesized surface — which is the same grading contract as every other band. The
+escalating surfaces above it remain ungraded.
 
 A GraphRAG answer-quality instrument is therefore a **separate** instrument with its own pass/fail
 reporting, not a section of this file. What *is* pinned deterministically about the graph-query tools
@@ -367,10 +372,13 @@ reason worth knowing:
 
 - **Version composition** (`code_changes`) needs two ingested versions, and the
   corpus recipe is `git archive` — no `.git`, no commits, no version entities.
-- **Cross-source joins** are unreachable in one call: `graph_search` matches
-  render only id/type/label, so property values (a dependency's
-  `ConfigDepVersion`, say) never appear in any answer — and Go import syntax
-  puts dependency paths into every consuming file anyway, co-locating the pair.
+- **Cross-source joins** were unreachable in one call when the band was
+  authored: `graph_search` matches rendered only id/type/label, so property
+  values (a dependency's `ConfigDepVersion`, say) never appeared in any answer.
+  `graph-search-match-properties` (#166) lifted that at name+value level — the
+  OSH v2 config band exercises it — but on THIS corpus the shape stays
+  inadmissible for composition questions regardless: Go import syntax puts
+  dependency paths into every consuming file, co-locating the pair.
 - **Caller+callee relation joins** need the caller, the symbol, and the callee in
   three different files; this codebase keeps helpers beside their callers, and
   callee-*pair* facts are inadmissible **by construction** — a function's own
@@ -418,17 +426,18 @@ the pin means re-verifying the set with both checkers and bumping its version.
 OSH scores are their own comparability domain and never merge with dogfood
 scores — see Comparability.
 
-The set has **no config band** (version 1). When it was authored, osh-core's
-gradle dependencies were unlabeled — `gradleDependencyEntity` emitted no
-`dc.terms.title`, so `graph_search` showed bare content-hashed IDs — a product
-finding the instrument surfaced (#142), fixed in #157: gradle dependency and
-pom module entities now emit titles, so dependency *names* are reachable via
-`graph_search`. Dependency property *values* (versions, configurations) remain
-unreachable in one call — `graph_search` matches render only id/type/label, and
-no other MCP tool reads config-entity properties (#142's open half). A config
-band is therefore now authorable for name-level facts, but adding one bumps
-`questions-osh.json` to version 2 and opens a new comparability domain — do it
-deliberately, and re-verify with both checkers.
+**Version 2 adds the config band** (G01–G03; a new comparability domain — v2
+scores never compare with v1). The band's history is two product findings the
+instrument surfaced: v1 shipped with no config band because gradle dependencies
+were unlabeled (#142; fixed by #157 — titles made *names* reachable), and
+because `graph_search` matches rendered only id/type/label, leaving property
+*values* (versions, configurations) unreachable in one call (#166; fixed by
+`graph-search-match-properties` — matches now carry a bounded allowlist of
+value properties when the substrate response includes entity triples). G01 is
+the name-level control (passes on #157 alone); G02/G03 are the value gate,
+verified failing before the rendering change and passing after. Only
+configurations the regex parser ingests exist in the graph — see
+`handler/cfgfile/parsers.go`.
 
 ## Arm-D readiness — dormant LLM-cost fields
 

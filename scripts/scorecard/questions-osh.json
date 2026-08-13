@@ -1,135 +1,172 @@
 {
-  "version": 1,
-  "corpus": "Open Sensor Hub core (github.com/opensensorhub/osh-core) at pin 235c0eabf24b6d6137b499b4402943d2794b70e6 — build with corpus-osh.sh",
-  "comparability": "own domain: OSH scores NEVER compare with dogfood (questions.json) scores; compare.sh's questions_version guard enforces this mechanically",
-  "grading": "deterministic substring matching, case-insensitive; see README.md",
-  "config_band_absent": "deliberate, and itself a finding: osh-core is Gradle-only (zero pom.xml), gradleDependencyEntity emits no dc.terms.title triple so graph_search shows gradle deps as bare content-hashed IDs, and no other MCP tool reads config-entity properties — dependency facts are unreachable through the whole scorecard tool surface",
-  "questions": [
-    {
-      "id": "D01",
-      "band": "doc",
-      "tool": "doc_context",
-      "args": {
-        "query": "what license is OpenSensorHub distributed under"
-      },
-      "expect_any": [
-        "mozilla public license",
-        "mpl-2.0"
-      ],
-      "why": "README License section, ~3.1KB into a 5.6KB file. The OSH doc corpus is two markdown files; this is the retrievability control for it."
-    },
-    {
-      "id": "D02",
-      "band": "doc",
-      "tool": "doc_context",
-      "args": {
-        "query": "where are osh-core binaries published for build systems to resolve"
-      },
-      "expect_any": [
-        "github packages",
-        "maven.pkg.github.com"
-      ],
-      "why": "README Using section, ~3.8KB in — the deepest fact in the largest OSH doc."
-    },
-    {
-      "id": "C01",
-      "band": "code",
-      "tool": "code_context",
-      "args": {
-        "query": "ModuleRegistry"
-      },
-      "expect_any": [
-        "ModuleRegistry"
-      ],
-      "why": "Java symbol retrieval of the central module loader (sensorhub-core impl/module). Regression detector for the Java AST path."
-    },
-    {
-      "id": "C02",
-      "band": "code",
-      "tool": "code_context",
-      "args": {
-        "query": "SWEVirtualSensor"
-      },
-      "expect_any": [
-        "SWEVirtualSensor"
-      ],
-      "why": "Java symbol retrieval from a non-core module (sensorhub-service-swe) — proves the multi-module Gradle tree ingests beyond the first project."
-    },
-    {
-      "id": "C03",
-      "band": "code",
-      "tool": "code_search",
-      "args": {
-        "query": "where are datastream keys validated before datastore reads"
-      },
-      "expect_any": [
-        "checkDataStreamKey",
-        "DataStoreUtils"
-      ],
-      "why": "Conceptual code search — paraphrase, not symbol name. checkDataStreamKey/DataStoreUtils are the real answer (sensorhub-core impl/datastore); tests semantic reach over Java bodies."
-    },
-    {
-      "id": "I01",
-      "band": "impact",
-      "tool": "code_impact",
-      "args": {
-        "query": "checkDataStreamKey"
-      },
-      "expect_any": [
-        "InMemoryDataStreamStore",
-        "MVDataStreamStoreImpl"
-      ],
-      "why": "Impact must NAME dependents. checkDataStreamKey (DataStoreUtils) is called from the in-memory store (sensorhub-core) and the H2 store (sensorhub-datastore-h2) — 7 call sites, inside the 12-per-role cap. expect_any: naming EITHER store proves the caller edge; the composition band is where naming BOTH is required."
-    },
-    {
-      "id": "N01",
-      "band": "negative",
-      "tool": "code_context",
-      "args": {
-        "query": "ZzQuuxTelemetryFrobnicatorThatDoesNotExist"
-      },
-      "expect_none": [
-        "ZzQuuxTelemetryFrobnicatorThatDoesNotExist ("
-      ],
-      "why": "MUST MISS. Zero fabrication on the Java corpus too."
-    },
-    {
-      "id": "N02",
-      "band": "negative",
-      "tool": "doc_context",
-      "args": {
-        "query": "what is the OpenSensorHub quantum entanglement bus"
-      },
-      "expect_none": [
-        "quantum entanglement bus is"
-      ],
-      "why": "MUST MISS. Fabrication check on the doc side."
-    },
-    {
-      "id": "P01",
-      "band": "composition",
-      "tool": "code_impact",
-      "args": {
-        "query": "cloneAsTemplatePermission"
-      },
-      "expect_all": [
-        "ConSysApiSecurity",
-        "SOSSecurity"
-      ],
-      "why": "Impact closure across service modules. cloneAsTemplatePermission (ModulePermissions, sensorhub-core security) is called from ConSysApiSecurity (sensorhub-service-consys) and SOSSecurity + SPSSecurity (sensorhub-service-swe); ConSysApiSecurity and SOSSecurity never share a file (check-composition.py-verified). 3 call sites — far inside the naming cap. The answer must name callers from BOTH service modules."
-    },
-    {
-      "id": "P02",
-      "band": "composition",
-      "tool": "code_impact",
-      "args": {
-        "query": "addIOsFromDataStore"
-      },
-      "expect_all": [
-        "SystemDataProvider",
-        "SystemTaskingConnector"
-      ],
-      "why": "Impact closure across the SOS and SPS service planes. addIOsFromDataStore (SystemUtils, sensorhub-core) is called from SystemDataProvider (impl/service/sos) and SystemTaskingConnector (impl/service/sps); the names never co-occur. 2 call sites. Like the dogfood band, OSH composition is impact-closure-only: the corpus is Gradle-only with unlabeled dependency entities (see config_band_absent), so cross-source joins are unreachable, and the archive corpus has no .git for version composition."
-    }
-  ]
+ "version": 2,
+ "corpus": "Open Sensor Hub core (github.com/opensensorhub/osh-core) at pin 235c0eabf24b6d6137b499b4402943d2794b70e6 — build with corpus-osh.sh",
+ "comparability": "own domain: OSH scores NEVER compare with dogfood (questions.json) scores; compare.sh's questions_version guard enforces this mechanically",
+ "grading": "deterministic substring matching, case-insensitive; see README.md",
+ "questions": [
+  {
+   "id": "D01",
+   "band": "doc",
+   "tool": "doc_context",
+   "args": {
+    "query": "what license is OpenSensorHub distributed under"
+   },
+   "expect_any": [
+    "mozilla public license",
+    "mpl-2.0"
+   ],
+   "why": "README License section, ~3.1KB into a 5.6KB file. The OSH doc corpus is two markdown files; this is the retrievability control for it."
+  },
+  {
+   "id": "D02",
+   "band": "doc",
+   "tool": "doc_context",
+   "args": {
+    "query": "where are osh-core binaries published for build systems to resolve"
+   },
+   "expect_any": [
+    "github packages",
+    "maven.pkg.github.com"
+   ],
+   "why": "README Using section, ~3.8KB in — the deepest fact in the largest OSH doc."
+  },
+  {
+   "id": "C01",
+   "band": "code",
+   "tool": "code_context",
+   "args": {
+    "query": "ModuleRegistry"
+   },
+   "expect_any": [
+    "ModuleRegistry"
+   ],
+   "why": "Java symbol retrieval of the central module loader (sensorhub-core impl/module). Regression detector for the Java AST path."
+  },
+  {
+   "id": "C02",
+   "band": "code",
+   "tool": "code_context",
+   "args": {
+    "query": "SWEVirtualSensor"
+   },
+   "expect_any": [
+    "SWEVirtualSensor"
+   ],
+   "why": "Java symbol retrieval from a non-core module (sensorhub-service-swe) — proves the multi-module Gradle tree ingests beyond the first project."
+  },
+  {
+   "id": "C03",
+   "band": "code",
+   "tool": "code_search",
+   "args": {
+    "query": "where are datastream keys validated before datastore reads"
+   },
+   "expect_any": [
+    "checkDataStreamKey",
+    "DataStoreUtils"
+   ],
+   "why": "Conceptual code search — paraphrase, not symbol name. checkDataStreamKey/DataStoreUtils are the real answer (sensorhub-core impl/datastore); tests semantic reach over Java bodies."
+  },
+  {
+   "id": "I01",
+   "band": "impact",
+   "tool": "code_impact",
+   "args": {
+    "query": "checkDataStreamKey"
+   },
+   "expect_any": [
+    "InMemoryDataStreamStore",
+    "MVDataStreamStoreImpl"
+   ],
+   "why": "Impact must NAME dependents. checkDataStreamKey (DataStoreUtils) is called from the in-memory store (sensorhub-core) and the H2 store (sensorhub-datastore-h2) — 7 call sites, inside the 12-per-role cap. expect_any: naming EITHER store proves the caller edge; the composition band is where naming BOTH is required."
+  },
+  {
+   "id": "N01",
+   "band": "negative",
+   "tool": "code_context",
+   "args": {
+    "query": "ZzQuuxTelemetryFrobnicatorThatDoesNotExist"
+   },
+   "expect_none": [
+    "ZzQuuxTelemetryFrobnicatorThatDoesNotExist ("
+   ],
+   "why": "MUST MISS. Zero fabrication on the Java corpus too."
+  },
+  {
+   "id": "N02",
+   "band": "negative",
+   "tool": "doc_context",
+   "args": {
+    "query": "what is the OpenSensorHub quantum entanglement bus"
+   },
+   "expect_none": [
+    "quantum entanglement bus is"
+   ],
+   "why": "MUST MISS. Fabrication check on the doc side."
+  },
+  {
+   "id": "P01",
+   "band": "composition",
+   "tool": "code_impact",
+   "args": {
+    "query": "cloneAsTemplatePermission"
+   },
+   "expect_all": [
+    "ConSysApiSecurity",
+    "SOSSecurity"
+   ],
+   "why": "Impact closure across service modules. cloneAsTemplatePermission (ModulePermissions, sensorhub-core security) is called from ConSysApiSecurity (sensorhub-service-consys) and SOSSecurity + SPSSecurity (sensorhub-service-swe); ConSysApiSecurity and SOSSecurity never share a file (check-composition.py-verified). 3 call sites — far inside the naming cap. The answer must name callers from BOTH service modules."
+  },
+  {
+   "id": "P02",
+   "band": "composition",
+   "tool": "code_impact",
+   "args": {
+    "query": "addIOsFromDataStore"
+   },
+   "expect_all": [
+    "SystemDataProvider",
+    "SystemTaskingConnector"
+   ],
+   "why": "Impact closure across the SOS and SPS service planes. addIOsFromDataStore (SystemUtils, sensorhub-core) is called from SystemDataProvider (impl/service/sos) and SystemTaskingConnector (impl/service/sps); the names never co-occur. 2 call sites. Like the dogfood band, OSH composition is impact-closure-only: the corpus is Gradle-only with unlabeled dependency entities (see config_band_absent), so cross-source joins are unreachable, and the archive corpus has no .git for version composition."
+  },
+  {
+   "id": "G01",
+   "band": "config",
+   "tool": "graph_search",
+   "args": {
+    "query": "guava google core libraries gradle dependency"
+   },
+   "expect_any": [
+    "com.google.guava:guava"
+   ],
+   "why": "Name-level control: guava is declared `api 'com.google.guava:guava:32.1.3-jre'` in sensorhub-core/build.gradle. The label (dc.terms.title, added by #157) must surface it in graph_search matches. If G01 misses, ranking never found the entity and G02's failure would be a retrieval gap, not a rendering gap — G01 separates the two."
+  },
+  {
+   "id": "G02",
+   "band": "config",
+   "tool": "graph_search",
+   "args": {
+    "query": "guava dependency version used by osh-core"
+   },
+   "expect_all": [
+    "32.1.3-jre"
+   ],
+   "why": "Value-level gate: the version string lives ONLY in the ConfigDepVersion property (labels are group:name without version; instance IDs are content hashes), so this can only pass if matches render property values. '32.1.3-jre' is unique across all parser-ingestable deps at the pin — no substring collisions."
+  },
+  {
+   "id": "G03",
+   "band": "config",
+   "tool": "graph_search",
+   "args": {
+    "query": "apache felix osgi framework dependency version"
+   },
+   "expect_all": [
+    "org.apache.felix.framework",
+    "7.0.3"
+   ],
+   "why": "Second value anchor on a different build.gradle (sensorhub-core-osgi): felix is the corpus's only `implementation`-configuration dep, version 7.0.3 unique at the pin. expect_all pairs name+version so a stray '7.0.3' elsewhere cannot pass it alone. The configuration VALUE is deliberately not asserted: 'implementation' is a substring of 'testImplementation' (authoring rule: no substring-colliding literals)."
+  }
+ ],
+ "config_band": "added in v2 (new comparability domain — v2 scores NEVER compare with v1): #157 gave gradle/pom entities dc.terms.title (name-level facts reachable via graph_search labels), and graph-search-match-properties renders allowlisted VALUE properties on matches (version/kind/scope/configuration) when the substrate response carries entity triples. G01 isolates name-level (passes on #157 alone); G02/G03 are the value gate — they FAIL before the properties change and PASS after. Only configurations the regex parser ingests (implementation|testImplementation|api|compileOnly|runtimeOnly) exist in the graph."
 }
