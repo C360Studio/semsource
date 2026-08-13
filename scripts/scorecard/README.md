@@ -37,6 +37,11 @@ the totals include four new questions, and quoting a v4 total against a v3 total
 would move a number without retrieval moving. The v3 results remain in `results/`
 under their version.
 
+**Version 5 adds the loose band and does not compare to version 4.** Same rule,
+same reason: every v4 question is retained verbatim and the unchanged bands still
+grade identically, but the totals include seven new questions. Per-band
+comparisons across v4/v5 stay valid for the unchanged bands; totals do not.
+
 **Two more comparability rules ship with v4:**
 
 - **Corpora never compare.** The OSH question set (`questions-osh.json`) is its
@@ -253,6 +258,8 @@ Bands exist so a score can be read rather than just totalled.
 - **negative** — must miss.
 - **discrimination** — the top node must answer on its own.
 - **composition** — no single passage can answer; see below.
+- **loose** — UI-shaped phrasings of facts other bands already probe; twins
+  isolate phrasing from retrieval; see below.
 
 `doc-early` versus `doc-late` is the load-bearing split for passage chunking. The
 substrate truncates embedding text at 8000 characters, so before chunking a
@@ -391,6 +398,42 @@ distinct dependents will have one silently evicted, and a question expecting the
 evicted name fails on every system forever). P01's anchor sits at exactly 12;
 its `why` records the arithmetic. A candidate anchor with 13 was rejected for
 exactly this reason.
+
+## The loose band — phrasing, not retrieval
+
+A human typing into a UI field is the one caller with no agent in the loop to
+reformulate a weak query (#170). Every NL surface currently runs the semstreams
+classifier chain at its keyword tier only, and that tier's vocabulary is
+sensor-heritage — so the open question is whether the embedding stage absorbs
+loose human phrasing on its own, or whether the dormant T1 embedding-classifier
+tier (`domain_examples_path` on the GraphQL gateway) needs feeding. This band is
+the gate for that decision: it must be run and found wanting **before** any
+classifier work is justified — the same measure-first bar that demoted the #137
+reranker.
+
+Each question restates a fact an existing question already probes — its **twin**,
+named in the question's `twin` field — in words a person would actually type,
+never containing the identifiers the twin leans on. Expects are identical to the
+twin's, so the pair grades on the same terms. The pairing is the instrument:
+
+- twin passes + loose fails → a **phrasing gap**: the NL front-end requires the
+  caller to speak the schema's language. This is the outcome that justifies
+  feeding T1.
+- both pass → **saturation**: loose phrasing is absorbed and classifier work
+  stays unjustified (#170 closes as measured-no-gap).
+- both fail → a **retrieval gap** that was never about phrasing — file it
+  against retrieval, not the classifier.
+
+Looseness dimensions covered: vocabulary-free (L01), effect-described (L02),
+colloquial-where (L03), behavior-described symbol hunt (L04 — the twin uses
+`code_context` with the symbol; a human without the symbol necessarily lands on
+the NL tool, so the tool differs by scenario, not by slip), maximally colloquial
+(L05), single-transposition typo (L06), and one twin-less verified single-hop
+fact phrased by effect (L07, `handler/excludes.go`). Arm A is expected to
+collapse on this band — its terms come from the query, and the queries are
+built to share no tokens with the evidence; that collapse is a measurement of
+the grep floor under human phrasing, not a rigged loss (the twins keep A's
+performance on precise phrasings in view).
 
 ## Latency — the dimension the harness never measured
 

@@ -1,5 +1,5 @@
 {
- "version": 4,
+ "version": 5,
  "corpus": "the semsource repository itself",
  "grading": "deterministic substring matching, case-insensitive; see README.md",
  "composition": "composition-band questions are gated by check-composition.py: their expect_all facts must not co-occur in any single ingested passage or code file, so single-shot retrieval cannot answer them from one chunk; see README.md",
@@ -350,6 +350,112 @@
     "systemSlug"
    ],
    "why": "Impact closure across config expansion and the git handler. URLToSlug (workspace/workspace.go) is called by expandMultiBranch in config/expand.go and systemSlug in handler/git/handler.go; the names never co-occur (systemSlug also exists in handler/cfgfile, still never beside expandMultiBranch). 3 production + 2 test callers. NOTE the band is impact-closure-only, and that is the finding, not an oversight: version composition needs two ingested versions (the archive corpus has no .git, so no version entities), a cross-source join is unanswerable in one call because graph_search's default (ranked compact) response carries no property values like ConfigDepVersion — gateway rendering for the full-entity shape is shipped but its default-path enablement is blocked on semstreams#958, and a caller+callee relation join requires three-file separation this codebase's layout (helpers beside callers) does not produce — callee-pair facts are inadmissible BY CONSTRUCTION since a body co-locates every callee it names. See README."
+  },
+  {
+   "id": "L01",
+   "band": "loose",
+   "tool": "code_search",
+   "twin": "C04",
+   "args": {
+    "query": "how do things get their long dotted names in the graph"
+   },
+   "expect_any": [
+    "entityid",
+    "Build",
+    "6-part",
+    "six-part"
+   ],
+   "why": "Twin C04, vocabulary-free dimension: the same fact (entityid.Build's 6-part construction) with zero domain vocabulary — no 'entity', no 'ID', no 'construct'. Expects are identical to C04 so the pair grades on the same terms. Twin passes + this misses = the NL front-end requires the caller to speak the schema's language; both pass = loose phrasing absorbed. See README, loose band."
+  },
+  {
+   "id": "L02",
+   "band": "loose",
+   "tool": "code_search",
+   "twin": "C05",
+   "args": {
+    "query": "why does stuff show up as out of date after a new scan"
+   },
+   "expect_any": [
+    "stale",
+    "lifecycle"
+   ],
+   "why": "Twin C05, effect-described dimension: the staleness marker described only by its observable effect ('out of date after a new scan') — no 'stale', no 'lifecycle', no 'marker'. Fact lives where C05's does. Expects identical to C05."
+  },
+  {
+   "id": "L03",
+   "band": "loose",
+   "tool": "code_search",
+   "twin": "C06",
+   "args": {
+    "query": "where do we keep the actual text of the files we pulled in"
+   },
+   "expect_any": [
+    "body",
+    "store",
+    "sha256",
+    "objectstore"
+   ],
+   "why": "Twin C06, colloquial-where dimension: content-addressed body storage asked as a person would type it — no 'content addressed', no 'storage', no 'sha'. Expects identical to C06."
+  },
+  {
+   "id": "L04",
+   "band": "loose",
+   "tool": "code_search",
+   "twin": "C01",
+   "args": {
+    "query": "the function that strips weird characters so names stay valid"
+   },
+   "expect_any": [
+    "SanitizeInstance",
+    "sanitiz"
+   ],
+   "why": "Twin C01, behavior-described symbol hunt: C01 hands code_context the symbol SanitizeInstance; a human who does not know the symbol can only describe what it does, and necessarily lands on the NL tool instead — the tool difference IS the scenario, not a design slip. Fact: entityid.SanitizeInstance, the canonical sanitizer. 'sanitiz' catches sanitize/sanitizer/sanitized in evidence."
+  },
+  {
+   "id": "L05",
+   "band": "loose",
+   "tool": "doc_context",
+   "twin": "D01",
+   "args": {
+    "query": "what kinds of stuff can I point this thing at"
+   },
+   "expect_all": [
+    "ast"
+   ],
+   "expect_any": [
+    "docs",
+    "document"
+   ],
+   "why": "Twin D01, maximally colloquial dimension: the Source Types fact with every content word stripped ('stuff', 'this thing'). Expects identical to D01. D01 is a control-band question that must pass on both sides, so a miss here while D01 passes is attributable to phrasing alone."
+  },
+  {
+   "id": "L06",
+   "band": "loose",
+   "tool": "code_search",
+   "twin": "C04",
+   "args": {
+    "query": "how are entitiy ids constructed"
+   },
+   "expect_any": [
+    "entityid",
+    "Build",
+    "6-part",
+    "six-part"
+   ],
+   "why": "Twin C04, typo dimension: C04's query verbatim except 'entitiy' — a single transposition. Isolates subword/typo tolerance from every other looseness dimension (L01 covers vocabulary distance against the same twin). Expects identical to C04."
+  },
+  {
+   "id": "L07",
+   "band": "loose",
+   "tool": "code_search",
+   "args": {
+    "query": "what stops dependency folders from being swallowed during a scan"
+   },
+   "expect_any": [
+    "node_modules",
+    "exclude"
+   ],
+   "why": "The one twin-less member: a single-hop verified fact — handler/excludes.go's shared exclusion set (node_modules et al.; the file itself documents the 36-junk-entity-IDs incident that motivated it) — phrased by effect ('swallowed during a scan'), no 'exclude', no 'node_modules' in the query. No precise twin exists in v4; the fact is simple enough that a miss here is a phrasing miss, not a depth miss."
   }
  ]
 }
