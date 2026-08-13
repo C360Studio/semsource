@@ -43,6 +43,9 @@ const (
 	// circuitOpenBackoff is how long to wait when the circuit breaker is open.
 	circuitOpenBackoff = 500 * time.Millisecond
 
+	// maxCircuitOpenBackoff caps the exponential retry backoff.
+	maxCircuitOpenBackoff = 10 * time.Second
+
 	// defaultSendTimeout bounds how long Send applies backpressure when the
 	// buffer is full before dropping loudly. Bounded so a wedged NATS cannot
 	// silently freeze ingest loops forever; loud so a drop is never invisible.
@@ -57,10 +60,12 @@ type NATSPublisher interface {
 // Publisher buffers EntityPayload messages and drains them to NATS at a
 // controlled rate with circuit breaker backoff.
 type Publisher struct {
-	client      NATSPublisher
-	logger      *slog.Logger
-	buf         buffer.Buffer[*graph.EntityPayload]
-	sendTimeout time.Duration
+	client          NATSPublisher
+	logger          *slog.Logger
+	buf             buffer.Buffer[*graph.EntityPayload]
+	sendTimeout     time.Duration
+	retryBackoff    time.Duration
+	maxRetryBackoff time.Duration
 
 	// Metrics
 	published atomic.Int64
@@ -88,6 +93,8 @@ type publisherConfig struct {
 	batchSize       int
 	drainInterval   time.Duration
 	sendTimeout     time.Duration
+	retryBackoff    time.Duration
+	maxRetryBackoff time.Duration
 	metricsRegistry *metric.MetricsRegistry
 	metricsPrefix   string
 }
@@ -113,6 +120,21 @@ func WithSendTimeout(d time.Duration) Option {
 	return func(c *publisherConfig) { c.sendTimeout = d }
 }
 
+// WithRetryBackoff sets the initial and maximum circuit-breaker retry backoff
+// (defaults 500ms / 10s). Non-positive values keep the defaults. Tests use
+// short backoffs so retry sequences complete in milliseconds instead of
+// real-clock seconds.
+func WithRetryBackoff(initial, maximum time.Duration) Option {
+	return func(c *publisherConfig) {
+		if initial > 0 {
+			c.retryBackoff = initial
+		}
+		if maximum > 0 {
+			c.maxRetryBackoff = maximum
+		}
+	}
+}
+
 // WithMetrics enables metrics export for this publisher: the buffer's own
 // write/read/overflow series plus the publish-boundary counters in metrics.go.
 // prefix identifies the source instance and becomes the metric subsystem, so one
@@ -127,10 +149,12 @@ func WithMetrics(registry *metric.MetricsRegistry, prefix string) Option {
 // New creates a Publisher with the given NATS client and options.
 func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher, error) {
 	cfg := publisherConfig{
-		capacity:      defaultCapacity,
-		batchSize:     defaultBatchSize,
-		drainInterval: defaultDrainInterval,
-		sendTimeout:   defaultSendTimeout,
+		capacity:        defaultCapacity,
+		batchSize:       defaultBatchSize,
+		drainInterval:   defaultDrainInterval,
+		sendTimeout:     defaultSendTimeout,
+		retryBackoff:    circuitOpenBackoff,
+		maxRetryBackoff: maxCircuitOpenBackoff,
 	}
 	for _, o := range opts {
 		o(&cfg)
@@ -152,12 +176,14 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 	}
 
 	return &Publisher{
-		client:      client,
-		logger:      logger,
-		buf:         buf,
-		sendTimeout: cfg.sendTimeout,
-		metrics:     newPubMetrics(cfg.metricsRegistry, cfg.metricsPrefix),
-		done:        make(chan struct{}),
+		client:          client,
+		logger:          logger,
+		buf:             buf,
+		sendTimeout:     cfg.sendTimeout,
+		retryBackoff:    cfg.retryBackoff,
+		maxRetryBackoff: cfg.maxRetryBackoff,
+		metrics:         newPubMetrics(cfg.metricsRegistry, cfg.metricsPrefix),
+		done:            make(chan struct{}),
 	}, nil
 }
 
@@ -312,8 +338,8 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 		return fmt.Errorf("marshal entity message: %w", err)
 	}
 
-	backoff := circuitOpenBackoff
-	maxBackoff := 10 * time.Second
+	backoff := p.retryBackoff
+	maxBackoff := p.maxRetryBackoff
 	maxAttempts := 20
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
