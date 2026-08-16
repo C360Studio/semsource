@@ -189,13 +189,27 @@ func TestEnforceSymbolCap(t *testing.T) {
 	}
 
 	t.Run("over cap strips symbols, keeps containers", func(t *testing.T) {
-		c := &Component{logger: slog.Default(), config: Config{MaxSymbolsPerFile: 10}}
+		// Capture at Info: the breach line must arrive AT the default level
+		// (Warn), not slip below it — the spec's "loudly" is a level contract.
+		capture := newLogCapture(slog.LevelInfo)
+		c := &Component{logger: slog.New(capture), config: Config{MaxSymbolsPerFile: 10}}
 		res := c.enforceSymbolCap(mk(11))
 		if len(res.Entities) != 1 || res.Entities[0].Type != semsourceast.TypeFile {
 			t.Errorf("breaching file must keep only file-level entities, got %d", len(res.Entities))
 		}
 		if c.cappedFiles.Load() != 1 || c.cappedSymbols.Load() != 11 {
 			t.Errorf("cap counters = (%d files, %d symbols), want (1, 11)", c.cappedFiles.Load(), c.cappedSymbols.Load())
+		}
+		var warned bool
+		capture.mu.Lock()
+		for _, r := range capture.records {
+			if r.Level >= slog.LevelWarn && strings.Contains(r.Message, "symbol cap breached") {
+				warned = true
+			}
+		}
+		capture.mu.Unlock()
+		if !warned {
+			t.Error("cap breach must be reported at Warn or above")
 		}
 	})
 
