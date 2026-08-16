@@ -42,8 +42,12 @@
       40,853) Progress advances: seed a fixture corpus, sample status repeatedly,
       assert the count strictly increases — asserting the field merely *exists*
       does not distinguish slow from stalled
-- [ ] 4.2 Stalled seed: with delivery blocked, assert the count does NOT advance
-      while the phase stays seeding
+- [x] 4.2 OBSERVED LIVE (2026-08-16, OSH beta.161 boots A+B): delivery blocked
+      (boot A: GRAPH stream at its 256MiB ceiling; boot B: broker paused) ->
+      published count flat (40,853 for ~5min / 3,986 for the pause) while the
+      phase stayed seeding. Boot B read via /metrics because a paused broker
+      also freezes the NATS-carried status reports — recorded as part of why
+      the metrics surface exists
 - [x] 4.3 Retry pressure: with the transport applying backpressure, assert
       `retries` rises while `failed`/`dropped` stay flat (D3)
 - [x] 4.4 Transition logging: assert one entry line and one recovery line across
@@ -68,10 +72,25 @@
 - [x] 5.2 Scrape the metrics endpoint and record the publish counters — 15
       SemSource series served where there were previously zero, per source
       instance, matching the status payload exactly (lib-ogc, 14,388 entities)
-- [ ] 5.3 Induce backpressure and confirm the three-way distinction is readable
-      from outside the process: slow-healthy, stalled, losing data (D3)
-- [ ] 5.4 Confirm the default log level surfaces the degraded condition without
-      raising verbosity
+- [x] 5.3 DONE LIVE, two-part verdict (2026-08-16). READABLE: yes — during a
+      120s broker pause the series moved distinctly (published flat,
+      backpressure gauge 1, retries 2, failed climbing, dropped 2) and boot A's
+      stream-full event showed failed+err_count with everything else flat. BUT
+      the class ROUTING is wrong: only the literal "circuit breaker is open"
+      error retries; timeout-class errors during the pause went TERMINAL —
+      5,282 entities permanently failed during a transient outage the design
+      says should self-correct ("entities are not lost while retrying" held
+      only for 2 attempts). Filed as semsource#176; the instrument works,
+      the classifier feeding it does not. Status honesty under loss is
+      semsource#177; the beta.161 ceiling A/B is semsource#178
+- [x] 5.4 VERIFIED LIVE at default level (2026-08-16): seed-timeout degrade
+      ("seed timeout — marking status degraded (may recover)", one WARN);
+      backpressure entry ("publish backpressure — transport refusing writes,
+      retrying", one WARN with first_entity) and exit ("publish backpressure
+      cleared", one INFO with counters); "status reporting recovered" on
+      un-pause. All edge-triggered, no per-interval repetition. Caveat also
+      recorded: boot A's stream-full event produced 34,871 per-entity WARN
+      lines — the per-item noise class 6.3 defers is still real
 
 ## 7. Blocked on an unproven cause — the surfaces themselves
 
@@ -103,3 +122,31 @@
       the decision is anchored to evidence rather than taste
 - [x] 6.3 Note the deferred follow-up: re-levelling the 139 per-item `Warn` calls
       and introducing a genuine `Error` tier
+
+## 8. Pre-publish seed liveness (async-source-seed 5.7 residual)
+
+Folded in 2026-08-16: the delivery counters above prove a seed is not FAILING,
+but the OSH plateau (publish flat at 40,853 for ~283s in both pre- and
+post-#125 runs) showed they cannot separate "parsing, not yet publishing" from
+"hung". Counters that advance during pre-publish work close that.
+
+- [x] 8.1 `files_parsed` advances during the parse phase (per successfully
+      parsed file, unrouted files excluded) — unit-tested; also re-armed the two
+      parser-concurrency race guards that had gone vacuous when deterministic
+      routing (#121) added a route check they bypassed
+- [x] 8.2 `bodies_offloaded` advances during body offload, counting fresh puts
+      and dedupe hits alike (either way a body resolved to its blob) — unit-tested
+- [x] 8.3 Both counters flow producer → internal status report → manifest →
+      external status surface; wire names pinned by test (JSON coupling, not a
+      shared type)
+- [x] 8.4 Both counters exported per source instance on the metrics endpoint
+      (`files_parsed_total`, `bodies_offloaded_total`), nil-registry-safe like
+      the publish counters
+- [x] 8.5 DONE LIVE (2026-08-16, boot A): the parse window (~90s, publish=0)
+      showed files_parsed 841 -> 1,644 -> 1,951 across polls on the external
+      status surface — the window that historically read as dead. During the
+      PLATEAU both new counters were flat, which was the CORRECT reading: the
+      plateau turned out to be a delivery stall (bounded buffer against the
+      minified-JS flood / full stream, semsource#175), and fp/bo-flat plus
+      pt-flat plus err-climbing diagnosed it from outside the process in one
+      glance — three goroutine-dump sessions historically

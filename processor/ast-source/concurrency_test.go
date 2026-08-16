@@ -40,7 +40,13 @@ func TestParseFileWithWatcher_ConcurrentSafe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create parser: %v", err)
 	}
-	pw := &pathWatcher{parsers: map[string]semsourceast.FileParser{"python": parser}}
+	// routes must be populated: since deterministic routing (#121),
+	// parseFileWithWatcher returns before parsing when the extension has no
+	// route, which silently made this race guard vacuous.
+	pw := &pathWatcher{
+		parsers: map[string]semsourceast.FileParser{"python": parser},
+		routes:  map[string]string{".py": "python"},
+	}
 	c := &Component{}
 
 	var wg sync.WaitGroup
@@ -50,6 +56,12 @@ func TestParseFileWithWatcher_ConcurrentSafe(t *testing.T) {
 		go func() { defer wg.Done(); _, _ = c.parseFileWithWatcher(context.Background(), pw, fileB) }()
 	}
 	wg.Wait()
+
+	// Proves the parses actually ran — the guard against this test going
+	// vacuous again — and exercises the liveness counter concurrently.
+	if got := c.filesParsed.Load(); got != 100 {
+		t.Fatalf("filesParsed = %d, want 100 — the interleaved parses did not run", got)
+	}
 }
 
 // TestParseFileWithWatcher_ConcurrentSafe_MultiLang extends the guard above to the
@@ -113,7 +125,13 @@ func TestParseFileWithWatcher_ConcurrentSafe_MultiLang(t *testing.T) {
 			if err != nil {
 				t.Fatalf("create parser: %v", err)
 			}
-			pw := &pathWatcher{parsers: map[string]semsourceast.FileParser{tc.lang: parser}}
+			// routes must be populated: since deterministic routing (#121),
+			// parseFileWithWatcher returns before parsing on a missing route,
+			// which silently made this race guard vacuous.
+			pw := &pathWatcher{
+				parsers: map[string]semsourceast.FileParser{tc.lang: parser},
+				routes:  map[string]string{filepath.Ext(tc.fileA[0]): tc.lang},
+			}
 			c := &Component{}
 
 			var wg sync.WaitGroup
@@ -123,6 +141,10 @@ func TestParseFileWithWatcher_ConcurrentSafe_MultiLang(t *testing.T) {
 				go func() { defer wg.Done(); _, _ = c.parseFileWithWatcher(context.Background(), pw, fileB) }()
 			}
 			wg.Wait()
+
+			if got := c.filesParsed.Load(); got != 100 {
+				t.Fatalf("filesParsed = %d, want 100 — the interleaved parses did not run", got)
+			}
 		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/c360studio/semsource/graph"
@@ -12,17 +13,34 @@ import (
 )
 
 // fakeStore is a minimal in-memory storage.Store for the producer test.
-type fakeStore struct{ data map[string][]byte }
+// Mutexed because bodiesForResult issues concurrent Puts (bodyPutConcurrency);
+// any test offloading more than one body drives this from multiple goroutines.
+type fakeStore struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
 
 func newFakeStore() *fakeStore { return &fakeStore{data: map[string][]byte{}} }
 
 func (f *fakeStore) Put(_ context.Context, key string, data []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.data[key] = append([]byte(nil), data...)
 	return nil
 }
-func (f *fakeStore) Get(_ context.Context, key string) ([]byte, error)  { return f.data[key], nil }
+
+func (f *fakeStore) Get(_ context.Context, key string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.data[key], nil
+}
 func (f *fakeStore) List(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (f *fakeStore) Delete(_ context.Context, key string) error         { delete(f.data, key); return nil }
+func (f *fakeStore) Delete(_ context.Context, key string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.data, key)
+	return nil
+}
 
 func TestBodiesForResult(t *testing.T) {
 	root := t.TempDir()
@@ -117,5 +135,39 @@ func TestBodiesForResult_NoStore(t *testing.T) {
 	c := &Component{logger: slog.Default()}
 	if got := c.bodiesForResult(context.Background(), &semsourceast.ParseResult{Path: "x.go"}, "/tmp"); got != nil {
 		t.Fatalf("no store should yield nil, got %+v", got)
+	}
+}
+
+// TestBodiesForResult_AdvancesOffloadCounter — the pre-publish liveness
+// counter (5.7) must advance for fresh puts AND dedupe hits: either way one
+// more body is resolved to a blob, and the offload window is exactly where the
+// publish count plateaus on a large corpus.
+func TestBodiesForResult_AdvancesOffloadCounter(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "svc.go")
+	src := "package svc\n\nfunc Dispatch() {\n\tOnEvent()\n}\n\nfunc OnEvent() {}\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeStore()
+	c := &Component{logger: slog.Default(), bodyStore: store}
+	result := &semsourceast.ParseResult{
+		Path: "svc.go",
+		Entities: []*semsourceast.CodeEntity{
+			{ID: "o.p.golang.s.function.dispatch", Type: semsourceast.TypeFunction, StartLine: 3, EndLine: 5},
+			{ID: "o.p.golang.s.function.onevent", Type: semsourceast.TypeFunction, StartLine: 7, EndLine: 7},
+		},
+	}
+
+	c.bodiesForResult(context.Background(), result, root)
+	if got := c.bodiesOffloaded.Load(); got != 2 {
+		t.Fatalf("bodiesOffloaded after fresh offload = %d, want 2", got)
+	}
+
+	// A re-parse hits the dedupe path (no Put), but the body is still resolved
+	// to its blob — liveness must advance identically.
+	c.bodiesForResult(context.Background(), result, root)
+	if got := c.bodiesOffloaded.Load(); got != 4 {
+		t.Fatalf("bodiesOffloaded after dedupe re-offload = %d, want 4 (dedupe hits must count)", got)
 	}
 }

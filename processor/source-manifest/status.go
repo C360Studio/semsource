@@ -60,12 +60,17 @@ type SourceStatusReport struct {
 	// EntityCount is the DISTINCT entity count (invariant under periodic
 	// republication); PublishTotal is raw publish throughput (audit
 	// 2026-07-19: the old publish-counter-as-entity-count inflated forever).
-	EntityCount  int64            `json:"entity_count"`
-	PublishTotal int64            `json:"publish_total,omitempty"`
-	ErrorCount   int64            `json:"error_count"`
-	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
-	LastError    *SourceError     `json:"last_error,omitempty"`
-	Timestamp    time.Time        `json:"timestamp"`
+	EntityCount  int64 `json:"entity_count"`
+	PublishTotal int64 `json:"publish_total,omitempty"`
+	// FilesParsed and BodiesOffloaded are pre-publish seed liveness: they
+	// advance during parse and body-offload windows where PublishTotal is
+	// flat, distinguishing a working seed from a wedged one (5.7).
+	FilesParsed     int64            `json:"files_parsed,omitempty"`
+	BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
+	ErrorCount      int64            `json:"error_count"`
+	TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
+	LastError       *SourceError     `json:"last_error,omitempty"`
+	Timestamp       time.Time        `json:"timestamp"`
 }
 
 // statusAggregator tracks per-source status reports and determines the
@@ -95,14 +100,16 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 
 	for _, r := range a.reports {
 		sources = append(sources, SourceStatus{
-			InstanceName: r.InstanceName,
-			SourceType:   r.SourceType,
-			Phase:        r.Phase,
-			EntityCount:  r.EntityCount,
-			PublishTotal: r.PublishTotal,
-			ErrorCount:   r.ErrorCount,
-			TypeCounts:   r.TypeCounts,
-			LastError:    r.LastError,
+			InstanceName:    r.InstanceName,
+			SourceType:      r.SourceType,
+			Phase:           r.Phase,
+			EntityCount:     r.EntityCount,
+			PublishTotal:    r.PublishTotal,
+			FilesParsed:     r.FilesParsed,
+			BodiesOffloaded: r.BodiesOffloaded,
+			ErrorCount:      r.ErrorCount,
+			TypeCounts:      r.TypeCounts,
+			LastError:       r.LastError,
 		})
 		totalEntities += r.EntityCount
 	}

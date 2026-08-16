@@ -27,11 +27,15 @@ type SourceStatus struct {
 	Phase        string `json:"phase"` // "ingesting", "watching", "idle", "errored"
 	// EntityCount is the DISTINCT entity count; PublishTotal is raw publish
 	// throughput (separately named so counts are never a readiness proxy).
-	EntityCount  int64            `json:"entity_count"`
-	PublishTotal int64            `json:"publish_total,omitempty"`
-	ErrorCount   int64            `json:"error_count"`
-	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
-	LastError    *SourceError     `json:"last_error,omitempty"`
+	EntityCount  int64 `json:"entity_count"`
+	PublishTotal int64 `json:"publish_total,omitempty"`
+	// Pre-publish seed liveness: advancing while PublishTotal is flat means
+	// the seed is parsing or offloading bodies, not wedged (5.7).
+	FilesParsed     int64            `json:"files_parsed,omitempty"`
+	BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
+	ErrorCount      int64            `json:"error_count"`
+	TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
+	LastError       *SourceError     `json:"last_error,omitempty"`
 }
 
 // SourceErrorCode is a typed code for asynchronous source-runtime failures.
