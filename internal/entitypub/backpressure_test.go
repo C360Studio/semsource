@@ -2,13 +2,15 @@ package entitypub
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/c360studio/semstreams/natsclient"
 
 	"github.com/c360studio/semsource/graph"
 )
@@ -21,10 +23,14 @@ type breakerPublisher struct {
 	seen      atomic.Int64
 }
 
-func (b *breakerPublisher) PublishToStream(context.Context, string, []byte) error {
+func (b *breakerPublisher) PublishToStream(ctx context.Context, subject string, data []byte) error {
+	return b.PublishToStreamWithMsgID(ctx, subject, data, "")
+}
+
+func (b *breakerPublisher) PublishToStreamWithMsgID(context.Context, string, []byte, string) error {
 	if b.seen.Add(1) <= b.openCalls {
-		// Matched by string in publishOne — the only retryable error.
-		return errors.New("circuit breaker is open")
+		// The TYPED sentinel: classification is errors.Is, never a string.
+		return fmt.Errorf("publish: %w", natsclient.ErrCircuitOpen)
 	}
 	return nil
 }
