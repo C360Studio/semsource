@@ -1,26 +1,27 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.6`,
-running on SemStreams `v1.0.0-beta.160` (the graph/foundation refactor
-checkpoint). `main` has moved to SemStreams `v1.0.0-beta.161` (the
-post-beta.160 reliability and lifecycle-control slice — caller-owned shutdown
-contexts, restored WebSocket path configurability, attributable slow-consumer
-errors); like beta.160 it mandates fresh NATS storage on adoption.
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.7`,
+running on SemStreams `v1.0.0-beta.161` (the post-beta.160 reliability and
+lifecycle-control slice).
 
-`v1.0.0-beta.6` is the call-graph-completeness and measurement release. It is
-a **breaking upgrade**: SemStreams beta.160 mandates fresh NATS storage
-(`docker compose down -v` and reseed — the graph re-derives from source), and
-the raw WebSocket stream is now served at **`/ws`** (the former configurable
-`/graph` path is gone; any configured `websocket_path` fails validation;
-SemStreams #945 tracks the surface's return). What the release adds: call-graph
-edges for Java instance receivers, Go function-typed values, and export-aware
-TS/Svelte resolution, plus first C support — with the per-language coverage
-contract published in the README and "a wrong edge is worse than a missing one"
-now spec, not folklore; a CI determinism gate that ingests a fixed corpus twice
-and diffs the entity set; gradle/pom entities fully labeled in search; and a
-committed three-arm scorecard (grep floor / MCP / raw cosine, two corpora) whose
-honest bounds — including where the graph does *not* win — live in
-`scripts/scorecard/results/SUMMARY-rc-beta6.md`.
+`v1.0.0-beta.7` is the trustworthy-delivery release. It is a **breaking
+upgrade**: SemStreams beta.161 mandates fresh NATS storage (`docker compose
+down -v` and reseed — the graph re-derives from source). One beta.6
+restriction is lifted: `websocket_path` is **configurable again**
+(semstreams#945 delivered); `/ws` stays the default and documented contract
+path. What the release adds: **no trash in the graph** — minified assets index
+as file entities only (never parsed into symbols) with a loud per-file symbol
+cap, eliminating the historical 5-minute publish plateau (OSH seed 8min →
+2min, 77.8k → 32.6k publishes); **transient trouble no longer loses
+entities** — publish errors classify by kind, broker outages and
+stream-capacity refusals retry idempotently (deterministic `Nats-Msg-Id`)
+inside a delivery budget, measured at zero loss where prior builds lost
+5,282 and 34,871 entities on the same inductions; **seed liveness is
+visible** — `files_parsed`/`bodies_offloaded` advance through the pre-publish
+windows on status and `/metrics`; and slow-consumer errors are attributed to
+their subscription. Scorecard on this release: OSH v2 11/13 (the two reds
+name still-open semstreams#823), dogfood loose band 33/33
+(`scripts/scorecard/results/`).
 
 The promise is simple: SemSource deliberately scrapes the pile of source files
 and turns it into a live, governed semantic knowledge graph (SKG). Humans,
@@ -79,6 +80,13 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Recently Shipped
 
+- `v1.0.0-beta.7`: SemStreams beta.161 cutover (breaking; fresh storage;
+  caller-owned shutdown contexts; `websocket_path` restored), asset ingestion
+  guards (#175: minified detection + symbol cap; plateau eliminated), typed
+  publish-error classification with idempotent retries (#176: zero-loss broker
+  pause and stream-constriction inductions), pre-publish seed liveness
+  counters, attributed slow-consumer errors, and archived
+  `ingest-observability` at 35/35 with live evidence.
 - `v1.0.0-beta.6`: SemStreams beta.160 cutover (breaking; fresh storage +
   `/ws`), call-graph completeness across Go/TS/Svelte/Java/Python/C with the
   README coverage matrix, CI determinism gate, red-main alerting + PR-side UI
@@ -121,10 +129,10 @@ confidence and dependency shape. The "why" behind durable choices lives in
   cannot clear a stored body reference in place, so parents would keep their old
   whole-file bodies through an in-place reindex. See
   [`docs/migration/doc-passage-chunking.md`](docs/migration/doc-passage-chunking.md).
-- **The raw WebSocket path is configurable again on `main`.** SemStreams
-  beta.161 restored the path surface (#945); `websocket_path` is honored once
-  more, with `/ws` remaining the default and documented contract path. On the
-  beta.6 tag (beta.160) the path stays fixed to `/ws`.
+- **The raw WebSocket path default is `/ws`.** `websocket_path` is honored
+  again since beta.7 (SemStreams #945 restored the surface); `/ws` remains the
+  default and documented contract path, and the ui profile's Caddy config
+  assumes it.
 - **C++ call edges are deliberately absent.** C is supported with a
   corpus-unique binding rule; C++ resolution was deferred whole rather than
   shipping guessed edges (see the README coverage matrix — a wrong edge is

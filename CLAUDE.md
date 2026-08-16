@@ -193,10 +193,10 @@ New message types must follow the payload registry pattern: define type → impl
 The public roadmap lives in `ROADMAP.md`; use that instead of the historical
 milestone list in `docs/spec/semsource-spec-v3.md`.
 
-Current release-candidate shape (the latest public tag is beta.6):
+Current release-candidate shape (the latest public tag is beta.7):
 
-1. `v1.0.0-beta.6` targets SemStreams `v1.0.0-beta.160`. **`main` now pins SemStreams
-   `v1.0.0-beta.161`** — the post-beta.160 reliability and lifecycle-control slice on top of
+1. `v1.0.0-beta.7` targets SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
+   lifecycle-control slice on top of
    the intentionally breaking graph/foundation refactor checkpoint (no
    upstream shims; fresh NATS storage mandated on adoption, so deployments upgrade via
    `docker compose down -v` + reseed — the graph re-derives from source). beta.161 makes
@@ -204,7 +204,11 @@ Current release-candidate shape (the latest public tag is beta.6):
    `StopAll` takes a bounded context created at the composition root, and stored lifecycle
    contexts are prohibited. It also restores WebSocket path configurability
    (`websocket_path` is honored again; `/ws` stays the default contract path) and attributes
-   slow-consumer errors to the responsible subscription. Ports use the strict
+   slow-consumer errors to the responsible subscription. beta.7 adds the asset ingestion
+   guards (minified assets never parse into symbols; per-file symbol cap) and typed
+   publish-error classification (transients retry idempotently via `Nats-Msg-Id` inside a
+   90s budget; measured zero-loss on broker-pause and stream-constriction inductions).
+   Ports use the strict
    `PortDefinition` envelope (typed `config` with `kind`); the ownership substrate is deleted —
    SemSource declares local `projection.Contract` intent (named reconcile groups `source` +
    `lifecycle` in `graph/contract.go`) and supersession mutates through the typed CAS client;
