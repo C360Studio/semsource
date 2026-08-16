@@ -291,7 +291,7 @@ func (c *Component) publishDelta(delta map[string][]message.Triple) int {
 }
 
 // Stop cancels the periodic loop, unsubscribes, and flushes the publisher.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.running {

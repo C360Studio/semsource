@@ -49,11 +49,11 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = query.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, query.Stop) })
 
 	const (
 		caller = "acme.semsource.golang.gw.function.dispatch"
@@ -167,11 +167,11 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = query.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, query.Stop) })
 
 	// Offload the verbatim body to a real ObjectStore and address it by handle —
 	// the producer side of the hydration contract. The engine's BodyResolver

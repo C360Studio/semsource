@@ -46,7 +46,7 @@ func TestIntegration_QuerySubjects(t *testing.T) {
 	if err := c.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, c.Stop) })
 
 	var manifest ManifestPayload
 	requestJSON(t, ctx, tc.Client, querySubject, &manifest)

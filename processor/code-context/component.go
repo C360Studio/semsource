@@ -529,7 +529,7 @@ func (c *Component) requireRunning(w http.ResponseWriter) bool {
 // Stop unsubscribes the NATS handlers. The subscription slice is cleaned up
 // unconditionally so a partial Start failure does not leak, and it is safe to
 // call more than once.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, sub := range c.subs {

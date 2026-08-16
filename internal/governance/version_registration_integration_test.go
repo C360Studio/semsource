@@ -49,11 +49,11 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 	}
 	mr := metric.NewMetricsRegistry()
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, mr)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	q := startGraphQuery(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = q.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, q.Stop) })
 
 	// Fixture: known diff between 1.9.0 and 1.10.0 —
 	// Run changed, Stable unchanged, Gone removed, Fresh added.
@@ -103,7 +103,7 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 			if err := comp.Start(ctx); err != nil {
 				t.Fatalf("Start: %v", err)
 			}
-			t.Cleanup(func() { _ = comp.Stop(5 * time.Second) })
+			t.Cleanup(func() { _ = stopWithin(5*time.Second, comp.Stop) })
 		}
 	}
 	if instanceNames[0] == instanceNames[1] {
@@ -120,7 +120,7 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 	if err := scomp.Start(ctx); err != nil {
 		t.Fatalf("supersession Start: %v", err)
 	}
-	t.Cleanup(func() { _ = scomp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, scomp.Stop) })
 
 	// Poll the diff until the asynchronously-indexed entities are all visible.
 	// Expected over REAL parse output: Fresh added, Gone removed, Run changed

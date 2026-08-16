@@ -91,7 +91,7 @@ func (c *Component) Start(_ context.Context) error {
 // Stop marks the component as stopped and closes the underlying store.
 // Close on the filesystem store is a no-op, but we call it for correctness
 // and to satisfy lifecycle contracts.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

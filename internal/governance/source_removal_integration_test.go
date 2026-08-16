@@ -113,7 +113,7 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	if err := manifest.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	t.Cleanup(func() { _ = manifest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, manifest.Stop) })
 
 	store := newMemConfigStore()
 	if err := manifest.RegisterIngestHandlers(ctx, sourcemanifest.IngestHandlerConfig{

@@ -43,7 +43,7 @@ func startedComponent(t *testing.T, watchRoot string) (*Component, func()) {
 		t.Fatalf("NewComponent: %v", err)
 	}
 	c := comp.(*Component)
-	return c, func() { _ = c.Stop(5 * time.Second) }
+	return c, func() { _ = stopWithin(5*time.Second, c.Stop) }
 }
 
 // TestIntegration_StartReturnsWhilePathsUnavailable is the whole point of the
@@ -99,7 +99,7 @@ func TestIntegration_StopDuringInFlightSeedWaits(t *testing.T) {
 		t.Fatal("seed already finished; the test would not exercise stop-during-seed")
 	}
 
-	if err := c.Stop(5 * time.Second); err != nil {
+	if err := stopWithin(5*time.Second, c.Stop); err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
 

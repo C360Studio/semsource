@@ -19,10 +19,6 @@ import (
 	"time"
 )
 
-// defaultStopTimeout bounds the shutdown wait when the caller passes none, so a
-// wedged seed cannot hang shutdown forever.
-const defaultStopTimeout = 30 * time.Second
-
 // Error describes a seed failure in the shape source-manifest expects on the
 // wire. The two are coupled by JSON, not by a Go type.
 type Error struct {
@@ -70,13 +66,16 @@ func (s *Supervisor) Start(ctx context.Context, logger *slog.Logger, seed func(c
 	}()
 }
 
-// Stop cancels the seed and waits for it, bounded by timeout.
+// Stop cancels the seed and waits for it, bounded by ctx. The caller owns the
+// shutdown deadline (semstreams' caller-owned lifecycle contract); this never
+// substitutes a timer of its own, so an unbounded ctx waits as long as the
+// caller is willing to.
 //
 // Callers MUST call this before stopping their publisher: stopping a publisher
 // closes its buffer, so a seed still running would publish into a closed one.
 // Callers must also not hold a lock the seed itself takes — this waits, and
 // waiting under a shared lock deadlocks against the seed's own critical section.
-func (s *Supervisor) Stop(timeout time.Duration, logger *slog.Logger) {
+func (s *Supervisor) Stop(ctx context.Context, logger *slog.Logger) {
 	s.mu.Lock()
 	cancel, done := s.cancel, s.done
 	s.cancel, s.done = nil, nil
@@ -89,14 +88,12 @@ func (s *Supervisor) Stop(timeout time.Duration, logger *slog.Logger) {
 	if done == nil {
 		return
 	}
-	if timeout <= 0 {
-		timeout = defaultStopTimeout
-	}
 	select {
 	case <-done:
-	case <-time.After(timeout):
+	case <-ctx.Done():
 		if logger != nil {
-			logger.Warn("timed out waiting for the initial seed to stop", "timeout", timeout)
+			logger.Warn("shutdown context expired before the initial seed stopped",
+				"error", ctx.Err())
 		}
 	}
 }

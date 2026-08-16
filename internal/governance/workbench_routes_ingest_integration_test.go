@@ -51,11 +51,11 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	mr := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, mr)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	q := startGraphQuery(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = q.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, q.Stop) })
 
 	astCfg, err := json.Marshal(map[string]any{
 		"watch_paths": []map[string]any{
@@ -78,7 +78,7 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	if err := astComp.Start(ctx); err != nil {
 		t.Fatalf("ast-source Start: %v", err)
 	}
-	t.Cleanup(func() { _ = astComp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
 	qc := tc.Client
 

@@ -383,3 +383,34 @@ func TestGraphSubsystemComponents_GraphEmbeddingDefersToDefaultPorts(t *testing.
 		t.Fatal("text_suffixes override missing; code doc predicates would not embed")
 	}
 }
+
+// TestWebsocketComponentConfig_PathReachesTheComponent guards the restored
+// websocket_path wiring (semstreams beta.161 / #945): the configured path must
+// land in the component JSON, and the default must stay the documented "/ws"
+// contract path. Without this, the knob silently regresses to a no-op — the
+// exact defect class semsource#147 was about.
+func TestWebsocketComponentConfig_PathReachesTheComponent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path string
+		want string
+	}{
+		{"default is the /ws contract path", "", "/ws"},
+		{"configured path is honored", "/graph", "/graph"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cc, err := websocketComponentConfig(&config.Config{Namespace: "acme", WebSocketPath: tc.path})
+			if err != nil {
+				t.Fatalf("websocketComponentConfig() error = %v", err)
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(cc.Config, &raw); err != nil {
+				t.Fatalf("unmarshal websocket config: %v", err)
+			}
+			got, _ := raw["path"].(string)
+			if got != tc.want {
+				t.Errorf("websocket config path = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

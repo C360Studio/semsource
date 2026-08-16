@@ -98,7 +98,7 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 	t.Cleanup(func() {
-		_ = ingest.Stop(5 * time.Second)
+		_ = stopWithin(5*time.Second, ingest.Stop)
 	})
 
 	cases := []struct {
@@ -234,7 +234,7 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 	metricsRegistry := metric.NewMetricsRegistry()
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
 	t.Cleanup(func() {
-		_ = ingest.Stop(5 * time.Second)
+		_ = stopWithin(5*time.Second, ingest.Stop)
 	})
 
 	publishSemsourcePayload(t, ctx, tc.Client, result.Payload)
@@ -286,15 +286,15 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
 	t.Cleanup(func() {
-		_ = ingest.Stop(5 * time.Second)
+		_ = stopWithin(5*time.Second, ingest.Stop)
 	})
 	index := startGraphIndex(t, ctx, tc.Client, metricsRegistry)
 	t.Cleanup(func() {
-		_ = index.Stop(5 * time.Second)
+		_ = stopWithin(5*time.Second, index.Stop)
 	})
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
 	t.Cleanup(func() {
-		_ = query.Stop(5 * time.Second)
+		_ = stopWithin(5*time.Second, query.Stop)
 	})
 
 	entities := []struct {
