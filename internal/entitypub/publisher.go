@@ -13,6 +13,8 @@ package entitypub
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -24,6 +26,7 @@ import (
 	"github.com/c360studio/semstreams/pkg/buffer"
 
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/degraded"
 )
 
 const (
@@ -50,11 +53,25 @@ const (
 	// buffer is full before dropping loudly. Bounded so a wedged NATS cannot
 	// silently freeze ingest loops forever; loud so a drop is never invisible.
 	defaultSendTimeout = 5 * time.Second
+
+	// deliveryBudget caps one entity's total retry wall-clock. It must stay
+	// inside the GRAPH stream's duplicate-detection window (server default
+	// 2m), because the Nats-Msg-Id dedup that makes retrying SAFE — the
+	// ingest merge APPENDS triples, so an ambiguous timeout retried without
+	// dedup double-applies (ADR-055 §5) — only holds within that window.
+	deliveryBudget = 90 * time.Second
+
+	// maxPublishAttempts bounds attempts within the budget; with the 500ms→10s
+	// backoff the elapsed ceiling binds first (~13 attempts).
+	maxPublishAttempts = 20
 )
 
 // NATSPublisher is the subset of natsclient.Client needed for publishing.
 type NATSPublisher interface {
 	PublishToStream(ctx context.Context, subject string, data []byte) error
+	// PublishToStreamWithMsgID stamps Nats-Msg-Id so the stream's duplicate
+	// window collapses ambiguous retries to one stored message (ADR-055 §5).
+	PublishToStreamWithMsgID(ctx context.Context, subject string, data []byte, msgID string) error
 }
 
 // Publisher buffers EntityPayload messages and drains them to NATS at a
@@ -79,6 +96,13 @@ type Publisher struct {
 	// it rather than on every retry. Logging per attempt is what forced this
 	// signal down to Debug in the first place, where it became invisible.
 	backpressure atomic.Bool
+
+	// publishFailing is edge-triggered like backpressure but for TERMINAL
+	// failures: one default-level entry when publishes start failing, one
+	// recovery line on the next success. The stream-ceiling incident produced
+	// 34,871 per-entity WARN lines; a flood is one transition, not N lines —
+	// exact counts live on the failed counter and metrics.
+	publishFailing degraded.Condition
 
 	// Lifecycle
 	cancel context.CancelFunc
@@ -322,38 +346,60 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 			}
 			p.failed.Add(1)
 			p.metrics.incFailed()
-			p.logger.Warn("entity publish failed after retries",
-				"id", payload.ID,
-				"error", err)
+			// Edge-triggered: the first failure names itself at the default
+			// level, the flood behind it counts on the failed counter, and
+			// per-entity detail stays at Debug (ADR-0011).
+			p.publishFailing.Enter(p.logger,
+				"entity publishes are failing — see entities_failed_total for the count",
+				"first_entity", payload.ID, "error", err)
+			p.logger.Debug("entity publish failed", "id", payload.ID, "error", err)
 		}
 	}
 }
 
-// publishOne marshals and publishes a single entity, retrying on circuit
-// breaker errors with exponential backoff.
+// publishOne marshals and publishes a single entity, retrying transient
+// transport errors (classifyPublishError) with exponential backoff inside the
+// delivery budget. Every attempt carries the same deterministic Nats-Msg-Id
+// (entity ID + content hash) so an ambiguous timeout retried is deduped
+// server-side instead of double-applying triples downstream.
 func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload) error {
 	msg := message.NewBaseMessage(graph.EntityType, payload, "semsource")
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("marshal entity message: %w", err)
+		return fmt.Errorf("marshal entity message (terminal, not retried): %w", err)
 	}
+	sum := sha256.Sum256(data)
+	msgID := payload.ID + ":" + hex.EncodeToString(sum[:6])
 
 	backoff := p.retryBackoff
 	maxBackoff := p.maxRetryBackoff
-	maxAttempts := 20
+	deadline := time.Now().Add(deliveryBudget)
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		err = p.client.PublishToStream(ctx, graphIngestSubject, data)
+	var attempts int
+	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
+		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
 			p.published.Add(1)
 			p.metrics.incPublished()
 			p.clearBackpressure()
+			p.publishFailing.Clear(p.logger, "entity publishing recovered")
 			return nil
 		}
 
-		// Only retry on circuit breaker — other errors are terminal.
-		if err.Error() != "circuit breaker is open" {
-			return err
+		switch classifyPublishError(ctx, err) {
+		case publishCanceled:
+			return err // shutdown drain; the caller's ctx guard owns it
+		case publishTerminal:
+			if attempts == 1 {
+				return fmt.Errorf("terminal on first attempt (not retried): %w", err)
+			}
+			return fmt.Errorf("terminal after %d attempts: %w", attempts, err)
+		case publishRetryable:
+			// fall through to the budget check and backoff below
+		}
+
+		if attempts == maxPublishAttempts || time.Now().After(deadline) {
+			break
 		}
 
 		p.retries.Add(1)
@@ -361,7 +407,9 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 		// Entering sustained backpressure is a state CHANGE an operator must see
 		// at the default level: a publisher retrying every entity reports no
 		// drops, no failures, and no errors while being functionally stalled.
-		// Reported once on entry, not once per attempt.
+		// Reported once on entry, not once per attempt — and now for EVERY
+		// retryable class, not only the circuit breaker (the live induction
+		// proved capacity refusals previously bypassed this entirely).
 		p.enterBackpressure(payload.ID, backoff)
 
 		select {
@@ -376,7 +424,8 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 		}
 	}
 
-	return fmt.Errorf("circuit breaker did not recover after %d attempts", maxAttempts)
+	return fmt.Errorf("delivery budget exhausted after %d attempts over %s: %w",
+		attempts, deliveryBudget, err)
 }
 
 // flush drains all remaining buffered entities. Used during shutdown.
@@ -389,7 +438,12 @@ func (p *Publisher) flush(ctx context.Context) {
 		for _, payload := range batch {
 			if err := p.publishOne(ctx, payload); err != nil {
 				p.failed.Add(1)
-				p.logger.Warn("flush: entity publish failed",
+				// Shutdown flush keeps one summary-shaped line per entity at
+				// Debug; the edge-triggered condition covers the transition.
+				p.publishFailing.Enter(p.logger,
+					"entity publishes are failing during flush",
+					"first_entity", payload.ID, "error", err)
+				p.logger.Debug("flush: entity publish failed",
 					"id", payload.ID,
 					"error", err)
 			}

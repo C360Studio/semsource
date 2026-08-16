@@ -32,6 +32,10 @@ type nopPublisher struct{}
 
 func (nopPublisher) PublishToStream(context.Context, string, []byte) error { return nil }
 
+func (nopPublisher) PublishToStreamWithMsgID(context.Context, string, []byte, string) error {
+	return nil
+}
+
 // unstartedComponent builds a doc-source Component whose NATS client was never
 // connected, so the body store cannot be created.
 func unstartedComponent(t *testing.T, root string) *Component {

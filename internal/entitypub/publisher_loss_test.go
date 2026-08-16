@@ -2,6 +2,7 @@ package entitypub
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"testing"
@@ -21,6 +22,10 @@ type gatedPublisher struct {
 
 func newGatedPublisher() *gatedPublisher {
 	return &gatedPublisher{gate: make(chan struct{}), sendSeen: make(chan struct{}, 1024)}
+}
+
+func (g *gatedPublisher) PublishToStreamWithMsgID(ctx context.Context, subject string, data []byte, _ string) error {
+	return g.PublishToStream(ctx, subject, data)
 }
 
 func (g *gatedPublisher) PublishToStream(ctx context.Context, _ string, _ []byte) error {
@@ -169,6 +174,12 @@ func TestFailed_TerminalPublishErrorsAreCounted(t *testing.T) {
 
 type failingPublisher struct{}
 
-func (failingPublisher) PublishToStream(context.Context, string, []byte) error {
-	return context.DeadlineExceeded // terminal (non-circuit-breaker) error
+func (f failingPublisher) PublishToStream(ctx context.Context, subject string, data []byte) error {
+	return f.PublishToStreamWithMsgID(ctx, subject, data, "")
+}
+
+func (failingPublisher) PublishToStreamWithMsgID(context.Context, string, []byte, string) error {
+	// A genuinely TERMINAL class: deadline errors are retryable since the
+	// #176 classification, so this fake fails with an unknown error instead.
+	return errors.New("invalid subject: not a stream subject")
 }
