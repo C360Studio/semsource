@@ -104,6 +104,14 @@ type Config struct {
 	WatchEnabled  bool   `json:"watch_enabled"  schema:"type:bool,description:Enable file watcher for real-time updates,category:basic,default:true"`
 	CoalesceMs    int    `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for file watcher events in ms. 0 uses built-in default (100ms),category:advanced"`
 	IndexInterval string `json:"index_interval" schema:"type:string,description:Full reindex interval (e.g. 60s). Empty string disables periodic reindex.,category:advanced,default:60s"`
+
+	// MaxSymbolsPerFile is the loud backstop behind minified-asset detection
+	// (asset-ingestion-guards): a file parsing into more symbol entities than
+	// this keeps its file-level entities and drops the symbols with one WARN.
+	// 0 disables the cap. The default leaves an order of magnitude of headroom
+	// over the largest legitimate file measured (generated serializers, low
+	// hundreds) while catching the ~10-15k-symbol minified-bundle members.
+	MaxSymbolsPerFile int `json:"max_symbols_per_file,omitempty" schema:"type:int,description:Per-file symbol cap; files exceeding it publish file-level entities only (0 disables),category:advanced,default:5000"`
 }
 
 // Validate checks the configuration for errors.
@@ -128,6 +136,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.MaxSymbolsPerFile < 0 {
+		return fmt.Errorf("max_symbols_per_file must be >= 0 (0 disables the cap)")
+	}
+
 	return nil
 }
 
@@ -149,7 +161,8 @@ func DefaultConfig() Config {
 		Ports: &component.PortConfig{
 			Outputs: outputDefs,
 		},
-		WatchEnabled:  true,
-		IndexInterval: "60s",
+		WatchEnabled:      true,
+		IndexInterval:     "60s",
+		MaxSymbolsPerFile: 5000,
 	}
 }
