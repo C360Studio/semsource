@@ -1057,9 +1057,16 @@ this ask). Adoption is a pin bump; the expected-red OSH v2 config band flips gre
 against `v1.0.0-beta.160` on the 32k-entity OSH corpus.
 **Filed:** [semstreams#958](https://github.com/C360Studio/semstreams/issues/958).
 **Resolution evidence:** closed upstream 2026-08-13; first tag carrying it is beta.161. The
-beta.161 pin bump is the adoption — the merged consumer-side rendering (semsource#167) now
-has real labels to render. The OSH v2 expected-red config band flip still needs a live run
-on this pin to claim.
+beta.161 pin bump is the adoption — where digests are returned, labels are real.
+**Live run 2026-08-16 (beta.161, OSH corpus): the config band did NOT flip** — G02/G03 still
+miss, but for a different reason than #958: `graph.query.searchGraph`'s sub-threshold path
+returns `entities: null` with bare `entity_ids` and NO digests at all
+(`summarize_threshold: 1`, strategy `graphrag`), so there is nothing for the #167 renderer
+to label or attach values to. The data is present (threshold-0 probe returns the dependency
+entity with full triples). The band's red now names the still-open
+[semstreams#823](https://github.com/C360Studio/semstreams/issues/823) — digest population on
+sub-threshold globalSearch paths — not #958. Recorded in
+`scripts/scorecard/results/beta161-osh-v2.json` (11/13; only G02/G03 red).
 
 ## graph-index Stop races its own watcher goroutine
 
