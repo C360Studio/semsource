@@ -115,6 +115,11 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 	var mu sync.Mutex
 	out := make(map[string]codeBody, len(work))
 	attach := func(w pending) {
+		// Counts fresh puts and dedupe hits alike: either way one more body is
+		// resolved to a blob, and this advancing while the publish count is
+		// flat is what separates a slow offload phase from a hang.
+		c.bodiesOffloaded.Add(1)
+		c.seedMetrics.IncBodiesOffloaded()
 		mu.Lock()
 		defer mu.Unlock()
 		out[w.entity] = codeBody{

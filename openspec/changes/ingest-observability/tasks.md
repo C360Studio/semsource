@@ -103,3 +103,26 @@
       the decision is anchored to evidence rather than taste
 - [x] 6.3 Note the deferred follow-up: re-levelling the 139 per-item `Warn` calls
       and introducing a genuine `Error` tier
+
+## 8. Pre-publish seed liveness (async-source-seed 5.7 residual)
+
+Folded in 2026-08-16: the delivery counters above prove a seed is not FAILING,
+but the OSH plateau (publish flat at 40,853 for ~283s in both pre- and
+post-#125 runs) showed they cannot separate "parsing, not yet publishing" from
+"hung". Counters that advance during pre-publish work close that.
+
+- [x] 8.1 `files_parsed` advances during the parse phase (per successfully
+      parsed file, unrouted files excluded) — unit-tested; also re-armed the two
+      parser-concurrency race guards that had gone vacuous when deterministic
+      routing (#121) added a route check they bypassed
+- [x] 8.2 `bodies_offloaded` advances during body offload, counting fresh puts
+      and dedupe hits alike (either way a body resolved to its blob) — unit-tested
+- [x] 8.3 Both counters flow producer → internal status report → manifest →
+      external status surface; wire names pinned by test (JSON coupling, not a
+      shared type)
+- [x] 8.4 Both counters exported per source instance on the metrics endpoint
+      (`files_parsed_total`, `bodies_offloaded_total`), nil-registry-safe like
+      the publish counters
+- [ ] 8.5 Live acceptance on an OSH-scale seed: during the former plateau
+      window, at least one pre-publish counter advances between status polls
+      while publish_total is flat

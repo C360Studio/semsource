@@ -36,3 +36,31 @@ point; it is not a new gate.
 - **WHEN** a consumer gates on the aggregate phase being `ready`
 - **THEN** the gate behaves exactly as before, and progress reporting during
   seeding does not cause it to report ready early
+
+### Requirement: Pre-publish seed work is visibly alive
+
+A source whose seed performs substantial work before publishing — parsing a
+watch path, resolving references, offloading verbatim bodies — SHALL advance at
+least one externally visible progress counter during that work, so a plateau in
+the delivery count is distinguishable from a hang. The counters SHALL be
+visible on the same status surface as the delivery count and mirrored on the
+metrics endpoint, per source instance.
+
+This closes the residual gap recorded as `async-source-seed` task 5.7: the
+delivery count alone proved a seed was not failing (no retries, no drops, no
+errors) but could not separate "parsing, not yet publishing" from "hung".
+
+#### Scenario: A parse or offload window reads as work, not a hang
+
+- **GIVEN** a seed in a window where files are being parsed or bodies offloaded
+  but no entities are being published
+- **WHEN** the status surface is polled repeatedly
+- **THEN** a pre-publish counter (files parsed, bodies offloaded) increases
+  between polls while the delivery count stays flat
+
+#### Scenario: A genuinely wedged seed shows no movement anywhere
+
+- **GIVEN** a seed making no forward progress of any kind
+- **WHEN** the status surface is polled repeatedly
+- **THEN** neither the delivery count nor any pre-publish counter advances
+  between polls

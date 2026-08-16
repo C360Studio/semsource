@@ -106,8 +106,17 @@ type Component struct {
 	entitiesIndexed atomic.Int64
 	parseFailures   atomic.Int64
 	errors          atomic.Int64
-	lastActivityMu  sync.RWMutex
-	lastActivity    time.Time
+
+	// Pre-publish seed liveness (async-source-seed 5.7 residual): a large seed
+	// spends minutes parsing and offloading bodies before anything publishes,
+	// and a frozen publish count alone cannot separate that from a hang. These
+	// advance during those windows; seedMetrics mirrors them on /metrics.
+	filesParsed     atomic.Int64
+	bodiesOffloaded atomic.Int64
+	seedMetrics     *entitypub.SeedMetrics
+
+	lastActivityMu sync.RWMutex
+	lastActivity   time.Time
 
 	// distinct tracks distinct entity IDs for honest status counts
 	// (publish counters inflate under periodic reindex — audit 2026-07-19).
@@ -151,14 +160,15 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
-		name:       "ast-source",
-		config:     config,
-		publisher:  pub,
-		distinct:   entitypub.NewDistinctTracker(),
-		natsClient: deps.NATSClient,
-		logger:     deps.GetLogger(),
-		platform:   deps.Platform,
-		fileHashes: make(map[string]string),
+		name:        "ast-source",
+		config:      config,
+		publisher:   pub,
+		seedMetrics: entitypub.NewSeedMetrics(deps.MetricsRegistry, config.InstanceName),
+		distinct:    entitypub.NewDistinctTracker(),
+		natsClient:  deps.NATSClient,
+		logger:      deps.GetLogger(),
+		platform:    deps.Platform,
+		fileHashes:  make(map[string]string),
 	}
 
 	return c, nil
@@ -697,6 +707,13 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 	pw.parseMu.Lock()
 	res, err := parser.ParseFile(ctx, filePath)
 	pw.parseMu.Unlock()
+	if err == nil && res != nil {
+		// Liveness during the pre-publish parse window: the publish count is
+		// flat while a watch path parses, and this is what proves the seed is
+		// working rather than wedged (async-source-seed 5.7).
+		c.filesParsed.Add(1)
+		c.seedMetrics.IncFilesParsed()
+	}
 	return res, err
 }
 
@@ -867,16 +884,18 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	// never diverge from the last one published.
 	c.setPhase(phase)
 	report := struct {
-		InstanceName string           `json:"instance_name"`
-		SourceType   string           `json:"source_type"`
-		Phase        string           `json:"phase"`
-		EntityCount  int64            `json:"entity_count"`
-		PublishTotal int64            `json:"publish_total,omitempty"`
-		ErrorCount   int64            `json:"error_count"`
-		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
-		Backpressure bool             `json:"backpressure,omitempty"`
-		LastError    *seedsup.Error   `json:"last_error,omitempty"`
-		Timestamp    time.Time        `json:"timestamp"`
+		InstanceName    string           `json:"instance_name"`
+		SourceType      string           `json:"source_type"`
+		Phase           string           `json:"phase"`
+		EntityCount     int64            `json:"entity_count"`
+		PublishTotal    int64            `json:"publish_total,omitempty"`
+		FilesParsed     int64            `json:"files_parsed,omitempty"`
+		BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
+		ErrorCount      int64            `json:"error_count"`
+		TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
+		Backpressure    bool             `json:"backpressure,omitempty"`
+		LastError       *seedsup.Error   `json:"last_error,omitempty"`
+		Timestamp       time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "ast",
@@ -886,6 +905,10 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		// (honest-readiness-and-errors D5).
 		EntityCount:  c.distinct.Count(),
 		PublishTotal: c.entitiesIndexed.Load(),
+		// Pre-publish liveness (5.7): these advance while PublishTotal is flat
+		// during parse and body offload, so a plateau reads as work, not a hang.
+		FilesParsed:     c.filesParsed.Load(),
+		BodiesOffloaded: c.bodiesOffloaded.Load(),
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).
