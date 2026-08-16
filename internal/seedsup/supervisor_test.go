@@ -68,7 +68,9 @@ func TestCancelledSeedIsNotAFailure(t *testing.T) {
 	})
 	<-started
 
-	s.Stop(2*time.Second, nil)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	s.Stop(stopCtx, nil)
 
 	if err := s.LastError(); err != nil {
 		t.Errorf("LastError() = %+v after cancellation, want nil — a cancelled seed is not a failure", err)
@@ -95,7 +97,9 @@ func TestStopWaitsForTheSeed(t *testing.T) {
 	})
 	<-started
 
-	s.Stop(2*time.Second, nil)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	s.Stop(stopCtx, nil)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -108,13 +112,16 @@ func TestStopWaitsForTheSeed(t *testing.T) {
 // stopped before it ever started one.
 func TestStopIsSafeWhenNoSeedRan(t *testing.T) {
 	var s Supervisor
-	s.Stop(time.Second, nil) // must not panic or block
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.Stop(stopCtx, nil) // must not panic or block
 	if s.Running() {
 		t.Error("Running() = true with no seed started")
 	}
 }
 
-// TestStopTimesOutRatherThanHanging — a wedged seed must not hang shutdown.
+// TestStopTimesOutRatherThanHanging — a wedged seed must not hang shutdown
+// past the caller's shutdown context.
 func TestStopTimesOutRatherThanHanging(t *testing.T) {
 	var s Supervisor
 	block := make(chan struct{})
@@ -128,8 +135,10 @@ func TestStopTimesOutRatherThanHanging(t *testing.T) {
 	})
 	<-started
 
+	stopCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
 	done := make(chan struct{})
-	go func() { defer close(done); s.Stop(100*time.Millisecond, nil) }()
+	go func() { defer close(done); s.Stop(stopCtx, nil) }()
 
 	select {
 	case <-done:

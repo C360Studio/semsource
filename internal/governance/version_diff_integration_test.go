@@ -51,11 +51,11 @@ func TestIntegration_VersionDiff(t *testing.T) {
 	mr := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, mr)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	q := startGraphQuery(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = q.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, q.Stop) })
 
 	// Offload verbatim bodies for the changed symbol (before/after) to the real
 	// ObjectStore the diff's fallback resolver attaches to (CONTENT bucket).
@@ -110,7 +110,7 @@ func TestIntegration_VersionDiff(t *testing.T) {
 	if err := scomp.Start(ctx); err != nil {
 		t.Fatalf("supersession Start: %v", err)
 	}
-	t.Cleanup(func() { _ = scomp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, scomp.Stop) })
 
 	// The changeset over v1.9.0 → v1.10.0.
 	resp := requestDiff(t, ctx, tc.Client, proj, "v1.9.0", "v1.10.0")

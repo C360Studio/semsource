@@ -84,11 +84,11 @@ func TestIntegration_DocTailPhraseSurvivesPassageChunking(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = query.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, query.Stop) })
 
 	tailPassage, tailBody, states, storeReg := ingestTailFixture(t, ctx, tc)
 

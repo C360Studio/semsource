@@ -987,7 +987,7 @@ differently, which is worse for both sides than reusing the framework's.
 
 ## `output/websocket` lost path configurability in the beta.160 port envelope
 
-### The served WebSocket path is constructor-only, so factory-spawned instances are pinned to `/ws` — framework-shaped — filed [semstreams#945](https://github.com/C360Studio/semstreams/issues/945)
+### The served WebSocket path is constructor-only, so factory-spawned instances are pinned to `/ws` — framework-shaped — RESOLVED in beta.161 ([semstreams#945](https://github.com/C360Studio/semstreams/issues/945)) — ADOPTED
 
 Through beta.156 a downstream service could put its raw stream on a contract path (ours: `/graph`,
 via `WebSocketPath`/`SEMSOURCE_WS_PATH`). beta.160's `NetworkPort` carries protocol/host/port only,
@@ -1005,10 +1005,14 @@ it went unfiled for a week because the only detector, `ui-release-smoke`, runs o
 **Surfaced by:** semsource `semstreams-beta160-migration` smoke fallout, 2026-08-12, against
 `v1.0.0-beta.160`.
 **Filed:** [semstreams#945](https://github.com/C360Studio/semstreams/issues/945).
+**Resolution evidence:** beta.161 exposes a top-level `path` field on the websocket output's
+JSON config ("WebSocket output again honors its configured path"). SemSource's beta.161 bump
+passes `websocket_path` through again, validates shape at load, and retires the "/ws" pin;
+the Caddy `/graph` → `/ws` rewrite stopgap is no longer load-bearing.
 
 ## Slow-consumer drops are unattributable at the client
 
-### natsclient's async error handler discards `*nats.Subscription` — framework-shaped — filed [semstreams#950](https://github.com/C360Studio/semstreams/issues/950)
+### natsclient's async error handler discards `*nats.Subscription` — framework-shaped — RESOLVED in beta.161 ([semstreams#950](https://github.com/C360Studio/semstreams/issues/950))
 
 `natsclient/client.go` registers `handleError` as the connection-wide `nats.ErrorHandler` and
 logs only the bare error, discarding the subscription argument — the sole carrier of what
@@ -1025,10 +1029,14 @@ blocked on this ask; the next OSH-scale run names it for free once the handler l
 **Surfaced by:** semsource scorecard-v4 OSH run, 2026-08-12, against `v1.0.0-beta.160`
 (`scripts/scorecard/results/SUMMARY-osh-v1.md`, finding 3).
 **Filed:** [semstreams#950](https://github.com/C360Studio/semstreams/issues/950).
+**Resolution evidence:** beta.161 release notes: NATS clients "attribute asynchronous
+slow-consumer errors to the responsible subscription" (and honor configured `MaxAckPending`,
+exposing max-delivery events). The next OSH-scale run on this pin names the overflowing
+subscription for free — no semsource code change needed.
 
 ## Digest labels fall back to hash instances
 
-### `EntityDigest.Label` ignores `dc.terms.title` — dependency digests render as bare hashes — framework-shaped — filed [semstreams#958](https://github.com/C360Studio/semstreams/issues/958)
+### `EntityDigest.Label` ignores `dc.terms.title` — dependency digests render as bare hashes — framework-shaped — RESOLVED upstream 2026-08-13, first tag beta.161 ([semstreams#958](https://github.com/C360Studio/semstreams/issues/958))
 
 On the graphrag strategy's summarized shape, every `dependency`-type digest labeled itself
 with the entity ID's content-hash instance segment (`"label": "e7190c34"`) even though each
@@ -1048,3 +1056,28 @@ this ask). Adoption is a pin bump; the expected-red OSH v2 config band flips gre
 **Surfaced by:** semsource `graph-search-match-properties` FAIL-before run, 2026-08-13,
 against `v1.0.0-beta.160` on the 32k-entity OSH corpus.
 **Filed:** [semstreams#958](https://github.com/C360Studio/semstreams/issues/958).
+**Resolution evidence:** closed upstream 2026-08-13; first tag carrying it is beta.161. The
+beta.161 pin bump is the adoption — the merged consumer-side rendering (semsource#167) now
+has real labels to render. The OSH v2 expected-red config band flip still needs a live run
+on this pin to claim.
+
+## graph-index Stop races its own watcher goroutine
+
+### `Stop`'s signal callback writes `entityCoalescer` under `mu` while `watchEntityStates` reads it lock-free — framework-shaped — filed [semstreams#977](https://github.com/C360Studio/semstreams/issues/977)
+
+beta.161's `Generation.Stop` is signal-then-join: the shutdown signal callback runs before
+the fixed goroutine set is joined. graph-index's signal callback snapshots-and-nils
+`c.entityCoalescer` under `c.mu` (`component.go:692` region), but the `watchEntityStates`
+goroutine — a member of that join set — reads the field (`!= nil`, then `Add`/`Remove`)
+without the lock (`component.go:915`). Cancellation is asynchronous, so a live watcher can
+observe the write mid-flight; `go test -race` flags it.
+
+**Blast radius here:** `go test -race -tags=integration ./internal/governance/` is flaky-red
+(2 of 2 full-suite runs, a *different* test each time — always the cleanup `Stop(ctx)` racing
+that generation's still-live watcher). CI is unaffected — it runs `-race` on unit tests and
+integration without `-race` — so this costs us the local race-checked integration signal, the
+exact invocation our own method notes recommend for semstreams bumps.
+
+**Surfaced by:** semsource `semstreams-beta161-migration`, 2026-08-16, against
+`v1.0.0-beta.161`.
+**Filed:** [semstreams#977](https://github.com/C360Studio/semstreams/issues/977).

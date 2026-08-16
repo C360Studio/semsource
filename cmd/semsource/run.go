@@ -199,7 +199,12 @@ func serveUntilSignal(
 	<-signalCtx.Done()
 	logger.Info("shutdown signal received")
 
-	if err := manager.StopAll(30 * time.Second); err != nil {
+	// The run context is already cancelled; shutdown needs its own bounded
+	// authority (semstreams caller-owned lifecycle contract). Background is
+	// allowed only here, at the process composition root.
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelStop()
+	if err := manager.StopAll(stopCtx); err != nil {
 		logger.Error("error stopping services", "error", err)
 		return fmt.Errorf("stop services: %w", err)
 	}
@@ -1011,13 +1016,16 @@ func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error)
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("parse websocket port %q: %w", wsPortStr, err)
 	}
-	// beta.160's NetworkPort carries protocol/host/port only — there is no
-	// path field, so cfg.WebSocketPath cannot reach the component and the
-	// server serves the upstream default "/ws". Resolved as a clean break:
-	// "/ws" is the documented contract path, config.Validate rejects any
-	// other websocket_path (semsource#147), and the config surface's return
-	// is asked upstream (semstreams#945).
+	// semstreams beta.161 restored the component's top-level "path" config
+	// (semsource#147, semstreams#945), so cfg.WebSocketPath reaches the
+	// server again. "/ws" stays the default and documented contract path.
+	wsPath := cfg.WebSocketPath
+	if wsPath == "" {
+		// Mirrors config.applyDefaults for callers holding a bare Config.
+		wsPath = "/ws"
+	}
 	raw, err := json.Marshal(map[string]any{
+		"path": wsPath,
 		"ports": map[string]any{
 			"inputs": []component.PortDefinition{
 				{

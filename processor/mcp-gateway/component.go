@@ -145,7 +145,7 @@ func (c *Component) Start(_ context.Context) error {
 }
 
 // Stop marks the gateway stopped.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.running {

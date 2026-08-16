@@ -54,11 +54,11 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = query.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, query.Stop) })
 
 	// A real Go source tree for ast-source to index.
 	root := t.TempDir()
@@ -93,7 +93,7 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 	if err := astComp.Start(ctx); err != nil {
 		t.Fatalf("ast-source Start: %v", err)
 	}
-	t.Cleanup(func() { _ = astComp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
 	// The engine derefs handles over the SAME CONTENT store the producer wrote.
 	store, err := objectstore.NewStoreWithConfig(ctx, tc.Client, objectstore.Config{

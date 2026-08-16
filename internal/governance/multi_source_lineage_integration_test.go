@@ -58,11 +58,11 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	mr := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, mr)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	q := startGraphQuery(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = q.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, q.Stop) })
 
 	root := t.TempDir()
 	write := func(rel, src string) {
@@ -103,7 +103,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	if err := astComp.Start(ctx); err != nil {
 		t.Fatalf("ast-source Start: %v", err)
 	}
-	t.Cleanup(func() { _ = astComp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
 	// Wait until all three sources' symbols are queryable, then locate them.
 	var runOld, runNew, stableOld, stableNew, appMain *semgraph.EntityState
@@ -146,7 +146,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	if err := scomp.Start(ctx); err != nil {
 		t.Fatalf("supersession Start: %v", err)
 	}
-	t.Cleanup(func() { _ = scomp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, scomp.Stop) })
 
 	summary := runPassAndSummary(t, ctx, tc.Client)
 	// Only depA's versioned entities are considered — appB is version-less, so the

@@ -49,11 +49,11 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 	metricsRegistry := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metricsRegistry)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	query := startGraphQuery(t, ctx, tc.Client, metricsRegistry)
-	t.Cleanup(func() { _ = query.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, query.Stop) })
 
 	root := t.TempDir()
 	write := func(rel, src string) {
@@ -98,7 +98,7 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 	if err := astComp.Start(ctx); err != nil {
 		t.Fatalf("ast-source Start: %v", err)
 	}
-	t.Cleanup(func() { _ = astComp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
 	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{}))
 	lens := prefixLens{code.New()}

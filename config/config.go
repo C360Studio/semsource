@@ -182,11 +182,9 @@ type Config struct {
 	// WebSocketPath is the URL path for the WebSocket endpoint.
 	// Can also be set via the SEMSOURCE_WS_PATH environment variable.
 	//
-	// Since semstreams beta.160 the websocket output component serves its
-	// default "/ws" and exposes no path configuration (semstreams#945), so
-	// any OTHER value here fails validation rather than being silently
-	// ignored — the same contract as the removed "headless" mode. The field
-	// stays so the knob can return if upstream restores the surface.
+	// Configurable again since semstreams beta.161 restored the component's
+	// path surface (semsource#147, semstreams#945); beta.160 had pinned it
+	// to "/ws". "/ws" stays the default and the documented contract path.
 	WebSocketPath string `json:"websocket_path,omitempty"`
 
 	// Graph configures graph subsystem components.
@@ -265,12 +263,15 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	// A websocket path we cannot honor must fail loudly, never be silently
-	// ignored: semstreams beta.160's websocket output serves "/ws" and lost
-	// its path configuration (semsource#147, semstreams#945). Accepting any
-	// other value would ship a config knob that does nothing.
-	if c.WebSocketPath != "" && c.WebSocketPath != "/ws" {
-		return fmt.Errorf("config: websocket_path %q cannot be honored: the raw stream serves \"/ws\" (semstreams beta.160 removed path configurability — see semsource#147 / semstreams#945); remove websocket_path or set it to \"/ws\"", c.WebSocketPath)
+	// The path is honored again since semstreams beta.161 restored the
+	// websocket output's path surface (semsource#147, semstreams#945), so
+	// validation checks shape, not the beta.160-era "/ws" pin. Failing here
+	// keeps `semsource validate` load-time-loud; the component's own
+	// Validate stays authoritative for full ServeMux pattern rules.
+	if c.WebSocketPath != "" {
+		if err := validateWebSocketPath(c.WebSocketPath); err != nil {
+			return fmt.Errorf("config: websocket_path %q: %w", c.WebSocketPath, err)
+		}
 	}
 
 	return c.validateModelRegistry()
@@ -343,6 +344,22 @@ func ValidateNamespace(namespace string) error {
 			"entity-ID org segment; it would leave too little of the %d-byte entity-ID budget "+
 			"for repo and symbol names, and entities would be rejected by the graph at ingest",
 			namespace, len(namespace), entityid.MaxOrgLen, semtypes.MaxEntityIDBytes)
+	}
+	return nil
+}
+
+// validateWebSocketPath mirrors the semstreams websocket output's basic path
+// rules (leading slash, no whitespace or control bytes) so an unservable path
+// fails at config load rather than at component start. The component's own
+// Validate remains authoritative for full ServeMux pattern rules.
+func validateWebSocketPath(path string) error {
+	if !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("must begin with /")
+	}
+	for i := 0; i < len(path); i++ {
+		if path[i] <= ' ' || path[i] == 0x7f {
+			return fmt.Errorf("contains whitespace or a control character at byte %d", i)
+		}
 	}
 	return nil
 }

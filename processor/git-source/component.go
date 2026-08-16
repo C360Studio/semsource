@@ -472,8 +472,8 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 	return cancel
 }
 
-// Stop gracefully stops the component within the given timeout.
-func (c *Component) Stop(timeout time.Duration) error {
+// Stop gracefully stops the component; ctx bounds the seed join and cleanup.
+func (c *Component) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	running := c.running
 	c.mu.Unlock()
@@ -486,7 +486,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 	// the seed itself takes it, so waiting under the lock deadlocks. Draining
 	// first also keeps shutdown safe — stopping the publisher closes its
 	// buffer, and a live seed would publish into a closed one.
-	c.seed.Stop(timeout, c.logger)
+	c.seed.Stop(ctx, c.logger)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

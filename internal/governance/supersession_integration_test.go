@@ -47,11 +47,11 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	mr := metric.NewMetricsRegistry()
 
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, mr)
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 	index := startGraphIndex(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = index.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, index.Stop) })
 	q := startGraphQuery(t, ctx, tc.Client, mr)
-	t.Cleanup(func() { _ = q.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, q.Stop) })
 
 	// Ingest the same two symbols at two versions of source "semstreams":
 	// Run's body changes across versions; Stable's body is identical.
@@ -85,7 +85,7 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	if err := scomp.Start(ctx); err != nil {
 		t.Fatalf("supersession Start: %v", err)
 	}
-	t.Cleanup(func() { _ = scomp.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, scomp.Stop) })
 
 	summary := runPassAndSummary(t, ctx, tc.Client)
 	if summary.Supersedes != 2 {

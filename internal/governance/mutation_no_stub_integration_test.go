@@ -42,7 +42,7 @@ func TestIntegration_MutationToMissingEntity_ReturnsNotFoundAndNoStub(t *testing
 		t.Fatalf("RegisterPayloads() error = %v", err)
 	}
 	ingest := startGraphIngest(t, ctx, tc.Client, reg, metric.NewMetricsRegistry())
-	t.Cleanup(func() { _ = ingest.Stop(5 * time.Second) })
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, ingest.Stop) })
 
 	mut, err := projection.NewMutationClient(projection.MutationClientConfig{
 		NATS:      tc.Client,

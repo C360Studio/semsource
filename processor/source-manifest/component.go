@@ -547,7 +547,7 @@ func (c *Component) configuredSourceTypes() []string {
 }
 
 // Stop gracefully stops the component.
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

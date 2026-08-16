@@ -2,7 +2,10 @@
 
 SemSource is in **public beta**. The current public tag is `v1.0.0-beta.6`,
 running on SemStreams `v1.0.0-beta.160` (the graph/foundation refactor
-checkpoint).
+checkpoint). `main` has moved to SemStreams `v1.0.0-beta.161` (the
+post-beta.160 reliability and lifecycle-control slice — caller-owned shutdown
+contexts, restored WebSocket path configurability, attributable slow-consumer
+errors); like beta.160 it mandates fresh NATS storage on adoption.
 
 `v1.0.0-beta.6` is the call-graph-completeness and measurement release. It is
 a **breaking upgrade**: SemStreams beta.160 mandates fresh NATS storage
@@ -118,9 +121,10 @@ confidence and dependency shape. The "why" behind durable choices lives in
   cannot clear a stored body reference in place, so parents would keep their old
   whole-file bodies through an in-place reindex. See
   [`docs/migration/doc-passage-chunking.md`](docs/migration/doc-passage-chunking.md).
-- **The raw WebSocket path is fixed to `/ws`.** SemStreams beta.160 removed
-  path configurability; a configured `websocket_path` fails validation rather
-  than being silently ignored. SemStreams #945 tracks restoring the surface.
+- **The raw WebSocket path is configurable again on `main`.** SemStreams
+  beta.161 restored the path surface (#945); `websocket_path` is honored once
+  more, with `/ws` remaining the default and documented contract path. On the
+  beta.6 tag (beta.160) the path stays fixed to `/ws`.
 - **C++ call edges are deliberately absent.** C is supported with a
   corpus-unique binding rule; C++ resolution was deferred whole rather than
   shipping guessed edges (see the README coverage matrix — a wrong edge is
