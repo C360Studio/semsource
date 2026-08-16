@@ -115,6 +115,15 @@ type Component struct {
 	bodiesOffloaded atomic.Int64
 	seedMetrics     *entitypub.SeedMetrics
 
+	// Asset-guard withholding (asset-ingestion-guards / #175): minified files
+	// indexed without symbol extraction, and cap-breach counts. Aggregated
+	// into one seed-end summary; a skipped minified file's symbol count is
+	// unknowable by design (it is never parsed), so symbols are counted for
+	// cap breaches only.
+	minifiedFiles atomic.Int64
+	cappedFiles   atomic.Int64
+	cappedSymbols atomic.Int64
+
 	lastActivityMu sync.RWMutex
 	lastActivity   time.Time
 
@@ -367,6 +376,8 @@ func (c *Component) runSeed(ctx context.Context) error {
 		"files", totalFiles,
 		"entities", c.entitiesIndexed.Load(),
 		"parse_failures", c.parseFailures.Load())
+
+	c.logGuardSummary()
 
 	c.publishStatusReport(ctx, "watching")
 
@@ -704,10 +715,23 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 	// bindings) that the watcher and reindex goroutines must not interleave.
 	// Held only across one file, so reindex releases between files and watch
 	// events still make progress.
+	// Asset guard (asset-ingestion-guards / #175): a minified asset is indexed
+	// as its file entity only, without ever running tree-sitter. Sits after
+	// route resolution so watch events and periodic reindex are covered
+	// identically, and before parseMu so a 3.5MB bundle never holds the lock.
+	if res := c.minifiedFileResult(pw, filePath, lang); res != nil {
+		c.minifiedFiles.Add(1)
+		c.filesParsed.Add(1)
+		c.seedMetrics.IncFilesParsed()
+		return res, nil
+	}
+
 	pw.parseMu.Lock()
 	res, err := parser.ParseFile(ctx, filePath)
 	pw.parseMu.Unlock()
 	if err == nil && res != nil {
+		// The loud backstop behind detection: strip symbols past the cap.
+		res = c.enforceSymbolCap(res)
 		// Liveness during the pre-publish parse window: the publish count is
 		// flat while a watch path parses, and this is what proves the seed is
 		// working rather than wedged (async-source-seed 5.7).
