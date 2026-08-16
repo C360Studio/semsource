@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/c360studio/semsource/graph"
@@ -12,17 +13,34 @@ import (
 )
 
 // fakeStore is a minimal in-memory storage.Store for the producer test.
-type fakeStore struct{ data map[string][]byte }
+// Mutexed because bodiesForResult issues concurrent Puts (bodyPutConcurrency);
+// any test offloading more than one body drives this from multiple goroutines.
+type fakeStore struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
 
 func newFakeStore() *fakeStore { return &fakeStore{data: map[string][]byte{}} }
 
 func (f *fakeStore) Put(_ context.Context, key string, data []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.data[key] = append([]byte(nil), data...)
 	return nil
 }
-func (f *fakeStore) Get(_ context.Context, key string) ([]byte, error)  { return f.data[key], nil }
+
+func (f *fakeStore) Get(_ context.Context, key string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.data[key], nil
+}
 func (f *fakeStore) List(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (f *fakeStore) Delete(_ context.Context, key string) error         { delete(f.data, key); return nil }
+func (f *fakeStore) Delete(_ context.Context, key string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.data, key)
+	return nil
+}
 
 func TestBodiesForResult(t *testing.T) {
 	root := t.TempDir()
