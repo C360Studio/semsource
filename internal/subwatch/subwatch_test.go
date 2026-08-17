@@ -19,9 +19,10 @@ import (
 )
 
 type fakeStore struct {
-	mu      sync.Mutex
-	puts    map[string]types.ComponentConfig
-	deletes []string
+	mu       sync.Mutex
+	puts     map[string]types.ComponentConfig
+	putCalls int
+	deletes  []string
 }
 
 func newFakeStore() *fakeStore {
@@ -32,6 +33,7 @@ func (f *fakeStore) PutComponentToKV(_ context.Context, name string, cfg types.C
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.puts[name] = cfg
+	f.putCalls++
 	return nil
 }
 
@@ -165,12 +167,23 @@ func TestTick_ExpandsDualPinWithCanonicalIdentityAndScopedInstances(t *testing.T
 		t.Errorf("got %d ast instances, want 2 (one per pin)", astSeen)
 	}
 
-	// Idempotent: a second tick with no change spawns nothing new.
-	before := len(store.puts)
+	// Second tick: no new instances, but ONE confirm re-put per component
+	// (defense against the framework watcher dropping a burst event).
+	before, callsBefore := len(store.puts), store.putCalls
 	w.Tick(context.Background())
 	if len(store.puts) != before || len(store.deletes) != 0 {
-		t.Errorf("no-change tick mutated state: puts %d→%d deletes %v",
+		t.Errorf("no-change tick mutated instances: puts %d→%d deletes %v",
 			before, len(store.puts), store.deletes)
+	}
+	if store.putCalls != callsBefore+before {
+		t.Errorf("confirm tick made %d re-puts, want %d", store.putCalls-callsBefore, before)
+	}
+
+	// Third tick: fully quiet.
+	callsBefore = store.putCalls
+	w.Tick(context.Background())
+	if store.putCalls != callsBefore {
+		t.Errorf("post-confirm tick still re-putting (%d calls)", store.putCalls-callsBefore)
 	}
 }
 

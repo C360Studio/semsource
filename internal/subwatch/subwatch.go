@@ -71,6 +71,14 @@ type Config struct {
 type spawned struct {
 	sha   string
 	names []string
+
+	// confirmed marks that the configs were re-put once on a tick AFTER the
+	// spawning one. The framework's reactive config watcher has been observed
+	// to drop one event out of a same-instant write burst (semstreams ask
+	// 2026-08-17: 6 puts in ~20ms deployed 5 components; an identical re-put
+	// at a later revision deployed the sixth immediately). A single quiet
+	// re-put per pin is cheap insurance until the watcher is fixed.
+	confirmed bool
 }
 
 // Watcher polls one parent repo's checkout and reconciles spawned
@@ -153,6 +161,22 @@ func (w *Watcher) Tick(ctx context.Context) {
 		}
 		w.removeInstances(ctx, path, tr)
 		delete(w.tracked, path)
+	}
+
+	// Confirm: one idempotent re-put for pins spawned on an earlier tick
+	// (see spawned.confirmed).
+	for path, tr := range w.tracked {
+		if tr.confirmed {
+			continue
+		}
+		if cur, ok := desired[path]; ok && cur.SHA == tr.sha {
+			if _, err := w.spawn(ctx, cur); err != nil {
+				w.logger.Warn("submodule confirm re-put failed",
+					"path", path, "error", err)
+				continue
+			}
+			tr.confirmed = true
+		}
 	}
 
 	// Add: new pins.

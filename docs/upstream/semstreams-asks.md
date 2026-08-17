@@ -1088,3 +1088,33 @@ exact invocation our own method notes recommend for semstreams bumps.
 **Surfaced by:** semsource `semstreams-beta161-migration`, 2026-08-16, against
 `v1.0.0-beta.161`.
 **Filed:** [semstreams#977](https://github.com/C360Studio/semstreams/issues/977).
+
+## ConfigManager reactive watcher drops one event in a same-instant write burst
+
+### 6 `PutComponentToKV` writes in ~20ms deployed 5 components; an identical re-put at a later revision deployed the sixth — framework-shaped — candidate
+
+Observed on semsource `v1.0.0-beta.161`-pinned code during the git-submodule
+compose acceptance (2026-08-17): submodule expansion writes 3 component
+configs per discovered pin through `Manager.PutComponentToKV`. Two pins
+discovered ~18ms apart produced 6 writes; the ServiceManager reactively
+created 5 components. The 6th key (`components.doc-source-…-b191a7bf4013-…`)
+was verifiably PRESENT in `semstreams_config` KV (revision 30, 591 bytes) with
+no error, warning, or creation log line — the component simply never existed.
+Re-putting the byte-identical value at a later revision (external writer,
+revision 32) deployed it within a second.
+
+Suspect: the `engineHighWaterRev` watermark guard (`config/manager.go`) —
+watcher events at revisions ≤ the watermark are skipped as "already applied
+in-process", and under a write burst the watermark can advance past an event
+whose deployment side-effect has NOT run. The 5-of-6 split inside one burst
+(the dropped write was the middle of the second triple) is consistent with a
+race, not ordering.
+
+**Blast radius here:** any dynamically spawned component (submodule expansion,
+branch discovery, runtime add) can silently not exist while its config sits in
+KV — the manifest-mirrors-running-set invariant breaks with no error anywhere.
+**Local stopgap:** `internal/subwatch` re-puts each pin's configs once on a
+later (quiet) tick (`spawned.confirmed`), which deploys reliably.
+
+**Surfaced by:** semsource `git-submodule-support` compose acceptance,
+2026-08-17, against `v1.0.0-beta.161`.
