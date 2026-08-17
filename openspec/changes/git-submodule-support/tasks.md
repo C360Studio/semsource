@@ -100,14 +100,17 @@ remote fixture is for the e2e tier.
 
 ## 6. Integration and e2e against the fixture
 
-- [ ] 6.1 Integration test (hermetic local remotes, fixture-shaped: dual pin
-      + nested path): clone → probe → expansion → ingestion; assert dedup,
-      version distinction via the `Farewell` marker, parent exclusion, and
-      probe status content.
-- [ ] 6.2 e2e (`-tags=e2e`): remote clone of `C360Studio/semdev-test`; wait
-      ready; assert root pin has `Farewell` under its version scope, nested
-      pin does not, parent scope contains no submodule symbols; local
-      plain-clone scenario surfaces uninitialized paths on status.
+- [x] 6.1 Integration test (hermetic, fixture-shaped dual pin, real NATS):
+      clone → subwatch expansion → the SPAWNED config bytes boot a real
+      ast-source and seed entities — pins the strict-decode-accepts-spawned-
+      configs seam (processor/ast-source/submodule_expansion_integration_test.go).
+- [x] 6.2 e2e (`-tags=e2e`, network): remote clone of the real
+      `C360Studio/semdev-test`; asserts completeness (both pins' Greet),
+      identity (Farewell only under the v2 scope; zero submodule code outside
+      submodule scopes), and loudness (both paths `materialized` with correct
+      12-hex pins on `/source-manifest/status`). PASSED locally in 33s.
+      (Uninitialized-path loudness is pinned at the integration tier —
+      handler/git/probe_integration_test.go.)
 - [ ] 6.3 Runtime acceptance on a real stack (compose): seed semdev-test,
       verify graph queries return submodule entities with expected identity
       and status surfaces tell the submodule story; record evidence on #185.
