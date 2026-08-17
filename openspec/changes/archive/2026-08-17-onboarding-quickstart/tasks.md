@@ -84,5 +84,9 @@ shared pin). Design decisions D1–D6 govern mechanics.
       past v1) once Coby ratifies the proposal. (Ratified 2026-08-17 —
       "Docker Compose is the v1 launcher"; recorded in
       [#184 comment](https://github.com/C360Studio/semsource/issues/184#issuecomment-5318346799).)
-- [ ] 5.3 Full local gate green, `/opsx:verify`, sync deltas + archive on the
-      branch, PR referencing #184.
+- [x] 5.3 Full local gate green, `/opsx:verify`, sync deltas + archive on the
+      branch, PR referencing #184. (Gate green 2026-08-17: gofmt/vet/revive,
+      `go test -race ./...`, the three CI integration packages, and both
+      quickstart tracks under the exact CI invocation (38s). Verify: no
+      criticals, no warnings — one attribution assert strengthened and the
+      spec's backpressure mention corrected to reality during the pass.)
