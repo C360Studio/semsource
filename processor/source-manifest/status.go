@@ -69,8 +69,11 @@ type SourceStatusReport struct {
 	BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
 	ErrorCount      int64            `json:"error_count"`
 	TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
-	LastError       *SourceError     `json:"last_error,omitempty"`
-	Timestamp       time.Time        `json:"timestamp"`
+	// Submodules is per-source submodule detail from repo sources (see
+	// SubmoduleStatus) — passed through to every status surface.
+	Submodules []SubmoduleStatus `json:"submodules,omitempty"`
+	LastError  *SourceError      `json:"last_error,omitempty"`
+	Timestamp  time.Time         `json:"timestamp"`
 }
 
 // statusAggregator tracks per-source status reports and determines the
@@ -109,6 +112,7 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			BodiesOffloaded: r.BodiesOffloaded,
 			ErrorCount:      r.ErrorCount,
 			TypeCounts:      r.TypeCounts,
+			Submodules:      r.Submodules,
 			LastError:       r.LastError,
 		})
 		totalEntities += r.EntityCount

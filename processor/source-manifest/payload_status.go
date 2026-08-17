@@ -35,7 +35,22 @@ type SourceStatus struct {
 	BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
 	ErrorCount      int64            `json:"error_count"`
 	TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
-	LastError       *SourceError     `json:"last_error,omitempty"`
+	// Submodules lists every submodule path a repo source declares and its
+	// state — never silently missing code (git-submodule-ingestion spec).
+	Submodules []SubmoduleStatus `json:"submodules,omitempty"`
+	LastError  *SourceError      `json:"last_error,omitempty"`
+}
+
+// SubmoduleStatus describes one declared submodule path of a repo source.
+type SubmoduleStatus struct {
+	// Path is the submodule working-tree path relative to the repo root.
+	Path string `json:"path"`
+	// SHA is the pinned gitlink commit (12-hex short form); empty for a
+	// stale declaration with no gitlink.
+	SHA string `json:"sha,omitempty"`
+	// State is one of: materialized, unmaterialized, excluded_by_config,
+	// declared_but_absent, beyond_cap.
+	State string `json:"state"`
 }
 
 // SourceErrorCode is a typed code for asynchronous source-runtime failures.

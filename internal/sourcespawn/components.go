@@ -100,6 +100,7 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 			instanceName = fmt.Sprintf("ast-source-%s-%s", project, vs)
 		}
 	}
+	instanceName = applyInstanceSuffix(instanceName, src.InstanceSuffix)
 
 	// True-freeze snapshots (entity-staleness spec D5): watch:false with no
 	// explicit index_interval is a real one-shot snapshot — no watcher, no
@@ -200,6 +201,19 @@ func gitComponentConfig(ctx context.Context, src config.SourceEntry, org string,
 	return instanceName, compCfg, nil
 }
 
+// applyInstanceSuffix appends a slugified instance-name discriminator (set by
+// submodule expansion — see SourceEntry.InstanceSuffix). Entity identity in
+// the component's config is untouched; only the instance name changes.
+func applyInstanceSuffix(name, suffix string) string {
+	if suffix == "" {
+		return name
+	}
+	if s := entityid.SystemSlug(suffix); s != "" {
+		return name + "-" + s
+	}
+	return name
+}
+
 // docComponentConfig builds config for a docs source entry.
 func docComponentConfig(src config.SourceEntry, org string) (string, map[string]any) {
 	paths := src.Paths
@@ -221,7 +235,7 @@ func docComponentConfig(src config.SourceEntry, org string) (string, map[string]
 		}
 	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("doc-source-%s", scopedSlug)
+	instanceName := applyInstanceSuffix(fmt.Sprintf("doc-source-%s", scopedSlug), src.InstanceSuffix)
 	cfg := map[string]any{
 		"ports":         outputPorts(),
 		"org":           org,
@@ -254,7 +268,7 @@ func cfgfileComponentConfig(src config.SourceEntry, org string) (string, map[str
 		}
 	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("cfgfile-source-%s", scopedSlug)
+	instanceName := applyInstanceSuffix(fmt.Sprintf("cfgfile-source-%s", scopedSlug), src.InstanceSuffix)
 	cfg := map[string]any{
 		"ports":         outputPorts(),
 		"org":           org,

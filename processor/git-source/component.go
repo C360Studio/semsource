@@ -408,6 +408,55 @@ func (c *Component) currentPhase() string {
 	return "ingesting"
 }
 
+// submoduleState is one declared submodule path on the status report. JSON
+// mirrors source-manifest's SubmoduleStatus (reports are duck-typed).
+type submoduleState struct {
+	Path  string `json:"path"`
+	SHA   string `json:"sha,omitempty"`
+	State string `json:"state"`
+}
+
+// submoduleStates classifies the handler's latest probe for the status
+// report. States: materialized, unmaterialized (declared and pinned but the
+// tree is empty — the silently-missing-code case), excluded_by_config
+// (submodules: false), declared_but_absent (stale .gitmodules entry with no
+// gitlink), beyond_cap (nesting deeper than the inventory cap).
+func (c *Component) submoduleStates() []submoduleState {
+	return classifySubmodules(c.handler.SubmoduleInventory(),
+		c.config.Submodules != nil && !*c.config.Submodules)
+}
+
+// classifySubmodules maps a probe inventory to status states. skip reflects
+// the submodules:false opt-out, which turns unmaterialized into
+// excluded_by_config — deliberate absence, distinguishable from unexpected.
+func classifySubmodules(inv *workspace.SubmoduleInventory, skip bool) []submoduleState {
+	if inv == nil {
+		return nil
+	}
+	var out []submoduleState
+	for _, s := range inv.Submodules {
+		st := submoduleState{Path: s.Path}
+		if len(s.SHA) >= 12 {
+			st.SHA = s.SHA[:12]
+		}
+		switch {
+		case s.Materialized:
+			st.State = "materialized"
+		case s.SHA == "":
+			st.State = "declared_but_absent"
+		case skip:
+			st.State = "excluded_by_config"
+		default:
+			st.State = "unmaterialized"
+		}
+		out = append(out, st)
+	}
+	for _, p := range inv.BeyondCap {
+		out = append(out, submoduleState{Path: p, State: "beyond_cap"})
+	}
+	return out
+}
+
 // publishStatusReport sends a status report to the manifest component via NATS core.
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	// Publishing a phase IS the transition, so the reporter's sampled phase can
@@ -421,6 +470,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal int64            `json:"publish_total,omitempty"`
 		ErrorCount   int64            `json:"error_count"`
 		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+		Submodules   []submoduleState `json:"submodules,omitempty"`
 		LastError    *seedsup.Error   `json:"last_error,omitempty"`
 		Timestamp    time.Time        `json:"timestamp"`
 	}{
@@ -431,8 +481,12 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal: c.entitiesPublished.Load(),
 		ErrorCount:   c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost(),
 		TypeCounts:   c.distinct.TypeCounts(),
-		LastError:    c.seed.LastError(),
-		Timestamp:    time.Now(),
+		// The no-silent-entity-loss posture applied to inputs: every declared
+		// submodule path and its state, so missing trees are visible on every
+		// status surface instead of silently absent from the graph.
+		Submodules: c.submoduleStates(),
+		LastError:  c.seed.LastError(),
+		Timestamp:  time.Now(),
 	}
 	data, err := json.Marshal(report)
 	if err != nil {

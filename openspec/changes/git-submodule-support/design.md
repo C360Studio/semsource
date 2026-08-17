@@ -54,15 +54,26 @@ Verified current state (2026-08-17):
 
 ## Decisions
 
-### D1. Discovery and expansion happen at runtime, in git-source, after the checkout materializes
+### D1. Discovery and expansion happen at runtime, after the checkout materializes — split between git-source (loudness) and a composition-root watcher (expansion)
 
-The git-source instance — the component that owns the clone/pull — probes the
-checkout after every successful `EnsureRepo` (initial and each poll cycle):
-parse `.gitmodules`, read gitlink SHAs and materialization state
-(`workspace.ListSubmodules`, new: `git submodule status --recursive` +
-`git config -f .gitmodules`), then spawn/refresh per-submodule ast/doc/cfg
-entries through the existing `sourcespawn.Add` path with deterministic names.
-The probe result is carried on git-source's status (the loudness signal).
+As implemented, the two halves live where their dependencies live:
+
+- **Loudness**: the git handler probes `workspace.ListSubmodules` after every
+  successful path resolution (initial and each poll); the git-source
+  component classifies the inventory onto its status report
+  (`submodules: [{path, sha, state}]`), which flows through the manifest
+  aggregation to NATS/HTTP/MCP unchanged (both are raw-JSON passthrough).
+- **Expansion**: components have no ConfigManager access, so spawning follows
+  the branch-watcher precedent exactly — `internal/subwatch` watchers started
+  at the composition root (`startSubmoduleWatchers` in run.go) poll each boot
+  repo/git source's checkout and reconcile spawned per-submodule ast/docs/cfg
+  configs via `sourcespawn.Build` + `PutComponentToKV`. Ticks before the
+  clone exists find nothing and retry.
+
+Known scope line (matches the branch-watcher precedent): runtime-ADDED repo
+sources (`add_source`) get materialization, boundary skip, and loudness, but
+no expansion watcher yet — their submodule code is visibly unexpanded on
+status rather than silently misattributed.
 
 *Why not spawn-time expansion in `ExpandRepoSources`?* The checkout doesn't
 exist yet for remote repos; cloning at expansion time moves minutes of work

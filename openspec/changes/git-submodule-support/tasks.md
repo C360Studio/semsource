@@ -62,22 +62,30 @@ remote fixture is for the e2e tier.
 
 ## 4. Probe and dynamic expansion in git-source
 
-- [ ] 4.1 Post-`EnsureRepo` probe (initial seed and every poll cycle):
-      `ListSubmodules` inventory onto git-source status detail with per-path
-      state — materialized / unmaterialized / excluded_by_config /
-      declared-but-absent / beyond-cap.
-- [ ] 4.2 Spawn per-submodule ast/doc/cfg entries via `sourcespawn.Add`:
-      canonical `project` = URLToSlug(resolved URL), `version` = 12-hex
-      gitlink SHA prefix, org inherited; instance names parent-scoped
-      (`…-via-<parentproject>`); doc/cfg entries carry the 3.2 override.
-      Idempotent across probe re-runs.
-- [ ] 4.3 Gitlink move = version transition: after tree sync, spawn
-      new-version instances, then `sourcespawn.Remove` old-version instances;
-      test ordering and that removal follows the source-lifecycle contract.
-- [ ] 4.4 Loudness end-to-end: unmaterialized submodule paths appear on MCP
-      `source_status` and HTTP `/source-manifest/status` (shared composition)
-      naming the paths; signal clears within one aggregation pass once the
-      tree materializes; opt-out shows `excluded_by_config`.
+- [x] 4.1 Post-resolution probe in the git handler (initial seed and every
+      poll): inventory classified onto git-source's status report with
+      per-path state — materialized / unmaterialized / excluded_by_config /
+      declared_but_absent / beyond_cap. Classification unit-tested; probe
+      pinned by an integration test.
+- [x] 4.2 Expansion via `internal/subwatch` at the composition root
+      (branch-watcher precedent — components lack ConfigManager access):
+      per-submodule ast/docs/cfg entries with canonical `project` =
+      SystemSlug(URLToSlug(resolved URL)) and `version` = 12-hex gitlink
+      prefix; doc/cfg ride `project-<sha12>` (keeps two pins' doc/config
+      identity distinct); instance names parent+LINK scoped
+      (`-via-<parent>-<path>` — same-SHA dual links in one parent must not
+      share instances). Idempotent across ticks; dual-pin fixture-shaped
+      test. Runtime-added repos: no expansion watcher yet (loud on status,
+      never misattributed) — recorded in design D1.
+- [x] 4.3 Gitlink move = version transition: spawn-new-then-remove-old via
+      KV config delete (ServiceManager tears down reactively); ordering and
+      old-instance removal tested.
+- [x] 4.4 Loudness end-to-end: the `submodules` field flows git-source →
+      SourceStatusReport → SourceStatus → StatusPayload; HTTP
+      `/source-manifest/status` serves that payload verbatim and MCP
+      `source_status` embeds the same raw JSON — one composition, no
+      re-mapping to drop it. Probe refresh per poll clears the signal after
+      materialization.
 
 ## 5. Identity assertions and ADR
 
