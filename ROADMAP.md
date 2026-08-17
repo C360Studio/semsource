@@ -1,25 +1,33 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.7`,
-running on SemStreams `v1.0.0-beta.161` (the post-beta.160 reliability and
-lifecycle-control slice).
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.8`,
+running on SemStreams `v1.0.0-beta.161` (unchanged from beta.7 — no substrate
+cutover in this release).
 
-`v1.0.0-beta.7` is the trustworthy-delivery release. It is a **breaking
-upgrade**: SemStreams beta.161 mandates fresh NATS storage (`docker compose
-down -v` and reseed — the graph re-derives from source). One beta.6
-restriction is lifted: `websocket_path` is **configurable again**
-(semstreams#945 delivered); `/ws` stays the default and documented contract
-path. What the release adds: **no trash in the graph** — minified assets index
-as file entities only (never parsed into symbols) with a loud per-file symbol
-cap, eliminating the historical 5-minute publish plateau (OSH seed 8min →
-2min, 77.8k → 32.6k publishes); **transient trouble no longer loses
-entities** — publish errors classify by kind, broker outages and
-stream-capacity refusals retry idempotently (deterministic `Nats-Msg-Id`)
-inside a delivery budget, measured at zero loss where prior builds lost
-5,282 and 34,871 entities on the same inductions; **seed liveness is
-visible** — `files_parsed`/`bodies_offloaded` advance through the pre-publish
-windows on status and `/metrics`; and slow-consumer errors are attributed to
-their subscription. Scorecard on this release: OSH v2 11/13 (the two reds
+`v1.0.0-beta.8` is the git-submodule release: a repo that links submodules now
+ingests **completely, loudly, and with sane identity** (#185; ADR-0012).
+Clones and pulls materialize every declared submodule tree at its pinned
+commit (recursive; shallow-first with a full-fetch fallback for non-tip pins;
+`submodules: false` opts out per source). Submodule code carries the
+submodule's **own** identity — project from its resolved URL, version from
+the 12-hex gitlink SHA — so the same pin linked from any number of repos
+yields byte-identical entity IDs that merge in the graph, while two pins stay
+distinct. Every declared submodule path reports a state on
+`source_status`/HTTP status (`materialized`, `unmaterialized`,
+`excluded_by_config`, `declared_but_absent`, `beyond_cap`) — missing
+submodule code is never silent. Ingest walks no longer cross nested git
+working trees at all, so embedded foreign repos stop blending into their
+parent's identity too. **Breaking only if your graph already contained
+accidentally-ingested submodule code** under parent identity: standard
+fresh-reseed posture applies (`docker compose down -v` + reseed). Verified
+end-to-end against a public dual-pin fixture: hermetic unit/integration
+tiers, an e2e remote-clone suite, and a compose acceptance run
+(`ready`, 46 entities, 0 errors, both pins expanded and correctly scoped —
+evidence on #185). The acceptance also surfaced an upstream config-watcher
+race (semstreams#986, one dropped event in a 6-write burst); SemSource
+defends with an idempotent confirm re-put until it is fixed. Prior-release
+measurements (asset guards, zero-loss publish classification, seed liveness)
+carry forward unchanged; scorecard state remains OSH v2 11/13 (the two reds
 name still-open semstreams#823), dogfood loose band 33/33
 (`scripts/scorecard/results/`).
 
@@ -80,6 +88,15 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Recently Shipped
 
+- `v1.0.0-beta.8`: git submodule support (#185, ADR-0012) — recursive
+  materialization on clone/pull with non-tip shallow fallback and per-source
+  opt-out; canonical submodule identity (resolved-URL project + 12-hex
+  gitlink-SHA version; cross-repo dedup by construction); per-path submodule
+  states on every status surface; git-boundary skipping at every ingest walk;
+  runtime expansion of per-submodule ast/docs/config components with
+  parent+link-scoped instance names; host-scoped git auth header. Verified by
+  hermetic + e2e + compose acceptance against a public dual-pin fixture;
+  surfaced and defended against semstreams#986.
 - `v1.0.0-beta.7`: SemStreams beta.161 cutover (breaking; fresh storage;
   caller-owned shutdown contexts; `websocket_path` restored), asset ingestion
   guards (#175: minified detection + symbol cap; plateau eliminated), typed
@@ -145,6 +162,15 @@ confidence and dependency shape. The "why" behind durable choices lives in
   web, config, and media sources are still one entity per artifact.
 - **Version diffs do not detect renames.** A renamed or moved symbol currently
   appears as a removal plus an addition.
+- **Submodule expansion covers boot-configured sources.** Repo/git sources
+  added at runtime via `add_source` materialize their submodules and report
+  per-path states, but are not yet auto-expanded into per-submodule scoped
+  components — visibly unexpanded on status, never misattributed.
+- **Dynamically spawned components depend on a framework watcher with a known
+  burst race** ([semstreams#986](https://github.com/C360Studio/semstreams/issues/986)):
+  one KV config write out of a same-instant burst can be dropped with no
+  error. SemSource's confirm re-put narrows the window; the real fix is
+  upstream.
 - **The graph is retention-first.** Safe, reference-complete deletion for genuine
   mistakes/churn is a future lifecycle feature, not the default behavior.
 
