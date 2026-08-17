@@ -108,6 +108,11 @@ func parseASTFlags(args []string) (*config.SourceEntry, error) {
 	path := fs.String("path", ".", "root path to scan")
 	language := fs.String("language", "", "language (go, typescript, python, java, svelte)")
 	watch := fs.Bool("watch", true, "watch for changes")
+	// Explicit identity (the config file's project/version pair): same
+	// project at two versions is what code_changes diffs; omission keeps
+	// path-derived identity.
+	project := fs.String("project", "", "explicit project identity (overrides path-derived)")
+	version := fs.String("version", "", "explicit version for this registration")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -116,6 +121,8 @@ func parseASTFlags(args []string) (*config.SourceEntry, error) {
 		Path:     *path,
 		Language: *language,
 		Watch:    *watch,
+		Project:  *project,
+		Version:  *version,
 	}, nil
 }
 
@@ -144,6 +151,10 @@ func parseRepoFlags(args []string) (*config.SourceEntry, error) {
 	branch := fs.String("branch", "", "branch (default: remote default)")
 	language := fs.String("language", "", "primary language (go, java, python, typescript, or leave blank to auto-detect)")
 	watch := fs.Bool("watch", true, "watch for changes")
+	// Explicit identity, applied to the expanded code entries exactly as a
+	// config-file declaration would be; omission keeps URL-derived identity.
+	project := fs.String("project", "", "explicit project identity (overrides URL-derived)")
+	version := fs.String("version", "", "explicit version for this registration")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -156,6 +167,8 @@ func parseRepoFlags(args []string) (*config.SourceEntry, error) {
 		Branch:   *branch,
 		Language: *language,
 		Watch:    *watch,
+		Project:  *project,
+		Version:  *version,
 	}, nil
 }
 

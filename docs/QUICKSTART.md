@@ -223,9 +223,10 @@ what the submodule machinery derives from the same repository's URL, and the
 version is the pinned commit — that exact pair is what makes its entities
 land on the same IDs as the parent's submodule pin.
 
-`semsource add repo --url <url>` appends a remote source from the command
-line; local sources with explicit `project`/`version` are declared in the
-config file as above.
+The same registrations work from the command line — `semsource add repo
+--url <url>` for the remote, and `semsource add ast --path <dir> --project
+<slug> --version <rev>` for a local source with explicit identity; the
+config file above is what either form writes.
 
 ```bash quickstart:multi
 semsource validate
