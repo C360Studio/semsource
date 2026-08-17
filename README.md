@@ -27,36 +27,20 @@ state, ownership, and query indices — so **a NATS server is always required**.
 
 ## Quick Start
 
-### Fastest — Docker Compose (bundles NATS + tier-1 semantic search)
+**Start here: [docs/QUICKSTART.md](docs/QUICKSTART.md)** — the documented
+zero-to-first-query path: point SemSource at a repository (or several, with
+explicit identity and the git-submodule case), watch it reach
+`phase: ready`, run a first query, and connect an agent. It covers both
+starts — Docker Compose (bundles NATS + semantic search) and the native
+binary — plus a signal-keyed troubleshooting section. Its command blocks are
+executed verbatim by CI against real fixture repositories, so the walkthrough
+cannot silently drift from the product.
 
-```bash
-git clone https://github.com/C360Studio/semsource.git && cd semsource
-docker compose up            # indexes the current directory; MCP gateway on :8080
-```
+The rest of this README is the reference: source types, CLI flags, compose
+profiles and ports, the config file, and the query/status API surfaces.
 
-One command, no NATS to run yourself. See [Docker Compose](#docker-compose) for profiles,
-ports, config, and connecting an agent.
-
-> **Port already allocated?** Another NATS is using 4222 — set `NATS_HOST_PORT=24222` (and
-> `NATS_MONITOR_HOST_PORT=28222`) and re-run.
 > **Picked up a stale image?** `docker compose up` reuses previously built/pulled images — use
 > `docker compose up --build` (local changes) or `--pull always` (released images) to refresh.
-
-### Native CLI
-
-```bash
-# Install (requires Go 1.26.3+)
-go install github.com/c360studio/semsource/cmd/semsource@latest
-
-# SemSource needs NATS (JetStream + KV) — start one if you don't have it:
-docker run --rm -p 4222:4222 nats:2.12-alpine -js
-
-# Auto-detect your project, write semsource.json, and start ingesting
-semsource init --quick
-semsource run
-```
-
-Or run the interactive wizard for full control: `semsource init`.
 
 ## What It Does
 

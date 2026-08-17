@@ -1,0 +1,45 @@
+# The quickstart document is executable truth (onboarding-quickstart spec):
+# docs/QUICKSTART.md's marked command blocks run verbatim, in document order,
+# against the public fixture repositories they name. A documented command that
+# stops producing the documented outcome fails this build instead of a user.
+#
+# This tier clones fixtures from GitHub, so pull requests are path-filtered:
+# unrelated docs-only edits never block on the network tier, while edits to
+# the quickstart itself, the e2e driver, or anything that could change the
+# documented behavior (Go code, configs, compose) do run it. The generic e2e
+# suite remains deliberately un-promoted (see ci.yml); only the bounded
+# quickstart tracks run here — tiny fixtures, two tracks, one engine at a
+# time.
+name: Quickstart
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/QUICKSTART.md"
+      - "test/e2e/**"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "configs/**"
+      - "docker-compose.yml"
+      - ".github/workflows/quickstart.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  quickstart-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Quickstart tracks (doc-driven e2e)
+        run: go test -tags=e2e -run 'TestE2E_Quickstart' -v -timeout 25m ./test/e2e/

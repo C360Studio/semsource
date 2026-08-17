@@ -18,6 +18,17 @@ docker compose version >/dev/null 2>&1 || fail "docker compose is required"
 # otherwise the shell PID makes concurrent smoke invocations distinct.
 export COMPOSE_PROJECT_NAME="${SEMSOURCE_SMOKE_PROJECT_NAME:-semsource-core-smoke-$$}"
 
+# This smoke covers the compose start-step of the documented quickstart
+# (docs/QUICKSTART.md, onboarding-quickstart D3): the doc's compose option and
+# this smoke must exercise the same config artifact. If the doc stops naming
+# the config this smoke boots, the coverage claim is broken — fail loudly.
+quickstart_doc="$project_dir/docs/QUICKSTART.md"
+[ -f "$quickstart_doc" ] || fail "docs/QUICKSTART.md is missing — this smoke covers its documented compose start"
+grep -q 'configs/mvp\.json' "$quickstart_doc" ||
+	fail "docs/QUICKSTART.md no longer documents configs/mvp.json — repoint this smoke (or the doc) so the smoked config is the documented one"
+grep -q 'SEMSOURCE_TARGET' "$quickstart_doc" ||
+	fail "docs/QUICKSTART.md no longer documents SEMSOURCE_TARGET — the compose start this smoke exercises is undocumented"
+
 # The default profile must neither resolve nor authenticate for the UI image.
 # A deliberately impossible immutable ref makes accidental profile leakage fail
 # before any paid or long-running stack work begins.
