@@ -559,7 +559,7 @@ func (e *gradleDependencyEntity) entityState() *handler.EntityState {
 // --------------------------------------------------------------------------
 
 func (h *ConfigHandler) parseFileEntityStates(base, path string, content []byte, root, org string, now time.Time) []*handler.EntityState {
-	system := systemSlug(root)
+	system := h.system(root)
 	switch base {
 	case "go.mod":
 		return h.goModEntityStates(content, path, system, org, now)

@@ -17,11 +17,21 @@ The AST source component MUST configure sources through one or more `watch_paths
 strictly reject top-level `repo_path`, `org`, `project`, `version`, `languages`, and
 `exclude_patterns`. It MUST NOT translate those fields through a compatibility accessor.
 
+The single sanctioned derivation is submodule expansion: when a configured
+watch path's repository declares git submodules, resolution MAY derive
+additional scoped watch entries from `.gitmodules` (each carrying the
+submodule's own project and gitlink-SHA version, per the
+git-submodule-ingestion capability). Derived entries are system-generated —
+never authored config keys, never a translation of the removed legacy shape —
+and the authored entry continues to govern the parent tree minus the submodule
+directories.
+
 #### Scenario: AST sources are configured
 
 - **WHEN** a composition configures one or more repositories
 - **THEN** each source is a complete validated `watch_paths` entry
-- **AND** runtime uses the entries without precedence or conversion logic
+- **AND** runtime uses the entries without precedence logic, the only
+  sanctioned derivation being submodule expansion of a configured entry
 
 #### Scenario: A removed AST key is supplied
 
@@ -35,6 +45,16 @@ strictly reject top-level `repo_path`, `org`, `project`, `version`, `languages`,
 - **THEN** validation fails before start
 - **AND** no implicit current-directory source is invented
 
+#### Scenario: A configured repository declares submodules
+
+- **WHEN** a configured watch path's repository declares git submodules with
+  materialized trees
+- **THEN** resolution yields one derived scoped entry per submodule (own
+  project, gitlink-SHA version) alongside the authored entry, which excludes
+  the submodule directories
+- **AND** the derived entries are observable on the source status surfaces,
+  not silent internal state
+
 ### Requirement: AST indexing exposes only active entry points
 
 Initial and watched AST indexing MUST use the component's registered language-aware paths. The
@@ -45,8 +65,6 @@ zero-caller `Watcher.IndexDirectory` compatibility API MUST NOT remain.
 - **WHEN** the AST component starts with canonical watch paths
 - **THEN** each configured language uses its registered parser
 - **AND** no compatibility directory-index method is called
-
-
 
 ### Requirement: Declared languages are validated against registered parsers
 
@@ -65,3 +83,4 @@ that walks files and extracts nothing.
 
 - **WHEN** a watch path declares `c` or `cpp`
 - **THEN** configuration succeeds and the matching source files are parsed
+

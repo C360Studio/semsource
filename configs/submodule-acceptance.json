@@ -1,0 +1,33 @@
+{
+  "namespace": "acme",
+  "workspace_dir": "/tmp/repos",
+  "sources": [
+    {
+      "type": "repo",
+      "url": "https://github.com/C360Studio/semdev-test",
+      "languages": ["go"],
+      "watch": false,
+      "poll_interval": "5s"
+    }
+  ],
+  "graph": {
+    "embedder_type": "http",
+    "index_workers": 4,
+    "coalesce_ms": 200
+  },
+  "model_registry": {
+    "endpoints": {
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "query_prefix": "Represent this sentence for searching relevant passages: "
+      }
+    },
+    "capabilities": {
+      "embedding": {
+        "preferred": ["semembed"]
+      }
+    }
+  }
+}

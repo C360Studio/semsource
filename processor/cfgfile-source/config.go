@@ -21,6 +21,12 @@ type Config struct {
 	// Org is the organization namespace used in entity ID construction.
 	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`
 
+	// Project, when non-empty, overrides the path-derived entity-ID system
+	// slug — submodule expansion registers the same canonical project from
+	// every consumer checkout path. Empty keeps path-derived IDs
+	// byte-for-byte.
+	Project string `json:"project,omitempty" schema:"type:string,description:Explicit project identity overriding the path-derived entity-ID system slug"`
+
 	// WatchEnabled controls whether filesystem changes are monitored in real time.
 	// Defaults to true.
 	WatchEnabled bool `json:"watch_enabled" schema:"type:bool,description:Enable real-time filesystem watching for config file changes,category:advanced,default:true"`

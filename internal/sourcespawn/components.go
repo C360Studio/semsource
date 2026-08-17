@@ -100,6 +100,7 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 			instanceName = fmt.Sprintf("ast-source-%s-%s", project, vs)
 		}
 	}
+	instanceName = applyInstanceSuffix(instanceName, src.InstanceSuffix)
 
 	// True-freeze snapshots (entity-staleness spec D5): watch:false with no
 	// explicit index_interval is a real one-shot snapshot — no watcher, no
@@ -193,8 +194,24 @@ func gitComponentConfig(ctx context.Context, src config.SourceEntry, org string,
 		"branch_slug":   src.BranchSlug,
 		"instance_name": instanceName,
 	}
+	if src.Submodules != nil {
+		compCfg["submodules"] = *src.Submodules
+	}
 
 	return instanceName, compCfg, nil
+}
+
+// applyInstanceSuffix appends a slugified instance-name discriminator (set by
+// submodule expansion — see SourceEntry.InstanceSuffix). Entity identity in
+// the component's config is untouched; only the instance name changes.
+func applyInstanceSuffix(name, suffix string) string {
+	if suffix == "" {
+		return name
+	}
+	if s := entityid.SystemSlug(suffix); s != "" {
+		return name + "-" + s
+	}
+	return name
 }
 
 // docComponentConfig builds config for a docs source entry.
@@ -209,15 +226,27 @@ func docComponentConfig(src config.SourceEntry, org string) (string, map[string]
 			slug = s
 		}
 	}
+	// An explicit project overrides the path-derived slug, mirroring ast:
+	// submodule expansion registers the same canonical project from every
+	// consumer checkout path (D9), and path slugs would fork identity.
+	if src.Project != "" {
+		if s := entityid.SystemSlug(src.Project); s != "" {
+			slug = s
+		}
+	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("doc-source-%s", scopedSlug)
-	return instanceName, map[string]any{
+	instanceName := applyInstanceSuffix(fmt.Sprintf("doc-source-%s", scopedSlug), src.InstanceSuffix)
+	cfg := map[string]any{
 		"ports":         outputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
 		"instance_name": instanceName,
 	}
+	if src.Project != "" {
+		cfg["project"] = src.Project
+	}
+	return instanceName, cfg
 }
 
 // cfgfileComponentConfig builds config for a config-file source entry.
@@ -232,15 +261,25 @@ func cfgfileComponentConfig(src config.SourceEntry, org string) (string, map[str
 			slug = s
 		}
 	}
+	// Explicit project overrides the path-derived slug (see docComponentConfig).
+	if src.Project != "" {
+		if s := entityid.SystemSlug(src.Project); s != "" {
+			slug = s
+		}
+	}
 	scopedSlug := entityid.BranchScopedSlug(slug, src.BranchSlug)
-	instanceName := fmt.Sprintf("cfgfile-source-%s", scopedSlug)
-	return instanceName, map[string]any{
+	instanceName := applyInstanceSuffix(fmt.Sprintf("cfgfile-source-%s", scopedSlug), src.InstanceSuffix)
+	cfg := map[string]any{
 		"ports":         outputPorts(),
 		"org":           org,
 		"paths":         paths,
 		"watch_enabled": src.Watch,
 		"instance_name": instanceName,
 	}
+	if src.Project != "" {
+		cfg["project"] = src.Project
+	}
+	return instanceName, cfg
 }
 
 // urlComponentConfig builds config for a URL source entry.

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -207,6 +208,9 @@ func (w *FSWatcher) addWatchesRecursive(root string) error {
 		if w.excludes[base] || (strings.HasPrefix(base, ".") && base != ".") {
 			return filepath.SkipDir
 		}
+		if path != root && gitboundary.IsBoundary(path) {
+			return filepath.SkipDir
+		}
 		if addErr := w.watcher.Add(path); addErr != nil {
 			w.logger.Warn("FSWatcher: failed to watch directory",
 				"path", path, "error", addErr)
@@ -282,6 +286,9 @@ func (w *FSWatcher) handleNewDirectory(path string) {
 	if w.excludes[base] || strings.HasPrefix(base, ".") {
 		return
 	}
+	if gitboundary.IsBoundary(path) || gitboundary.Under(w.root, path) {
+		return
+	}
 	if err := w.watcher.Add(path); err != nil {
 		w.logger.Warn("FSWatcher: failed to watch new directory",
 			"path", path, "error", err)
@@ -309,6 +316,12 @@ func (w *FSWatcher) flushPending(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
+		}
+		// Checked at flush, not accumulate: a materializing submodule gains
+		// its .git gitlink only after its files are written, so this is the
+		// first moment the boundary is reliably visible.
+		if gitboundary.Under(w.root, path) {
+			continue
 		}
 		w.processOne(path, op)
 	}

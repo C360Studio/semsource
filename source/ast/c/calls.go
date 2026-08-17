@@ -9,6 +9,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	cgrammar "github.com/smacker/go-tree-sitter/c"
 
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -87,6 +88,9 @@ func (p *Parser) buildDefIndex() {
 			if defSkipDirs[info.Name()] || strings.HasPrefix(info.Name(), ".") {
 				return filepath.SkipDir
 			}
+			if gitboundary.IsBoundary(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		switch filepath.Ext(path) {
@@ -126,7 +130,8 @@ func (p *Parser) corpusHasCPP() bool {
 			return filepath.SkipAll
 		}
 		if info.IsDir() {
-			if path != p.repoRoot && (defSkipDirs[info.Name()] || strings.HasPrefix(info.Name(), ".")) {
+			if path != p.repoRoot && (defSkipDirs[info.Name()] ||
+				strings.HasPrefix(info.Name(), ".") || gitboundary.IsBoundary(path)) {
 				return filepath.SkipDir
 			}
 			return nil

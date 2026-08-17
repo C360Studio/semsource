@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -164,7 +165,13 @@ func (p *Parser) ParseDirectory(ctx context.Context, dirPath string) ([]*ast.Par
 		}
 
 		// Skip non-Go files and test files
-		if info.IsDir() || !strings.HasSuffix(path, ".go") {
+		if info.IsDir() {
+			if path != dirPath && gitboundary.IsBoundary(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 

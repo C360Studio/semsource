@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -54,6 +55,10 @@ type Config struct {
 	// Used in multi-branch mode to prevent entity ID collisions across branches.
 	BranchSlug string
 
+	// SkipSubmodules disables submodule materialization on clone/pull.
+	// Default (false) materializes declared submodule trees.
+	SkipSubmodules bool
+
 	// Logger, when non-nil, receives structured logs from Watch/pollLoop
 	// operations. Without a logger, polling errors are invisible — the handler
 	// silently skips failed ticks. Pass the component's logger here so poll
@@ -79,6 +84,11 @@ type Handler struct {
 	// a poll tick). Readable via WatchErrorCount so the owning component can
 	// surface the value in its status report.
 	watchErrors atomic.Int64
+
+	// submodules is the latest probe result (see probeSubmodules), read by
+	// the owning component for its status report.
+	subMu      sync.RWMutex
+	submodules *workspace.SubmoduleInventory
 }
 
 // New creates a Handler with the given configuration.
@@ -335,6 +345,7 @@ func (c *localCfg) GetSceneThreshold() float64  { return 0 }
 // into WorkspaceDir and returns the resulting path.
 func (h *Handler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig) (string, error) {
 	if p := cfg.GetPath(); p != "" {
+		h.probeSubmodules(ctx, p)
 		return p, nil
 	}
 	repoURL := cfg.GetURL()
@@ -344,8 +355,37 @@ func (h *Handler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig)
 	if h.cfg.WorkspaceDir == "" {
 		return "", fmt.Errorf("git handler: workspace_dir required for remote repos (no local path set)")
 	}
-	opts := workspace.Options{Token: h.cfg.Token}
-	return workspace.EnsureRepo(ctx, repoURL, cfg.GetBranch(), h.cfg.WorkspaceDir, opts)
+	opts := workspace.Options{Token: h.cfg.Token, SkipSubmodules: h.cfg.SkipSubmodules}
+	path, err := workspace.EnsureRepo(ctx, repoURL, cfg.GetBranch(), h.cfg.WorkspaceDir, opts)
+	if err == nil {
+		h.probeSubmodules(ctx, path)
+	}
+	return path, err
+}
+
+// probeSubmodules refreshes the submodule inventory after every successful
+// path resolution (initial and each poll). The inventory is the loudness
+// source of truth: declared-but-unmaterialized trees surface on the status
+// report instead of silently missing from the graph.
+func (h *Handler) probeSubmodules(ctx context.Context, repoPath string) {
+	inv, err := workspace.ListSubmodules(ctx, repoPath)
+	if err != nil {
+		if h.cfg.Logger != nil {
+			h.cfg.Logger.Debug("submodule probe failed", "repo", repoPath, "error", err)
+		}
+		return
+	}
+	h.subMu.Lock()
+	h.submodules = inv
+	h.subMu.Unlock()
+}
+
+// SubmoduleInventory returns the latest submodule probe result, or nil before
+// the first successful probe.
+func (h *Handler) SubmoduleInventory() *workspace.SubmoduleInventory {
+	h.subMu.RLock()
+	defer h.subMu.RUnlock()
+	return h.submodules
 }
 
 // systemSlug returns the system slug for entity ID construction.

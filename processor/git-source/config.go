@@ -46,6 +46,11 @@ type Config struct {
 	// Defaults to true.
 	WatchEnabled *bool `json:"watch_enabled,omitempty" schema:"type:bool,description:Enable polling for new commits,category:advanced,default:true"`
 
+	// Submodules controls whether declared git submodule trees are
+	// materialized on clone and pull. Default (nil) is ON: silently absent
+	// submodule code is the failure mode submodule support exists to prevent.
+	Submodules *bool `json:"submodules,omitempty" schema:"type:bool,description:Materialize declared git submodule working trees on clone and pull,category:advanced,default:true"`
+
 	// MaxCommits caps the number of commits ingested per ingest call.
 	// 0 means unlimited (default).
 	MaxCommits int `json:"max_commits" schema:"type:int,description:Maximum commits to ingest per run (0 for unlimited),category:advanced,default:0"`

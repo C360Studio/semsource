@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -26,6 +27,7 @@ import (
 	"github.com/c360studio/semsource/graph"
 	semgovernance "github.com/c360studio/semsource/internal/governance"
 	"github.com/c360studio/semsource/internal/sourcespawn"
+	"github.com/c360studio/semsource/internal/subwatch"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	audiosource "github.com/c360studio/semsource/processor/audio-source"
 	cfgfilesource "github.com/c360studio/semsource/processor/cfgfile-source"
@@ -194,6 +196,7 @@ func serveUntilSignal(
 	}
 
 	startBranchWatchers(signalCtx, expandResult.Watchers, cfg, configMgr, logger)
+	startSubmoduleWatchers(signalCtx, cfg, configMgr, logger)
 
 	logger.Info("semsource running — waiting for shutdown signal")
 	<-signalCtx.Done()
@@ -1182,6 +1185,65 @@ func registerIngestHandlers(
 			return ctx.Err()
 		case <-time.After(pollInterval):
 		}
+	}
+}
+
+// startSubmoduleWatchers starts a poll goroutine per boot repo/git source
+// that materializes submodules (default on; `submodules: false` opts out).
+// Discovery must run AFTER git-source's clone materializes the checkout, so
+// like branch watchers this polls: ticks before the checkout exists find no
+// inventory and try again. Discovered pins expand into scoped ast/docs/config
+// components via the ConfigManager KV store (internal/subwatch).
+func startSubmoduleWatchers(
+	ctx context.Context,
+	cfg *config.Config,
+	configMgr *semconfig.Manager,
+	logger *slog.Logger,
+) {
+	for _, src := range cfg.Sources {
+		if src.Type != "repo" && src.Type != "git" {
+			continue
+		}
+		if src.Submodules != nil && !*src.Submodules {
+			continue
+		}
+		if len(src.Branches) > 0 {
+			// Multi-branch sources track worktrees per branch; per-worktree
+			// submodule expansion is not covered yet. Say so rather than
+			// silently ingesting nothing from their submodules.
+			logger.Info("submodule expansion does not cover multi-branch sources yet",
+				"repo", src.URL+src.Path)
+			continue
+		}
+		repoPath := src.Path
+		if repoPath == "" && src.URL != "" {
+			repoPath = filepath.Join(cfg.WorkspaceDir, workspace.URLToSlug(src.URL))
+		}
+		if repoPath == "" {
+			continue
+		}
+		parentSlug := entityid.SystemSlug(repoPath)
+		if src.Project != "" {
+			parentSlug = entityid.SystemSlug(src.Project)
+		}
+
+		w := subwatch.New(subwatch.Config{
+			RepoPath:   repoPath,
+			ParentSlug: parentSlug,
+			Languages:  src.EffectiveLanguages(),
+			Watch:      src.Watch,
+			Opts: sourcespawn.Options{
+				Org:           cfg.Namespace,
+				WorkspaceDir:  cfg.WorkspaceDir,
+				GitToken:      cfg.GitToken,
+				MediaStoreDir: cfg.MediaStoreDir,
+			},
+			Store:  configMgr,
+			Logger: logger,
+		})
+		interval := parseBranchPollInterval(src.PollInterval)
+		logger.Info("starting submodule watcher", "repo", repoPath, "interval", interval)
+		go w.Run(ctx, interval)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/internal/gitboundary"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
@@ -238,7 +239,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 			return nil, err
 		}
 
-		system := entityid.SystemSlug(root)
+		system := h.system(root)
 
 		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
@@ -249,6 +250,9 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 			}
 			if info.IsDir() {
 				if isDefaultExcludedDocDir(root, path) {
+					return filepath.SkipDir
+				}
+				if path != root && gitboundary.IsBoundary(path) {
 					return filepath.SkipDir
 				}
 				return nil
@@ -380,7 +384,7 @@ func (h *Handler) enrichEventEntityStates(ctx context.Context, ev handler.Change
 	}
 
 	now := time.Now().UTC()
-	system := entityid.SystemSlug(root)
+	system := h.system(root)
 
 	states, err := h.ingestFileEntityStates(ctx, ev.Path, root, system, org, now)
 	if err == nil {

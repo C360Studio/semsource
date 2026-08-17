@@ -103,8 +103,25 @@ type SourceEntry struct {
 	// entity IDs per branch. Not user-configurable.
 	BranchSlug string `json:"-"`
 
+	// InstanceSuffix is set internally by submodule expansion to keep
+	// component INSTANCE names unique per parent repo while entity identity
+	// (project/version) stays canonical. Two parents linking the same
+	// submodule at the same SHA must publish byte-identical entity IDs from
+	// two separate instances — a shared instance name would make one
+	// parent's registration overwrite the other's, and removing one parent
+	// would tear down the survivor's instance. Not user-configurable.
+	InstanceSuffix string `json:"-"`
+
 	// Watch enables continuous file-system or network watching for this source.
 	Watch bool `json:"watch,omitempty"`
+
+	// Submodules controls git submodule materialization for git and repo
+	// sources. Default (nil) is ON — a clone that silently omits submodule
+	// trees is missing code, which is the failure mode submodule support
+	// exists to prevent. Explicit false opts out; declared-but-skipped
+	// submodule paths are still reported on source status as excluded by
+	// configuration.
+	Submodules *bool `json:"submodules,omitempty"`
 
 	// Extensions filters which file extensions to scan (e.g., ["png", "jpg"]).
 	// Used by image and video sources. Empty means use handler defaults.

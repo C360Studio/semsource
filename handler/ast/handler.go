@@ -25,6 +25,7 @@ import (
 	_ "github.com/c360studio/semsource/source/ast/ts"
 
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/internal/gitboundary"
 )
 
 // Config is an optional extended interface that SourceConfig implementations
@@ -179,6 +180,9 @@ func parseDirectory(ctx context.Context, parser semsourceast.FileParser, root st
 		if info.IsDir() {
 			base := filepath.Base(path)
 			if strings.HasPrefix(base, ".") || base == "vendor" || base == "node_modules" {
+				return filepath.SkipDir
+			}
+			if path != root && gitboundary.IsBoundary(path) {
 				return filepath.SkipDir
 			}
 			return nil

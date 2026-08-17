@@ -380,6 +380,34 @@ declare it explicitly when the paths differ per version:
 
 Omitting both keeps version-independent ingestion (entity IDs unchanged).
 
+### Git submodules
+
+Repos with git submodules ingest **completely, loudly, and with their own
+identity** — on by default for `repo`/`git` sources:
+
+- **Materialization**: clones and pulls bring every declared submodule tree to
+  its pinned commit (recursively; shallow first, full-fetch fallback for
+  non-tip pins). Opt out per source with `"submodules": false`.
+- **Identity**: each submodule's code is scoped to its own project (derived
+  from the submodule's resolved URL) and a version derived from the pinned
+  gitlink SHA (first 12 hex chars) — not the parent's identity. The same
+  submodule pinned at the same commit by any number of repos yields
+  byte-identical entity IDs and merges in the graph; two different pins stay
+  distinct (ADR-0012). Nested submodule paths and submodules-of-submodules
+  are handled (inventory depth cap 10, capped paths reported).
+- **Loudness**: every declared submodule path appears on `source_status` /
+  `/source-manifest/status` with a state — `materialized`, `unmaterialized`
+  (declared but empty: clone the parent with `--recurse-submodules` or let
+  SemSource clone it), `excluded_by_config`, `declared_but_absent` (stale
+  `.gitmodules`), or `beyond_cap`. Missing submodule code is never silent.
+- **Boundaries**: ingest walks never cross into a nested git working tree —
+  a submodule (or any embedded foreign repo) under a watch path no longer
+  blends into the parent's identity.
+
+Submodule expansion runs for sources configured in `semsource.json` at boot;
+sources added at runtime via `add_source` materialize and report submodule
+state but are not yet auto-expanded.
+
 Optional top-level fields:
 
 | Field                     | Default              | Description                                                                                                                                                                                         |
