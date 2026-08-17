@@ -20,6 +20,12 @@ type Options struct {
 	// injected via the GIT_ASKPASS mechanism so it never appears in process
 	// listings or on-disk git config. SSH URLs are unaffected.
 	Token string
+
+	// SkipSubmodules disables submodule materialization. The default
+	// (false) materializes declared submodule trees after every clone and
+	// pull — silent absence is the failure mode this package exists to
+	// prevent, so recursion is opt-out, not opt-in.
+	SkipSubmodules bool
 }
 
 // EnsureRepo clones or pulls a git repository into baseDir/{slug}.
@@ -45,10 +51,50 @@ func EnsureRepo(ctx context.Context, repoURL, branch, baseDir string, opts ...Op
 
 	// If .git exists, pull; otherwise clone.
 	if _, err := os.Stat(filepath.Join(localPath, ".git")); err == nil {
-		return localPath, pull(ctx, localPath, branch, opt.Token)
+		if err := pull(ctx, localPath, branch, repoURL, opt.Token); err != nil {
+			return localPath, err
+		}
+	} else if err := clone(ctx, repoURL, branch, localPath, opt.Token); err != nil {
+		return localPath, err
 	}
 
-	return localPath, clone(ctx, repoURL, branch, localPath, opt.Token)
+	if opt.SkipSubmodules {
+		return localPath, nil
+	}
+	return localPath, ensureSubmodules(ctx, localPath, repoURL, opt.Token)
+}
+
+// ensureSubmodules materializes the working trees of every submodule the
+// checkout declares, recursively, at the commits its gitlinks pin. It runs
+// after both clone and pull so a moved gitlink is synced before ingestion.
+//
+// The first attempt is shallow (--depth 1). A shallow fetch of a pinned
+// commit FAILS when that commit is not the remote branch tip and the server
+// does not allow direct SHA fetches — a routine situation for pinned
+// submodules. On any failure the whole update is retried without --depth:
+// already-materialized submodules are no-ops, so the retry only deepens the
+// ones that failed.
+func ensureSubmodules(ctx context.Context, repoPath, repoURL, token string) error {
+	if _, err := os.Stat(filepath.Join(repoPath, ".gitmodules")); err != nil {
+		return nil // no declared submodules — nothing to materialize
+	}
+
+	shallow := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive", "--depth", "1")
+	shallow.Dir = repoPath
+	applyAuth(shallow, token, repoURL)
+	shallowOut, shallowErr := shallow.CombinedOutput()
+	if shallowErr == nil {
+		return nil
+	}
+
+	full := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive")
+	full.Dir = repoPath
+	applyAuth(full, token, repoURL)
+	if out, err := full.CombinedOutput(); err != nil {
+		return fmt.Errorf("workspace: git submodule update: %w\n%s\n(shallow attempt: %v\n%s)",
+			err, string(out), shallowErr, string(shallowOut))
+	}
+	return nil
 }
 
 // IsRepoReady checks whether a directory is ready for ingestion.
@@ -150,18 +196,18 @@ func clone(ctx context.Context, repoURL, branch, dest, token string) error {
 	args = append(args, repoURL, dest)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
-	applyAuth(cmd, token)
+	applyAuth(cmd, token, repoURL)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("workspace: git clone: %w\n%s", err, string(out))
 	}
 	return nil
 }
 
-func pull(ctx context.Context, repoPath, branch, token string) error {
+func pull(ctx context.Context, repoPath, branch, repoURL, token string) error {
 	// Fetch latest refs from origin.
 	cmd := exec.CommandContext(ctx, "git", "fetch", "origin")
 	cmd.Dir = repoPath
-	applyAuth(cmd, token)
+	applyAuth(cmd, token, repoURL)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("workspace: git fetch: %w\n%s", err, string(out))
 	}
@@ -181,7 +227,7 @@ func pull(ctx context.Context, repoPath, branch, token string) error {
 	// Fast-forward pull; fail loudly if the local branch has diverged.
 	cmd = exec.CommandContext(ctx, "git", "pull", "--ff-only")
 	cmd.Dir = repoPath
-	applyAuth(cmd, token)
+	applyAuth(cmd, token, repoURL)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("workspace: git pull: %w\n%s", err, string(out))
 	}
@@ -192,9 +238,20 @@ func pull(ctx context.Context, repoPath, branch, token string) error {
 // The token is injected via GIT_CONFIG environment variables so it never
 // appears in on-disk git config. SSH URLs are unaffected.
 // Requires Git 2.31+ (March 2021) for GIT_CONFIG_COUNT support.
-func applyAuth(cmd *exec.Cmd, token string) {
+//
+// The extraheader key is scoped to repoURL's origin when it is an http(s)
+// URL: submodule recursion means one git command can fetch from several
+// hosts, and an unscoped header would send the parent repo's token to all
+// of them. When repoURL is not http(s) the key falls back to the unscoped
+// form (ssh transports ignore http headers entirely).
+func applyAuth(cmd *exec.Cmd, token, repoURL string) {
 	if token == "" {
 		return
+	}
+	key := "http.extraheader"
+	if u, err := url.Parse(repoURL); err == nil &&
+		(u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+		key = fmt.Sprintf("http.%s://%s/.extraheader", u.Scheme, u.Host)
 	}
 	// Use GIT_CONFIG_COUNT to inject an http.extraheader with the bearer
 	// token. This is the same mechanism GitHub Actions uses. The header is
@@ -202,7 +259,7 @@ func applyAuth(cmd *exec.Cmd, token string) {
 	// on-disk configuration.
 	cmd.Env = append(os.Environ(),
 		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=http.extraheader",
+		"GIT_CONFIG_KEY_0="+key,
 		"GIT_CONFIG_VALUE_0=Authorization: bearer "+token,
 		"GIT_TERMINAL_PROMPT=0",
 	)
@@ -233,7 +290,7 @@ func ResolveDefaultBranch(ctx context.Context, repoURL, token string) (string, e
 		return "", fmt.Errorf("workspace: repo URL is required")
 	}
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--symref", repoURL, "HEAD")
-	applyAuth(cmd, token)
+	applyAuth(cmd, token, repoURL)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("workspace: git ls-remote --symref %s HEAD: %w\n%s", repoURL, err, string(out))

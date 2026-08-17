@@ -7,22 +7,28 @@ remote fixture is for the e2e tier.
 
 ## 1. Workspace git plumbing
 
-- [ ] 1.1 `workspace.ListSubmodules(ctx, path)` → `[]SubmoduleInfo{Path, URL,
+- [x] 1.1 `workspace.ListSubmodules(ctx, path)` → `[]SubmoduleInfo{Path, URL,
       ResolvedURL, SHA, Materialized}`: parse `.gitmodules` via
-      `git config -f`, gitlink SHAs via `git submodule status --recursive`,
-      resolve relative URLs against the parent's remote; report
-      declared-but-absent (stale `.gitmodules`) entries. Unit tests on
-      hermetic temp-dir repos, including a relative-URL submodule.
-- [ ] 1.2 Recursion depth cap (10) in `ListSubmodules`: beyond-cap paths are
-      returned as a distinct category, never silently dropped; test with a
-      deep synthetic nesting chain.
-- [ ] 1.3 `EnsureRepo` submodule materialization behind an `Options` flag
-      (default on): clone adds `--recurse-submodules --shallow-submodules`;
-      pull runs `git submodule update --init --recursive` after the parent
-      syncs; parent depth stays 1. Test that a moved gitlink resyncs the tree.
-- [ ] 1.4 Shallow-fetch fallback: when a submodule update fails on a non-tip
-      pinned SHA, retry that submodule with a full fetch. Hermetic test with
-      a local bare remote pinned to a non-tip commit.
+      `git config -f`, gitlink SHAs via `git ls-files -s` (reads the PINNED
+      gitlink from the index — `submodule status` reports checked-out HEAD,
+      which can differ, and needs no init state), resolve relative URLs
+      against the parent's remote; report declared-but-absent (stale
+      `.gitmodules`) entries. Unit tests on hermetic temp-dir repos,
+      including a relative-URL submodule.
+- [x] 1.2 Recursion depth cap (10) in `ListSubmodules`: beyond-cap paths are
+      returned as a distinct category, never silently dropped; tested via a
+      capped-inventory test hook (`export_test.go`) on a 2-level chain.
+- [x] 1.3 `EnsureRepo` submodule materialization behind an `Options` flag
+      (default on, `SkipSubmodules` opt-out): both clone and pull paths run
+      `git submodule update --init --recursive --depth 1` as a separate step
+      (not clone flags — one shared path, tractable fallback); parent depth
+      stays 1. Moved-gitlink resync tested. Auth extraheader is now
+      HOST-SCOPED (recursion would otherwise send the parent token to every
+      submodule host).
+- [x] 1.4 Shallow-fetch fallback: on any shallow submodule-update failure,
+      retry the whole update without `--depth` (materialized trees are
+      no-ops). Hermetic test over file:// (which honors --depth) with a
+      non-tip pin.
 
 ## 2. Walk-time git-boundary skip
 

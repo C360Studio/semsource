@@ -136,15 +136,23 @@ per the loudness spec.
 
 ### D7. Clone/pull mechanics
 
-- Clone: `--recurse-submodules --shallow-submodules` (parent stays
-  `--depth 1`; gitlink SHAs live in the tree object, so depth 1 suffices).
+- Materialization is one shared step after BOTH clone and pull (not
+  `git clone --recurse-submodules` flags): the parent clones/pulls exactly as
+  today (`--depth 1`; gitlink SHAs live in the tree object, so depth 1
+  suffices), then `git submodule update --init --recursive --depth 1` brings
+  every declared tree to its (possibly moved) gitlink. One code path, and
+  failure never leaves a half-cloned parent ambiguous.
 - A shallow submodule fetch FAILS when the pinned SHA is not the remote
-  branch tip (a well-known git behavior, server-dependent). Fallback: on
-  failure, retry that submodule with a full fetch
-  (`git submodule update --init --recursive` without depth). The fixture's
-  v1 pin is deliberately a non-tip SHA and exercises exactly this path.
-- Pull: after the parent syncs, `git submodule update --init --recursive`
-  brings trees to the (possibly moved) gitlinks; the probe then re-runs.
+  branch tip (a well-known git behavior, server-dependent). Fallback: on any
+  shallow failure, retry the whole update without `--depth` —
+  already-materialized submodules are no-ops, so only the failed ones deepen.
+  The fixture's v1 pin is deliberately a non-tip SHA and exercises exactly
+  this path.
+- Auth: the injected `http.extraheader` is scoped to the parent remote's
+  host (`http.<scheme>://<host>/.extraheader`) — recursion means one git
+  command can fetch several hosts, and an unscoped header would send the
+  parent's token to all of them.
+- The probe re-runs after every successful materialization.
 
 ### D8. A moved gitlink is a version transition, not an in-place mutation
 
