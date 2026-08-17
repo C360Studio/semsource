@@ -19,6 +19,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedsup"
+	"github.com/c360studio/semsource/internal/sourcestatus"
 )
 
 // urlSourceSchema defines the configuration schema for the url-source component.
@@ -378,17 +379,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	// Publishing a phase IS the transition, so the reporter's sampled phase can
 	// never diverge from the last one published.
 	c.setPhase(phase)
-	report := struct {
-		InstanceName string           `json:"instance_name"`
-		SourceType   string           `json:"source_type"`
-		Phase        string           `json:"phase"`
-		EntityCount  int64            `json:"entity_count"`
-		PublishTotal int64            `json:"publish_total,omitempty"`
-		ErrorCount   int64            `json:"error_count"`
-		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
-		LastError    *seedsup.Error   `json:"last_error,omitempty"`
-		Timestamp    time.Time        `json:"timestamp"`
-	}{
+	report := sourcestatus.Report{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "url",
 		Phase:        phase,
@@ -396,6 +387,9 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal: c.entitiesPublished.Load(),
 		ErrorCount:   c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:   c.distinct.TypeCounts(),
+		// Publisher distress: retrying against a refusing transport reports
+		// no drops and no errors while being functionally stalled (#188).
+		Backpressure: c.publisher.InBackpressure(),
 		LastError:    c.seed.LastError(),
 		Timestamp:    time.Now(),
 	}

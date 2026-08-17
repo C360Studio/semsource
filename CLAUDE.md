@@ -170,11 +170,11 @@ Move the former top-level `repo_path`, `org`, `project`, `version`, `languages`,
 - **config.go** — Config struct with `json` + `schema` tags, `Validate()`, `DefaultConfig()`
 - **component.go** — Implements `component.Discoverable` interface (Meta, InputPorts, OutputPorts, ConfigSchema, Health, DataFlow)
 - **factory.go** — `Register()` with full registration config (Name, Factory, Schema, Type, Protocol, Domain, Description, Version)
-- **payloads.go** — Payload registered in `init()` via `component.RegisterPayload`; Domain/Category/Version must match between `init()` and `Schema()`
+- **payload_registry.go** — package-level `RegisterPayloads(reg *payloadregistry.Registry)` listing a `payloadregistry.Registration` per payload type; each payload's `Schema() message.Type` must match its registration's Domain/Category/Version
 
 ### Payload Registration
 
-New message types must follow the payload registry pattern: define type → implement `MarshalJSON` wrapping in `BaseMessage` → register in `init()` → blank-import in entry point. Use `/new-payload` skill for the full checklist.
+New message types must follow the payload registry pattern: define the type implementing `message.Payload` (`Schema()`, `Validate()`, alias-based `MarshalJSON`/`UnmarshalJSON`) → add it to the package's `RegisterPayloads(reg)` → wire that call into `buildPayloadRegistry()` in `cmd/semsource/run.go`. Registration is explicit at bootstrap — no `init()` side effects, no blank imports. Canonical references: `graph/event_payload.go`, `processor/source-manifest/payload_registry.go`. Use `/new-payload` skill for the full checklist.
 
 ## Key Design Decisions
 

@@ -306,6 +306,7 @@ what it means, and what to do.
 | ------ | ------- | ------ |
 | `phase: "seeding"` and per-source `files_parsed` / `bodies_offloaded` advancing between polls | The seed is working through files; publishing may lag parsing | Wait; re-poll. Large repos seed for a while on first run |
 | `phase: "seeding"`, counters **not** advancing, `publish_total` flat | A source is stalled, not slow | Check that source's `last_error` (`code` + `message`); verify NATS is up and reachable at your `NATS_URL` |
+| A source's `backpressure: true` | Its publisher is retrying against a refusing or saturated transport — no drops, no errors, but functionally stalled | Check NATS health and capacity (server up? stream limits hit?); the flag clears on its own once the transport drains |
 | `phase: "degraded"` | The seed timeout fired before every source reported | Find the source whose `phase` is not `watching`/`idle`; its `last_error` says why. Fix and restart |
 | `phase: "ready"` but `code_context` misses a symbol you can see, `index.ready: false` | Sources finished, structural index still catching up | Wait for `index.ready: true`, then re-query — structural queries gate on it |
 | `code_search` results weak or empty, `embedding.ready: false` (or `available: false`) | Semantic ranking not caught up (or not configured — native default is BM25) | Wait for `embedding.ready`; for semantic search natively, configure `graph.embedder_type: "http"` + a `model_registry` (the compose stack does this for you) |

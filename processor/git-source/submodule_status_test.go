@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
 )
 
@@ -23,7 +24,7 @@ func TestClassifySubmodules(t *testing.T) {
 	}
 
 	got := classifySubmodules(inv, false)
-	want := []submoduleState{
+	want := []sourcestatus.SubmoduleStatus{
 		{Path: "sub", SHA: sha[:12], State: "materialized"},
 		{Path: "nested/sub", SHA: sha[:12], State: "unmaterialized"},
 		{Path: "ghost", State: "declared_but_absent"},

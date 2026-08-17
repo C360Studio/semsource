@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semsource/internal/seedsup"
+	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/vocabulary"
@@ -52,29 +54,11 @@ const (
 )
 
 // SourceStatusReport is the internal message published by source components
-// to semsource.internal.status after initial ingest and periodically.
-type SourceStatusReport struct {
-	InstanceName string `json:"instance_name"`
-	SourceType   string `json:"source_type"`
-	Phase        string `json:"phase"`
-	// EntityCount is the DISTINCT entity count (invariant under periodic
-	// republication); PublishTotal is raw publish throughput (audit
-	// 2026-07-19: the old publish-counter-as-entity-count inflated forever).
-	EntityCount  int64 `json:"entity_count"`
-	PublishTotal int64 `json:"publish_total,omitempty"`
-	// FilesParsed and BodiesOffloaded are pre-publish seed liveness: they
-	// advance during parse and body-offload windows where PublishTotal is
-	// flat, distinguishing a working seed from a wedged one (5.7).
-	FilesParsed     int64            `json:"files_parsed,omitempty"`
-	BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
-	ErrorCount      int64            `json:"error_count"`
-	TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
-	// Submodules is per-source submodule detail from repo sources (see
-	// SubmoduleStatus) — passed through to every status surface.
-	Submodules []SubmoduleStatus `json:"submodules,omitempty"`
-	LastError  *SourceError      `json:"last_error,omitempty"`
-	Timestamp  time.Time         `json:"timestamp"`
-}
+// to semsource.internal.status after initial ingest and periodically. The
+// definition lives in internal/sourcestatus — the ONE shared wire type both
+// producers and this aggregator use, so a field added on the producer side
+// can never be silently dropped here (#188).
+type SourceStatusReport = sourcestatus.Report
 
 // statusAggregator tracks per-source status reports and determines the
 // aggregate ingestion phase.
@@ -96,6 +80,21 @@ func (a *statusAggregator) update(report *SourceStatusReport) {
 	a.reports[report.InstanceName] = report
 }
 
+// toSourceError converts the internal report's error (seedsup.Error, what
+// producers hold) into the externally served payload's typed SourceError.
+// The conversion is the deliberate boundary between the internal shared
+// contract and the registered StatusPayload envelope.
+func toSourceError(e *seedsup.Error) *SourceError {
+	if e == nil {
+		return nil
+	}
+	return &SourceError{
+		Code:      SourceErrorCode(e.Code),
+		Message:   e.Message,
+		Timestamp: e.Timestamp,
+	}
+}
+
 // buildStatus constructs a StatusPayload from the current aggregated state.
 func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 	sources := make([]SourceStatus, 0, len(a.reports))
@@ -103,17 +102,19 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 
 	for _, r := range a.reports {
 		sources = append(sources, SourceStatus{
-			InstanceName:    r.InstanceName,
-			SourceType:      r.SourceType,
-			Phase:           r.Phase,
-			EntityCount:     r.EntityCount,
-			PublishTotal:    r.PublishTotal,
-			FilesParsed:     r.FilesParsed,
-			BodiesOffloaded: r.BodiesOffloaded,
-			ErrorCount:      r.ErrorCount,
-			TypeCounts:      r.TypeCounts,
-			Submodules:      r.Submodules,
-			LastError:       r.LastError,
+			InstanceName:      r.InstanceName,
+			SourceType:        r.SourceType,
+			Phase:             r.Phase,
+			EntityCount:       r.EntityCount,
+			PublishTotal:      r.PublishTotal,
+			FilesParsed:       r.FilesParsed,
+			BodiesOffloaded:   r.BodiesOffloaded,
+			BoundariesSkipped: r.BoundariesSkipped,
+			ErrorCount:        r.ErrorCount,
+			TypeCounts:        r.TypeCounts,
+			Backpressure:      r.Backpressure,
+			Submodules:        r.Submodules,
+			LastError:         toSourceError(r.LastError),
 		})
 		totalEntities += r.EntityCount
 	}

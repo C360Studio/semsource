@@ -1,6 +1,7 @@
 package sourcemanifest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -298,9 +299,16 @@ func (c *Component) startStatusAggregation(ctx context.Context) error {
 
 // handleStatusReport processes an incoming status report from a source component.
 func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
+	// Strict decode into the ONE shared report type: semsource is a single
+	// process, so producer and consumer are always the same build — an
+	// unknown field can only mean code bypassed internal/sourcestatus, and
+	// accepting it leniently is how fields were silently lost before (#188).
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
 	var report SourceStatusReport
-	if err := json.Unmarshal(data, &report); err != nil {
-		c.logger.Warn("invalid status report", "error", err)
+	if err := dec.Decode(&report); err != nil {
+		c.logger.Error("status report violates the shared contract; dropping report",
+			"error", err)
 		return
 	}
 
