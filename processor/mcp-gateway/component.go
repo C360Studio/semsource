@@ -74,7 +74,7 @@ func (c *Component) buildServer() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "semsource", Version: serverVersion}, nil)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "add_source",
-		Description: "Register a source (repo/git/docs/config/url) for semsource to index. Path-based sources must be under an allowlisted root. Returns handles + a readiness condition to poll.",
+		Description: "Register a source (repo/git/docs/config/url) for semsource to index. Path-based sources must be under an allowlisted root. Returns handles + a readiness condition to poll. Repo/git sources materialize declared git submodule trees on clone and report per-path submodule state on source_status; per-submodule identity expansion currently applies to boot-configured sources only.",
 	}, c.addSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "remove_source",

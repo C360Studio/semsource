@@ -117,9 +117,13 @@ remote fixture is for the e2e tier.
 
 ## 7. Docs, verify, archive
 
-- [ ] 7.1 Update user-facing docs: submodule behavior, `submodules` opt-out,
-      identity/version semantics (feeds #184's multi-repo onboarding story);
-      `add_source` tool description mentions submodule expansion.
-- [ ] 7.2 Full local gate green (`gofmt`, `go vet`, revive, `go test -race
-      -tags=integration ./...`), then `/opsx:verify`, sync deltas + archive
-      on a branch, PR referencing #185.
+- [x] 7.1 Update user-facing docs: README "Git submodules" section (behavior,
+      opt-out, identity/version semantics, loudness states, boundary rule,
+      runtime-add scope line — feeds #184's multi-repo onboarding story);
+      `add_source` tool description states materialization + status and the
+      boot-only expansion scope honestly.
+- [ ] 7.2 Full local gate GREEN 2026-08-17 (task lint incl. revive; unit;
+      `go test -race -tags=integration ./...` all pass; e2e vs the real
+      fixture passes). Remaining: 6.3 compose runtime acceptance, then
+      `/opsx:verify`, sync deltas + archive on the branch, PR referencing
+      #185.
