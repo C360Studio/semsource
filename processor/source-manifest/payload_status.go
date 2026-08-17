@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -31,10 +32,17 @@ type SourceStatus struct {
 	PublishTotal int64 `json:"publish_total,omitempty"`
 	// Pre-publish seed liveness: advancing while PublishTotal is flat means
 	// the seed is parsing or offloading bodies, not wedged (5.7).
-	FilesParsed     int64            `json:"files_parsed,omitempty"`
-	BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
-	ErrorCount      int64            `json:"error_count"`
-	TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
+	FilesParsed     int64 `json:"files_parsed,omitempty"`
+	BodiesOffloaded int64 `json:"bodies_offloaded,omitempty"`
+	// BoundariesSkipped counts nested git trees the ingest walk refused to
+	// enter — informational: those trees are other sources' scope.
+	BoundariesSkipped int64            `json:"boundaries_skipped,omitempty"`
+	ErrorCount        int64            `json:"error_count"`
+	TypeCounts        map[string]int64 `json:"type_counts,omitempty"`
+	// Backpressure is true while this source's publisher is retrying against
+	// a refusing or saturated transport — no drops, no errors, functionally
+	// stalled. It separates "slow" from "stalled" without reading logs.
+	Backpressure bool `json:"backpressure,omitempty"`
 	// Submodules lists every submodule path a repo source declares and its
 	// state — never silently missing code (git-submodule-ingestion spec).
 	Submodules []SubmoduleStatus `json:"submodules,omitempty"`
@@ -42,16 +50,9 @@ type SourceStatus struct {
 }
 
 // SubmoduleStatus describes one declared submodule path of a repo source.
-type SubmoduleStatus struct {
-	// Path is the submodule working-tree path relative to the repo root.
-	Path string `json:"path"`
-	// SHA is the pinned gitlink commit (12-hex short form); empty for a
-	// stale declaration with no gitlink.
-	SHA string `json:"sha,omitempty"`
-	// State is one of: materialized, unmaterialized, excluded_by_config,
-	// declared_but_absent, beyond_cap.
-	State string `json:"state"`
-}
+// The definition lives in internal/sourcestatus — the same type producers
+// put on the wire, so the shape exists exactly once.
+type SubmoduleStatus = sourcestatus.SubmoduleStatus
 
 // SourceErrorCode is a typed code for asynchronous source-runtime failures.
 // Codes flow to remote callers (subscribers of graph.ingest.status) so they

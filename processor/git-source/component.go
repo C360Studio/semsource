@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedsup"
+	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
 )
 
@@ -408,20 +409,12 @@ func (c *Component) currentPhase() string {
 	return "ingesting"
 }
 
-// submoduleState is one declared submodule path on the status report. JSON
-// mirrors source-manifest's SubmoduleStatus (reports are duck-typed).
-type submoduleState struct {
-	Path  string `json:"path"`
-	SHA   string `json:"sha,omitempty"`
-	State string `json:"state"`
-}
-
 // submoduleStates classifies the handler's latest probe for the status
 // report. States: materialized, unmaterialized (declared and pinned but the
 // tree is empty — the silently-missing-code case), excluded_by_config
 // (submodules: false), declared_but_absent (stale .gitmodules entry with no
 // gitlink), beyond_cap (nesting deeper than the inventory cap).
-func (c *Component) submoduleStates() []submoduleState {
+func (c *Component) submoduleStates() []sourcestatus.SubmoduleStatus {
 	return classifySubmodules(c.handler.SubmoduleInventory(),
 		c.config.Submodules != nil && !*c.config.Submodules)
 }
@@ -429,13 +422,13 @@ func (c *Component) submoduleStates() []submoduleState {
 // classifySubmodules maps a probe inventory to status states. skip reflects
 // the submodules:false opt-out, which turns unmaterialized into
 // excluded_by_config — deliberate absence, distinguishable from unexpected.
-func classifySubmodules(inv *workspace.SubmoduleInventory, skip bool) []submoduleState {
+func classifySubmodules(inv *workspace.SubmoduleInventory, skip bool) []sourcestatus.SubmoduleStatus {
 	if inv == nil {
 		return nil
 	}
-	var out []submoduleState
+	var out []sourcestatus.SubmoduleStatus
 	for _, s := range inv.Submodules {
-		st := submoduleState{Path: s.Path}
+		st := sourcestatus.SubmoduleStatus{Path: s.Path}
 		if len(s.SHA) >= 12 {
 			st.SHA = s.SHA[:12]
 		}
@@ -452,7 +445,7 @@ func classifySubmodules(inv *workspace.SubmoduleInventory, skip bool) []submodul
 		out = append(out, st)
 	}
 	for _, p := range inv.BeyondCap {
-		out = append(out, submoduleState{Path: p, State: "beyond_cap"})
+		out = append(out, sourcestatus.SubmoduleStatus{Path: p, State: "beyond_cap"})
 	}
 	return out
 }
@@ -462,18 +455,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	// Publishing a phase IS the transition, so the reporter's sampled phase can
 	// never diverge from the last one published.
 	c.setPhase(phase)
-	report := struct {
-		InstanceName string           `json:"instance_name"`
-		SourceType   string           `json:"source_type"`
-		Phase        string           `json:"phase"`
-		EntityCount  int64            `json:"entity_count"`
-		PublishTotal int64            `json:"publish_total,omitempty"`
-		ErrorCount   int64            `json:"error_count"`
-		TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
-		Submodules   []submoduleState `json:"submodules,omitempty"`
-		LastError    *seedsup.Error   `json:"last_error,omitempty"`
-		Timestamp    time.Time        `json:"timestamp"`
-	}{
+	report := sourcestatus.Report{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "git",
 		Phase:        phase,
@@ -485,8 +467,11 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		// submodule path and its state, so missing trees are visible on every
 		// status surface instead of silently absent from the graph.
 		Submodules: c.submoduleStates(),
-		LastError:  c.seed.LastError(),
-		Timestamp:  time.Now(),
+		// Publisher distress: retrying against a refusing transport reports
+		// no drops and no errors while being functionally stalled (#188).
+		Backpressure: c.publisher.InBackpressure(),
+		LastError:    c.seed.LastError(),
+		Timestamp:    time.Now(),
 	}
 	data, err := json.Marshal(report)
 	if err != nil {
