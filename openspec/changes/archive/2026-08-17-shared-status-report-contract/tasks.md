@@ -34,6 +34,8 @@ Design D1–D5 govern mechanics. Fixes #188.
 
 - [x] 4.1 `docs/QUICKSTART.md`: backpressure troubleshooting row (D5,
       prose-only; marked-block step counts unchanged).
-- [ ] 4.2 Full local gate green (fmt/vet/revive, `go test -race ./...`,
+- [x] 4.2 Full local gate green (fmt/vet/revive, `go test -race ./...`,
       CI integration packages, quickstart tracks), `/opsx:verify`, sync
       deltas + archive on the branch, PR referencing #188 (Closes #188).
+      (Gate green 2026-08-17; verify: all four spec scenarios covered by the
+      contract tests, incl. an explicit recovery-clears-the-flag assertion.)
