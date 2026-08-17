@@ -106,6 +106,11 @@ semsource add repo --url github.com/org/repo --branch main
 semsource add docs --paths "docs/,README.md"
 semsource add url --urls "https://api.example.com/docs" --poll-interval 10m
 
+# Explicit identity (--project/--version, ast and repo): the same project at
+# two versions is what lights up code_changes version diffs
+semsource add ast --path ./deps/depA-1.9.0 --project depA --version 1.9.0
+semsource add ast --path ./deps/depA-1.10.0 --project depA --version 1.10.0
+
 # Add sources (interactive)
 semsource add
 
@@ -363,6 +368,8 @@ declare it explicitly when the paths differ per version:
 ```
 
 Omitting both keeps version-independent ingestion (entity IDs unchanged).
+The same pair is available non-interactively as `semsource add ast|repo
+--project <slug> --version <rev>` (see [Managing Sources](#managing-sources)).
 
 ### Git submodules
 
