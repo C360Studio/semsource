@@ -126,8 +126,8 @@ remote fixture is for the e2e tier.
       runtime-add scope line — feeds #184's multi-repo onboarding story);
       `add_source` tool description states materialization + status and the
       boot-only expansion scope honestly.
-- [ ] 7.2 Full local gate GREEN 2026-08-17 (task lint incl. revive; unit;
+- [x] 7.2 Full local gate GREEN 2026-08-17 (task lint incl. revive; unit;
       `go test -race -tags=integration ./...` all pass; e2e vs the real
-      fixture passes). Remaining: 6.3 compose runtime acceptance, then
-      `/opsx:verify`, sync deltas + archive on the branch, PR referencing
-      #185.
+      fixture passes). /opsx:verify PASSED (no criticals; 2 test-coverage
+      suggestions recorded in the report); deltas synced + archived as
+      2026-08-17-git-submodule-support; PR referencing #185.
