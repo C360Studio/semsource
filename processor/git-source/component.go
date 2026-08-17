@@ -110,13 +110,14 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	h := githandler.New(githandler.Config{
-		PollInterval: pollInterval,
-		MaxCommits:   config.MaxCommits,
-		WorkspaceDir: config.WorkspaceDir,
-		Token:        config.GitToken,
-		Org:          config.Org,
-		BranchSlug:   config.BranchSlug,
-		Logger:       deps.GetLogger(),
+		PollInterval:   pollInterval,
+		MaxCommits:     config.MaxCommits,
+		WorkspaceDir:   config.WorkspaceDir,
+		Token:          config.GitToken,
+		Org:            config.Org,
+		BranchSlug:     config.BranchSlug,
+		SkipSubmodules: config.Submodules != nil && !*config.Submodules,
+		Logger:         deps.GetLogger(),
 	})
 
 	watchEnabled := config.WatchEnabled == nil || *config.WatchEnabled

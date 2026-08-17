@@ -106,7 +106,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	// Pass the org into the handler so Watch events also carry EntityStates.
-	h := cfghandler.New(&cfghandler.Config{Org: config.Org})
+	h := cfghandler.New(&cfghandler.Config{Org: config.Org, Project: config.Project})
 	sc := &sourceCfg{
 		paths:        config.Paths,
 		watchEnabled: config.WatchEnabled,

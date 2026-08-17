@@ -25,8 +25,8 @@ import (
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/internal/degraded"
-	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/internal/seedsup"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
@@ -918,19 +918,19 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 	// never diverge from the last one published.
 	c.setPhase(phase)
 	report := struct {
-		InstanceName    string           `json:"instance_name"`
-		SourceType      string           `json:"source_type"`
-		Phase           string           `json:"phase"`
-		EntityCount     int64            `json:"entity_count"`
-		PublishTotal    int64            `json:"publish_total,omitempty"`
-		FilesParsed     int64            `json:"files_parsed,omitempty"`
-		BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
-		BoundariesSkipped int64          `json:"boundaries_skipped,omitempty"`
-		ErrorCount      int64            `json:"error_count"`
-		TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
-		Backpressure    bool             `json:"backpressure,omitempty"`
-		LastError       *seedsup.Error   `json:"last_error,omitempty"`
-		Timestamp       time.Time        `json:"timestamp"`
+		InstanceName      string           `json:"instance_name"`
+		SourceType        string           `json:"source_type"`
+		Phase             string           `json:"phase"`
+		EntityCount       int64            `json:"entity_count"`
+		PublishTotal      int64            `json:"publish_total,omitempty"`
+		FilesParsed       int64            `json:"files_parsed,omitempty"`
+		BodiesOffloaded   int64            `json:"bodies_offloaded,omitempty"`
+		BoundariesSkipped int64            `json:"boundaries_skipped,omitempty"`
+		ErrorCount        int64            `json:"error_count"`
+		TypeCounts        map[string]int64 `json:"type_counts,omitempty"`
+		Backpressure      bool             `json:"backpressure,omitempty"`
+		LastError         *seedsup.Error   `json:"last_error,omitempty"`
+		Timestamp         time.Time        `json:"timestamp"`
 	}{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "ast",

@@ -106,6 +106,14 @@ type SourceEntry struct {
 	// Watch enables continuous file-system or network watching for this source.
 	Watch bool `json:"watch,omitempty"`
 
+	// Submodules controls git submodule materialization for git and repo
+	// sources. Default (nil) is ON — a clone that silently omits submodule
+	// trees is missing code, which is the failure mode submodule support
+	// exists to prevent. Explicit false opts out; declared-but-skipped
+	// submodule paths are still reported on source status as excluded by
+	// configuration.
+	Submodules *bool `json:"submodules,omitempty"`
+
 	// Extensions filters which file extensions to scan (e.g., ["png", "jpg"]).
 	// Used by image and video sources. Empty means use handler defaults.
 	Extensions []string `json:"extensions,omitempty"`

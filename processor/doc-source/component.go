@@ -136,7 +136,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
 	// with the wired body store (which needs a context to attach). The live
 	// handler is the one built in Start.
-	h := dochandler.NewWithOrg(config.Org)
+	h := dochandler.NewWithOrg(config.Org, dochandler.WithProject(config.Project))
 
 	sc := &sourceCfg{
 		paths:        config.Paths,
@@ -200,6 +200,7 @@ func (c *Component) Start(ctx context.Context) error {
 			graph.BodyStoreBucket, err)
 	}
 	c.handler = dochandler.NewWithOrg(c.config.Org,
+		dochandler.WithProject(c.config.Project),
 		dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
 
 	c.publishStatusReport(ctx, "ingesting")
@@ -506,9 +507,15 @@ func (c *Component) rootForPath(absPath string) (root string, ok bool) {
 // (processor/supersession), fired in the background so the watch loop is
 // never blocked on a full graph pass.
 func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string) {
+	system := entityid.SystemSlug(root)
+	// The lifecycle pass scopes by the SAME system slug the entities carry:
+	// with a project override the path-derived slug matches nothing.
+	if c.config.Project != "" {
+		system = entityid.SystemSlug(c.config.Project)
+	}
 	req := graph.LifecycleRunRequest{
 		Org:      c.config.Org,
-		Systems:  []string{entityid.SystemSlug(root)},
+		Systems:  []string{system},
 		RootPath: root,
 		Reason:   reason,
 	}

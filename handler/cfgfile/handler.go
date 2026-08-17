@@ -39,6 +39,13 @@ type Config struct {
 	// values via IngestEntityStates and Watch. Required for the normalizer-free
 	// processor path.
 	Org string
+
+	// Project, when non-empty, overrides the path-derived entity-ID system
+	// slug. Submodule expansion depends on this: the same canonical project
+	// must be registrable from every consumer's checkout path, and path
+	// slugs would fork config identity per checkout. Empty keeps today's
+	// path-derived IDs byte-for-byte.
+	Project string
 }
 
 // ConfigHandler implements handler.SourceHandler for go.mod, package.json,
@@ -306,7 +313,7 @@ func (h *ConfigHandler) fanOut(ctx context.Context, root string, in <-chan handl
 // parseFile dispatches to the right parser based on the base filename and
 // converts the result to []handler.RawEntity.
 func (h *ConfigHandler) parseFile(base, path string, content []byte, root string) []handler.RawEntity {
-	system := systemSlug(root)
+	system := h.system(root)
 	switch base {
 	case "go.mod":
 		return h.goModEntities(content, path, system)
@@ -609,6 +616,15 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 		return []string{p}
 	}
 	return nil
+}
+
+// system returns the entity-ID system slug for a walk root: the explicit
+// project override when set, else the path-derived slug.
+func (h *ConfigHandler) system(root string) string {
+	if h.cfg.Project != "" {
+		return systemSlug(h.cfg.Project)
+	}
+	return systemSlug(root)
 }
 
 // systemSlug returns a NATS-safe system slug derived from the root directory path.

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semstreams/storage"
 )
@@ -21,6 +22,13 @@ type Handler struct {
 	// values via IngestEntityStates and enrichEventEntityStates. When empty,
 	// EntityStates are not populated on watch events.
 	org string
+
+	// project, when non-empty, overrides the path-derived entity-ID system
+	// slug. Submodule expansion depends on this: the same canonical project
+	// must be registrable from every consumer's checkout path, and path
+	// slugs would fork doc identity per checkout. Empty keeps today's
+	// path-derived IDs byte-for-byte.
+	project string
 
 	// bodyStore / bodyInstance are the fusion verbatim-body store (ADR-062). Every
 	// doc's passage is offloaded here (content-addressed) and wired to a single
@@ -47,6 +55,14 @@ func WithBodyStore(s storage.Store, instance string) Option {
 	}
 }
 
+// WithProject overrides the path-derived entity-ID system slug with an
+// explicit project identity. See Handler.project.
+func WithProject(project string) Option {
+	return func(h *Handler) {
+		h.project = project
+	}
+}
+
 // New returns a ready-to-use Handler.
 func New(opts ...Option) *Handler {
 	h := &Handler{}
@@ -62,6 +78,15 @@ func NewWithOrg(org string, opts ...Option) *Handler {
 	h := New(opts...)
 	h.org = org
 	return h
+}
+
+// system returns the entity-ID system slug for a walk root: the explicit
+// project override when set, else the path-derived slug.
+func (h *Handler) system(root string) string {
+	if h.project != "" {
+		return entityid.SystemSlug(h.project)
+	}
+	return entityid.SystemSlug(root)
 }
 
 // sourceTypeKey is the config source type key for doc sources.

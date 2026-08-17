@@ -54,6 +54,10 @@ type Config struct {
 	// Used in multi-branch mode to prevent entity ID collisions across branches.
 	BranchSlug string
 
+	// SkipSubmodules disables submodule materialization on clone/pull.
+	// Default (false) materializes declared submodule trees.
+	SkipSubmodules bool
+
 	// Logger, when non-nil, receives structured logs from Watch/pollLoop
 	// operations. Without a logger, polling errors are invisible — the handler
 	// silently skips failed ticks. Pass the component's logger here so poll
@@ -344,7 +348,7 @@ func (h *Handler) resolveRepoPath(ctx context.Context, cfg handler.SourceConfig)
 	if h.cfg.WorkspaceDir == "" {
 		return "", fmt.Errorf("git handler: workspace_dir required for remote repos (no local path set)")
 	}
-	opts := workspace.Options{Token: h.cfg.Token}
+	opts := workspace.Options{Token: h.cfg.Token, SkipSubmodules: h.cfg.SkipSubmodules}
 	return workspace.EnsureRepo(ctx, repoURL, cfg.GetBranch(), h.cfg.WorkspaceDir, opts)
 }
 

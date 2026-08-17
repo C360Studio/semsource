@@ -47,12 +47,18 @@ remote fixture is for the e2e tier.
 
 ## 3. Config surfaces
 
-- [ ] 3.1 `submodules *bool` (default true) on the repo/git `SourceEntry` and
-      git-source `Config` (schema tags, `Validate`, `DefaultConfig`); strict
-      decoding still rejects unknown keys.
-- [ ] 3.2 Optional `project` override on doc-source and cfgfile-source
-      configs: explicit value replaces the path-derived system slug; absent
-      keeps today's IDs byte-identical (regression-test both paths).
+- [x] 3.1 `submodules *bool` (default nil=on) on the repo/git `SourceEntry`
+      and git-source `Config` (schema default:true); expandSingleBranch
+      propagates it to the git child; sourcespawn passes it through; git
+      handler gains `SkipSubmodules` wired to `workspace.Options`. Decode
+      test pins nil-vs-explicit-false.
+- [x] 3.2 Optional `project` override on doc-source and cfgfile-source
+      configs and handlers (`WithProject` / `Config.Project`): explicit value
+      replaces the path-derived system slug (doc lifecycle trigger scopes by
+      the same slug); absent keeps today's IDs byte-identical (pinned by the
+      whole existing suite, which never sets it). sourcespawn doc/cfg
+      builders use `src.Project` for slug + pass `project` through.
+      Override tests at both handlers.
 
 ## 4. Probe and dynamic expansion in git-source
 

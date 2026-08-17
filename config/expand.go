@@ -106,6 +106,7 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 		Branch:     src.Branch,
 		Watch:      src.Watch,
 		BranchSlug: src.BranchSlug,
+		Submodules: src.Submodules,
 	})
 
 	// 2. AST source — code structure analysis
