@@ -25,6 +25,7 @@ import (
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/internal/degraded"
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedsup"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -106,6 +107,11 @@ type Component struct {
 	entitiesIndexed atomic.Int64
 	parseFailures   atomic.Int64
 	errors          atomic.Int64
+
+	// boundariesSkipped counts nested git working trees (submodules, foreign
+	// repos) the walk refused to enter. Non-zero is informational, not an
+	// error: those trees belong to their own source scope.
+	boundariesSkipped atomic.Int64
 
 	// Pre-publish seed liveness (async-source-seed 5.7 residual): a large seed
 	// spends minutes parsing and offloading bodies before anything publishes,
@@ -667,6 +673,10 @@ func (c *Component) parseDirectory(ctx context.Context, pw *pathWatcher) ([]*sem
 			if pw.excludes[base] || strings.HasPrefix(base, ".") {
 				return filepath.SkipDir
 			}
+			if path != pw.root && gitboundary.IsBoundary(path) {
+				c.boundariesSkipped.Add(1)
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -915,6 +925,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		PublishTotal    int64            `json:"publish_total,omitempty"`
 		FilesParsed     int64            `json:"files_parsed,omitempty"`
 		BodiesOffloaded int64            `json:"bodies_offloaded,omitempty"`
+		BoundariesSkipped int64          `json:"boundaries_skipped,omitempty"`
 		ErrorCount      int64            `json:"error_count"`
 		TypeCounts      map[string]int64 `json:"type_counts,omitempty"`
 		Backpressure    bool             `json:"backpressure,omitempty"`
@@ -933,6 +944,9 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		// during parse and body offload, so a plateau reads as work, not a hang.
 		FilesParsed:     c.filesParsed.Load(),
 		BodiesOffloaded: c.bodiesOffloaded.Load(),
+		// Nested git trees the walk refused to enter (submodules, foreign
+		// repos) — informational: those trees are other sources' scope.
+		BoundariesSkipped: c.boundariesSkipped.Load(),
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).

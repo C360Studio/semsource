@@ -32,12 +32,18 @@ remote fixture is for the e2e tier.
 
 ## 2. Walk-time git-boundary skip
 
-- [ ] 2.1 ast/doc/cfgfile walkers skip any subdirectory containing a `.git`
-      entry (file or directory) and count skipped boundaries in per-source
-      status detail (shared helper if the walk layer allows).
-- [ ] 2.2 Tests: a submodule dir and an unrelated nested git repo under a
-      watch path produce zero parent-scoped entities; skip counts visible;
-      empty (unmaterialized) submodule dirs produce nothing and no error.
+- [x] 2.1 ast/doc/cfgfile walkers skip any subdirectory containing a `.git`
+      entry (file or directory) via shared `internal/gitboundary`; applied at
+      12 walk sites (ast-source parseDirectory, both fs watchers incl.
+      runtime new-dir + flush-time `Under` guard for the materialize-while-
+      watching race, doc/cfgfile/ast handlers, 5 language parsers, C call
+      walks). ast-source counts skips (`boundaries_skipped` on its status
+      report); doc/cfg handlers skip without a counter (no per-handler status
+      channel — manifest surfacing lands with group 4).
+- [x] 2.2 Tests: gitboundary unit tests + boundary tests at cfgfile, doc,
+      and golang-parser walk sites (submodule gitlink + foreign nested repo
+      + empty submodule dir → zero parent-scoped entities, no error). Full
+      unit suite green.
 
 ## 3. Config surfaces
 

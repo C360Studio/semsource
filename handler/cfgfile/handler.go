@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/handler/internal/fswatcher"
+	"github.com/c360studio/semsource/internal/gitboundary"
 )
 
 // configFileNames is the set of file names that this handler processes.
@@ -101,6 +102,9 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 				if handler.IsDefaultExcludedDir(info.Name()) {
 					return filepath.SkipDir
 				}
+				if path != root && gitboundary.IsBoundary(path) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			base := filepath.Base(path)
@@ -154,6 +158,9 @@ func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.Sour
 				// one by one: a node_modules walk yields thousands of package.json
 				// files that are not this project's configuration.
 				if handler.IsDefaultExcludedDir(info.Name()) {
+					return filepath.SkipDir
+				}
+				if path != root && gitboundary.IsBoundary(path) {
 					return filepath.SkipDir
 				}
 				return nil

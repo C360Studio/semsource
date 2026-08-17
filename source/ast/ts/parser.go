@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/source/ast"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/javascript"
@@ -173,6 +174,9 @@ func (p *Parser) ParseDirectory(ctx context.Context, dirPath string) ([]*ast.Par
 			// Skip common non-source directories
 			if base == "node_modules" || base == "dist" || base == ".next" ||
 				base == "build" || base == "coverage" || strings.HasPrefix(base, ".") {
+				return filepath.SkipDir
+			}
+			if path != dirPath && gitboundary.IsBoundary(path) {
 				return filepath.SkipDir
 			}
 			return nil

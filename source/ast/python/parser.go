@@ -11,6 +11,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/python"
 
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/source/ast"
 )
 
@@ -168,7 +169,13 @@ func (p *Parser) ParseDirectory(ctx context.Context, dirPath string) ([]*ast.Par
 		}
 
 		// Skip directories and non-Python files
-		if info.IsDir() || !strings.HasSuffix(path, ".py") {
+		if info.IsDir() {
+			if path != dirPath && gitboundary.IsBoundary(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".py") {
 			return nil
 		}
 

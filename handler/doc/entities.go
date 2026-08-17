@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
+	"github.com/c360studio/semsource/internal/gitboundary"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/storage"
@@ -249,6 +250,9 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 			}
 			if info.IsDir() {
 				if isDefaultExcludedDocDir(root, path) {
+					return filepath.SkipDir
+				}
+				if path != root && gitboundary.IsBoundary(path) {
 					return filepath.SkipDir
 				}
 				return nil

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -224,6 +225,11 @@ func (w *Watcher) addWatchesRecursive(root string) error {
 			return filepath.SkipDir
 		}
 
+		// A nested git working tree is another source's scope.
+		if path != root && gitboundary.IsBoundary(path) {
+			return filepath.SkipDir
+		}
+
 		// Add watch
 		if err := w.watcher.Add(path); err != nil {
 			w.logger.Warn("Failed to watch directory",
@@ -305,6 +311,9 @@ func (w *Watcher) handleNewDirectory(path string) {
 	if w.excludes[base] || strings.HasPrefix(base, ".") {
 		return
 	}
+	if gitboundary.IsBoundary(path) || gitboundary.Under(w.config.RepoRoot, path) {
+		return
+	}
 
 	if err := w.watcher.Add(path); err != nil {
 		w.logger.Warn("Failed to watch new directory",
@@ -337,6 +346,13 @@ func (w *Watcher) flushPending(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
+		}
+
+		// Checked at flush, not accumulate: a materializing submodule gains
+		// its .git gitlink only after its files are written, so this is the
+		// first moment the boundary is reliably visible.
+		if gitboundary.Under(w.config.RepoRoot, path) {
+			continue
 		}
 
 		relPath, _ := filepath.Rel(w.config.RepoRoot, path)
