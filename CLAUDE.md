@@ -193,9 +193,25 @@ New message types must follow the payload registry pattern: define type → impl
 The public roadmap lives in `ROADMAP.md`; use that instead of the historical
 milestone list in `docs/spec/semsource-spec-v3.md`.
 
-Current release-candidate shape (the latest public tag is beta.7):
+Current release-candidate shape (the latest public tag is beta.8):
 
-1. `v1.0.0-beta.7` targets SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
+1. `v1.0.0-beta.8` is the git-submodule release (#185, ADR-0012), still on
+   SemStreams `v1.0.0-beta.161` (no substrate cutover). Repos with submodules
+   ingest completely (clone/pull materialize declared trees at their gitlink
+   pins, shallow-first with full-fetch fallback; `submodules: false` opts out),
+   loudly (per-path states — materialized / unmaterialized /
+   excluded_by_config / declared_but_absent / beyond_cap — on every status
+   surface), and with canonical identity (project = resolved-URL slug,
+   version = 12-hex gitlink SHA riding `WatchPathConfig.Version`; same pin
+   from any parent → byte-identical entity IDs; instance names are
+   parent+link-scoped). Ingest walks never cross nested git working trees
+   (`internal/gitboundary`); expansion runs at the composition root
+   (`internal/subwatch`, boot-configured sources only — runtime adds are
+   loud-but-unexpanded). Breaking only for graphs that had accidentally
+   ingested submodule code under parent identity (fresh reseed). Known
+   upstream dependency: semstreams#986 (config-watcher burst race; SemSource
+   defends with a confirm re-put).
+2. `v1.0.0-beta.7` targeted SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
    lifecycle-control slice on top of
    the intentionally breaking graph/foundation refactor checkpoint (no
    upstream shims; fresh NATS storage mandated on adoption, so deployments upgrade via
@@ -217,21 +233,21 @@ Current release-candidate shape (the latest public tag is beta.7):
    `OpenCatalogReader`. The `graph.query.searchGraph` and `graph.query.summary` operations
    SURVIVE the query-contract closure (the removals were aggregate Go wrappers and shared
    agentic tool registrations).
-2. Core ingestion, governed entity publishing, source manifest/status, fusion
+3. Core ingestion, governed entity publishing, source manifest/status, fusion
    tools, version diffs, and consumer query integration are present.
-3. The default Compose profile is UI-free: `docker compose up` resolves only
+4. The default Compose profile is UI-free: `docker compose up` resolves only
    NATS, semembed, and SemSource. In deployment documentation, "headless" means
    this omitted workbench profile; it is not the removed `mode: "headless"`
    configuration value, which must continue to fail validation.
-4. The opt-in `ui` profile now belongs to SemSource and serves the local `ui/`
+5. The opt-in `ui` profile now belongs to SemSource and serves the local `ui/`
    workbench. This is a breaking replacement for the former sibling SemTeams UI
    mapping; SemTeams owns its packaging and consumes unchanged SemSource HTTP,
    MCP, NATS, GraphQL, and governed graph contracts.
-5. Release use requires `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>` and no sibling
+6. Release use requires `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>` and no sibling
    checkout or host Node.js. Local development is explicit through
    `docker-compose.ui-dev.yml` or `task ui:smoke:dev`; `task ui:e2e` uses the
    lockfile-matched container runner.
-6. OpenSpec task 7.3 is complete. Trusted `main` UI publish/smoke jobs verified
+7. OpenSpec task 7.3 is complete. Trusted `main` UI publish/smoke jobs verified
    revision `25b2816d14a147c1d6eb7b54e40668b51ba3574a` at manifest digest
    `sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`
    for `linux/amd64` and `linux/arm64`, including registry, local, Compose-rendered,
@@ -242,8 +258,10 @@ Current release-candidate shape (the latest public tag is beta.7):
    uses the adopted SemStreams #533 facet in `v1.0.0-beta.153` through the existing
    code-context route, with local and real-profile acceptance; GraphQL is not part
    of that slice.
-7. Active follow-ups are query-index readiness/scale, GraphQL capabilities
-   alignment, code/version intelligence, and federation validation.
+8. Active follow-ups are easy-button onboarding (#184, multi-repo story now
+   unblocked by the submodule config semantics), query-index readiness/scale,
+   GraphQL capabilities alignment, code/version intelligence, and federation
+   validation. Upstream watch: semstreams#986 and #977.
 
 ## Custom Agents & Skills
 
