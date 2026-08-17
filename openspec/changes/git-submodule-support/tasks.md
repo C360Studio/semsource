@@ -89,13 +89,14 @@ remote fixture is for the e2e tier.
 
 ## 5. Identity assertions and ADR
 
-- [ ] 5.1 ADR (one page): submodule identity — project from resolved URL
-      slug, version from fixed 12-hex gitlink SHA prefix, org from parent
-      source; why runtime expansion and parent-scoped instances.
-- [ ] 5.2 ID tests: submodule symbol IDs carry submodule project + version
-      scope and zero parent contribution; same (URL, SHA) from two parents →
-      byte-identical IDs; two SHAs → distinct version scopes; all IDs valid
-      6-part NATS-KV-safe via `entityid.*`.
+- [x] 5.1 ADR-0012: submodule identity — project from resolved URL slug,
+      version from fixed 12-hex gitlink SHA prefix, org from parent source;
+      entity identity canonical / instance identity parent-scoped.
+- [x] 5.2 ID tests: checkout-location independence (same content, two roots →
+      byte-identical IDs), version-scoped system segment present, distinct
+      scopes per SHA, NATS-KV validity via `entityid.ValidateNATSKVKey`
+      (source/ast/golang/identity_dedup_test.go); config-level identity flow
+      pinned by the subwatch dual-pin test.
 
 ## 6. Integration and e2e against the fixture
 
