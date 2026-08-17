@@ -326,8 +326,22 @@ func TestE2E_QuickstartMultiTrack(t *testing.T) {
 				return strings.Contains(out, `"name":"Classify"`)
 			},
 			assert: func(t *testing.T, env *quickstartEnv) {
-				if !strings.Contains(env.lastOutput(), "func Classify") {
-					t.Errorf("parent-scope query returned no verbatim body:\n%.2000s", env.lastOutput())
+				out := env.lastOutput()
+				if !strings.Contains(out, "func Classify") {
+					t.Errorf("parent-scope query returned no verbatim body:\n%.2000s", out)
+				}
+				// Attribution: Classify belongs to the parent repository's
+				// own identity scope, not the submodule's.
+				ids := idsContaining(out, "classify")
+				if len(ids) == 0 {
+					t.Errorf("no Classify entity handle in response:\n%.2000s", out)
+				}
+				for _, id := range ids {
+					lower := strings.ToLower(id)
+					if !strings.Contains(lower, "github-com-c360studio-semdev-test") ||
+						strings.Contains(lower, subProjectSlug) {
+						t.Errorf("Classify handle %q is not scoped to the parent repository", id)
+					}
 				}
 			},
 		},

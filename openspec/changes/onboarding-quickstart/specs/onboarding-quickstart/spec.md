@@ -81,8 +81,11 @@ against a two-repository fixture.
 Every troubleshooting entry in the quickstart SHALL name an observable signal
 (aggregate phase, per-source phase, index/embedding readiness,
 `files_parsed`/`bodies_offloaded` liveness, submodule path states,
-backpressure) and the action it indicates. Advice that cannot be tied to an
-observable signal SHALL NOT appear.
+error counts and `last_error`, query-route HTTP status codes) and the action
+it indicates. Advice that cannot be tied to an observable signal SHALL NOT
+appear. (The per-source backpressure flag was proposed for this list but is
+not served on any status surface today — the aggregator drops it; tracked in
+#188. When it surfaces, a troubleshooting entry SHOULD key on it.)
 
 #### Scenario: A stuck seed is diagnosable from the document
 
