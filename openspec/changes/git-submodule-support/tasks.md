@@ -111,9 +111,13 @@ remote fixture is for the e2e tier.
       12-hex pins on `/source-manifest/status`). PASSED locally in 33s.
       (Uninitialized-path loudness is pinned at the integration tier —
       handler/git/probe_integration_test.go.)
-- [ ] 6.3 Runtime acceptance on a real stack (compose): seed semdev-test,
-      verify graph queries return submodule entities with expected identity
-      and status surfaces tell the submodule story; record evidence on #185.
+- [x] 6.3 Compose runtime acceptance PASSED 2026-08-17: core profile, branch
+      build, remote fixture clone → phase ready, 46 entities, 0 errors, both
+      pins expanded (ast 12-vs-10 = the Farewell delta), both submodule paths
+      materialized with correct 12-hex pins on status; evidence on #185.
+      Surfaced a framework race (6 KV writes in ~20ms deployed 5 components;
+      config present, no error) → filed semstreams#986, logged in
+      semstreams-asks, and subwatch gained a one-time confirm re-put per pin.
 
 ## 7. Docs, verify, archive
 

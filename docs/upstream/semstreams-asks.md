@@ -1091,7 +1091,7 @@ exact invocation our own method notes recommend for semstreams bumps.
 
 ## ConfigManager reactive watcher drops one event in a same-instant write burst
 
-### 6 `PutComponentToKV` writes in ~20ms deployed 5 components; an identical re-put at a later revision deployed the sixth — framework-shaped — candidate
+### 6 `PutComponentToKV` writes in ~20ms deployed 5 components; an identical re-put at a later revision deployed the sixth — framework-shaped — filed [semstreams#986](https://github.com/C360Studio/semstreams/issues/986)
 
 Observed on semsource `v1.0.0-beta.161`-pinned code during the git-submodule
 compose acceptance (2026-08-17): submodule expansion writes 3 component
