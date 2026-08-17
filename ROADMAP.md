@@ -1,34 +1,32 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.8`,
-running on SemStreams `v1.0.0-beta.161` (unchanged from beta.7 — no substrate
-cutover in this release).
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.9`,
+running on SemStreams `v1.0.0-beta.161` (unchanged since beta.7 — no
+substrate cutover).
 
-`v1.0.0-beta.8` is the git-submodule release: a repo that links submodules now
-ingests **completely, loudly, and with sane identity** (#185; ADR-0012).
-Clones and pulls materialize every declared submodule tree at its pinned
-commit (recursive; shallow-first with a full-fetch fallback for non-tip pins;
-`submodules: false` opts out per source). Submodule code carries the
-submodule's **own** identity — project from its resolved URL, version from
-the 12-hex gitlink SHA — so the same pin linked from any number of repos
-yields byte-identical entity IDs that merge in the graph, while two pins stay
-distinct. Every declared submodule path reports a state on
-`source_status`/HTTP status (`materialized`, `unmaterialized`,
-`excluded_by_config`, `declared_but_absent`, `beyond_cap`) — missing
-submodule code is never silent. Ingest walks no longer cross nested git
-working trees at all, so embedded foreign repos stop blending into their
-parent's identity too. **Breaking only if your graph already contained
-accidentally-ingested submodule code** under parent identity: standard
-fresh-reseed posture applies (`docker compose down -v` + reseed). Verified
-end-to-end against a public dual-pin fixture: hermetic unit/integration
-tiers, an e2e remote-clone suite, and a compose acceptance run
-(`ready`, 46 entities, 0 errors, both pins expanded and correctly scoped —
-evidence on #185). The acceptance also surfaced an upstream config-watcher
-race (semstreams#986, one dropped event in a 6-write burst); SemSource
-defends with an idempotent confirm re-put until it is fixed. Prior-release
-measurements (asset guards, zero-loss publish classification, seed liveness)
-carry forward unchanged; scorecard state remains OSH v2 11/13 (the two reds
-name still-open semstreams#823), dogfood loose band 33/33
+`v1.0.0-beta.9` is the onboarding release — and the **first non-breaking
+release in the beta line**: no substrate cutover, no fresh storage, no
+reseed; upgrade in place. Its centerpiece closes v1-blocker #184:
+[`docs/QUICKSTART.md`](docs/QUICKSTART.md) takes a new user from a repo (or
+several) to `phase: ready` and a correct first query on the documented
+commands alone — and the document is **executable truth**: CI extracts its
+marked command blocks and runs them verbatim, in order, against public
+fixtures (single-repo, and multi-repo with explicit `project`/`version`
+identity plus the submodule dedup demonstration ADR-0012 makes true by
+construction), so doc drift fails a build instead of a user. The decision on
+the one-action launcher is recorded on #184: **Docker Compose is the v1
+launcher**; a bespoke launcher is deferred past v1 with the quickstart as
+its executable skeleton. Alongside it, status honesty deepened (#188): the
+internal status report is now ONE shared contract (`internal/sourcestatus`)
+decoded strictly — the previously dropped per-source `backpressure` and
+`boundaries_skipped` signals reach every status surface, so "slow vs
+stalled" is answerable without logs, and the quickstart's troubleshooting is
+keyed entirely to signals that exist. `semsource add ast|repo` gained
+`--project`/`--version` (#189), making the version-diff registration shape a
+two-command affair. With #185 (submodules, beta.8) and #184 both closed, the
+remaining v1 gate is external: SemStreams reaching v1. Prior-release
+measurements carry forward unchanged; scorecard state remains OSH v2 11/13
+(the two reds name still-open semstreams#823), dogfood loose band 33/33
 (`scripts/scorecard/results/`).
 
 The promise is simple: SemSource deliberately scrapes the pile of source files
@@ -53,6 +51,11 @@ confidence and dependency shape. The "why" behind durable choices lives in
 - **Agent-ready query surfaces**: MCP source tools, HTTP/NATS source manifest
   status, GraphQL through the UI profile, and deterministic fusion tools
   (`code_context`, `code_search`, `code_impact`, `doc_context`, `code_changes`).
+- **An executable onboarding quickstart**: the documented zero-to-first-query
+  path ([docs/QUICKSTART.md](docs/QUICKSTART.md)) is extracted and run
+  verbatim by CI against public fixtures — single-repo and multi-repo with
+  explicit identity and submodule dedup — with troubleshooting keyed only to
+  signals the status surface actually serves.
 - **Passage-level document retrieval**: documents are ingested as a navigational
   parent entity plus one entity per structural passage, each with its own
   verbatim body. A question about one paragraph matches that paragraph instead of
@@ -88,6 +91,16 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## Recently Shipped
 
+- `v1.0.0-beta.9`: the onboarding release (non-breaking; no reseed) — the
+  executable quickstart (#184: `docs/QUICKSTART.md` command blocks run
+  verbatim by CI against public fixtures, single- and multi-repo tracks
+  incl. the submodule dedup demo; path-filtered Quickstart CI workflow;
+  README walkthrough replaced by the link; D5 recorded: Compose is the v1
+  launcher), the shared status-report contract (#188: nine duck-typed
+  report copies collapsed into `internal/sourcestatus` with strict decode;
+  `backpressure` + `boundaries_skipped` now on every status surface;
+  signal-keyed troubleshooting), and CLI identity flags (#189:
+  `add ast|repo --project/--version`).
 - `v1.0.0-beta.8`: git submodule support (#185, ADR-0012) — recursive
   materialization on clone/pull with non-tip shallow fallback and per-source
   opt-out; canonical submodule identity (resolved-URL project + 12-hex
@@ -196,13 +209,15 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 - Keep the UI-free backend/MCP stack as SemSource's default deployment for
   embedded use by SemTeams, SemSpec, SemDragon, SemOps, and other consumers.
-- Add a one-action local start that detects the project, launches pinned runtime
-  artifacts, actively reports ingest/index/embedding readiness, and provides
-  assistant connection instructions.
+- The zero-to-first-query path is documented and continuously proven: the
+  [quickstart](docs/QUICKSTART.md) is executed verbatim by CI
+  (`onboarding-quickstart` capability, beta.9).
+- **Decided (#184, 2026-08-17): Docker Compose is the v1 launcher.** A
+  bespoke one-action launcher (`add-one-action-local-start`) is deferred
+  past v1, not rejected — the quickstart's CI-proven command sequence is its
+  executable skeleton whenever it is picked up.
 - Make the released path independent of sibling repository checkouts and a local
   JavaScript toolchain; UI activation remains explicit.
-- Proposed follow-on `add-one-action-local-start` is not yet created or approved;
-  it depends on a released workbench artifact.
 
 ### Project Knowledge Workbench
 
