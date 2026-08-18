@@ -13,6 +13,12 @@ the source files.
 
 > **Public beta (`v1.0.0-beta.9`).** See [ROADMAP.md](ROADMAP.md) for what's in the beta, the known
 > limitations, and what's coming next.
+>
+> **Media sources (`image`/`video`/`audio`) are alpha at best.** They ingest
+> metadata-by-reference, but they have not been exercised recently and are not
+> a current priority — expect rough edges, and open an issue if you depend on
+> them. The code/docs/config/git/url paths are what the beta hardening (and
+> the CI-executed [quickstart](docs/QUICKSTART.md)) actually covers.
 
 ## Prerequisites
 
@@ -81,9 +87,13 @@ or live UI updates; it is not the primary governed query contract.
 | `docs`   | Markdown, plain text                                        | fsnotify             |
 | `config` | go.mod, package.json, pom.xml, Dockerfile, etc.             | fsnotify             |
 | `url`    | HTTP/S pages                                                | configurable polling |
-| `image`  | PNG, JPG, etc. (metadata + optional thumbnails)             | fsnotify             |
-| `video`  | Keyframe extraction via ffmpeg                              | fsnotify             |
-| `audio`  | Audio metadata via ffprobe                                  | fsnotify             |
+| `image`  | PNG, JPG, etc. (metadata + optional thumbnails) — *alpha*   | fsnotify             |
+| `video`  | Keyframe extraction via ffmpeg — *alpha*                    | fsnotify             |
+| `audio`  | Audio metadata via ffprobe — *alpha*                        | fsnotify             |
+
+The three media types are **alpha**: functional metadata ingestion, but not
+recently exercised and outside the current hardening focus (see the note at
+the top).
 
 ## CLI Reference
 

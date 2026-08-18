@@ -153,8 +153,11 @@ confidence and dependency shape. The "why" behind durable choices lives in
 - **Large-corpus query readiness is still being hardened.** Real dogfooding found
   graph-index scale and readiness gaps in SemStreams; SemSource tracks them
   upstream instead of hiding them locally.
-- **Media bytes are local-filestore backed.** Code/doc bodies use ObjectStore, but
-  image/video/audio bytes are not yet shared ObjectStore payloads.
+- **Media sources are alpha.** `image`/`video`/`audio` ingestion is
+  metadata-by-reference and functional, but has not been exercised recently
+  and sits outside the current hardening focus; media bytes are also still
+  local-filestore backed (not shared ObjectStore payloads). The hardened,
+  continuously verified paths are code/docs/config/git/url.
 - **Passage chunking requires a graph rebuild, not a reindex.** The substrate
   cannot clear a stored body reference in place, so parents would keep their old
   whole-file bodies through an in-place reindex. See
