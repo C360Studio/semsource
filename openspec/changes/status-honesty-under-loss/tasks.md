@@ -68,15 +68,15 @@ partial rollout fails loudly by design.
 
 ## 4. Retire `publish_total` (BREAKING)
 
-- [ ] 4.1 Remove `PublishTotal` from `internal/sourcestatus.Report`,
+- [x] 4.1 Remove `PublishTotal` from `internal/sourcestatus.Report`,
   `processor/source-manifest/payload_status.go`, `status.go`, and all eight source
   components. Verify: `grep -rn 'publish_total\|PublishTotal' --include='*.go' .`
   returns nothing outside archived changes.
-- [ ] 4.2 Update the fixtures that pin the old field —
+- [x] 4.2 Update the fixtures that pin the old field —
   `internal/sourcestatus/report_test.go:20` and
   `processor/source-manifest/contract_test.go:62`. Verify: `go test ./internal/...
   ./processor/...` green.
-- [ ] 4.3 Update the HTTP, MCP, and workbench status surfaces and their tests.
+- [x] 4.3 Update the HTTP, MCP, and workbench status surfaces and their tests.
   Verify: `TestWorkbenchCapabilities_ReadyHeadlessContract` and
   `TestWorkbenchCapabilities_SourceErrorsOverrideAggregateReady`
   (`workbench_capabilities_test.go:16,202`) pass against the new field set.

@@ -22,11 +22,9 @@ type Report struct {
 	InstanceName string `json:"instance_name"`
 	SourceType   string `json:"source_type"`
 	Phase        string `json:"phase"`
-	// EntityCount is the DISTINCT entity count (invariant under periodic
-	// republication); PublishTotal is raw publish throughput — separately
-	// named so counts are never a readiness proxy.
-	EntityCount  int64 `json:"entity_count"`
-	PublishTotal int64 `json:"publish_total,omitempty"`
+	// EntityCount is the DISTINCT entity count, invariant under periodic
+	// republication, so counts are never a readiness proxy.
+	EntityCount int64 `json:"entity_count"`
 	// OfferedTotal, DeliveredTotal and LostTotal are the delivery figures,
 	// named separately because offering is not arrival: Send() returns after
 	// a buffer write, before any delivery outcome exists. A single combined
@@ -51,7 +49,7 @@ type Report struct {
 	// be cleared by a clean re-seed.
 	SeedLost int64 `json:"seed_lost"`
 	// FilesParsed and BodiesOffloaded are pre-publish seed liveness: they
-	// advance during parse and body-offload windows where PublishTotal is
+	// advance during parse and body-offload windows where DeliveredTotal is
 	// flat, distinguishing a working seed from a wedged one.
 	FilesParsed     int64 `json:"files_parsed,omitempty"`
 	BodiesOffloaded int64 `json:"bodies_offloaded,omitempty"`

@@ -577,7 +577,6 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		SourceType:   "docs",
 		Phase:        phase,
 		EntityCount:  c.distinct.Count(),
-		PublishTotal: c.entitiesPublished.Load(),
 		// Delivery figures: acceptance is not arrival. OfferedTotal is what
 		// this source handed to the publisher; DeliveredTotal is what the
 		// publisher confirmed onto the stream; LostTotal is the difference

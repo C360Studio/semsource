@@ -929,10 +929,9 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		SourceType:   "ast",
 		Phase:        phase,
 		// Distinct entities, invariant under periodic republication; raw
-		// publish throughput is the separately named publish_total
+		// delivery is the separately named delivery figures below
 		// (honest-readiness-and-errors D5).
-		EntityCount:  c.distinct.Count(),
-		PublishTotal: c.entitiesIndexed.Load(),
+		EntityCount: c.distinct.Count(),
 		// Delivery figures: acceptance is not arrival. OfferedTotal is what
 		// this source handed to the publisher; DeliveredTotal is what the
 		// publisher confirmed onto the stream; LostTotal is the difference
@@ -945,7 +944,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.PassLost(),
-		// Pre-publish liveness (5.7): these advance while PublishTotal is flat
+		// Pre-publish liveness (5.7): these advance while DeliveredTotal is flat
 		// during parse and body offload, so a plateau reads as work, not a hang.
 		FilesParsed:     c.filesParsed.Load(),
 		BodiesOffloaded: c.bodiesOffloaded.Load(),

@@ -17,7 +17,6 @@ func fullReport() Report {
 		SourceType:        "ast",
 		Phase:             "watching",
 		EntityCount:       42,
-		PublishTotal:      99,
 		OfferedTotal:      99,
 		DeliveredTotal:    90,
 		LostTotal:         9,

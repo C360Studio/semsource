@@ -11,7 +11,7 @@ import (
 // counts, so the 60s periodic reindex inflated them forever (audit
 // 2026-07-19: folder ×4, repo ×4 within minutes while the graph itself was
 // clean). Distinct cardinality is invariant under republication; raw publish
-// throughput is reported separately as publish_total.
+// delivery is reported separately as delivered_total.
 type DistinctTracker struct {
 	mu    sync.Mutex
 	seen  map[string]struct{}

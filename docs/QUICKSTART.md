@@ -306,9 +306,10 @@ what it means, and what to do.
 | Signal | Meaning | Action |
 | ------ | ------- | ------ |
 | `phase: "seeding"` and per-source `files_parsed` / `bodies_offloaded` advancing between polls | The seed is working through files; publishing may lag parsing | Wait; re-poll. Large repos seed for a while on first run |
-| `phase: "seeding"`, counters **not** advancing, `publish_total` flat | A source is stalled, not slow | Check that source's `last_error` (`code` + `message`); verify NATS is up and reachable at your `NATS_URL` |
+| `phase: "seeding"`, counters **not** advancing, `delivered_total` flat | A source is stalled, not slow | Check that source's `last_error` (`code` + `message`); verify NATS is up and reachable at your `NATS_URL` |
 | A source's `backpressure: true` | Its publisher is retrying against a refusing or saturated transport — no drops, no errors, but functionally stalled | Check NATS health and capacity (server up? stream limits hit?); the flag clears on its own once the transport drains |
-| `phase: "degraded"` | The seed timeout fired before every source reported | Find the source whose `phase` is not `watching`/`idle`; its `last_error` says why. Fix and restart |
+| `phase: "degraded"`, every source `watching`/`idle`, some source's `seed_lost` > 0 | A seed finished but entities it offered never reached the graph — the corpus is incomplete | Check that source's `last_error` and NATS stream limits. The graph re-derives from source: fix the cause, then re-seed. `degraded` clears only when a pass completes with `seed_lost: 0` |
+| `phase: "degraded"`, some source not `watching`/`idle` | The seed timeout fired before every source reported | Find the source whose `phase` is not `watching`/`idle`; its `last_error` says why. Fix and restart |
 | `phase: "ready"` but `code_context` misses a symbol you can see, `index.ready: false` | Sources finished, structural index still catching up | Wait for `index.ready: true`, then re-query — structural queries gate on it |
 | `code_search` results weak or empty, `embedding.ready: false` (or `available: false`) | Semantic ranking not caught up (or not configured — native default is BM25) | Wait for `embedding.ready`; for semantic search natively, configure `graph.embedder_type: "http"` + a `model_registry` (the compose stack does this for you) |
 | A source's `phase: "errored"` or `error_count` > 0 | That source hit parse/publish failures; entities may be missing | Read `last_error.code` — bad paths and unreadable files are config-side; publish errors are transport-side |
