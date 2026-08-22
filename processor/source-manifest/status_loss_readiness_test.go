@@ -80,3 +80,59 @@ func TestBuildStatus_LossDegradationIsStickyUntilACleanPass(t *testing.T) {
 			got, PhaseReady)
 	}
 }
+
+// TestBuildStatus_ReproducesIssue177Evidence pins the concrete run that
+// motivated the change. beta.161 OSH acceptance, boot A: the publisher had
+// delivered 42,931 entities and terminally failed 34,871, and status reported
+// publish_total 77,802 with phase ready. A consumer honouring the documented
+// gate proceeded against a graph missing 45% of what the headline claimed.
+func TestBuildStatus_ReproducesIssue177Evidence(t *testing.T) {
+	const (
+		delivered = 42931
+		lost      = 34871
+		offered   = delivered + lost // 77,802 — the old publish_total
+	)
+
+	agg := newStatusAggregator(1)
+	agg.update(&SourceStatusReport{
+		InstanceName:   "ast-source-main",
+		SourceType:     "ast",
+		Phase:          SourcePhaseWatching,
+		EntityCount:    delivered,
+		OfferedTotal:   offered,
+		DeliveredTotal: delivered,
+		LostTotal:      lost,
+		SeedLost:       lost,
+		ErrorCount:     lost,
+	})
+
+	status := agg.buildStatus("ns")
+	if status.Phase != PhaseDegraded {
+		t.Errorf("phase = %q, want %q (this run previously reported ready)", status.Phase, PhaseDegraded)
+	}
+
+	got := status.Sources[0]
+	for _, tc := range []struct {
+		name      string
+		got, want int64
+	}{
+		{"delivered_total", got.DeliveredTotal, delivered},
+		{"lost_total", got.LostTotal, lost},
+		{"seed_lost", got.SeedLost, lost},
+		{"offered_total", got.OfferedTotal, offered},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)
+		}
+	}
+
+	// The old headline number is still derivable — it was never wrong, only
+	// misnamed. What changed is that it can no longer be mistaken for delivery.
+	if got.OfferedTotal != 77802 {
+		t.Errorf("offered_total = %d, want 77802 (the figure that shipped as publish_total)", got.OfferedTotal)
+	}
+	if got.DeliveredTotal >= got.OfferedTotal {
+		t.Errorf("delivered (%d) must be strictly below offered (%d) under loss",
+			got.DeliveredTotal, got.OfferedTotal)
+	}
+}

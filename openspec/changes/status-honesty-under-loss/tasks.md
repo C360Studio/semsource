@@ -83,14 +83,14 @@ partial rollout fails loudly by design.
 
 ## 5. Verification
 
-- [ ] 5.1 Run the full gate: `task lint` (revive pinned v1.15.0, warnings fail)
+- [x] 5.1 Run the full gate: `task lint` (revive pinned v1.15.0, warnings fail)
   and `task test`, then `go test -race ./...` for the aggregator's concurrent
   report handling.
 - [ ] 5.2 Add an e2e assertion that a seed with induced delivery loss reports
   `degraded` and a non-zero `lost_total` on the HTTP status surface, and that a
   clean seed reports `ready` with `lost_total == 0`. Verify: `go test -tags=e2e
   ./test/e2e/`.
-- [ ] 5.3 Reproduce #177's evidence shape: assert that a run delivering 42,931 of
+- [x] 5.3 Reproduce #177's evidence shape: assert that a run delivering 42,931 of
   77,802 accepted entities reports `delivered_total: 42931`, `lost_total: 34871`,
   and `phase: degraded` — the exact case that previously reported
   `publish_total: 77802` and `phase: ready`. Verify: table-driven test in
