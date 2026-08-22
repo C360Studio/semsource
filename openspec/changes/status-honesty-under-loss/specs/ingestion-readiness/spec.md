@@ -3,11 +3,15 @@
 ### Requirement: Ready means seeded
 
 The aggregate ingestion `phase` SHALL be `ready` only when every configured source has completed
-its initial seed AND every entity those sources offered for publication was confirmed delivered;
-while any source is still seeding the phase SHALL be observably `seeding`; any errored source — and
-any source whose seed completed with entities offered but never delivered — SHALL yield
-`degraded`. The documented consumer gate (poll until `ready`) therefore guarantees the initial
-corpus is fully published.
+its initial seed AND no source lost an entity it offered during that seed; while any source is
+still seeding the phase SHALL be observably `seeding`; any errored source — and any source whose
+seed lost entities it had offered — SHALL yield `degraded`.
+
+The documented consumer gate (poll until `ready`) therefore guarantees that no source silently
+dropped part of the corpus it ingested. It does not guarantee that every entity has finished
+landing at the instant `ready` is first observed: publishing is asynchronous and continues after a
+source finishes walking its inputs. The guarantee is against silent loss, which is permanent, not
+against in-flight delivery, which resolves on its own.
 
 Completing a seed is necessary but not sufficient for `ready`. A `degraded` phase arising from
 delivery loss SHALL be sticky: it SHALL NOT return to `ready` on the strength of continued activity
@@ -22,7 +26,7 @@ alone, but only once a subsequent pass completes with no loss.
 
 - **GIVEN** no configured source has lost an offered entity
 - **WHEN** the final configured source reports initial-seed completion
-- **THEN** `phase` transitions to `ready`
+- **THEN** `phase` transitions to `ready`, without waiting for entities still in flight
 
 #### Scenario: Errored source degrades the aggregate
 
@@ -94,24 +98,27 @@ No status surface SHALL publish a single figure that conflates offering with del
 cannot answer the only question a consumer asks of it — whether the corpus actually arrived — and
 reads as throughput while overstating delivery.
 
-The three figures SHALL reconcile: entities offered equals entities delivered, plus entities lost,
-plus any still in flight. In-flight means every entity whose delivery outcome does not yet exist,
-which is a superset of those awaiting their turn — so the identity holds as equality only once
-delivery has settled. The delivered figure SHALL never exceed the number of entities confirmed onto
-the graph stream.
+Each figure SHALL be independently meaningful: the delivered figure SHALL never exceed the number
+of entities confirmed onto the graph stream, and the loss figure SHALL count every entity that was
+offered and did not arrive.
+
+No arithmetic relationship between the figures is required to hold at any instant. Status is a
+sample of a live asynchronous system, and entities legitimately sit between offered and delivered
+while publishing continues. Requiring the figures to reconcile exactly would demand a moving system
+hold still, and would make a routine in-flight window indistinguishable from loss.
 
 #### Scenario: A lossy seed reports all three figures
 
 - **GIVEN** a seed in which some offered entities were never delivered
 - **WHEN** the status surface is polled after that seed completes
-- **THEN** the source reports a non-zero loss figure, a delivered figure equal to the number
-  confirmed onto the stream, and an offered figure equal to delivered plus lost
+- **THEN** the source reports a non-zero loss figure and a delivered figure equal to the number
+  confirmed onto the stream
 
 #### Scenario: A clean seed reports zero loss
 
 - **GIVEN** a seed in which every offered entity was delivered
 - **WHEN** the status surface is polled after that seed completes
-- **THEN** the loss figure is zero and the delivered figure equals the offered figure
+- **THEN** the loss figure is zero
 
 #### Scenario: No conflated figure is published
 

@@ -391,7 +391,6 @@ func (c *Component) runSeed(ctx context.Context) error {
 
 	c.logGuardSummary()
 
-	c.seedLoss.End(c.publisher.Lost())
 	c.publishStatusReport(ctx, "watching")
 
 	// Collect cancel funcs locally, then assign under lock to avoid races with Stop.
@@ -943,7 +942,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		OfferedTotal:   c.entitiesIndexed.Load() + c.publisher.Dropped(),
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
-		SeedLost:       c.seedLoss.PassLost(),
+		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
 		// Pre-publish liveness (5.7): these advance while DeliveredTotal is flat
 		// during parse and body offload, so a plateau reads as work, not a hang.
 		FilesParsed:     c.filesParsed.Load(),

@@ -195,7 +195,6 @@ func (c *Component) runSeed(ctx context.Context) error {
 	c.logger.Info("URL-source initial ingest complete",
 		"entities_published", c.entitiesPublished.Load())
 
-	c.seedLoss.End(c.publisher.Lost())
 	c.publishStatusReport(ctx, "watching")
 
 	for _, rawURL := range c.config.URLs {
@@ -401,7 +400,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		OfferedTotal:   c.entitiesPublished.Load() + c.publisher.Dropped(),
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
-		SeedLost:       c.seedLoss.PassLost(),
+		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
 		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// Publisher distress: retrying against a refusing transport reports

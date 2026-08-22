@@ -132,7 +132,7 @@ func TestBuildStatus_ReproducesIssue177Evidence(t *testing.T) {
 		t.Errorf("offered_total = %d, want 77802 (the figure that shipped as publish_total)", got.OfferedTotal)
 	}
 	if got.DeliveredTotal >= got.OfferedTotal {
-		t.Errorf("delivered (%d) must be strictly below offered (%d) under loss",
+		t.Errorf("delivered (%d) must read below offered (%d) under loss",
 			got.DeliveredTotal, got.OfferedTotal)
 	}
 }

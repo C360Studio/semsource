@@ -255,7 +255,6 @@ func (c *Component) runSeed(ctx context.Context) error {
 		"repo", repoDesc,
 		"entities_published", c.entitiesPublished.Load())
 
-	c.seedLoss.End(c.publisher.Lost())
 	c.publishStatusReport(ctx, "watching")
 
 	cancel := c.startPolling(ctx)
@@ -477,7 +476,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		OfferedTotal:   c.entitiesPublished.Load() + c.publisher.Dropped(),
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
-		SeedLost:       c.seedLoss.PassLost(),
+		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
 		ErrorCount:     c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// The no-silent-entity-loss posture applied to inputs: every declared

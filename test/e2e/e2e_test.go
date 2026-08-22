@@ -64,12 +64,19 @@ type statusPayload struct {
 }
 
 type sourceStatus struct {
-	InstanceName string           `json:"instance_name"`
-	SourceType   string           `json:"source_type"`
-	Phase        string           `json:"phase"`
-	EntityCount  int64            `json:"entity_count"`
-	ErrorCount   int64            `json:"error_count"`
-	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
+	InstanceName string `json:"instance_name"`
+	SourceType   string `json:"source_type"`
+	Phase        string `json:"phase"`
+	EntityCount  int64  `json:"entity_count"`
+	// Delivery figures. Offering is not arrival: these reconcile as
+	// offered = delivered + lost + in-flight, and SeedLost is what readiness
+	// keys on (lifetime loss is monotonic and could never clear).
+	OfferedTotal   int64            `json:"offered_total"`
+	DeliveredTotal int64            `json:"delivered_total"`
+	LostTotal      int64            `json:"lost_total"`
+	SeedLost       int64            `json:"seed_lost"`
+	ErrorCount     int64            `json:"error_count"`
+	TypeCounts     map[string]int64 `json:"type_counts,omitempty"`
 }
 
 // summaryPayload mirrors the source-manifest summary response structure.
@@ -594,6 +601,26 @@ func TestE2E_NativeQuickStart(t *testing.T) {
 	}
 	if status.TotalEntities == 0 {
 		t.Fatalf("status total_entities = 0; status=%+v", status)
+	}
+
+	// A healthy install must report no loss on the real HTTP surface, and must
+	// not be degraded. Deliberately NOT asserted: any arithmetic relating
+	// offered to delivered. Status is a sample of a live asynchronous system —
+	// publishing continues after a source finishes walking files, so entities
+	// legitimately sit between the two figures at any instant. Loss is the
+	// signal that matters; the rest are diagnostics.
+	for _, src := range status.Sources {
+		if src.LostTotal != 0 {
+			t.Errorf("source %q: lost_total = %d, want 0 on a clean install",
+				src.InstanceName, src.LostTotal)
+		}
+		if src.SeedLost != 0 {
+			t.Errorf("source %q: seed_lost = %d, want 0 on a clean install",
+				src.InstanceName, src.SeedLost)
+		}
+	}
+	if status.Phase == "degraded" {
+		t.Errorf("phase = degraded on a clean install; per-source figures: %+v", status.Sources)
 	}
 
 	// The default install must actually ingest git history: commit entities

@@ -68,13 +68,20 @@ over-triggering is as harmful as under-triggering.
 ### D2: Stickiness needs a per-pass baseline, not a counter test
 
 **Decision:** each source records the publisher's loss count at the start of a pass
-and compares at the end. A pass is clean when the count is unchanged across it.
+and reports the difference live. A pass is clean while the count is unchanged.
 
 `Lost() > 0` cannot express "sticky until a clean re-pass" — the counter is
 monotonic, so the test would latch on the first loss and never clear, making
 `degraded` permanent by construction rather than by policy. Comparing against a
 per-pass baseline gives a genuine "did *this* pass lose anything" answer while
 leaving the cumulative figure intact for the surfaces.
+
+**Computed live, not frozen at the end of the walk.** Publishing is asynchronous
+and terminal failures resolve only after their retry budget, well after a source
+has moved to watching — measured on a clean install, a source reports `watching`
+with `offered 3, delivered 0`. A figure frozen at that transition would miss
+exactly the drain-time loss this exists to catch, which is where #177's 34,871
+failures actually occurred.
 
 **Alternative considered:** reset the publisher's counters at pass boundaries.
 Rejected — the cumulative totals are what the metrics surface and the loss figure
@@ -109,20 +116,21 @@ is incomplete until then, and the loss figures say by how much.
 
 **Why offered, not accepted.** `Send()` returns an error when the buffer overflows,
 and every source increments its counter only on a nil return — so the source-local
-counter excludes drops. `Lost()` includes them. Reconciling against the raw counter
-therefore fails by exactly the drop count: measured, `offered 0 != delivered 0 +
-lost 3 + in-flight 1`. Adding `Dropped()` back restores the identity without
-touching any increment site, because the source-local counter is exactly
-`delivered + failed + in-flight`.
+counter excludes drops while `Lost()` includes them. A drop is the publisher
+refusing an entity the source had; calling that "not offered" would hide it from
+the offered figure while still counting it as lost. Adding `Dropped()` back is a
+one-expression change at the report, touching no increment site.
 
-A drop is the publisher refusing an entity the source had. Calling that "not
-offered" would hide it from the arithmetic while still counting it as lost, which
-is the same class of dishonesty as `publish_total`.
+**No reconciliation invariant.** An earlier revision of this design required
+`offered = delivered + lost + in-flight` to hold. That was dropped: status is a
+*sample* of a live asynchronous system, and requiring the figures to reconcile
+exactly demands a moving system hold still. It also made a routine in-flight
+window — publishing continues after a source finishes walking its inputs —
+indistinguishable from loss, and pulled readiness toward waiting for quiescence
+that watch traffic would never grant.
 
-**In-flight is not `Pending()`.** `Pending()` is buffer depth; an entity the drain
-loop has taken but not yet resolved is in neither `Pending()` nor the terminal
-counters. The identity is therefore exact only once delivery has settled, which is
-what the spec says and what the tests wait for.
+The figures are diagnostics; the gate is the only thing engineered exactly, and
+only in one direction: never report `ready` after a seed that lost entities.
 
 **Deliberate overlap:** loss appears in both `lost_total` and (via `Lost()`) in
 `error_count`. This is not double-counting to be fixed — `error_count` is
