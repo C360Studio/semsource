@@ -48,21 +48,21 @@ partial rollout fails loudly by design.
 
 ## 3. Readiness degrades on loss (behavioural)
 
-- [ ] 3.1 Widen the aggregator so a source whose seed completed with loss degrades
+- [x] 3.1 Widen the aggregator so a source whose seed completed with loss degrades
   the aggregate. Trigger on the loss signal from group 2, **not** on `ErrorCount`
   — it folds in `parseFailures` and would degrade permanently on one unparseable
   file (design D1). Verify: new test asserting `phase == degraded` for a source
   reporting `lost_total > 0` with `Phase != errored`.
-- [ ] 3.2 Assert a non-zero `error_count` from parse failures alone does **not**
+- [x] 3.2 Assert a non-zero `error_count` from parse failures alone does **not**
   degrade the aggregate. Verify: new test with `ErrorCount > 0`, `lost_total == 0`
   → `phase == ready`. This is the regression guard for 3.1's whole rationale.
-- [ ] 3.3 Make loss-induced degradation sticky via the aggregator's existing
+- [x] 3.3 Make loss-induced degradation sticky via the aggregator's existing
   `degraded` flag, cleared only by a subsequent clean pass (design D3 — watch
   activity does not clear it). Verify: extend
   `TestStatusAggregator_TimeoutDegradedClearsOnCleanSeed`
   (`status_seedwindow_test.go:71`) with a loss-induced sibling case, asserting it
   does *not* clear on continued watch reports.
-- [ ] 3.4 Confirm `TestStatusAggregator_ReadyAfterLastSeedCompletes`
+- [x] 3.4 Confirm `TestStatusAggregator_ReadyAfterLastSeedCompletes`
   (`status_seedwindow_test.go:36`) still passes for a clean seed — the no-loss
   path is unchanged. Verify: existing test, unmodified.
 
