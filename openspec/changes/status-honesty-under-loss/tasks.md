@@ -36,13 +36,13 @@ partial rollout fails loudly by design.
 
 ## 2. Per-pass loss baseline (additive)
 
-- [ ] 2.1 Record the publisher's loss count at the start of each source's initial
+- [x] 2.1 Record the publisher's loss count at the start of each source's initial
   seed and expose whether the pass completed clean (`Lost()` unchanged across it).
   The natural hook is each component's existing phase-transition path —
   `publishStatusReport`/`setPhase` in ast-source and its siblings. Verify: unit
   test per source shape asserting clean-pass true with no loss, false with
   induced loss.
-- [ ] 2.2 Carry the clean-pass outcome on the shared report so the aggregator can
+- [x] 2.2 Carry the clean-pass outcome on the shared report so the aggregator can
   read it without recomputing from monotonic counters (design D2). Verify:
   `internal/sourcestatus/report_test.go` round-trip covers the new signal.
 

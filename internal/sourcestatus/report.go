@@ -44,6 +44,12 @@ type Report struct {
 	OfferedTotal   int64 `json:"offered_total"`
 	DeliveredTotal int64 `json:"delivered_total"`
 	LostTotal      int64 `json:"lost_total"`
+	// SeedLost is the loss attributable to the most recently COMPLETED seed
+	// pass, as distinct from LostTotal's process lifetime. The publisher's
+	// counters are monotonic, so lifetime loss can never fall back to zero;
+	// without a per-pass figure a loss-degraded readiness phase could never
+	// be cleared by a clean re-seed.
+	SeedLost int64 `json:"seed_lost"`
 	// FilesParsed and BodiesOffloaded are pre-publish seed liveness: they
 	// advance during parse and body-offload windows where PublishTotal is
 	// flat, distinguishing a working seed from a wedged one.

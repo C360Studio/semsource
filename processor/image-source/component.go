@@ -18,6 +18,7 @@ import (
 	imghandler "github.com/c360studio/semsource/handler/image"
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/seedloss"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/storage/filestore"
@@ -52,9 +53,12 @@ func (s *sourceCfg) GetCoalesceMs() int          { return s.coalesceMs }
 // When FileStoreRoot is configured, binary content is stored in the local
 // filesystem via filestore; otherwise, only metadata entities are published.
 type Component struct {
-	name       string
-	config     Config
-	publisher  *entitypub.Publisher
+	name      string
+	config    Config
+	publisher *entitypub.Publisher
+	// seedLoss attributes publisher loss to one seed pass; the publisher's
+	// own counters are monotonic and so can never clear.
+	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 	platform   component.PlatformMeta
@@ -168,6 +172,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
+	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
 
 	// Started before the seed, not after it, so progress is visible while the
@@ -214,6 +219,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 		"paths", c.config.Paths,
 		"entities_published", c.entitiesPublished.Load())
 
+	c.seedLoss.End(c.publisher.Lost())
 	c.publishStatusReport(ctx, "watching")
 
 	cancel := c.startWatching(ctx)
@@ -392,6 +398,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		OfferedTotal:   c.entitiesPublished.Load() + c.publisher.Dropped(),
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
+		SeedLost:       c.seedLoss.PassLost(),
 		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// Publisher distress: retrying against a refusing transport reports

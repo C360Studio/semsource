@@ -39,6 +39,10 @@ type SourceStatus struct {
 	OfferedTotal   int64 `json:"offered_total"`
 	DeliveredTotal int64 `json:"delivered_total"`
 	LostTotal      int64 `json:"lost_total"`
+	// SeedLost is loss attributable to the most recently completed seed pass.
+	// Readiness keys on this rather than LostTotal, which is monotonic over
+	// the process lifetime and so could never clear.
+	SeedLost int64 `json:"seed_lost"`
 	// Pre-publish seed liveness: advancing while PublishTotal is flat means
 	// the seed is parsing or offloading bodies, not wedged (5.7).
 	FilesParsed     int64 `json:"files_parsed,omitempty"`

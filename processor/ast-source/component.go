@@ -27,6 +27,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/gitboundary"
+	"github.com/c360studio/semsource/internal/seedloss"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -63,9 +64,12 @@ type pathWatcher struct {
 
 // Component implements the ast-source processor.
 type Component struct {
-	name       string
-	config     Config
-	publisher  *entitypub.Publisher
+	name      string
+	config    Config
+	publisher *entitypub.Publisher
+	// seedLoss attributes publisher loss to one seed pass; the publisher's
+	// own counters are monotonic and so can never clear.
+	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 	platform   component.PlatformMeta
@@ -293,6 +297,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.publisher.Start(ctx)
 	c.initBodyStore(ctx)
 
+	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
 
 	c.startProgressReporting(ctx)
@@ -386,6 +391,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 
 	c.logGuardSummary()
 
+	c.seedLoss.End(c.publisher.Lost())
 	c.publishStatusReport(ctx, "watching")
 
 	// Collect cancel funcs locally, then assign under lock to avoid races with Stop.
@@ -938,6 +944,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		OfferedTotal:   c.entitiesIndexed.Load() + c.publisher.Dropped(),
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
+		SeedLost:       c.seedLoss.PassLost(),
 		// Pre-publish liveness (5.7): these advance while PublishTotal is flat
 		// during parse and body offload, so a plateau reads as work, not a hang.
 		FilesParsed:     c.filesParsed.Load(),

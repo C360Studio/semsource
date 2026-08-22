@@ -45,3 +45,34 @@ func TestBuildStatusReport_DeliveryFiguresReconcile(t *testing.T) {
 			got, r.DeliveredTotal, r.LostTotal, pub.Pending(), want)
 	}
 }
+
+// TestBuildStatusReport_SeedLossIsPerPassNotLifetime pins the distinction that
+// makes a loss-degraded readiness phase clearable. The publisher's loss
+// counters are monotonic, so a source that lost entities once reports non-zero
+// LostTotal for the rest of the process. SeedLost must instead answer "did the
+// most recently completed pass lose anything", which a clean re-seed can reset.
+func TestBuildStatusReport_SeedLossIsPerPassNotLifetime(t *testing.T) {
+	pub, _ := statustest.LossyPublisher(t, 2)
+	c := &Component{publisher: pub, distinct: entitypub.NewDistinctTracker(), handler: &githandler.Handler{}}
+
+	// A lossy pass: the baseline is taken before the loss.
+	c.seedLoss.Begin(0)
+	c.seedLoss.End(pub.Lost())
+	lossy := c.buildStatusReport("watching")
+	if lossy.SeedLost != pub.Lost() {
+		t.Errorf("lossy pass: SeedLost = %d, want %d", lossy.SeedLost, pub.Lost())
+	}
+
+	// A clean pass that follows it: lifetime loss is unchanged and still
+	// non-zero, but nothing was lost during this pass.
+	c.seedLoss.Begin(pub.Lost())
+	c.seedLoss.End(pub.Lost())
+	clean := c.buildStatusReport("watching")
+	if clean.LostTotal == 0 {
+		t.Fatal("lifetime loss cleared; the assertion below would prove nothing")
+	}
+	if clean.SeedLost != 0 {
+		t.Errorf("clean pass: SeedLost = %d, want 0 (lifetime loss is still %d)",
+			clean.SeedLost, clean.LostTotal)
+	}
+}

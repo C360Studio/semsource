@@ -21,6 +21,7 @@ func fullReport() Report {
 		OfferedTotal:      99,
 		DeliveredTotal:    90,
 		LostTotal:         9,
+		SeedLost:          4,
 		FilesParsed:       120,
 		BodiesOffloaded:   80,
 		BoundariesSkipped: 2,
