@@ -914,11 +914,11 @@ func (c *Component) currentPhase() string {
 }
 
 // publishStatusReport sends a status report to the manifest component via NATS core.
-func (c *Component) publishStatusReport(ctx context.Context, phase string) {
-	// Publishing a phase IS the transition, so the reporter's sampled phase can
-	// never diverge from the last one published.
-	c.setPhase(phase)
-	report := sourcestatus.Report{
+// buildStatusReport assembles this source's status report. It is pure —
+// no I/O and no phase mutation — so the field wiring, in particular the
+// accepted/delivered/lost delivery figures, is directly assertable.
+func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
+	return sourcestatus.Report{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "ast",
 		Phase:        phase,
@@ -927,6 +927,13 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		// (honest-readiness-and-errors D5).
 		EntityCount:  c.distinct.Count(),
 		PublishTotal: c.entitiesIndexed.Load(),
+		// Delivery figures: acceptance is not arrival. AcceptedTotal is what
+		// this source handed to the publisher; DeliveredTotal is what the
+		// publisher confirmed onto the stream; LostTotal is the difference
+		// that never arrived (overflow drops + terminal failures).
+		AcceptedTotal:  c.entitiesIndexed.Load(),
+		DeliveredTotal: c.publisher.Published(),
+		LostTotal:      c.publisher.Lost(),
 		// Pre-publish liveness (5.7): these advance while PublishTotal is flat
 		// during parse and body offload, so a plateau reads as work, not a hang.
 		FilesParsed:     c.filesParsed.Load(),
@@ -946,6 +953,13 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		LastError:    c.seed.LastError(),
 		Timestamp:    time.Now(),
 	}
+}
+
+func (c *Component) publishStatusReport(ctx context.Context, phase string) {
+	// Publishing a phase IS the transition, so the reporter's sampled phase can
+	// never diverge from the last one published.
+	c.setPhase(phase)
+	report := c.buildStatusReport(phase)
 	data, err := json.Marshal(report)
 	if err != nil {
 		c.logger.Warn("failed to marshal status report", "error", err)

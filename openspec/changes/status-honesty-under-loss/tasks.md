@@ -12,11 +12,11 @@ partial rollout fails loudly by design.
 
 ## 1. Surface the publisher's figures (additive)
 
-- [ ] 1.1 Add `accepted_total`, `delivered_total`, and `lost_total` to
+- [x] 1.1 Add `accepted_total`, `delivered_total`, and `lost_total` to
   `internal/sourcestatus.Report`, leaving `publish_total` in place for now.
   Verify: extend `internal/sourcestatus/report_test.go` (currently sets
   `PublishTotal: 99` at :20) so a round-trip carries all four fields.
-- [ ] 1.2 Populate the three new fields in all eight source components, in the
+- [x] 1.2 Populate the three new fields in all eight source components, in the
   same commit as 1.1 — `ast`, `doc`, `git`, `cfgfile`, `url`, `image`, `audio`,
   `video`. `delivered_total` from `Publisher.Published()`, `lost_total` from
   `Publisher.Lost()`, `accepted_total` from the existing source-local counter
