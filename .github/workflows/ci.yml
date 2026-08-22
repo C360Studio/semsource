@@ -134,10 +134,42 @@ jobs:
       - name: Release verifier contract tests
         run: task ui:image:release:test
 
-  # NOTE: an `e2e` job (go test -tags=e2e) is intentionally NOT wired in yet.
-  # The local black-box e2e gate now passes on semstreams beta.145, but it is
-  # Docker-backed and slower than the PR unit/lint gates. Run it before release
-  # cuts until we deliberately promote it into CI.
+  # The e2e suite is split by what a test COSTS, not by what it covers.
+  #
+  # This job runs the tests that need only Docker-backed NATS and a locally
+  # built binary — no external repository is cloned, so nothing here depends on
+  # a third-party host being up. Measured at ~26s of test time.
+  #
+  # Deliberately excluded, and where they run instead:
+  #   TestE2E_OSH_JavaMavenIngest  clones github.com/opensensorhub/osh-core, a
+  #                               large third-party repo (~29s). Its
+  #                               availability is not ours, so it stays out of
+  #                               the PR gate; run before release cuts.
+  #   TestE2E_SubmoduleIngest      clones the C360Studio/semdev-test fixtures
+  #                               (~27s). Same fixtures quickstart.yml already
+  #                               clones, so promoting it is a bandwidth
+  #                               question rather than a trust one.
+  #   TestE2E_Quickstart*          already gated by quickstart.yml on its own
+  #                               path filter; running them here would duplicate.
+  #
+  # TestE2E_UpgradePathRehearsal is the reason this job exists: it is the
+  # executable proof of the documented upgrade path (purge graph state, restart,
+  # graph re-derives from source, unrelated state survives). It went red on the
+  # beta.161 bump and nobody saw it, because no e2e job ran in CI.
+  e2e-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Black-box e2e (no external clones)
+        run: |
+          go test -tags=e2e -v -timeout 10m ./test/e2e/ \
+            -run 'TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal'
 
   build-and-push:
     needs: [test, lint, test-integration]
