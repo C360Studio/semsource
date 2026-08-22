@@ -30,11 +30,13 @@ type SourceStatus struct {
 	// throughput (separately named so counts are never a readiness proxy).
 	EntityCount  int64 `json:"entity_count"`
 	PublishTotal int64 `json:"publish_total,omitempty"`
-	// AcceptedTotal, DeliveredTotal and LostTotal are the delivery figures.
-	// Acceptance is not arrival, so they are named separately and reconcile
-	// as accepted = delivered + lost + in-flight. A zero LostTotal asserts
-	// "nothing was lost" and is therefore always emitted.
-	AcceptedTotal  int64 `json:"accepted_total"`
+	// OfferedTotal, DeliveredTotal and LostTotal are the delivery figures.
+	// Offering is not arrival, so they are named separately and reconcile as
+	// offered = delivered + lost + in-flight; OfferedTotal includes entities
+	// the publisher refused on overflow, since those are counted in
+	// LostTotal. A zero LostTotal asserts "nothing was lost" and is
+	// therefore always emitted.
+	OfferedTotal   int64 `json:"offered_total"`
 	DeliveredTotal int64 `json:"delivered_total"`
 	LostTotal      int64 `json:"lost_total"`
 	// Pre-publish seed liveness: advancing while PublishTotal is flat means

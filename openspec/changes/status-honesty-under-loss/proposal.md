@@ -35,12 +35,13 @@ now, before the sem\* consumers depend on it.
   outcome: every existing reader keeps parsing it and quietly gets different
   semantics, with nothing to fail against. Replacement names make the break
   legible at the point of use.
-- The replacement figures derive from the publisher, which already knows all of
-  them: `Published()` (confirmed onto the stream), `Failed()` (left the buffer,
-  never arrived), `Dropped()` (rejected at the buffer on overflow), and `Lost()`
-  (`Failed + Dropped`, documented as "zero means every accepted entity was
-  delivered"). None of these reach a status surface today. Exact field names and
-  which of the four are surfaced are a `design.md` decision.
+- The replacement figures are `offered_total`, `delivered_total`, and
+  `lost_total`, derived from the publisher, which already knows all of them:
+  `Published()` (confirmed onto the stream), `Failed()` (left the buffer, never
+  arrived), `Dropped()` (refused at the buffer on overflow), and `Lost()`
+  (`Failed + Dropped`). None of these reach a status surface today. `offered_total`
+  counts drops as well as accepted hand-offs, so the three figures reconcile —
+  see `design.md` D4.
 - The source-local counters that feed `publish_total` today increment at
   `Publisher.Send()`, which returns after a buffer write and before any delivery
   outcome exists. They are not confirmation and cannot be made into it.

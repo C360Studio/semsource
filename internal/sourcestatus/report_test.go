@@ -18,7 +18,7 @@ func fullReport() Report {
 		Phase:             "watching",
 		EntityCount:       42,
 		PublishTotal:      99,
-		AcceptedTotal:     99,
+		OfferedTotal:      99,
 		DeliveredTotal:    90,
 		LostTotal:         9,
 		FilesParsed:       120,

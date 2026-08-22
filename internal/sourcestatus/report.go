@@ -27,16 +27,21 @@ type Report struct {
 	// named so counts are never a readiness proxy.
 	EntityCount  int64 `json:"entity_count"`
 	PublishTotal int64 `json:"publish_total,omitempty"`
-	// AcceptedTotal, DeliveredTotal and LostTotal are the delivery figures,
-	// named separately because acceptance is not arrival: Send() returns
-	// after a buffer write, before any delivery outcome exists. A single
-	// combined figure cannot answer the only question asked of it — whether
-	// the corpus actually arrived — and overstates delivery under loss.
+	// OfferedTotal, DeliveredTotal and LostTotal are the delivery figures,
+	// named separately because offering is not arrival: Send() returns after
+	// a buffer write, before any delivery outcome exists. A single combined
+	// figure cannot answer the only question asked of it — whether the corpus
+	// actually arrived — and overstates delivery under loss.
 	//
-	// They reconcile as accepted = delivered + lost + in-flight. None carry
-	// omitempty: a zero LostTotal is the assertion "nothing was lost", which
-	// is not the same claim as an absent field.
-	AcceptedTotal  int64 `json:"accepted_total"`
+	// OfferedTotal counts every entity the source handed to its publisher,
+	// including those the publisher then refused on overflow. Counting only
+	// the ones it accepted would leave drops on one side of the arithmetic:
+	// they are in LostTotal, so they must be in OfferedTotal too.
+	//
+	// They reconcile exactly as offered = delivered + lost + in-flight. None
+	// carry omitempty: a zero LostTotal is the assertion "nothing was lost",
+	// which is not the same claim as an absent field.
+	OfferedTotal   int64 `json:"offered_total"`
 	DeliveredTotal int64 `json:"delivered_total"`
 	LostTotal      int64 `json:"lost_total"`
 	// FilesParsed and BodiesOffloaded are pre-publish seed liveness: they

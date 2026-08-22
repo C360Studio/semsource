@@ -29,7 +29,7 @@ loss figures instead.
 
 - **GIVEN** an entity accepted into the publisher's send buffer whose delivery is not yet confirmed
 - **WHEN** the status surface is polled
-- **THEN** the entity is absent from the confirmed count, and present in the accepted count
+- **THEN** the entity is absent from the confirmed count, and present in the offered count
 
 #### Scenario: A terminal failure after acceptance is never counted
 

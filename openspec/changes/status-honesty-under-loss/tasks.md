@@ -12,26 +12,27 @@ partial rollout fails loudly by design.
 
 ## 1. Surface the publisher's figures (additive)
 
-- [x] 1.1 Add `accepted_total`, `delivered_total`, and `lost_total` to
+- [x] 1.1 Add `offered_total`, `delivered_total`, and `lost_total` to
   `internal/sourcestatus.Report`, leaving `publish_total` in place for now.
   Verify: extend `internal/sourcestatus/report_test.go` (currently sets
   `PublishTotal: 99` at :20) so a round-trip carries all four fields.
 - [x] 1.2 Populate the three new fields in all eight source components, in the
   same commit as 1.1 — `ast`, `doc`, `git`, `cfgfile`, `url`, `image`, `audio`,
   `video`. `delivered_total` from `Publisher.Published()`, `lost_total` from
-  `Publisher.Lost()`, `accepted_total` from the existing source-local counter
+  `Publisher.Lost()`, `offered_total` from the existing source-local counter
   (`entitiesIndexed` in ast-source, `entitiesPublished` in the other seven).
   Verify: `go test ./processor/...` plus a per-source assertion that
-  `accepted_total >= delivered_total` on a report built after a seed.
+  `offered_total >= delivered_total` on a report built after a seed.
 - [x] 1.3 Thread the three fields through the aggregator's report mapping in
   `processor/source-manifest/status.go` and the status payload in
   `payload_status.go`. Verify: `TestStatusAggregator_PhaseTransitions`
   (`component_test.go:622`) still passes and the new fields appear on the
   aggregate payload.
-- [ ] 1.4 Assert the reconciliation identity `accepted = delivered + lost +
-  pending` holds for a source driven through a seed with induced loss. Verify:
-  new test in `processor/source-manifest/` using a publisher stub whose sends
-  fail terminally.
+- [x] 1.4 Assert the reconciliation identity `offered = delivered + lost +
+  in-flight` holds for a source driven through induced loss. Verify: the
+  per-source `TestBuildStatusReport_DeliveryFiguresReconcile` tests, driven by
+  `internal/statustest.LossyPublisher`, which settles delivery before asserting
+  so the identity holds as equality rather than as a bound.
 
 ## 2. Per-pass loss baseline (additive)
 

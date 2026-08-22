@@ -99,21 +99,30 @@ is incomplete until then, and the loss figures say by how much.
 ### D4: `publish_total` is replaced by three reconciling figures
 
 **Decision:** remove `publish_total` from `internal/sourcestatus.Report`; add
-`accepted_total`, `delivered_total`, and `lost_total`.
+`offered_total`, `delivered_total`, and `lost_total`.
 
 | Field | Source | Meaning |
 | --- | --- | --- |
-| `accepted_total` | the existing source-local counter, renamed | entities the source handed to its publisher |
+| `offered_total` | source-local counter **plus** `Publisher.Dropped()` | every entity the source handed to its publisher |
 | `delivered_total` | `Publisher.Published()` | entities confirmed onto the stream |
-| `lost_total` | `Publisher.Lost()` | accepted but never delivered (`Failed + Dropped`) |
+| `lost_total` | `Publisher.Lost()` | offered but never delivered (`Failed + Dropped`) |
 
-The source-local counter is not deleted — it becomes `accepted_total`, which is
-what it always actually measured. Renaming rather than removing it is the point of
-the change: `publish_total` was a true number under a false name.
+**Why offered, not accepted.** `Send()` returns an error when the buffer overflows,
+and every source increments its counter only on a nil return — so the source-local
+counter excludes drops. `Lost()` includes them. Reconciling against the raw counter
+therefore fails by exactly the drop count: measured, `offered 0 != delivered 0 +
+lost 3 + in-flight 1`. Adding `Dropped()` back restores the identity without
+touching any increment site, because the source-local counter is exactly
+`delivered + failed + in-flight`.
 
-Reconciliation is `accepted = delivered + lost + pending`, with `Publisher.Pending()`
-supplying the in-flight term. Surfacing `pending` is optional and left to
-implementation; the three named figures are what the spec requires.
+A drop is the publisher refusing an entity the source had. Calling that "not
+offered" would hide it from the arithmetic while still counting it as lost, which
+is the same class of dishonesty as `publish_total`.
+
+**In-flight is not `Pending()`.** `Pending()` is buffer depth; an entity the drain
+loop has taken but not yet resolved is in neither `Pending()` nor the terminal
+counters. The identity is therefore exact only once delivery has settled, which is
+what the spec says and what the tests wait for.
 
 **Deliberate overlap:** loss appears in both `lost_total` and (via `Lost()`) in
 `error_count`. This is not double-counting to be fixed — `error_count` is

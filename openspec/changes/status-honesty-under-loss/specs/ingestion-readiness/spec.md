@@ -3,9 +3,9 @@
 ### Requirement: Ready means seeded
 
 The aggregate ingestion `phase` SHALL be `ready` only when every configured source has completed
-its initial seed AND every entity those sources accepted for publication was confirmed delivered;
+its initial seed AND every entity those sources offered for publication was confirmed delivered;
 while any source is still seeding the phase SHALL be observably `seeding`; any errored source — and
-any source whose seed completed with entities accepted but never delivered — SHALL yield
+any source whose seed completed with entities offered but never delivered — SHALL yield
 `degraded`. The documented consumer gate (poll until `ready`) therefore guarantees the initial
 corpus is fully published.
 
@@ -20,7 +20,7 @@ alone, but only once a subsequent pass completes with no loss.
 
 #### Scenario: Ready after the last source completes
 
-- **GIVEN** no configured source has lost an accepted entity
+- **GIVEN** no configured source has lost an offered entity
 - **WHEN** the final configured source reports initial-seed completion
 - **THEN** `phase` transitions to `ready`
 
@@ -31,7 +31,7 @@ alone, but only once a subsequent pass completes with no loss.
 
 #### Scenario: A seed that completed with loss does not report ready
 
-- **GIVEN** a source whose initial seed completed after entities it accepted failed to be delivered
+- **GIVEN** a source whose initial seed completed after entities it offered failed to be delivered
 - **WHEN** the status surface is polled
 - **THEN** the aggregate phase is `degraded`, not `ready`, and that source reports a non-zero loss
   figure
@@ -80,34 +80,40 @@ readiness semantics are defined solely by *Ready means seeded*.
 
 ## ADDED Requirements
 
-### Requirement: Acceptance, delivery, and loss are separately named on every status surface
+### Requirement: Offering, delivery, and loss are separately named on every status surface
 
-Per-source status SHALL carry the number of entities accepted for publication, the number confirmed
+Per-source status SHALL carry the number of entities offered for publication, the number confirmed
 delivered, and the number lost as three separately named figures, on every status surface that
 carries per-source counts.
 
-No status surface SHALL publish a single figure that conflates acceptance with delivery. Such a
-figure cannot answer the only question a consumer asks of it — whether the corpus actually arrived —
-and reads as throughput while overstating delivery.
+The offered figure SHALL count every entity the source handed to its publisher, including those the
+publisher refused rather than buffered. A refused entity is counted as lost, so excluding it from
+the offered figure would place it on one side of the arithmetic only.
 
-The three figures SHALL reconcile: entities accepted equals entities delivered, plus entities lost,
-plus any still in flight. The delivered figure SHALL never exceed the number of entities confirmed
-onto the graph stream.
+No status surface SHALL publish a single figure that conflates offering with delivery. Such a figure
+cannot answer the only question a consumer asks of it — whether the corpus actually arrived — and
+reads as throughput while overstating delivery.
+
+The three figures SHALL reconcile: entities offered equals entities delivered, plus entities lost,
+plus any still in flight. In-flight means every entity whose delivery outcome does not yet exist,
+which is a superset of those awaiting their turn — so the identity holds as equality only once
+delivery has settled. The delivered figure SHALL never exceed the number of entities confirmed onto
+the graph stream.
 
 #### Scenario: A lossy seed reports all three figures
 
-- **GIVEN** a seed in which some accepted entities were never delivered
+- **GIVEN** a seed in which some offered entities were never delivered
 - **WHEN** the status surface is polled after that seed completes
 - **THEN** the source reports a non-zero loss figure, a delivered figure equal to the number
-  confirmed onto the stream, and an accepted figure equal to delivered plus lost
+  confirmed onto the stream, and an offered figure equal to delivered plus lost
 
 #### Scenario: A clean seed reports zero loss
 
-- **GIVEN** a seed in which every accepted entity was delivered
+- **GIVEN** a seed in which every offered entity was delivered
 - **WHEN** the status surface is polled after that seed completes
-- **THEN** the loss figure is zero and the delivered figure equals the accepted figure
+- **THEN** the loss figure is zero and the delivered figure equals the offered figure
 
 #### Scenario: No conflated figure is published
 
 - **WHEN** any status surface carrying per-source counts is polled
-- **THEN** no field in the response reports acceptance and delivery as a single number
+- **THEN** no field in the response reports offering and delivery as a single number

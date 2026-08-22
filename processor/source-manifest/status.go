@@ -107,7 +107,7 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			Phase:             r.Phase,
 			EntityCount:       r.EntityCount,
 			PublishTotal:      r.PublishTotal,
-			AcceptedTotal:     r.AcceptedTotal,
+			OfferedTotal:      r.OfferedTotal,
 			DeliveredTotal:    r.DeliveredTotal,
 			LostTotal:         r.LostTotal,
 			FilesParsed:       r.FilesParsed,

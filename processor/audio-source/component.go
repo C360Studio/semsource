@@ -383,11 +383,15 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		Phase:        phase,
 		EntityCount:  c.distinct.Count(),
 		PublishTotal: c.entitiesPublished.Load(),
-		// Delivery figures: acceptance is not arrival. AcceptedTotal is what
+		// Delivery figures: acceptance is not arrival. OfferedTotal is what
 		// this source handed to the publisher; DeliveredTotal is what the
 		// publisher confirmed onto the stream; LostTotal is the difference
 		// that never arrived (overflow drops + terminal failures).
-		AcceptedTotal:  c.entitiesPublished.Load(),
+		// Offered includes what the publisher refused on overflow: a drop is a
+		// loss of an entity this source had, not a non-event. Counting only
+		// accepted hand-offs would put drops in LostTotal but not here, and
+		// the figures would not reconcile.
+		OfferedTotal:   c.entitiesPublished.Load() + c.publisher.Dropped(),
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),

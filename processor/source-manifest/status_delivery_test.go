@@ -14,7 +14,7 @@ func TestBuildStatus_DeliveryFiguresReachTheAggregate(t *testing.T) {
 		SourceType:     "ast",
 		Phase:          SourcePhaseWatching,
 		EntityCount:    120,
-		AcceptedTotal:  200,
+		OfferedTotal:   200,
 		DeliveredTotal: 170,
 		LostTotal:      30,
 	})
@@ -25,8 +25,8 @@ func TestBuildStatus_DeliveryFiguresReachTheAggregate(t *testing.T) {
 	}
 	got := status.Sources[0]
 
-	if got.AcceptedTotal != 200 {
-		t.Errorf("AcceptedTotal = %d, want 200", got.AcceptedTotal)
+	if got.OfferedTotal != 200 {
+		t.Errorf("OfferedTotal = %d, want 200", got.OfferedTotal)
 	}
 	if got.DeliveredTotal != 170 {
 		t.Errorf("DeliveredTotal = %d, want 170", got.DeliveredTotal)
@@ -35,8 +35,8 @@ func TestBuildStatus_DeliveryFiguresReachTheAggregate(t *testing.T) {
 		t.Errorf("LostTotal = %d, want 30", got.LostTotal)
 	}
 	// The identity the figures exist to make checkable, with nothing in flight.
-	if got.AcceptedTotal != got.DeliveredTotal+got.LostTotal {
+	if got.OfferedTotal != got.DeliveredTotal+got.LostTotal {
 		t.Errorf("accepted (%d) != delivered (%d) + lost (%d)",
-			got.AcceptedTotal, got.DeliveredTotal, got.LostTotal)
+			got.OfferedTotal, got.DeliveredTotal, got.LostTotal)
 	}
 }
