@@ -23,7 +23,7 @@ partial rollout fails loudly by design.
   (`entitiesIndexed` in ast-source, `entitiesPublished` in the other seven).
   Verify: `go test ./processor/...` plus a per-source assertion that
   `accepted_total >= delivered_total` on a report built after a seed.
-- [ ] 1.3 Thread the three fields through the aggregator's report mapping in
+- [x] 1.3 Thread the three fields through the aggregator's report mapping in
   `processor/source-manifest/status.go` and the status payload in
   `payload_status.go`. Verify: `TestStatusAggregator_PhaseTransitions`
   (`component_test.go:622`) still passes and the new fields appear on the

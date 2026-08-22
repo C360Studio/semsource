@@ -30,6 +30,13 @@ type SourceStatus struct {
 	// throughput (separately named so counts are never a readiness proxy).
 	EntityCount  int64 `json:"entity_count"`
 	PublishTotal int64 `json:"publish_total,omitempty"`
+	// AcceptedTotal, DeliveredTotal and LostTotal are the delivery figures.
+	// Acceptance is not arrival, so they are named separately and reconcile
+	// as accepted = delivered + lost + in-flight. A zero LostTotal asserts
+	// "nothing was lost" and is therefore always emitted.
+	AcceptedTotal  int64 `json:"accepted_total"`
+	DeliveredTotal int64 `json:"delivered_total"`
+	LostTotal      int64 `json:"lost_total"`
 	// Pre-publish seed liveness: advancing while PublishTotal is flat means
 	// the seed is parsing or offloading bodies, not wedged (5.7).
 	FilesParsed     int64 `json:"files_parsed,omitempty"`
