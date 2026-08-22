@@ -19,6 +19,7 @@ import (
 	githandler "github.com/c360studio/semsource/handler/git"
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/seedloss"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
@@ -52,9 +53,12 @@ func (s *sourceCfg) GetSceneThreshold() float64  { return 0 }
 // which handles local path resolution, remote cloning, commit log walking,
 // and change detection via polling.
 type Component struct {
-	name       string
-	config     Config
-	publisher  *entitypub.Publisher
+	name      string
+	config    Config
+	publisher *entitypub.Publisher
+	// seedLoss attributes publisher loss to one seed pass; the publisher's
+	// own counters are monotonic and so can never clear.
+	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 	platform   component.PlatformMeta
@@ -168,6 +172,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.publisher.Start(ctx)
 
+	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
 
 	// Started before the seed, not after it, so progress is visible while the
@@ -451,18 +456,29 @@ func classifySubmodules(inv *workspace.SubmoduleInventory, skip bool) []sourcest
 }
 
 // publishStatusReport sends a status report to the manifest component via NATS core.
-func (c *Component) publishStatusReport(ctx context.Context, phase string) {
-	// Publishing a phase IS the transition, so the reporter's sampled phase can
-	// never diverge from the last one published.
-	c.setPhase(phase)
-	report := sourcestatus.Report{
+// buildStatusReport assembles this source's status report. It is pure —
+// no I/O and no phase mutation — so the field wiring, in particular the
+// accepted/delivered/lost delivery figures, is directly assertable.
+func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
+	return sourcestatus.Report{
 		InstanceName: c.config.InstanceName,
 		SourceType:   "git",
 		Phase:        phase,
 		EntityCount:  c.distinct.Count(),
-		PublishTotal: c.entitiesPublished.Load(),
-		ErrorCount:   c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost(),
-		TypeCounts:   c.distinct.TypeCounts(),
+		// Delivery figures: acceptance is not arrival. OfferedTotal is what
+		// this source handed to the publisher; DeliveredTotal is what the
+		// publisher confirmed onto the stream; LostTotal is the difference
+		// that never arrived (overflow drops + terminal failures).
+		// Offered includes what the publisher refused on overflow: a drop is a
+		// loss of an entity this source had, not a non-event. Counting only
+		// accepted hand-offs would put drops in LostTotal but not here, and
+		// the figures would not reconcile.
+		OfferedTotal:   c.entitiesPublished.Load() + c.publisher.Dropped(),
+		DeliveredTotal: c.publisher.Published(),
+		LostTotal:      c.publisher.Lost(),
+		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
+		ErrorCount:     c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost(),
+		TypeCounts:     c.distinct.TypeCounts(),
 		// The no-silent-entity-loss posture applied to inputs: every declared
 		// submodule path and its state, so missing trees are visible on every
 		// status surface instead of silently absent from the graph.
@@ -473,6 +489,13 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 		LastError:    c.seed.LastError(),
 		Timestamp:    time.Now(),
 	}
+}
+
+func (c *Component) publishStatusReport(ctx context.Context, phase string) {
+	// Publishing a phase IS the transition, so the reporter's sampled phase can
+	// never diverge from the last one published.
+	c.setPhase(phase)
+	report := c.buildStatusReport(phase)
 	data, err := json.Marshal(report)
 	if err != nil {
 		c.logger.Warn("failed to marshal status report", "error", err)

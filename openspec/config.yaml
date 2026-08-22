@@ -48,7 +48,7 @@ rules:
     - Always include a "## Non-goals" section (boundary discipline).
     - Name which sem* products consume the capability, if any.
     - Check the Product Boundary first — if it is substrate, it is semstreams' job.
-  spec:
+  specs:
     - Describe CURRENT behavior verified against code, not aspirations.
     - Seed a capability spec lazily (the first change that touches it); do not backfill.
   tasks:

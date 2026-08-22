@@ -59,7 +59,6 @@ func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 		SourceType:        "ast",
 		Phase:             SourcePhaseWatching,
 		EntityCount:       7,
-		PublishTotal:      9,
 		FilesParsed:       11,
 		BodiesOffloaded:   4,
 		BoundariesSkipped: 2,

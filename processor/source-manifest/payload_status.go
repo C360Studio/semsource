@@ -26,11 +26,23 @@ type SourceStatus struct {
 	InstanceName string `json:"instance_name"`
 	SourceType   string `json:"source_type"`
 	Phase        string `json:"phase"` // "ingesting", "watching", "idle", "errored"
-	// EntityCount is the DISTINCT entity count; PublishTotal is raw publish
-	// throughput (separately named so counts are never a readiness proxy).
-	EntityCount  int64 `json:"entity_count"`
-	PublishTotal int64 `json:"publish_total,omitempty"`
-	// Pre-publish seed liveness: advancing while PublishTotal is flat means
+	// EntityCount is the DISTINCT entity count, separately named so counts
+	// are never a readiness proxy.
+	EntityCount int64 `json:"entity_count"`
+	// OfferedTotal, DeliveredTotal and LostTotal are the delivery figures.
+	// Offering is not arrival, so they are named separately and reconcile as
+	// offered = delivered + lost + in-flight; OfferedTotal includes entities
+	// the publisher refused on overflow, since those are counted in
+	// LostTotal. A zero LostTotal asserts "nothing was lost" and is
+	// therefore always emitted.
+	OfferedTotal   int64 `json:"offered_total"`
+	DeliveredTotal int64 `json:"delivered_total"`
+	LostTotal      int64 `json:"lost_total"`
+	// SeedLost is loss attributable to the most recently completed seed pass.
+	// Readiness keys on this rather than LostTotal, which is monotonic over
+	// the process lifetime and so could never clear.
+	SeedLost int64 `json:"seed_lost"`
+	// Pre-publish seed liveness: advancing while DeliveredTotal is flat means
 	// the seed is parsing or offloading bodies, not wedged (5.7).
 	FilesParsed     int64 `json:"files_parsed,omitempty"`
 	BodiesOffloaded int64 `json:"bodies_offloaded,omitempty"`

@@ -22,13 +22,34 @@ type Report struct {
 	InstanceName string `json:"instance_name"`
 	SourceType   string `json:"source_type"`
 	Phase        string `json:"phase"`
-	// EntityCount is the DISTINCT entity count (invariant under periodic
-	// republication); PublishTotal is raw publish throughput — separately
-	// named so counts are never a readiness proxy.
-	EntityCount  int64 `json:"entity_count"`
-	PublishTotal int64 `json:"publish_total,omitempty"`
+	// EntityCount is the DISTINCT entity count, invariant under periodic
+	// republication, so counts are never a readiness proxy.
+	EntityCount int64 `json:"entity_count"`
+	// OfferedTotal, DeliveredTotal and LostTotal are the delivery figures,
+	// named separately because offering is not arrival: Send() returns after
+	// a buffer write, before any delivery outcome exists. A single combined
+	// figure cannot answer the only question asked of it — whether the corpus
+	// actually arrived — and overstates delivery under loss.
+	//
+	// OfferedTotal counts every entity the source handed to its publisher,
+	// including those the publisher then refused on overflow. Counting only
+	// the ones it accepted would leave drops on one side of the arithmetic:
+	// they are in LostTotal, so they must be in OfferedTotal too.
+	//
+	// They reconcile exactly as offered = delivered + lost + in-flight. None
+	// carry omitempty: a zero LostTotal is the assertion "nothing was lost",
+	// which is not the same claim as an absent field.
+	OfferedTotal   int64 `json:"offered_total"`
+	DeliveredTotal int64 `json:"delivered_total"`
+	LostTotal      int64 `json:"lost_total"`
+	// SeedLost is the loss attributable to the most recently COMPLETED seed
+	// pass, as distinct from LostTotal's process lifetime. The publisher's
+	// counters are monotonic, so lifetime loss can never fall back to zero;
+	// without a per-pass figure a loss-degraded readiness phase could never
+	// be cleared by a clean re-seed.
+	SeedLost int64 `json:"seed_lost"`
 	// FilesParsed and BodiesOffloaded are pre-publish seed liveness: they
-	// advance during parse and body-offload windows where PublishTotal is
+	// advance during parse and body-offload windows where DeliveredTotal is
 	// flat, distinguishing a working seed from a wedged one.
 	FilesParsed     int64 `json:"files_parsed,omitempty"`
 	BodiesOffloaded int64 `json:"bodies_offloaded,omitempty"`

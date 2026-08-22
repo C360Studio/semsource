@@ -106,7 +106,10 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			SourceType:        r.SourceType,
 			Phase:             r.Phase,
 			EntityCount:       r.EntityCount,
-			PublishTotal:      r.PublishTotal,
+			OfferedTotal:      r.OfferedTotal,
+			DeliveredTotal:    r.DeliveredTotal,
+			LostTotal:         r.LostTotal,
+			SeedLost:          r.SeedLost,
 			FilesParsed:       r.FilesParsed,
 			BodiesOffloaded:   r.BodiesOffloaded,
 			BoundariesSkipped: r.BoundariesSkipped,
@@ -126,12 +129,22 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 	// honest-readiness-and-errors). An errored source degrades the aggregate
 	// even when everything has reported (the old else-if made that branch
 	// unreachable once reports were in).
+	// A seed that completed with loss degrades the aggregate and holds it
+	// there. Setting the flag (rather than only testing the reports) keeps the
+	// phase at degraded through a re-seed window, where allSeeded is briefly
+	// false and the phase would otherwise read as plain "seeding" while the
+	// graph is still missing everything the lossy pass dropped.
+	if a.anySeedLoss() {
+		a.degraded = true
+	}
 	phase := PhaseSeeding
 	switch {
-	case a.allSeeded() && !a.anyErrored():
+	case a.allSeeded() && !a.anyErrored() && !a.anySeedLoss():
 		phase = PhaseReady
 		// A seed-timeout degradation is transient: if every source finished
-		// its seed cleanly afterwards, ready is the truthful answer.
+		// its seed cleanly afterwards, ready is the truthful answer. The same
+		// applies to loss — a clean re-pass reports seed_lost 0, which clears
+		// the flag here even though lifetime loss can never fall back.
 		a.degraded = false
 	case a.degraded || a.anyErrored():
 		phase = PhaseDegraded
@@ -172,6 +185,30 @@ func (a *statusAggregator) allSeeded() bool {
 func (a *statusAggregator) anyErrored() bool {
 	for _, r := range a.reports {
 		if r.Phase == SourcePhaseErrored {
+			return true
+		}
+	}
+	return false
+}
+
+// anySeedLoss reports whether any source's most recently completed seed pass
+// lost entities it had offered for publication.
+//
+// This keys on SeedLost, deliberately NOT on ErrorCount. ErrorCount is a sum:
+// every source folds publisher loss into it, ast-source adds parse failures
+// and git-source adds watch errors. Degrading on that would put any corpus
+// containing a single unparseable file into a permanent degraded state, and a
+// phase that is always degraded carries no more information than one that is
+// never degraded. Parse failure and delivery loss are different claims: an
+// unparseable file produced no entities and cost the graph nothing it was
+// promised, while a lost entity is a hole in a corpus the gate called complete.
+//
+// It also keys on SeedLost rather than LostTotal because the publisher's
+// lifetime counters are monotonic — LostTotal can never fall back, so a
+// degraded phase derived from it could never clear.
+func (a *statusAggregator) anySeedLoss() bool {
+	for _, r := range a.reports {
+		if r.SeedLost > 0 {
 			return true
 		}
 	}
