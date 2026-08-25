@@ -27,18 +27,18 @@ multi-prefix entries) are all deferrable and none is baked into a task below.
 
 ## 1. Content seam (behavior-preserving)
 
-- [ ] 1.1 Split `handler/doc/entities.go:292` `ingestFileEntityStates` into an
+- [x] 1.1 Split `handler/doc/entities.go:292` `ingestFileEntityStates` into an
   exported content-taking method on `doc.Handler` accepting
   `(ctx, content []byte, logicalPath, system, org string, now time.Time)`. The
   filesystem caller reads the file, computes the root-relative path, and
   delegates. Verify: `go test ./handler/doc/...` passes with **no test changes** —
   a behavior-preserving split needs no new fixtures.
-- [ ] 1.2 Slash-normalize the logical path at the boundary (`filepath.ToSlash` on
+- [x] 1.2 Slash-normalize the logical path at the boundary (`filepath.ToSlash` on
   the filesystem side) and derive extension, MIME, and title-fallback inside the
   seam with `path.*` rather than `filepath.*` (design D3). Verify: a unit test
   asserting the seam produces identical entities for `a/b/doc.md` and the
   platform-native equivalent.
-- [ ] 1.3 Add a shared table test driving both callers over the same fixture bytes
+- [x] 1.3 Add a shared table test driving both callers over the same fixture bytes
   and asserting byte-identical entity output, so the two callers cannot drift.
   Verify: the new test fails if either caller's title, MIME, hash, or passage
   ordinals diverge.

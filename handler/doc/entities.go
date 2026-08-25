@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -285,30 +286,56 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	return states, nil
 }
 
-// ingestFileEntityStates reads a single document and returns the parent entity
-// followed by one entity per passage, in ordinal order. The parent is the stable
-// navigational node (identity, title, path, hash, provenance, chunk count); the
-// passages carry the retrievable bodies.
-func (h *Handler) ingestFileEntityStates(ctx context.Context, path, root, system, org string, now time.Time) ([]*handler.EntityState, error) {
-	content, err := os.ReadFile(path)
+// ingestFileEntityStates reads a single document from disk and delegates to
+// IngestContentEntityStates. It owns exactly two things the content seam cannot
+// know: how to read the bytes, and how to turn an absolute filesystem path into
+// the root-relative logical path that identity is built from.
+//
+// filePath is named for the "path" package this file now imports; the parameter
+// used to be called path and would shadow it.
+func (h *Handler) ingestFileEntityStates(ctx context.Context, filePath, root, system, org string, now time.Time) ([]*handler.EntityState, error) {
+	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("read %q: %w", path, err)
+		return nil, fmt.Errorf("read %q: %w", filePath, err)
 	}
 
+	relPath, _ := filepath.Rel(root, filePath)
+	return h.IngestContentEntityStates(ctx, content, filepath.ToSlash(relPath), system, org, now)
+}
+
+// IngestContentEntityStates builds the parent entity followed by one entity per
+// passage, in ordinal order, from bytes that have already been read. The parent
+// is the stable navigational node (identity, title, path, hash, provenance,
+// chunk count); the passages carry the retrievable bodies.
+//
+// It takes content rather than a path because a document does not have to come
+// from a filesystem. An object store hands over bytes and a key; making that
+// caller write the bytes to a temp file first would put a local, non-intrinsic
+// path where identity is derived from — the failure mode entity-identity-safety
+// exists to prevent.
+//
+// logicalPath is the document's identity-bearing path and MUST be
+// slash-delimited: it is what the DocFilePath triple carries and what the
+// instance segment is built from. Extension, MIME, and the title fallback are
+// derived with the "path" package rather than "path/filepath" for that reason —
+// on a platform whose separator is not "/", filepath would disagree with an
+// object key about where the basename starts. The filesystem caller normalizes
+// with filepath.ToSlash before calling in.
+func (h *Handler) IngestContentEntityStates(ctx context.Context, content []byte, logicalPath, system, org string, now time.Time) ([]*handler.EntityState, error) {
 	hash := contentHash(content)
-	relPath, _ := filepath.Rel(root, path)
-	format := formatForExt(filepath.Ext(path))
-	title := extractTitle(content, filepath.Base(path), format)
-	mime := mimeForExt(filepath.Ext(path))
+	ext := path.Ext(logicalPath)
+	format := formatForExt(ext)
+	title := extractTitle(content, path.Base(logicalPath), format)
+	mime := mimeForExt(ext)
 	passages := splitPassages(content, format)
 
-	parent := newEntity(org, title, relPath, mime, hash, system, now)
+	parent := newEntity(org, title, logicalPath, mime, hash, system, now)
 	parent.ChunkCount = len(passages)
 
 	states := make([]*handler.EntityState, 0, len(passages)+1)
 	states = append(states, parent.EntityState())
 	for _, p := range passages {
-		pe := newPassageEntity(org, system, parent.ID, title, relPath, mime, p, now)
+		pe := newPassageEntity(org, system, parent.ID, title, logicalPath, mime, p, now)
 		if err := offloadPassageBody(ctx, pe, h.bodyStore, h.bodyInstance); err != nil {
 			return nil, err
 		}
