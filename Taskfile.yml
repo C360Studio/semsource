@@ -1,5 +1,13 @@
 version: "3"
 
+vars:
+  # Pinned to match the lint job in .github/workflows/ci.yml. revive runs with
+  # warningCode=1, so warnings are fatal and an unpinned release can fail CI on
+  # a new rule with no code change. Bump this and ci.yml together — tools:check
+  # fails loudly when a local install drifts from the pin, which is otherwise
+  # how you get a green local lint and a red CI one.
+  REVIVE_VERSION: v1.15.0
+
 tasks:
   default:
     desc: Show available tasks
@@ -11,9 +19,28 @@ tasks:
     cmds:
       - go build -o bin/semsource ./cmd/semsource
 
+  tools:install:
+    desc: Install pinned Go dev tools (revive)
+    cmds:
+      - go install github.com/mgechev/revive@{{.REVIVE_VERSION}}
+
+  tools:check:
+    desc: Verify pinned Go dev tools are installed at the expected version
+    silent: true
+    cmds:
+      - >-
+        command -v revive >/dev/null 2>&1 ||
+        { echo "revive is not installed. Run: task tools:install"; exit 1; }
+      - >-
+        installed="$(revive --version 2>/dev/null | awk '{print $NF}')";
+        expected="$(printf '%s' '{{.REVIVE_VERSION}}' | sed 's/^v//')";
+        [ "$installed" = "$expected" ] ||
+        { echo "revive $installed is installed but $expected is pinned. Run: task tools:install"; exit 1; }
+
   lint:
     desc: Run Go linters (vet, fmt check, revive)
     cmds:
+      - task: tools:check
       # npm dependencies can contain unrelated Go source. Keep backend gates
       # scoped to SemSource packages even after the owned UI has been installed.
       - >-
