@@ -1,0 +1,17 @@
+name: Set up Task
+description: >-
+  Install the go-task runner at the repository-wide pinned version. Exists so
+  the pin and its rationale live in one place instead of being copied into
+  every workflow that needs Task.
+
+runs:
+  using: composite
+  steps:
+    - uses: go-task/setup-task@v2
+      with:
+        # Exact pin: the default "3.x" resolves via a get-latest-release
+        # API call that fails outright during GitHub API degradation (six
+        # consecutive setup failures on 2026-08-17's incident before any
+        # workflow step ran). An exact version downloads the asset
+        # directly — and pins for reproducibility, like revive.
+        version: 3.52.0
