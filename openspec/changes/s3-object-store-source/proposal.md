@@ -91,6 +91,9 @@ store. Nothing on this path waits for the next release.
   ingested as empty documents.
 - **Claim and citation extraction** — that is #201, and it is blocked on data shapes we do not have.
 - **Public or multi-tenant exposure** of the resulting graph — that is #200.
+- **A Garage-backed compatibility test.** The integration suite runs against MinIO, which
+  containerizes in one step and can gate every PR. Garage's own e2e is tracked in #202, along with
+  the bootstrap sequence and the readiness-gate trap that make it more than a container swap.
 - **Bucket lifecycle or retention management.** The graph stays retention-first (ADR-0008); nothing
   here introduces reference-blind eviction.
 

@@ -168,14 +168,23 @@ types, rather than introduced alongside the tenth and assumed to work.
   `docs/upstream/semstreams-asks.md` as a triaged framework-shaped **candidate** —
   a second sem\* service needing an artifact bucket (design D2). Verify: the entry
   exists and names the trigger, following the file's existing entry format.
-- [ ] 7.3 Add an integration test ingesting a fixture corpus from a containerized
-  Garage (or MinIO) instance end to end, reaching `phase: ready` and answering one
-  query. Verify: `go test -tags=integration ./...` passes with the container
-  running.
-- [ ] 7.4 Measure an unbounded-prefix ingest against the #178 GRAPH ceiling
+- [ ] 7.3 Add the MinIO-backed integration test ingesting a fixture corpus end to
+  end, reaching `phase: ready` and answering one query, self-provisioning the
+  container the way `natsclient.NewTestClient` already does. MinIO rather than
+  Garage: it containerizes in one step with env-var credentials and a live S3 API,
+  so it can gate every PR without adding flake surface. Garage compatibility is
+  tracked separately in #202. Verify: `go test -tags=integration` against the new
+  packages passes with Docker available.
+- [ ] 7.4 Add the new packages to the integration job's package list in
+  `.github/workflows/ci.yml:42`, which today runs a hand-maintained allowlist
+  (`./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/`) and
+  not `./...`. Without this the new integration tests compile, pass locally, and
+  never run in CI. Verify: a CI run shows the new packages in the integration job's
+  output.
+- [ ] 7.5 Measure an unbounded-prefix ingest against the #178 GRAPH ceiling
   behavior before any documentation calls this unbounded-safe. Verify: a recorded
   measurement in the change or issue, with prefix-scoping guidance if a ceiling is
   hit.
-- [ ] 7.5 Run the full gate before push — `gofmt`, `go vet`, `revive` (pinned
+- [ ] 7.6 Run the full gate before push — `gofmt`, `go vet`, `revive` (pinned
   v1.15.0, warnings fail), and `go test -race -tags=integration ./...`. Verify: CI
   green.

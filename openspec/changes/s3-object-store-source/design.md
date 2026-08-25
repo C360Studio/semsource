@@ -139,6 +139,32 @@ and no key set. The retraction path takes the key set as its input, so there is 
 a partial listing can reach it — the failure mode the spec calls out is prevented by the signature
 rather than by remembering to check a boolean.
 
+### D10: MinIO gates every PR; Garage compatibility is a tracked follow-up
+
+Three test layers, deliberately split by what each can actually prove:
+
+1. **No container** — the completeness gate, ETag map, skip accounting, retraction safety, and
+   identity all test against a fake implementing the source's own enumerate/fetch interface. The
+   retraction-safety cases need failure *injected mid-pagination*, which is more deterministic
+   against a fake than against any real server. This is where most of groups 3 and 4 verify.
+2. **MinIO container** — proves `storage/s3store` speaks S3 on the wire: path-style addressing,
+   pagination continuation, ETag parsing. One container, env-var credentials, S3 API live on start,
+   bucket created through the S3 API itself. Cheap enough to gate every PR, and consistent with the
+   existing house pattern — `natsclient.NewTestClient` already self-provisions NATS via
+   testcontainers (`.github/workflows/ci.yml:37-42`).
+3. **Garage** — deferred to #202.
+
+**The honest cost:** this design is Garage-first, and MinIO passing does not prove Garage works. That
+claim currently rests on Garage's published compatibility matrix and the adopter's own usage rather
+than on our test evidence. #202 exists to close that, and carries the bootstrap trap with it: Garage's
+S3 API is unusable until `garage layout apply` completes, so a testcontainers wait strategy keyed on
+port availability passes too early and yields intermittent auth failures that read as client bugs.
+
+**Alternative considered:** `gofakes3` in-process, avoiding a container entirely. Rejected because
+composite multipart ETags are exactly the behavior D6 singles out as dangerous, and an in-process
+fake is the least likely to be faithful there — it would produce confidence on the one property most
+in need of real verification.
+
 ## Risks / Trade-offs
 
 - **A transient listing failure retracts the entire corpus** → D9 makes it unrepresentable; tested by
@@ -149,6 +175,12 @@ rather than by remembering to check a boolean.
   the content hash is always computed from the bytes.
 - **An artifact bucket grows without bound, unlike a repository** → verify against #178 before
   documenting this as unbounded-safe. Prefix-scoping is the operator-side mitigation available today.
+- **The Garage-first claim is not backed by our own test evidence until #202 lands** → the
+  compatibility matrix and the adopter's usage carry it in the meantime; the specific behaviors to
+  verify are enumerated in that issue rather than left to whoever picks it up.
+- **New integration tests silently never run in CI** → `.github/workflows/ci.yml:42` runs a
+  hand-maintained package allowlist, not `./...`. Task 7.4 adds the new packages; this is the same
+  two-lists-no-cross-check shape group 5 fixes for source types, one layer up.
 - **`minio-go`'s credential chain is thinner than the AWS SDK's** → env-supplied static credentials
   are the documented and specified path (`specs/runtime-configuration`); revisit only if an AWS
   deployment needs IRSA.
