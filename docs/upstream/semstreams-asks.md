@@ -127,6 +127,44 @@ producers aren't embedded. Ask: reuse the #399 `StoreResolver` in graph-embeddin
 **Blocks:** the doc-store unification (semsource task #19) — a true unify needs instance-aware embedding.
 **Surfaced by:** ADR-062 convergence — investigating why doc bodies were double-stored (CONTENT vs MESSAGES).
 
+## Concurrency
+
+### 13. `graph-index` Stop races its own entity watcher — framework-shaped — candidate
+`processor/graph-index` (beta.161) writes `c.entityCoalescer = nil` inside `Stop`'s
+generation callback while holding `c.mu` (`component.go:692`), but `watchEntityStates`
+reads `c.entityCoalescer` without taking that lock (`component.go:915`). The race
+detector reports it as a write/read pair on the same address.
+
+Reproduce: `go test -race -tags=integration ./internal/governance/` in semsource,
+which starts and stops a graph-index component in several tests in one process.
+A single test in isolation does not surface it — the window needs a watcher still
+draining while another test's component stops.
+
+Impact on us is currently test-only: neither CI job combines `-race` with
+`-tags=integration` (the unit job races without the tag, the integration job runs
+the tag without `-race`), so this does not gate a build. It does mean the strongest
+local gate a developer can run reports a failure that is not theirs.
+**Stopgap:** none needed; documented here so the next person who runs the combined
+gate does not go looking in semsource for it.
+
+## Storage backends
+
+### 12. S3-compatible `storage.Store` implementation — framework-shaped — candidate
+`storage.Store` and `storage.StreamableStore` are framework interfaces, and the
+framework already ships `storage/objectstore` (NATS) against them. SemSource now
+ships `storage/s3store` against the same interfaces so an object-store source can
+read document artifacts out of Garage, MinIO, or AWS. Nothing about it is
+SemSource-specific: it is one `minio-go` client behind the framework's own
+interface, with the endpoint, addressing style, and region explicit so
+self-hosted stores are first-class rather than a deviation.
+
+Built here rather than upstream because there is exactly one consumer today, and
+a framework-shaped thing with one consumer is a guess about the second. **The
+revisit trigger is a second sem\* service needing an artifact bucket** — at that
+point the second copy is the cost, and promotion pays for itself. Promotion, if
+it happens, goes through an issue against semstreams, never a PR.
+**Stopgap:** `storage/s3store` in semsource (s3-object-store-source, design D2).
+
 ## Transport / subject taxonomy
 
 ### 6. RPC reply subjects share the `graph.ingest.*` prefix with the persisted data plane — framework-shaped — candidate

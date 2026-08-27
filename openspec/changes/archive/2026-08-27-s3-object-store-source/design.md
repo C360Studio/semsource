@@ -165,6 +165,57 @@ composite multipart ETags are exactly the behavior D6 singles out as dangerous, 
 fake is the least likely to be faithful there — it would produce confidence on the one property most
 in need of real verification.
 
+### D11: A HEAD 404 is ambiguous, so the store asks a second question
+
+Found while implementing group 2, and worth recording because the code that prevents it looks like
+an unnecessary round trip to anyone reading it later.
+
+`storage.Store` promises a not-found sentinel, and the client resolves a single object with `HEAD`.
+A `HEAD` response carries no body, so a 404 arrives with nothing in it to say *what* was missing, and
+minio-go fills in `NoSuchKey` because an object is what it asked for. A wrong bucket therefore
+answers `NoSuchKey` for every key in it — the exact shape of the risk this design already names, where
+a deployment fault reads as a corpus that is legitimately empty.
+
+The store resolves it by consulting bucket existence when, and only when, a `HEAD` 404 arrives, and by
+routing every other operation through the error body the store does send. `Get` issues a plain `GET`
+rather than reusing the `HEAD` path, so the ingest path pays one round trip per document rather than
+two. When the bucket check is itself inconclusive — a store answering with a denial rather than a
+verdict — the sentinel stands: inventing a bucket fault from a permission error trades one wrong
+answer for another.
+
+### D12: Unbounded-prefix measurement — what it establishes, and what it does not
+
+Task 7.5 exists so that nothing calls a whole-bucket ingest safe on the strength of nobody having
+tried it. An artifact bucket differs from a repository in the way that matters: it grows without
+anyone deciding to grow it, and #178 records the GRAPH stream refusing the tail of a large corpus.
+
+Measured by `TestIntegration_UnboundedPrefixIngestMeasurement` (`internal/governance`, MinIO-backed,
+empty prefix — the whole bucket):
+
+| Figure | Value |
+| --- | --- |
+| Documents | 1000 |
+| Body size | 2069 bytes each |
+| Entities produced | 4000 (one parent plus three passages per document) |
+| Offered / delivered | 4000 / 4000 |
+| Lost | 0 |
+| Seed loss | 0 |
+| Backpressure observed | no |
+| Ingest duration | 2.7s to `phase: ready` |
+
+**What this establishes:** a whole-bucket ingest at this size completes, publishes every document,
+and loses nothing. No ceiling was reached and no prefix-scoping guidance is required at this scale.
+
+**What it does not establish:** a safe upper bound. It is one corpus at one size against a test
+stream whose bounds are the test helper's (64MiB), not production's 256MiB. The #178 behavior
+appears at a corpus tail far above this, so this measurement rules the ceiling *out* at 1000
+documents rather than locating it. An adopter with a bucket an order of magnitude larger is outside
+what has been measured, and prefix scoping remains the operator-side mitigation.
+
+The test asserts only that nothing was lost. That is deliberate: a measurement that tolerated
+silent loss would be evidence for the wrong conclusion, and a measurement that asserted a duration
+would be a flake.
+
 ## Risks / Trade-offs
 
 - **A transient listing failure retracts the entire corpus** → D9 makes it unrepresentable; tested by

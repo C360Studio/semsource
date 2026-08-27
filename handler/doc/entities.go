@@ -62,15 +62,28 @@ type Entity struct {
 // entity every save. The content hash still travels as the DocFileHash triple
 // for change detection — it just no longer feeds identity.
 func newEntity(org, title, filePath, mimeType, contentHash, system string, indexedAt time.Time) *Entity {
-	instance := entityid.SanitizeInstance(filePath)
 	return &Entity{
-		ID:          entityid.Build(org, entityid.PlatformSemsource, "web", system, "doc", instance),
+		ID:          DocumentEntityID(org, system, filePath),
 		Title:       title,
 		FilePath:    filePath,
 		MimeType:    mimeType,
 		ContentHash: contentHash,
 		IndexedAt:   indexedAt,
 	}
+}
+
+// DocumentEntityID returns the entity ID of the document at logicalPath.
+//
+// Exported because a source sometimes has to name a document it is not
+// ingesting: an object-store source that retracts a key its listing no longer
+// sees knows the key, not the entity. Building that identifier by hand
+// elsewhere would put a second copy of the construction in the tree, and the
+// day the two disagree is the day retraction starts missing its target
+// silently. The ingest path calls this too, so there is only ever one.
+//
+// logicalPath must be slash-delimited — see IngestContentEntityStates.
+func DocumentEntityID(org, system, logicalPath string) string {
+	return entityid.Build(org, entityid.PlatformSemsource, "web", system, "doc", entityid.SanitizeInstance(logicalPath))
 }
 
 // Triples converts the Entity to a slice of message.Triple using canonical

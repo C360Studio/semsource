@@ -308,6 +308,60 @@ func urlComponentConfig(src config.SourceEntry, org string) (string, map[string]
 	}
 }
 
+// objectStoreComponentConfig builds config for an s3 source entry.
+//
+// The instance name is scoped by bucket AND prefix, so two prefixes of one
+// bucket registered as separate projects get separate components rather than
+// silently colliding on one.
+//
+// No credential ever passes through here. The component reads them from the
+// process environment at construction, which is why the source entry carries
+// only endpoint, bucket, and prefix.
+func objectStoreComponentConfig(src config.SourceEntry, org string, opts Options) (string, map[string]any) {
+	slug := entityid.SystemSlug(src.Bucket)
+	if slug == "" {
+		slug = "s3-" + contentHashSlug(src)
+	}
+	if src.Prefix != "" {
+		if prefixSlug := entityid.SystemSlug(src.Prefix); prefixSlug != "" {
+			slug += "-" + prefixSlug
+		}
+	}
+	instanceName := fmt.Sprintf("objectstore-source-%s", slug)
+
+	compCfg := map[string]any{
+		"ports":         outputPorts(),
+		"org":           org,
+		"bucket":        src.Bucket,
+		"watch_enabled": src.Watch,
+		"instance_name": instanceName,
+	}
+	if src.Prefix != "" {
+		compCfg["prefix"] = src.Prefix
+	}
+	if src.Endpoint != "" {
+		compCfg["endpoint"] = src.Endpoint
+	}
+	if src.Region != "" {
+		compCfg["region"] = src.Region
+	}
+	if src.PathStyle {
+		compCfg["path_style"] = true
+	}
+	if src.Project != "" {
+		compCfg["project"] = src.Project
+	}
+	if src.Version != "" {
+		compCfg["version"] = src.Version
+	}
+	// Passage bodies are stored locally: the bucket is read-only, and where a
+	// body lands has no bearing on identity, which comes from the object key.
+	if opts.MediaStoreDir != "" {
+		compCfg["body_store_root"] = opts.MediaStoreDir
+	}
+	return instanceName, compCfg
+}
+
 // mediaComponentConfig builds config for image, video, or audio source entries.
 func mediaComponentConfig(src config.SourceEntry, org string, opts Options) (string, map[string]any) {
 	paths := src.Paths

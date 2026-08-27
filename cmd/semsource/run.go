@@ -36,6 +36,7 @@ import (
 	gitsource "github.com/c360studio/semsource/processor/git-source"
 	imagesource "github.com/c360studio/semsource/processor/image-source"
 	mcpgateway "github.com/c360studio/semsource/processor/mcp-gateway"
+	objectstoresource "github.com/c360studio/semsource/processor/objectstore-source"
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 	"github.com/c360studio/semsource/processor/supersession"
 	urlsource "github.com/c360studio/semsource/processor/url-source"
@@ -300,19 +301,23 @@ func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 // registerSemsourceFactories registers all semsource-specific component factories.
 func registerSemsourceFactories(registry *component.Registry) error {
 	for name, fn := range map[string]func() error{
-		"ast-source":      func() error { return astsource.Register(registry) },
-		"git-source":      func() error { return gitsource.Register(registry) },
-		"doc-source":      func() error { return docsource.Register(registry) },
-		"cfgfile-source":  func() error { return cfgfilesource.Register(registry) },
-		"url-source":      func() error { return urlsource.Register(registry) },
-		"image-source":    func() error { return imagesource.Register(registry) },
-		"video-source":    func() error { return videosource.Register(registry) },
-		"audio-source":    func() error { return audiosource.Register(registry) },
-		"filestore":       func() error { return filestore.Register(registry) },
-		"source-manifest": func() error { return sourcemanifest.Register(registry) },
-		"code-context":    func() error { return codecontext.Register(registry) },
-		"mcp-gateway":     func() error { return mcpgateway.Register(registry) },
-		"supersession":    func() error { return supersession.Register(registry) },
+		"ast-source":     func() error { return astsource.Register(registry) },
+		"git-source":     func() error { return gitsource.Register(registry) },
+		"doc-source":     func() error { return docsource.Register(registry) },
+		"cfgfile-source": func() error { return cfgfilesource.Register(registry) },
+		"url-source":     func() error { return urlsource.Register(registry) },
+		// No entry in buildPayloadRegistry: object-store artifacts become
+		// ordinary document entities through the doc pipeline, so this source
+		// introduces no payload type of its own.
+		"objectstore-source": func() error { return objectstoresource.Register(registry) },
+		"image-source":       func() error { return imagesource.Register(registry) },
+		"video-source":       func() error { return videosource.Register(registry) },
+		"audio-source":       func() error { return audiosource.Register(registry) },
+		"filestore":          func() error { return filestore.Register(registry) },
+		"source-manifest":    func() error { return sourcemanifest.Register(registry) },
+		"code-context":       func() error { return codecontext.Register(registry) },
+		"mcp-gateway":        func() error { return mcpgateway.Register(registry) },
+		"supersession":       func() error { return supersession.Register(registry) },
 	} {
 		if err := fn(); err != nil {
 			return fmt.Errorf("register %s component: %w", name, err)

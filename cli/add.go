@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/storage/s3store"
 )
 
 // Add either runs the interactive wizard to add a source (no extra args),
@@ -62,6 +65,16 @@ func Add(term *Term, configPath string, args []string) error {
 		}
 	}
 
+	// Validate before writing. A source entry that cannot load is worse than a
+	// rejected one: `semsource run` would refuse to start, and the operator
+	// would be debugging a file this command told them was fine.
+	if err := entry.Validate(); err != nil {
+		return err
+	}
+	if err := verifySource(entry); err != nil {
+		return err
+	}
+
 	cfg.Sources = append(cfg.Sources, *entry)
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -75,6 +88,68 @@ func Add(term *Term, configPath string, args []string) error {
 
 	term.Success(fmt.Sprintf("Added %s source to %s", entry.Type, configPath))
 	return nil
+}
+
+// verifySource checks that a new source entry describes something reachable,
+// before anything is written.
+//
+// Indirected through a package variable so tests can drive both outcomes
+// without a bucket, a network, or credentials.
+var verifySource = func(entry *config.SourceEntry) error {
+	if entry.Type != "s3" {
+		// Every other source type is a path or a URL whose reachability is the
+		// ingest loop's business — a directory that does not exist yet is a
+		// normal thing to register.
+		return nil
+	}
+	return verifyObjectStore(entry)
+}
+
+// verifyObjectStore probes the configured bucket.
+//
+// A bucket is worth probing where a directory is not: the failure modes are a
+// wrong endpoint, a credential that is not in the environment, and a bucket
+// that does not exist — all of which are invisible until the first ingest, and
+// all of which the operator can fix in the second it takes to read the error.
+// The listing is the probe because it exercises all three in one request.
+func verifyObjectStore(entry *config.SourceEntry) error {
+	store, err := s3store.New(s3store.Config{
+		Bucket:    entry.Bucket,
+		Endpoint:  entry.Endpoint,
+		Region:    entry.Region,
+		PathStyle: entry.PathStyle,
+	})
+	if err != nil {
+		return fmt.Errorf("object store %s bucket %q is not usable: %w",
+			endpointLabel(entry.Endpoint), entry.Bucket, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), objectStoreProbeTimeout)
+	defer cancel()
+
+	if _, err := store.Objects(ctx, entry.Prefix); err != nil {
+		// Endpoint, bucket, and cause: without all three the operator cannot
+		// tell a typo in the bucket from a credential that is not exported.
+		return fmt.Errorf("cannot reach bucket %q at %s: %w\n"+
+			"  check the endpoint, that the bucket exists, and that %s and %s are set in the environment",
+			entry.Bucket, endpointLabel(entry.Endpoint), err,
+			s3store.EnvAccessKeyID, s3store.EnvSecretAccessKey)
+	}
+	return nil
+}
+
+// objectStoreProbeTimeout bounds the reachability check. Short: this runs in
+// front of a human at a terminal, and a store that cannot answer a listing in
+// this long is not one to register without noticing.
+const objectStoreProbeTimeout = 15 * time.Second
+
+// endpointLabel names an endpoint for an error message, including the case
+// where none was configured.
+func endpointLabel(endpoint string) string {
+	if endpoint == "" {
+		return s3store.DefaultEndpoint + " (the default)"
+	}
+	return endpoint
 }
 
 // addNonInteractive dispatches to a type-specific flag parser.
@@ -92,6 +167,8 @@ func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, erro
 		return parseConfigFlags(args)
 	case "url":
 		return parseURLFlags(args)
+	case "s3":
+		return parseS3Flags(args)
 	case "image":
 		return parseImageFlags(args)
 	case "video":
@@ -99,8 +176,48 @@ func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, erro
 	case "audio":
 		return parseAudioFlags(args)
 	default:
-		return nil, fmt.Errorf("unknown source type %q (valid: ast, git, repo, docs, config, url, image, video, audio)", typeKey)
+		return nil, fmt.Errorf("unknown source type %q (valid: %s)", typeKey, strings.Join(config.SourceTypes(), ", "))
 	}
+}
+
+// parseS3Flags parses the flags for an S3-compatible object-store source.
+//
+// There is no credential flag, and there must never be one: this writes to
+// semsource.json, which is watched and replicated through KV, so a key placed
+// here would be distributed well beyond the process that needs it. The
+// credentials come from the process environment at run time.
+func parseS3Flags(args []string) (*config.SourceEntry, error) {
+	fs := flag.NewFlagSet("add s3", flag.ContinueOnError)
+	bucket := fs.String("bucket", "", "bucket holding the document artifacts")
+	prefix := fs.String("prefix", "", "key prefix to scope ingestion to (empty means the whole bucket)")
+	endpoint := fs.String("endpoint", "", "S3-compatible endpoint URL, scheme included (empty means AWS)")
+	region := fs.String("region", "", "region forwarded for request signing")
+	pathStyle := fs.Bool("path-style", false, "use path-style bucket addressing (needed by most self-hosted stores)")
+	watch := fs.Bool("watch", true, "re-list the prefix on an interval to pick up changes")
+	// Explicit identity, the same pair every other source takes: project is
+	// what supersession corresponds entities by, version is what lets two
+	// snapshots of one corpus coexist. Omitting both derives identity from the
+	// bucket, byte-for-byte.
+	project := fs.String("project", "", "explicit project identity (overrides the bucket-derived slug)")
+	version := fs.String("version", "", "explicit version for this registration")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	if *bucket == "" {
+		return nil, fmt.Errorf("s3 source requires --bucket")
+	}
+
+	return &config.SourceEntry{
+		Type:      "s3",
+		Bucket:    *bucket,
+		Prefix:    *prefix,
+		Endpoint:  *endpoint,
+		Region:    *region,
+		PathStyle: *pathStyle,
+		Watch:     *watch,
+		Project:   *project,
+		Version:   *version,
+	}, nil
 }
 
 func parseASTFlags(args []string) (*config.SourceEntry, error) {

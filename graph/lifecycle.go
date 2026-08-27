@@ -38,18 +38,41 @@ const (
 const lifecycleTriggerTimeout = 30 * time.Second
 
 // LifecycleRunRequest triggers one lifecycle pass scoped to Org+Systems
-// (entity-ID org and system segments — see entityid.Build). RootPath, when
-// set, anchors a filesystem liveness check: entities whose path predicate
-// resolves to a now-missing file under RootPath are marked with Reason;
-// entities previously marked whose file has reappeared are cleared. RootPath
-// empty (the remove_source shape) skips the filesystem check entirely and
-// marks every in-scope entity with Reason unconditionally — correct only
-// when the source itself is gone, not merely one file.
+// (entity-ID org and system segments — see entityid.Build).
+//
+// The pass needs some way to decide whether an entity's backing artifact is
+// still there, and takes one of three:
+//
+//   - RootPath set — a filesystem liveness check. Entities whose path
+//     predicate resolves to a now-missing file under RootPath are marked with
+//     Reason; entities previously marked whose file has reappeared are cleared.
+//   - Absent set — the caller states which paths are gone, for artifacts that
+//     are not files. See Absent.
+//   - Neither — no liveness check at all: every in-scope entity is marked with
+//     Reason unconditionally. This is the remove_source shape, correct only
+//     when the source itself is gone, not merely one artifact.
 type LifecycleRunRequest struct {
 	Org      string   `json:"org"`
 	Systems  []string `json:"systems"`
 	RootPath string   `json:"root_path,omitempty"`
 	Reason   string   `json:"reason"`
+
+	// Absent is the caller's own answer to the liveness question, for sources
+	// whose artifacts are not files and cannot be stat-ed — an object store
+	// tells nobody what it holds except by being listed. A non-nil Absent
+	// names every path the caller's COMPLETED enumeration found to be gone;
+	// every other in-scope path is treated as present, which is what lets a
+	// reappeared artifact clear its marker on the same pass.
+	//
+	// It is mutually exclusive with RootPath: two liveness oracles disagreeing
+	// silently is worse than a rejected request.
+	//
+	// Deliberately without omitempty. An empty non-nil Absent is a real and
+	// safe assertion — "my listing completed and nothing is missing" — while a
+	// nil one alongside an empty RootPath is the remove_source shape that
+	// marks everything in scope. omitempty would collapse the first into the
+	// second and retract a whole corpus on a pass that found nothing wrong.
+	Absent []string `json:"absent"`
 }
 
 // LifecycleRunResponse summarizes one lifecycle pass.

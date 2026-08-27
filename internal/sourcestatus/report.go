@@ -67,8 +67,22 @@ type Report struct {
 	// Submodules lists every submodule path a repo source declares and its
 	// state — missing code is never silent (git-submodule-ingestion spec).
 	Submodules []SubmoduleStatus `json:"submodules,omitempty"`
-	LastError  *seedsup.Error    `json:"last_error,omitempty"`
-	Timestamp  time.Time         `json:"timestamp"`
+	// ObjectsSkipped counts objects an object-store source enumerated and did
+	// not ingest, keyed by reason: unsupported_format, empty_object,
+	// unreadable. It is the difference between "there is no such document"
+	// and "that document was never parsed", which no other field on this
+	// report can express.
+	//
+	// Counts rather than the keys themselves, because a bucket's unparseable
+	// objects are unbounded — a corpus of reports beside ten thousand images
+	// would put ten thousand strings on every status surface — and because
+	// these are the figures for the LAST COMPLETED PASS, not a lifetime
+	// total. A skip repeats every pass by nature (an unsupported extension
+	// stays unsupported), so a running total would climb forever while
+	// describing the same few objects.
+	ObjectsSkipped map[string]int64 `json:"objects_skipped,omitempty"`
+	LastError      *seedsup.Error   `json:"last_error,omitempty"`
+	Timestamp      time.Time        `json:"timestamp"`
 }
 
 // SubmoduleStatus describes one declared submodule path of a repo source.

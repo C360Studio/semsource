@@ -36,10 +36,15 @@ jobs:
 
       # The critical-path integration suites (MCP answers, fusion pipeline,
       # versionDiff, readiness, staleness lifecycle) self-provision NATS via
-      # testcontainers; ubuntu-latest runners ship Docker, so no service-
-      # container choreography is needed here.
+      # testcontainers, and the object store suite provisions MinIO the same
+      # way; ubuntu-latest runners ship Docker, so no service-container
+      # choreography is needed here.
+      #
+      # This list is maintained by hand rather than being ./... — a package
+      # missing from it has integration tests that compile, pass locally, and
+      # never run. Add new ones as they land.
       - name: Integration tests
-        run: go test -tags=integration ./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/
+        run: go test -tags=integration ./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/ ./storage/s3store/ ./handler/objectstore/ ./processor/objectstore-source/
 
   lint:
     runs-on: ubuntu-latest

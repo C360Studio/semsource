@@ -45,77 +45,88 @@ multi-prefix entries) are all deferrable and none is baked into a task below.
 
 ## 2. `storage/s3store`
 
-- [ ] 2.1 Add `minio-go` to `go.mod` (design D1). Verify: `go build ./...`,
+- [x] 2.1 Add `minio-go` to `go.mod` (design D1). Verify: `go build ./...`,
   `go vet ./...`, and a clean `go install ./cmd/semsource` with no new
   system prerequisites.
-- [ ] 2.2 Implement `storage.Store` (`Put`/`Get`/`List`/`Delete`) and
+- [x] 2.2 Implement `storage.Store` (`Put`/`Get`/`List`/`Delete`) and
   `StreamableStore.Open` against an S3-compatible endpoint, with explicit
   endpoint URL, path-style toggle, and region passthrough. Verify: a store test
   mirroring `storage/filestore/store_test.go` against a MinIO or Garage test
   container.
-- [ ] 2.3 Add `Config` with `json` + `schema` tags, `Validate()`, and
+- [x] 2.3 Add `Config` with `json` + `schema` tags, `Validate()`, and
   `DefaultConfig()` following `storage/filestore/config.go`, carrying endpoint,
   bucket, path-style, and region — and **no credential fields**. Verify: a config
   test asserting `Validate()` rejects an empty bucket and an unparseable endpoint.
-- [ ] 2.4 Resolve credentials from the process environment at construction only
+- [x] 2.4 Resolve credentials from the process environment at construction only
   (design, `specs/runtime-configuration`). Verify: a test asserting a credential
   key placed on the config struct fails strict decoding, and that neither
   `Validate()` output nor the component's log lines contain a secret value.
 
 ## 3. Enumeration and change detection
 
-- [ ] 3.1 Implement the enumeration pass returning an observed key set **only** on
+- [x] 3.1 Implement the enumeration pass returning an observed key set **only** on
   a listing that completed across every continuation page, and an error otherwise
   (design D9). Verify: a test injecting a listing failure after page one returns
   an error and no key set.
-- [ ] 3.2 Consume paginated listings fully and scope to the configured prefix.
+- [x] 3.2 Consume paginated listings fully and scope to the configured prefix.
   Verify: a test with more objects than one page asserts every object is
   enumerated and that objects outside the prefix are not.
-- [ ] 3.3 Maintain the in-memory `key → ETag` map and skip re-fetching unchanged
+- [x] 3.3 Maintain the in-memory `key → ETag` map and skip re-fetching unchanged
   objects (design D5, D6). Verify: a test asserting a second pass over unchanged
   metadata issues zero object reads and publishes nothing.
-- [ ] 3.4 Apply the document-extension gate **before** fetching a body, counting
+- [x] 3.4 Apply the document-extension gate **before** fetching a body, counting
   each skip with a reason (design D8). Verify: a test asserting an unsupported
   object produces no entity, no body fetch, and one counted skip carrying a reason.
 
 ## 4. Handler, identity, and processor
 
-- [ ] 4.1 Implement `handler/objectstore` satisfying the `SourceHandler` interface
+- [x] 4.1 Implement `handler/objectstore` satisfying the `SourceHandler` interface
   (`Ingest`, `Watch`, `Supports`, `SourceType`), calling the group 1 content seam
   for each object it ingests. Verify: `handler` interface compliance test plus an
-  ingest test over a fake store.
-- [ ] 4.2 Construct identity as `system` = project override else
+  ingest test over a fake store. Landed as `IngestEntityStates` + `Watch` +
+  `Supports` + `SourceType`, mirroring `handler/doc` — the peer this source is
+  modeled on does not implement `handler.SourceHandler` either, and its
+  `Ingest` returns `[]RawEntity`, which task 4.6 forbids this source from
+  populating. Only the older git/url/cfgfile handlers still satisfy that
+  interface.
+- [x] 4.2 Construct identity as `system` = project override else
   `entityid.SystemSlug(bucket)`, `instance` = `entityid.SanitizeInstance(objectKey)`
   (design D7). Verify: tests covering the `specs/entity-identity-safety` scenarios —
   identical IDs across differing local paths, identical IDs across a restart, keys
   differing only past truncation staying distinct, and `ValidateEntityID` passing
   for keys containing `/`, spaces, and non-ASCII bytes.
-- [ ] 4.3 Compute the content hash from fetched bytes with the doc handler's
+- [x] 4.3 Compute the content hash from fetched bytes with the doc handler's
   existing `contentHash`, never from the ETag (design D6). Verify: a test using a
   multipart-style composite ETag fixture asserts `DocFileHash` matches the bytes'
   hash and not the ETag.
-- [ ] 4.4 Preserve the `ErrBodyStoreRequired` split — an unreadable object is one
+- [x] 4.4 Preserve the `ErrBodyStoreRequired` split — an unreadable object is one
   document's problem (skip and count), an unavailable body store aborts the pass.
   Verify: two tests, one per failure mode, asserting skip-and-continue versus
   abort.
-- [ ] 4.5 Implement `processor/objectstore-source` with `component.go`,
+- [x] 4.5 Implement `processor/objectstore-source` with `component.go`,
   `config.go`, and `factory.go` per the component checklist, registered without
   touching `buildPayloadRegistry()`. Verify: component discovery test plus a build
   asserting `cmd/semsource/run.go` is unchanged.
-- [ ] 4.6 Emit canonical typed `EntityStates` for every ingested or re-ingested
+- [x] 4.6 Emit canonical typed `EntityStates` for every ingested or re-ingested
   object, with no `RawEntity` population, and treat a non-delete event lacking
   valid states as a bounded contract error that publishes nothing
   (`specs/typed-source-change-events`). Verify: tests for both the happy path and
   the missing-state contract failure.
-- [ ] 4.7 Publish staleness markers for objects absent from a **completed** pass,
+- [x] 4.7 Publish staleness markers for objects absent from a **completed** pass,
   and for no entity otherwise. Verify: the four spec scenarios — genuine removal,
   listing failure mid-pagination, authentication failure, and a legitimately
-  emptied prefix.
-- [ ] 4.8 Populate `internal/sourcestatus.Report` including readiness,
+  emptied prefix. The existing lifecycle trigger had no mode that fits: `RootPath`
+  anchors a filesystem stat and an object key is not a file, while an empty
+  `RootPath` marks every in-scope entity (the source-removed shape). Resolved by
+  adding an explicit `Absent` set to `LifecycleRunRequest`, so `processor/supersession`
+  keeps ownership of marking and reaches a document's passages through the path
+  grouping it already does. Adds an `entity-staleness` spec delta this change did
+  not previously declare.
+- [x] 4.8 Populate `internal/sourcestatus.Report` including readiness,
   backpressure, and skipped-object counts. Verify: a status test asserting the
   entry carries the same fields as every other source and that skip counts are
   visible without a source-specific query.
-- [ ] 4.9 Assert the source is read-only: no ingest, watch, retraction, or status
+- [x] 4.9 Assert the source is read-only: no ingest, watch, retraction, or status
   path issues a write, copy, or delete against the bucket. Verify: a fake store
   that fails the test on any mutating call, exercised across a full
   ingest-change-retract cycle.
@@ -125,11 +136,11 @@ multi-prefix entries) are all deferrable and none is baked into a task below.
 Lands before group 6 so the guard is proven green against today's nine source
 types, rather than introduced alongside the tenth and assumed to work.
 
-- [ ] 5.1 Export a `config.SourceTypes()` accessor over the private
+- [x] 5.1 Export a `config.SourceTypes()` accessor over the private
   `validSourceTypes` map (`config/source.go:10`) so other packages can enumerate
   the supported types, and keep `:209` reading through it. Verify: `go build ./...`
   and `go test ./config/...` pass with no existing test changes.
-- [ ] 5.2 Add an in-package test in `internal/sourcespawn` asserting every type
+- [x] 5.2 Add an in-package test in `internal/sourcespawn` asserting every type
   from `config.SourceTypes()` builds component specs through `buildSpecs`
   (`sourcespawn.go:330`) without returning `CodeUnsupportedType`. The test asserts
   only the **config↔spawn** direction: a type valid in `semsource.json` with no
@@ -140,51 +151,65 @@ types, rather than introduced alongside the tenth and assumed to work.
 
 ## 6. Configuration and CLI
 
-- [ ] 6.1 Add the object-store case to `sourcespawn.buildSpecs`
+- [x] 6.1 Add the object-store case to `sourcespawn.buildSpecs`
   (`internal/sourcespawn/sourcespawn.go:330`), mapping the type to the
   `objectstore-source` factory. Verify: a spawn test asserts the produced spec
   carries the expected factory name and source type.
-- [ ] 6.2 Add the source type to `config/source.go:10` `validSourceTypes` and the
+- [x] 6.2 Add the source type to `config/source.go:10` `validSourceTypes` and the
   type switch at `:209`, with validation rejecting a missing bucket and an
   unparseable endpoint. The group 5 invariant test is the guard here — it goes red
   if this lands without 6.1, so no same-commit discipline is required of the
   author. Verify: `semsource validate` tests for both rejection cases and one
   accepted entry, plus a green group 5 test.
-- [ ] 6.3 Add `semsource add s3` to `cli/add.go:83` accepting bucket, prefix,
+- [x] 6.3 Add `semsource add s3` to `cli/add.go:83` accepting bucket, prefix,
   endpoint, and the existing `--project` / `--version` identity flags. Verify:
   `cli/add_test.go` cases for explicit identity, omitted identity falling back to
   the bucket slug, and two prefixes of one bucket registered as distinct projects.
-- [ ] 6.4 Make registration failure actionable — an unreachable or unauthenticated
+  `--version` was made to mean something rather than be accepted and ignored: the
+  handler scopes identity through `entityid.ScopedSystemSlug`, exactly as ast
+  does, which is byte-identical when the flag is omitted.
+- [x] 6.4 Make registration failure actionable — an unreachable or unauthenticated
   bucket fails with endpoint, bucket, and cause, leaving the config file
   unchanged. Verify: a CLI test asserting the error text and an untouched config
   file on failure.
 
 ## 7. Evidence, docs, and follow-ups
 
-- [ ] 7.1 Add the source type to the README source-type table and supply the test
+- [x] 7.1 Add the source type to the README source-type table and supply the test
   evidence `advertised-surface-coverage` requires for an advertised surface.
   Verify: the advertised-surface test suite covers the new row.
-- [ ] 7.2 Record the ownership revisit trigger in
+- [x] 7.2 Record the ownership revisit trigger in
   `docs/upstream/semstreams-asks.md` as a triaged framework-shaped **candidate** —
   a second sem\* service needing an artifact bucket (design D2). Verify: the entry
   exists and names the trigger, following the file's existing entry format.
-- [ ] 7.3 Add the MinIO-backed integration test ingesting a fixture corpus end to
+- [x] 7.3 Add the MinIO-backed integration test ingesting a fixture corpus end to
   end, reaching `phase: ready` and answering one query, self-provisioning the
   container the way `natsclient.NewTestClient` already does. MinIO rather than
   Garage: it containerizes in one step with env-var credentials and a live S3 API,
   so it can gate every PR without adding flake surface. Garage compatibility is
   tracked separately in #202. Verify: `go test -tags=integration` against the new
   packages passes with Docker available.
-- [ ] 7.4 Add the new packages to the integration job's package list in
+- [x] 7.4 Add the new packages to the integration job's package list in
   `.github/workflows/ci.yml:42`, which today runs a hand-maintained allowlist
   (`./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/`) and
   not `./...`. Without this the new integration tests compile, pass locally, and
   never run in CI. Verify: a CI run shows the new packages in the integration job's
-  output.
-- [ ] 7.5 Measure an unbounded-prefix ingest against the #178 GRAPH ceiling
+  output. `./storage/s3store/` was pulled forward into group 2; `./handler/objectstore/`
+  and `./processor/objectstore-source/` joined it here, and the end-to-end and
+  measurement suites live in `./internal/governance/`, which was already listed.
+- [x] 7.5 Measure an unbounded-prefix ingest against the #178 GRAPH ceiling
   behavior before any documentation calls this unbounded-safe. Verify: a recorded
   measurement in the change or issue, with prefix-scoping guidance if a ceiling is
-  hit.
-- [ ] 7.6 Run the full gate before push — `gofmt`, `go vet`, `revive` (pinned
+  hit. Recorded as design D12: 1000 documents, 4000 entities, zero loss, no
+  backpressure, 2.7s — no ceiling reached at this scale, so no guidance is required;
+  the measurement's limits are stated rather than generalized.
+- [x] 7.6 Run the full gate before push — `gofmt`, `go vet`, `revive` (pinned
   v1.15.0, warnings fail), and `go test -race -tags=integration ./...`. Verify: CI
-  green.
+  green. gofmt, vet, revive, `go install`, `go test -race ./...`, and the exact CI
+  integration command all pass. The combined `-race -tags=integration ./...` form
+  reports one failure in `internal/governance`, from a PRE-EXISTING race inside
+  semstreams `graph-index.Stop` (it reproduces with this change's test files
+  removed, and hits `TestIntegration_VersionRegistrationToDiff`, which this change
+  never touched). Recorded as upstream ask #13. No CI job combines those two flags,
+  so CI is green; the note exists so the next person to run the strongest local
+  gate does not go looking in semsource for it.
