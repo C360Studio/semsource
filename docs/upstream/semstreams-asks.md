@@ -24,8 +24,25 @@ Status: `candidate` (not yet filed) · `filed #NNN` · `local-stopgap` · `wontf
 > pinned to `v1.0.0-beta.161`. Adopting beta.162 is breaking and requires newly
 > provisioned NATS storage, so it is its own change, not a bump.
 >
-> **Nine entries are still `candidate` — raised here but never filed upstream.** That
-> backlog, not the closed issues, is what this document has outstanding.
+> **Eight entries carried `candidate`.** Triaged the same day against upstream code and
+> issues, that backlog is much smaller than it looked — and its most useful finding is not
+> a filing list:
+>
+> | Ask | Verdict |
+> | --- | --- |
+> | 1. BFO/CCO `SubClassOf` helper | **Shipped in beta.161** ([#396](https://github.com/C360Studio/semstreams/issues/396)) — **not yet adopted here** |
+> | 2. Predicate role / salience | **Shipped in beta.161** ([#396](https://github.com/C360Studio/semstreams/issues/396)) — **not yet adopted here** |
+> | 5. name→ranked-IDs index | **Shipped in beta.161** — `graph-query.handleQueryByName` (gh#376) |
+> | 7. Service-level auth primitive | Adjacent issues exist ([#882](https://github.com/C360Studio/semstreams/issues/882), #854, #211); the cross-surface primitive is still unfiled |
+> | 9b. GraphQL capabilities route | Upstream [#784](https://github.com/C360Studio/semstreams/issues/784) **CLOSED**; needs a local re-check before filing anything |
+> | 4. `vocabulary/export` IRI-as-literal | **Still real** in beta.161, no upstream issue — file |
+> | 6. RPC reply subject prefix | **Still real**, no upstream issue, self-described low urgency for us |
+> | 12. S3-compatible `storage.Store` | Upstream still ships none — but **we built one**; reframe as an offer, not a request |
+>
+> **Three of eight were already solved upstream, in the version we already depend on, and
+> we are still running the stopgaps.** `vocabulary/bfo/hierarchy.go` says so in its own doc
+> comment: it "retires the per-consumer subclass stopgaps (e.g. semsource's source/ontology
+> static subtree)". Adopting those is worth more than filing anything.
 
 ---
 
@@ -45,14 +62,25 @@ salience), #5 (name→ranked-IDs index) below.
 
 ## BFO/CCO alignment (ADR-0005)
 
-### 1. BFO/CCO `SubClassOf` / hierarchy helper — framework-shaped — candidate
+### 1. BFO/CCO `SubClassOf` / hierarchy helper — framework-shaped — RESOLVED in beta.161 ([semstreams#396](https://github.com/C360Studio/semstreams/issues/396)) — **NOT YET ADOPTED**
+
+> Upstream ships `vocabulary/bfo.SubClassOf` and `vocabulary/cco.SubClassOf` in the version
+> we already depend on, and its doc comment names our stopgap: it "retires the per-consumer
+> subclass stopgaps (e.g. semsource's source/ontology static subtree)". Our
+> `source/ontology/hierarchy.go` (28 hand-encoded mappings) still carries a comment saying
+> upstreaming is tracked here. Adopting it is local work, not an upstream ask.
 `vocabulary/bfo` and `vocabulary/cco` ship IRI constants only, no subclass graph.
 Ontology-distance ranking needs the (fixed, standard) BFO/CCO subclass tree. A
 `SubClassOf` map or `Parents(iri)`/`IsA(child, parent)` helper in those packages
 would serve every consumer instead of each re-encoding it.
 **Stopgap:** static subclass subtree in `source/ontology/` (only the classes we use).
 
-### 2. Predicate role / salience in the vocabulary registry — framework-shaped — candidate
+### 2. Predicate role / salience in the vocabulary registry — framework-shaped — RESOLVED in beta.161 ([semstreams#396](https://github.com/C360Studio/semstreams/issues/396)) — **NOT YET ADOPTED**
+
+> `vocabulary.Register` takes `WithRole(PredicateRole)` and `WithWeight(float64)` in the
+> version we depend on — and upstream went further than the ask: weights are **signed**, so a
+> predicate can be down-ranked, not merely ranked. Our salience table in `source/ast/` and the
+> fusion ranker are the unretired stopgap.
 Predicate roles (identity/relationship/metric/…) are pattern-matched in semsource
 `processor/source-manifest/status.go`, not stored. A `WithRole`/`WithWeight` option
 on `vocabulary.Register` (carried in `PredicateMetadata`) would make salience a
@@ -77,7 +105,11 @@ IRI node). `export` should recognize absolute-IRI string objects (`http(s)://`,
 not hold for class/relation IRIs.
 **Surfaced by:** ADR-0005 A0 review. Not exercised today (export deferred).
 
-### 5. No name→ranked-IDs index for symbol resolution — framework-shaped — candidate
+### 5. No name→ranked-IDs index for symbol resolution — framework-shaped — RESOLVED in beta.161 (gh#376)
+
+> `processor/graph-query/query.go:649` `handleQueryByName` serves "deterministic
+> name→ranked-IDs requests (gh#376)" over the `byName` operation, passing through to
+> graph-index's `graph.index.query.byName`. Confirm what we consume before closing this out.
 `graph.query.*` has no subject that maps a bare symbol NAME (e.g. "OnEvent") to a
 ranked list of entity IDs. `entityByAlias` returns a single canonical ID (only if
 the name is a registered alias); `semantic` is embedding-based. So the fusion code
@@ -169,7 +201,13 @@ gate does not go looking in semsource for it.
 
 ## Storage backends
 
-### 12. S3-compatible `storage.Store` implementation — framework-shaped — candidate
+### 12. S3-compatible `storage.Store` implementation — framework-shaped — candidate, **reframe as an offer**
+
+> Upstream `storage/` still ships only `objectstore` and `storeregistry`. Since this was
+> written we built one: `storage/s3store` satisfies `storage.Store` and
+> `storage.StreamableStore`, is proven against MinIO on every PR and against real Garage
+> (#202). The ask is no longer "we need this" but "we have one — does the framework want
+> it?", which is a different issue and a much easier one to say yes to.
 `storage.Store` and `storage.StreamableStore` are framework interfaces, and the
 framework already ships `storage/objectstore` (NATS) against them. SemSource now
 ships `storage/s3store` against the same interfaces so an object-store source can
@@ -209,7 +247,14 @@ test stream zeroed the fused response.
 
 ## Service auth
 
-### 7. Service-level auth (API token / session) as a framework primitive — framework-shaped — candidate
+### 7. Service-level auth (API token / session) as a framework primitive — framework-shaped — candidate (sharpened 2026-08-27)
+
+> Upstream now carries **three separate per-surface auth issues** —
+> [#882](https://github.com/C360Studio/semstreams/issues/882) (graph-gateway `/graphql`),
+> #854 (lifecycle-gateway), #211 (MCP) — and #882 explicitly distinguishes itself from the
+> other two. None of them is the cross-surface primitive this entry asks for. That is this
+> ask's own prediction coming true ("N incompatible token schemes, no shared
+> principal/tenancy model"), and it is the argument to lead with when filing.
 As semsource becomes an external service (ADR-0006) it needs auth on its HTTP/MCP
 surfaces — API token first, session-based for interactive callers later. Every sem*
 service exposed externally faces the same need. Rolling auth per service means N
@@ -315,7 +360,11 @@ source-registration tools, translating tool calls → NATS. If the shape general
 propose lifting the MCP-server machinery upstream so it isn't re-rolled per service.
 **Surfaced by:** adding MCP to semsource (ADR-0007 §1; first MCP across sem\*).
 
-### 9b. GraphQL capabilities route points at an unregistered graph-query subject — framework-shaped — candidate
+### 9b. GraphQL capabilities route points at an unregistered graph-query subject — framework-shaped — likely superseded by [semstreams#784](https://github.com/C360Studio/semstreams/issues/784) (CLOSED 2026-08-13)
+
+> #784 is the same finding filed upstream, and `graph.query.capabilities` no longer appears
+> anywhere in beta.161. Re-check what our GraphQL surface routes today before filing
+> anything; our own `/capabilities` is served by `processor/source-manifest` and is unrelated.
 SemStreams beta.144 `gateway/graph-gateway` still routes GraphQL `capabilities`
 queries to `graph.query.capabilities`, but `processor/graph-query`'s handler table
 does not register a responder for that subject. The SemStreams docs describe
