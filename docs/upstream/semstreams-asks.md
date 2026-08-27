@@ -11,6 +11,22 @@ framework-shaped work as bespoke either.**
 
 Status: `candidate` (not yet filed) · `filed #NNN` · `local-stopgap` · `wontfix`
 
+> **Upstream state check — 2026-08-27.** Every issue this document records as `filed`
+> was queried against semstreams on that date. **Seven of the eight are CLOSED**; only
+> [#603](https://github.com/C360Studio/semstreams/issues/603) is still open. Closed:
+> #376, #414, #431, #520, #597, #977, #986. A `filed` marker below therefore says only
+> that we raised it — never that it is still outstanding, and never that we have adopted
+> the fix. Adoption is a separate claim and is marked `ADOPTED` where it has been verified.
+>
+> Both entries this file previously carried as live upstream watches (#977, #986) are
+> closed. #977 is additionally *structural* in `v1.0.0-beta.162`, which deletes
+> `internal/lifecyclejoin` outright; we still observe the race only because we remain
+> pinned to `v1.0.0-beta.161`. Adopting beta.162 is breaking and requires newly
+> provisioned NATS storage, so it is its own change, not a bump.
+>
+> **Nine entries are still `candidate` — raised here but never filed upstream.** That
+> backlog, not the closed issues, is what this document has outstanding.
+
 ---
 
 ## Major proposals
@@ -129,7 +145,11 @@ producers aren't embedded. Ask: reuse the #399 `StoreResolver` in graph-embeddin
 
 ## Concurrency
 
-### 13. `graph-index` Stop races its own entity watcher — framework-shaped — candidate
+### 13. `graph-index` Stop races its own entity watcher — framework-shaped — filed [semstreams#977](https://github.com/C360Studio/semstreams/issues/977), CLOSED 2026-08-17
+
+> Duplicate of the fuller entry at the end of this file; kept for the reading order.
+> Fixed structurally in beta.162 (`internal/lifecyclejoin` deleted). Still reproducible
+> here only because we are pinned to beta.161.
 `processor/graph-index` (beta.161) writes `c.entityCoalescer = nil` inside `Stop`'s
 generation callback while holding `c.mu` (`component.go:692`), but `watchEntityStates`
 reads `c.entityCoalescer` without taking that lock (`component.go:915`). The race
@@ -1108,7 +1128,7 @@ sub-threshold globalSearch paths — not #958. Recorded in
 
 ## graph-index Stop races its own watcher goroutine
 
-### `Stop`'s signal callback writes `entityCoalescer` under `mu` while `watchEntityStates` reads it lock-free — framework-shaped — filed [semstreams#977](https://github.com/C360Studio/semstreams/issues/977)
+### `Stop`'s signal callback writes `entityCoalescer` under `mu` while `watchEntityStates` reads it lock-free — framework-shaped — filed [semstreams#977](https://github.com/C360Studio/semstreams/issues/977), CLOSED 2026-08-17 — fixed structurally in beta.162 (`internal/lifecyclejoin` deleted)
 
 beta.161's `Generation.Stop` is signal-then-join: the shutdown signal callback runs before
 the fixed goroutine set is joined. graph-index's signal callback snapshots-and-nils
@@ -1129,7 +1149,7 @@ exact invocation our own method notes recommend for semstreams bumps.
 
 ## ConfigManager reactive watcher drops one event in a same-instant write burst
 
-### 6 `PutComponentToKV` writes in ~20ms deployed 5 components; an identical re-put at a later revision deployed the sixth — framework-shaped — filed [semstreams#986](https://github.com/C360Studio/semstreams/issues/986)
+### 6 `PutComponentToKV` writes in ~20ms deployed 5 components; an identical re-put at a later revision deployed the sixth — framework-shaped — filed [semstreams#986](https://github.com/C360Studio/semstreams/issues/986), CLOSED 2026-08-21
 
 Observed on semsource `v1.0.0-beta.161`-pinned code during the git-submodule
 compose acceptance (2026-08-17): submodule expansion writes 3 component

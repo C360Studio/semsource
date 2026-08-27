@@ -277,22 +277,54 @@ Current release-candidate shape (the latest public tag is beta.9):
 9. Active follow-ups are query-index readiness/scale, GraphQL capabilities
    alignment, code/version intelligence, and federation validation (#184
    easy-button onboarding closed in beta.9; both v1 blockers are done, and
-   the remaining v1 gate is SemStreams reaching v1). Upstream watch:
-   semstreams#986 and #977.
+   the remaining v1 gate is SemStreams reaching v1). The former upstream
+   watches semstreams#986 and #977 are both CLOSED (verified 2026-08-27);
+   #977 is fixed structurally in SemStreams `v1.0.0-beta.162`, which deletes
+   `internal/lifecyclejoin`. We still see that race locally under
+   `go test -race -tags=integration` only because we remain pinned to
+   beta.161 — adopting beta.162 is breaking (newly provisioned NATS storage,
+   no migration path) and needs its own change.
 
 ## Custom Agents & Skills
 
-### Review Agents (`.claude/agents/`)
+Canonical, platform-neutral definitions live in `.agents/`; `.claude/` and `.codex/`
+hold thin adapters that name exactly one canonical file and carry none of its body.
+`.agents/README.md` is the map. Run `task agents:check` after touching any of it, or
+after moving the semstreams pin.
 
-- **go-component-reviewer** — Reviews semstreams component implementations against the full component checklist (config tags, Discoverable interface, factory registration, payload registry, NATS usage, entity identity)
-- **graph-event-reviewer** — Reviews entity identity construction, event semantics, federation merge behavior, and watch/real-time correctness
+### Review Agents
 
-### Skills (`.claude/skills/`)
+**Spawning a role agent whose scope matches the diff is the default execution path
+for nontrivial work — no user permission needed.** There is no "don't spawn agents
+unless asked" rule in this repository. Spawn both concurrently when a change touches
+both failure classes; spawn neither when it touches neither, since a reviewer outside
+its scope returns noise and noise is how a real finding gets ignored. The owner session
+keeps the decision — these roles return findings, never commits. Massively-parallel
+`Workflow` orchestration is a separate question and remains opt-in.
 
-- `/new-payload` — Step-by-step checklist for adding a new payload type to the registry
-- `/orchestration-check` — Determine if logic belongs in a reactive rule, workflow, or component
-- `/kv-or-stream` — Decide between KV Watch and JetStream Stream for a communication path
-- `/query-pattern` — Choose between GraphQL, MCP, or NATS Direct for a query use case
+Both are read-only — findings with file:line references and a severity, no fixes
+unless separately authorized.
+
+- **go-component-reviewer** (`.agents/contracts/go-component-reviewer.md`) — semstreams
+  component implementations against the full checklist: config tags, Discoverable
+  interface, factory registration, payload registry, NATS usage, entity identity
+- **graph-event-reviewer** (`.agents/contracts/graph-event-reviewer.md`) — entity identity
+  construction, event semantics, federation merge behavior, watch/real-time correctness
+
+### Shared decision skills (`.agents/skills/`)
+
+Two are **vendored** from semstreams — framework truth we do not own, and our copy must
+match the pinned upstream byte for byte. Two are **deliberate forks** where our conventions
+genuinely differ; the manifest records the upstream digest we last reconciled against, so an
+upstream edit fails the check instead of diverging silently.
+
+- `/kv-or-stream` — **vendored** — KV Watch vs JetStream Stream for a communication path
+- `/orchestration-check` — **vendored** — rule vs workflow vs component boundary
+- `/new-payload` — **forked** — we register explicitly at bootstrap; upstream uses `init()`
+- `/query-pattern` — **forked** — we ship an MCP gateway; the framework does not
+
+The `openspec-*` entries under `.claude/skills/` are Claude-workflow tooling and stay
+platform-specific by design.
 
 ## Spec Reference
 

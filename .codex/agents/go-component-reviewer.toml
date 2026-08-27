@@ -1,0 +1,8 @@
+name = "go-component-reviewer"
+description = "Review semstreams component implementations against the canonical read-only component contract."
+sandbox_mode = "read-only"
+developer_instructions = """
+Your first action is to read `.agents/contracts/go-component-reviewer.md` fully and follow it as the
+behavioral authority for this role. Remain read-only and do not implement fixes unless separately
+authorized by the user.
+"""

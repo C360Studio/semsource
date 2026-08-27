@@ -1,0 +1,13 @@
+# Canonical shared decision skills and their relationship to semstreams.
+# Checked by scripts/check-agent-sync.sh; see .agents/README.md.
+#
+# vendored — semstreams owns this truth; our copy must match upstream byte for byte.
+# forked   — we own it deliberately; the digest records the upstream revision we last
+#            reconciled against, so an upstream edit forces a conscious re-read.
+#
+# Fields are tab-separated: name, mode, upstream sha256.
+upstream_version	v1.0.0-beta.161
+kv-or-stream	vendored	c2223363e9291e6e18a4716b06444751596d3bad7ab307a8600b93ba9d1645db
+orchestration-check	vendored	54cd290a2c5d711293754c3bcfaa273c40a3f47836b44a1d90dd460df20253c2
+new-payload	forked	92d6e849bba362b5e88c88ab7bcb5ce0ebe52cfbbe8f51df0353f8d346d2e150
+query-pattern	forked	7bd65580080d1ebcc0d88ffb5d1ca7c4f9e66f0fadb89a1e214e24f530ac2f87
