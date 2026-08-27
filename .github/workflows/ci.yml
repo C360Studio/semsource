@@ -71,6 +71,14 @@ jobs:
       - name: Lint
         run: task lint
 
+      # Agent configuration is only useful if it is true. This catches a vendored
+      # decision skill drifting from the framework truth it copies, an upstream
+      # edit to one we deliberately forked, and an adapter that has stopped
+      # naming its canonical contract — including the missing-frontmatter case
+      # that left both reviewers advertised but undiscoverable.
+      - name: Agent configuration
+        run: task agents:check
+
   ui-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 10

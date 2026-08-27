@@ -67,6 +67,11 @@ tasks:
     cmds:
       - go test -race ./...
 
+  agents:check:
+    desc: Verify agent contracts, adapters, and shared skills against the semstreams pin
+    cmds:
+      - ./scripts/check-agent-sync.sh
+
   test:e2e:
     desc: Run e2e tests (requires Docker)
     cmds:

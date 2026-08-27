@@ -34,8 +34,10 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Local agent/runtime config
-.agents/
-.codex/
+# .agents/ and .codex/ are deliberately TRACKED — .agents/ is the canonical,
+# platform-neutral authority for agent contracts and shared decision skills, and
+# .codex/ holds the thin Codex adapters that point at it. See .agents/README.md.
+# They were previously ignored as "local agent/runtime config", which is what kept
+# this repository from adopting the layout semstreams uses.
 
 /semsource
