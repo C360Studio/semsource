@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -28,10 +27,6 @@ import (
 // that needs a bucket shares. That is deliberate: two copies of a container
 // definition drift, and the one that drifts is always the one you are not
 // looking at.
-
-func TestMain(m *testing.M) {
-	os.Exit(miniotest.RunTests(m))
-}
 
 // newContainerStore creates a bucket for this test and returns a Store scoped
 // to it.

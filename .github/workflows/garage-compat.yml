@@ -1,0 +1,49 @@
+# The object-store source is designed Garage-first — the first adopter runs
+# Garage, not AWS — but the integration suite that gates every pull request
+# runs against MinIO, because MinIO containerizes in one step. MinIO passing
+# does not prove Garage works. This job is where that claim gets its evidence
+# (#202).
+#
+# It is separate from ci.yml, and path-filtered, because Garage costs a cluster
+# bootstrap to start: a daemon with no layout can store nothing, so the
+# container has to be given a role and told to apply it before the S3 endpoint
+# means anything. That belongs off the critical path of every pull request and
+# on the changes that could actually break it — the store, its provider, and
+# the dependency set they resolve through.
+name: Garage compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "storage/s3store/**"
+      - "internal/garagetest/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/garage-compat.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  garage-compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # The suite provisions Garage itself through testcontainers, the way the
+      # MinIO suite provisions MinIO; ubuntu-latest runners ship Docker, so no
+      # service-container choreography is needed here.
+      #
+      # Both tags at once: the two suites share a TestMain and run in one
+      # process, so this also proves the store behaves the same against both
+      # servers on the same commit rather than in two builds nobody compares.
+      - name: Garage and MinIO compatibility suites
+        run: go test -tags=integration,garage -v -timeout 15m ./storage/s3store/

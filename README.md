@@ -577,6 +577,7 @@ go build -o semsource ./cmd/semsource
 go test ./...                              # Unit tests
 go test -tags=integration ./...            # Integration tests (self-ingest)
 go test -tags=e2e ./test/e2e/              # Black-box binary tests
+go test -tags=garage ./storage/s3store/    # S3 compatibility against real Garage
 task core:smoke                            # UI-free Compose contract smoke
 task ui:image:verify                       # Clean local production-image verification
 SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest> task ui:smoke  # Released profile smoke

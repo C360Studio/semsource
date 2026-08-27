@@ -80,6 +80,7 @@ go build ./...
 go test ./...                              # unit tests only
 go test -tags=integration ./...            # include integration tests
 go test -tags=e2e ./test/e2e/              # black-box binary tests
+go test -tags=garage ./storage/s3store/     # S3 compatibility against real Garage
 go test -run TestName ./path/to/package    # single test
 go test -race -tags=integration ./...      # race detection
 ```
