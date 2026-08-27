@@ -87,6 +87,7 @@ or live UI updates; it is not the primary governed query contract.
 | `docs`   | Markdown, plain text                                        | fsnotify             |
 | `config` | go.mod, package.json, pom.xml, Dockerfile, etc.             | fsnotify             |
 | `url`    | HTTP/S pages                                                | configurable polling |
+| `s3`     | Document artifacts in an S3-compatible bucket               | prefix re-listing    |
 | `image`  | PNG, JPG, etc. (metadata + optional thumbnails) — *alpha*   | fsnotify             |
 | `video`  | Keyframe extraction via ffmpeg — *alpha*                    | fsnotify             |
 | `audio`  | Audio metadata via ffprobe — *alpha*                        | fsnotify             |

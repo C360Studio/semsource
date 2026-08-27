@@ -42,5 +42,8 @@ until archived. Run `openspec validate` before finalizing.
 - Every graph write carries a semantic envelope (semstreams ADR-055).
 - The live graph is retention-first — never NATS TTL/MaxBytes for graph lifecycle.
 - CI green before push: revive **warnings fail** (v1.15.0), gofmt, go vet, go test.
+  Run `task tools:install` once to get revive at the pinned version, then `task lint`.
+  `task lint` refuses to run against a missing or drifted revive rather than
+  reporting a clean local lint that CI then contradicts.
 - SemStreams has its own team — file framework gaps as GitHub issues
   (`docs/upstream/semstreams-asks.md`), never a PR/commit to that repo.

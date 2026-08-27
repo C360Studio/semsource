@@ -74,6 +74,8 @@ Bare `semsource` with no args auto-runs if `semsource.json` exists.
 ## Build & Test Commands
 
 ```bash
+task tools:install                         # once: revive at the CI-pinned version
+task lint                                  # vet + gofmt + revive (warnings fail)
 go build ./...
 go test ./...                              # unit tests only
 go test -tags=integration ./...            # include integration tests

@@ -31,6 +31,7 @@ func fullReport() Report {
 			{Path: "vendor/lib", SHA: "b1256521ee39", State: "materialized"},
 			{Path: "stale/entry", State: "declared_but_absent"},
 		},
+		ObjectsSkipped: map[string]int64{"unsupported_format": 412, "empty_object": 3},
 		LastError: &seedsup.Error{
 			Code:      "SOURCE_UNREACHABLE",
 			Message:   "clone failed",

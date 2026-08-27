@@ -3,10 +3,18 @@ package config
 import (
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"time"
+
+	"github.com/c360studio/semsource/storage/s3store"
 )
 
 // validSourceTypes lists all supported source handler types.
+//
+// Read through SourceTypes rather than copied: the list appeared in three
+// places before — this map, the error message below, and the type switch in
+// internal/sourcespawn — and nothing checked that they agreed.
 var validSourceTypes = map[string]bool{
 	"git":    true,
 	"repo":   true,
@@ -17,6 +25,25 @@ var validSourceTypes = map[string]bool{
 	"image":  true,
 	"video":  true,
 	"audio":  true,
+	"s3":     true,
+}
+
+// SourceTypes returns the source types configuration accepts, sorted.
+//
+// Exported because the invariant that matters spans a package boundary: every
+// type accepted here must be constructible by internal/sourcespawn, and while
+// the set was unexported that agreement could only be maintained by hand. A
+// type accepted here and missing there passes `semsource validate` and then
+// fails at `semsource run` — loudly, with a typed error, so not silent
+// degradation — but validate has still made a promise it had no way to check.
+// internal/sourcespawn tests against this list so the promise is checkable.
+func SourceTypes() []string {
+	out := make([]string, 0, len(validSourceTypes))
+	for sourceType := range validSourceTypes {
+		out = append(out, sourceType)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // SourceEntry represents a single source to be ingested.
@@ -67,6 +94,32 @@ type SourceEntry struct {
 
 	// URLs is a list of HTTP/S URLs for url sources.
 	URLs []string `json:"urls,omitempty"`
+
+	// Bucket is the object store bucket for s3 sources. Required for that
+	// type; it is also what the entity-ID system slug derives from when
+	// Project is empty.
+	Bucket string `json:"bucket,omitempty"`
+
+	// Prefix scopes an s3 source to part of its bucket. Empty means the whole
+	// bucket, which only suits a bucket that holds documents and nothing else.
+	Prefix string `json:"prefix,omitempty"`
+
+	// Endpoint is the S3-compatible endpoint URL for s3 sources, scheme
+	// included. Empty means AWS. There is deliberately no credential field
+	// here or anywhere else on this struct: this document is watched and
+	// replicated through KV, so a key placed on it would be distributed well
+	// beyond the process that needs it. Credentials come from the process
+	// environment.
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Region is forwarded to an s3 source's store for request signing.
+	// Self-hosted stores generally ignore it; AWS does not.
+	Region string `json:"region,omitempty"`
+
+	// PathStyle selects path-style bucket addressing for s3 sources, which
+	// self-hosted stores reached by IP, or by a name with no wildcard DNS
+	// record, require.
+	PathStyle bool `json:"path_style,omitempty"`
 
 	// PollInterval controls how often poll-based sources check their origin
 	// for changes. Must be parseable as a Go time.Duration.
@@ -207,7 +260,7 @@ func validatePositiveDuration(field, value string) error {
 // Validate checks that the SourceEntry has the required fields for its type.
 func (s SourceEntry) Validate() error {
 	if !validSourceTypes[s.Type] {
-		return fmt.Errorf("source: unknown type %q (valid: git, repo, ast, docs, config, url, image, video, audio)", s.Type)
+		return fmt.Errorf("source: unknown type %q (valid: %s)", s.Type, strings.Join(SourceTypes(), ", "))
 	}
 
 	if err := validatePositiveDuration("poll_interval", s.PollInterval); err != nil {
@@ -250,6 +303,23 @@ func (s SourceEntry) Validate() error {
 	case "url":
 		if len(s.URLs) == 0 {
 			return fmt.Errorf("source type %q: at least one url is required", s.Type)
+		}
+	case "s3":
+		// The store owns what a well-formed endpoint is, so there is one
+		// definition rather than two that can disagree. Its Validate covers
+		// the missing bucket too, but the message here names the source entry
+		// the operator is looking at.
+		if s.Bucket == "" {
+			return fmt.Errorf("source type %q: bucket is required", s.Type)
+		}
+		store := s3store.Config{
+			Bucket:    s.Bucket,
+			Endpoint:  s.Endpoint,
+			Region:    s.Region,
+			PathStyle: s.PathStyle,
+		}
+		if err := store.Validate(); err != nil {
+			return fmt.Errorf("source type %q: %w", s.Type, err)
 		}
 	case "image":
 		if len(s.Paths) == 0 {

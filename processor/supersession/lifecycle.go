@@ -52,11 +52,10 @@ func (c *Component) handleLifecycleRun(ctx context.Context, data []byte) ([]byte
 }
 
 // runLifecyclePass enumerates every entity in req.Org+req.Systems' scope and
-// converges each entity's entity.lifecycle.stale marker against reality: with
-// RootPath set, entities whose path predicate resolves to a now-missing file
-// get marked and entities whose file has reappeared get cleared; with
-// RootPath empty (the remove_source shape) every in-scope entity is
-// unconditionally marked — there is no filesystem left to check. Passes are
+// converges each entity's entity.lifecycle.stale marker against reality. How
+// reality is determined depends on which liveness oracle the request carries —
+// a filesystem root, an explicit absent set, or neither, in which case every
+// in-scope entity is unconditionally marked. See LifecycleRunRequest. Passes are
 // serialized against the correspondence pass via runMu. Read-then-write-only-
 // the-delta, so re-running converges rather than duplicating markers.
 func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRunRequest) (graph.LifecycleRunResponse, error) {
@@ -95,14 +94,11 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 		}
 	}
 
-	var statFn func(path string) bool
-	if req.RootPath != "" {
-		statFn = func(path string) bool {
-			_, err := os.Stat(filepath.Join(req.RootPath, path))
-			return err == nil
-		}
+	statFn, err := livenessOracle(req)
+	if err != nil {
+		return graph.LifecycleRunResponse{}, err
 	}
-	toMark, toClear, pathCount := decideLifecycleActions(inScope, req.RootPath, req.Reason, statFn)
+	toMark, toClear, pathCount := decideLifecycleActions(inScope, req.Reason, statFn)
 
 	resp := graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
 
@@ -127,16 +123,55 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	return resp, nil
 }
 
+// livenessOracle turns a request into the function that answers "is the
+// artifact at this path still there?", or nil when the request carries no way
+// to tell.
+//
+// RootPath and Absent are two different oracles and a request carrying both is
+// rejected rather than resolved by precedence: whichever one lost would go on
+// disagreeing silently, and the visible symptom is entities that will not
+// retract or will not come back.
+func livenessOracle(req graph.LifecycleRunRequest) (func(path string) bool, error) {
+	if req.RootPath != "" && req.Absent != nil {
+		return nil, fmt.Errorf("lifecycle run: root_path and absent are mutually exclusive")
+	}
+
+	if req.RootPath != "" {
+		return func(path string) bool {
+			_, err := os.Stat(filepath.Join(req.RootPath, path))
+			return err == nil
+		}, nil
+	}
+
+	if req.Absent != nil {
+		// The caller enumerated its own source and completed; anything it did
+		// not name is present. A path it never mentions is therefore live,
+		// which is what lets an artifact that came back clear its marker on
+		// this same pass rather than waiting for a re-seed.
+		absent := make(map[string]struct{}, len(req.Absent))
+		for _, path := range req.Absent {
+			absent[path] = struct{}{}
+		}
+		return func(path string) bool {
+			_, gone := absent[path]
+			return !gone
+		}, nil
+	}
+
+	return nil, nil
+}
+
 // decideLifecycleActions is the pure diff/converge core, isolated from all
-// NATS/filesystem I/O so it is unit-testable with fakes. stat is injected
-// (nil when rootPath is empty) and reports whether the given entity-relative
-// path is present on disk. Idempotent: an already-marked entity whose file is
-// still missing produces no action, and an unmarked entity whose file is
-// present produces no action — only the boundary crossings do.
-func decideLifecycleActions(inScope []gtypes.EntityState, rootPath, reason string, stat func(path string) bool) (toMark []message.Triple, toClear []string, pathCount int) {
-	if rootPath == "" {
-		// No filesystem to check — the source itself is gone, so every
-		// in-scope entity is unconditionally stale.
+// NATS/filesystem I/O so it is unit-testable with fakes. stat is injected and
+// reports whether the given entity-relative path still has its artifact; it is
+// nil when the request carried no way to tell. Idempotent: an already-marked
+// entity whose artifact is still missing produces no action, and an unmarked
+// entity whose artifact is present produces no action — only the boundary
+// crossings do.
+func decideLifecycleActions(inScope []gtypes.EntityState, reason string, stat func(path string) bool) (toMark []message.Triple, toClear []string, pathCount int) {
+	if stat == nil {
+		// Nothing to check liveness against — the source itself is gone, so
+		// every in-scope entity is unconditionally stale.
 		for i := range inScope {
 			if isMarkedStale(inScope[i].Triples) {
 				continue

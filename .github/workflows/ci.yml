@@ -36,10 +36,15 @@ jobs:
 
       # The critical-path integration suites (MCP answers, fusion pipeline,
       # versionDiff, readiness, staleness lifecycle) self-provision NATS via
-      # testcontainers; ubuntu-latest runners ship Docker, so no service-
-      # container choreography is needed here.
+      # testcontainers, and the object store suite provisions MinIO the same
+      # way; ubuntu-latest runners ship Docker, so no service-container
+      # choreography is needed here.
+      #
+      # This list is maintained by hand rather than being ./... — a package
+      # missing from it has integration tests that compile, pass locally, and
+      # never run. Add new ones as they land.
       - name: Integration tests
-        run: go test -tags=integration ./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/
+        run: go test -tags=integration ./internal/governance/ ./processor/mcp-gateway/ ./processor/code-context/ ./storage/s3store/ ./handler/objectstore/ ./processor/objectstore-source/
 
   lint:
     runs-on: ubuntu-latest
@@ -51,20 +56,20 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install revive
-        # Pinned (not @latest): warningCode=1 makes warnings fatal, so an
-        # unpinned revive release could fail CI on a new rule with no code
-        # change. Bump deliberately and re-run `task lint` locally to match.
-        run: go install github.com/mgechev/revive@v1.15.0
+      - uses: ./.github/actions/setup-task
 
-      - name: go vet
-        run: go vet ./...
+      # The revive pin lives in Taskfile.yml's REVIVE_VERSION, and the vet /
+      # gofmt / revive invocations live in its lint task. CI runs that one
+      # definition rather than keeping a second copy that can drift from it —
+      # and these copies already had drifted: they linted ./... including
+      # ui/node_modules, which task lint deliberately filters out.
+      - name: Install pinned dev tools
+        run: |
+          task tools:install
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: gofmt check
-        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
-
-      - name: revive
-        run: revive -config revive.toml -formatter friendly ./...
+      - name: Lint
+        run: task lint
 
   ui-quality:
     runs-on: ubuntu-latest
@@ -116,14 +121,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - uses: go-task/setup-task@v2
-        with:
-          # Exact pin: the default "3.x" resolves via a get-latest-release
-          # API call that fails outright during GitHub API degradation (six
-          # consecutive setup failures on 2026-08-17's incident before any
-          # workflow step ran). An exact version downloads the asset
-          # directly — and pins for reproducibility, like revive.
-          version: 3.52.0
+      - uses: ./.github/actions/setup-task
 
       - name: Clean production image verification
         env:
@@ -298,14 +296,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: go-task/setup-task@v2
-        with:
-          # Exact pin: the default "3.x" resolves via a get-latest-release
-          # API call that fails outright during GitHub API degradation (six
-          # consecutive setup failures on 2026-08-17's incident before any
-          # workflow step ran). An exact version downloads the asset
-          # directly — and pins for reproducibility, like revive.
-          version: 3.52.0
+      - uses: ./.github/actions/setup-task
 
       - name: Verify immutable registry image and provenance
         id: verify

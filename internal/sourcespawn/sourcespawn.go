@@ -355,6 +355,10 @@ func buildSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]co
 		name, cfg := urlComponentConfig(src, opts.Org)
 		return []componentSpec{{name, "url-source", "url", cfg}}, nil
 
+	case "s3":
+		name, cfg := objectStoreComponentConfig(src, opts.Org, opts)
+		return []componentSpec{{name, "objectstore-source", "s3", cfg}}, nil
+
 	case "image", "video", "audio":
 		name, cfg := mediaComponentConfig(src, opts.Org, opts)
 		return []componentSpec{{name, src.Type + "-source", src.Type, cfg}}, nil

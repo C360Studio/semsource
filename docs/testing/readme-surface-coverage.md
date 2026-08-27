@@ -78,6 +78,7 @@ SemSource through `github.com/c360studio/semstreams v1.0.0-beta.144`.
 | `semsource add repo --url ... --branch main`       | `TestAddNonInteractiveRepo`                                                | covered | None                                          |
 | `semsource add docs --paths ...`                   | `TestAddNonInteractiveDocs`                                                | covered | None                                          |
 | `semsource add url --urls ... --poll-interval 10m` | `TestAddNonInteractiveURL`                                                 | covered | None                                          |
+| `semsource add s3 --bucket ... --prefix ...`       | `TestAddS3_ExplicitIdentity`, `TestAddS3_OmittedIdentityFallsBackToTheBucket`, `TestAddS3_TwoPrefixesAreDistinctProjects` | covered | Registration failure: `TestAddS3_UnreachableBucketLeavesTheConfigUnchanged`, `TestVerifyObjectStore_NamesEverythingNeeded` |
 | interactive `semsource add`                        | None at CLI boundary                                                       | gap     | Add when interactive flow is product-critical |
 | `semsource sources`                                | `go test ./cli -run TestSources`                                           | covered | None                                          |
 | interactive `semsource remove`                     | `go test ./cli -run TestRemove`                                            | covered | None                                          |

@@ -242,7 +242,7 @@ func TestDecideLifecycleActions_ShrunkDocument_MarksOnlyTheVanishedTail(t *testi
 	// A ten-passage document is now seven passages long. The file is still on
 	// disk, so stat() cannot see the loss — only the parent's count can.
 	fx := docFixture{path: "guide.md", count: 7, passages: 10}
-	toMark, toClear, paths := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, paths := decideLifecycleActions(fx.build(), graph.LifecycleReasonFileDeleted, statPresent)
 
 	if paths != 1 {
 		t.Errorf("Paths = %d, want 1 (parent and all passages share one path)", paths)
@@ -270,7 +270,7 @@ func TestDecideLifecycleActions_ShrunkDocument_MarksOnlyTheVanishedTail(t *testi
 
 func TestDecideLifecycleActions_AllPassagesLive_NoAction(t *testing.T) {
 	fx := docFixture{path: "guide.md", count: 10, passages: 10}
-	toMark, toClear, paths := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, paths := decideLifecycleActions(fx.build(), graph.LifecycleReasonFileDeleted, statPresent)
 
 	if paths != 1 {
 		t.Errorf("Paths = %d, want 1", paths)
@@ -284,7 +284,7 @@ func TestDecideLifecycleActions_RegrownDocument_ClearsRevivedPassages(t *testing
 	// The document shrank to seven, a prior pass marked 7/8/9, and the prose
 	// has since come back: count is ten again, so the three markers are wrong.
 	fx := docFixture{path: "guide.md", count: 10, passages: 10, markedIdx: []int{7, 8, 9}}
-	toMark, toClear, _ := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, _ := decideLifecycleActions(fx.build(), graph.LifecycleReasonFileDeleted, statPresent)
 
 	if len(toMark) != 0 {
 		t.Errorf("marked %v, want no marks (every passage is live again)", sortedKeys(markedByID(t, toMark)))
@@ -299,7 +299,7 @@ func TestDecideLifecycleActions_ShrunkDocumentAlreadyMarked_IsIdempotent(t *test
 	// replacing by predicate, so re-emitting these markers would stack a
 	// duplicate triple on every run.
 	fx := docFixture{path: "guide.md", count: 7, passages: 10, markedIdx: []int{7, 8, 9}}
-	toMark, toClear, _ := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, _ := decideLifecycleActions(fx.build(), graph.LifecycleReasonFileDeleted, statPresent)
 
 	assertNoActions(t, toMark, toClear, "converged shrink (7/8/9 already marked)")
 }
@@ -311,7 +311,7 @@ func TestDecideLifecycleActions_DeletedFile_MarksParentAndEveryPassage(t *testin
 	// entity backed by the missing file is stale, and with the CALLER's
 	// reason — passage_removed would misdescribe a deleted file.
 	fx := docFixture{path: "guide.md", count: 7, passages: 10}
-	toMark, toClear, paths := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonFileDeleted, statMissing)
+	toMark, toClear, paths := decideLifecycleActions(fx.build(), graph.LifecycleReasonFileDeleted, statMissing)
 
 	if paths != 1 {
 		t.Errorf("Paths = %d, want 1", paths)
@@ -334,7 +334,7 @@ func TestDecideLifecycleActions_PassagesWithoutParent_NeverMarked(t *testing.T) 
 	// evidence a passage has vanished — is absent. Conservative by design:
 	// never mark without evidence.
 	fx := docFixture{path: "guide.md", passages: 10, omitParent: true}
-	toMark, toClear, paths := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, paths := decideLifecycleActions(fx.build(), graph.LifecycleReasonFileDeleted, statPresent)
 
 	if paths != 1 {
 		t.Errorf("Paths = %d, want 1", paths)
@@ -348,7 +348,7 @@ func TestDecideLifecycleActions_PassagesWithoutParent_NeverMarked(t *testing.T) 
 	// before the parent, then re-mark them on the next full pass. No evidence,
 	// no action — in both directions.
 	withMarks := docFixture{path: "guide.md", passages: 10, markedIdx: []int{7, 8, 9}, omitParent: true}
-	toMark, toClear, _ = decideLifecycleActions(withMarks.build(), "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, _ = decideLifecycleActions(withMarks.build(), graph.LifecycleReasonFileDeleted, statPresent)
 	assertNoActions(t, toMark, toClear, "already-marked passages with no parent count")
 }
 
@@ -380,7 +380,7 @@ func TestDecideLifecycleActions_PreChunkingDocument_BehavesAsBefore(t *testing.T
 			if tt.present {
 				stat = statPresent
 			}
-			toMark, toClear, _ := decideLifecycleActions(fx.build(), "/docs", graph.LifecycleReasonPathMissing, stat)
+			toMark, toClear, _ := decideLifecycleActions(fx.build(), graph.LifecycleReasonPathMissing, stat)
 
 			assertMarkedExactly(t, toMark, graph.LifecycleReasonPathMissing, tt.wantMarked...)
 			assertClearedExactly(t, toClear, tt.wantCleared...)
@@ -399,7 +399,7 @@ func TestDecideLifecycleActions_CodeEntitiesUnaffectedByPassageRules(t *testing.
 	live := codeEntityAt("acme.semsource.golang.repo.function.a-go-Foo", "a.go", false)
 	entities := append(shrunk.build(), live)
 
-	toMark, toClear, paths := decideLifecycleActions(entities, "/repo", graph.LifecycleReasonFileDeleted, statPresent)
+	toMark, toClear, paths := decideLifecycleActions(entities, graph.LifecycleReasonFileDeleted, statPresent)
 	if paths != 2 {
 		t.Errorf("Paths = %d, want 2 (guide.md and a.go)", paths)
 	}
@@ -414,7 +414,7 @@ func TestDecideLifecycleActions_CodeEntitiesUnaffectedByPassageRules(t *testing.
 	// And a code entity whose file is gone is still marked with the caller's
 	// reason, unchanged by any of this.
 	gone := []gtypes.EntityState{codeEntityAt("acme.semsource.golang.repo.function.b-go-Bar", "b.go", false)}
-	toMark, _, _ = decideLifecycleActions(gone, "/repo", graph.LifecycleReasonFileDeleted, statMissing)
+	toMark, _, _ = decideLifecycleActions(gone, graph.LifecycleReasonFileDeleted, statMissing)
 	assertMarkedExactly(t, toMark, graph.LifecycleReasonFileDeleted, "acme.semsource.golang.repo.function.b-go-Bar")
 }
 
@@ -454,7 +454,7 @@ func TestDecideLifecycleActions_NumericTriplesSurviveJSONRoundTrip(t *testing.T)
 			// test 1 if the encoding changes.
 			assertNumericObjectsAreFloat64(t, entities)
 
-			toMark, toClear, _ := decideLifecycleActions(entities, "/docs", graph.LifecycleReasonFileDeleted, statPresent)
+			toMark, toClear, _ := decideLifecycleActions(entities, graph.LifecycleReasonFileDeleted, statPresent)
 			if len(toClear) != 0 {
 				t.Errorf("cleared %v, want no clears", sortedCopy(toClear))
 			}
@@ -538,7 +538,7 @@ func TestDecideLifecycleActions_SourceRemoved_MarksPassagesUnconditionally(t *te
 
 	// nil stat, exactly as runLifecyclePass passes it when RootPath is empty:
 	// any filesystem check on this path would nil-panic rather than pass.
-	toMark, toClear, paths := decideLifecycleActions(entities, "", graph.LifecycleReasonSourceRemoved, nil)
+	toMark, toClear, paths := decideLifecycleActions(entities, graph.LifecycleReasonSourceRemoved, nil)
 
 	if paths != 0 {
 		t.Errorf("Paths = %d, want 0 (no filesystem check on remove_source)", paths)

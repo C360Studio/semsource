@@ -83,7 +83,7 @@ func TestDecideLifecycleActions_RemoveSource_MarksEveryUnmarkedEntity(t *testing
 		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", false),
 		docEntity("acme.semsource.web.sys.doc.b-md", "b.md", false),
 	}
-	toMark, toClear, paths := decideLifecycleActions(entities, "", source.LifecycleReasonSourceRemoved, nil)
+	toMark, toClear, paths := decideLifecycleActions(entities, source.LifecycleReasonSourceRemoved, nil)
 
 	if paths != 0 {
 		t.Errorf("Paths = %d, want 0 (no filesystem check on remove_source)", paths)
@@ -105,7 +105,7 @@ func TestDecideLifecycleActions_RemoveSource_SkipsAlreadyMarked(t *testing.T) {
 	entities := []gtypes.EntityState{
 		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", true), // already marked
 	}
-	toMark, toClear, _ := decideLifecycleActions(entities, "", source.LifecycleReasonSourceRemoved, nil)
+	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonSourceRemoved, nil)
 	if len(toMark) != 0 {
 		t.Errorf("toMark = %v, want empty (idempotent — already marked)", toMark)
 	}
@@ -121,7 +121,7 @@ func TestDecideLifecycleActions_MissingPath_MarksUnmarkedEntity(t *testing.T) {
 		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", false),
 	}
 	stat := func(_ string) bool { return false } // every path missing
-	toMark, toClear, paths := decideLifecycleActions(entities, "/repo", source.LifecycleReasonFileDeleted, stat)
+	toMark, toClear, paths := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
 
 	if paths != 1 {
 		t.Errorf("Paths = %d, want 1", paths)
@@ -139,7 +139,7 @@ func TestDecideLifecycleActions_MissingPath_AlreadyMarkedIsNoOp(t *testing.T) {
 		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", true), // already marked
 	}
 	stat := func(_ string) bool { return false }
-	toMark, toClear, _ := decideLifecycleActions(entities, "/repo", source.LifecycleReasonPathMissing, stat)
+	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonPathMissing, stat)
 	if len(toMark) != 0 || len(toClear) != 0 {
 		t.Errorf("expected no action for an already-marked, still-missing entity: toMark=%v toClear=%v", toMark, toClear)
 	}
@@ -150,7 +150,7 @@ func TestDecideLifecycleActions_PresentPath_ClearsMarkedEntity(t *testing.T) {
 		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", true), // was marked, file is back
 	}
 	stat := func(_ string) bool { return true } // every path present
-	toMark, toClear, _ := decideLifecycleActions(entities, "/repo", source.LifecycleReasonFileDeleted, stat)
+	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
 
 	if len(toMark) != 0 {
 		t.Errorf("toMark = %v, want empty", toMark)
@@ -165,7 +165,7 @@ func TestDecideLifecycleActions_PresentPath_UnmarkedIsNoOp(t *testing.T) {
 		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", false),
 	}
 	stat := func(_ string) bool { return true }
-	toMark, toClear, _ := decideLifecycleActions(entities, "/repo", source.LifecycleReasonFileDeleted, stat)
+	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
 	if len(toMark) != 0 || len(toClear) != 0 {
 		t.Errorf("expected no action for a live, never-marked entity: toMark=%v toClear=%v", toMark, toClear)
 	}
@@ -176,7 +176,7 @@ func TestDecideLifecycleActions_NoPathPredicate_Skipped(t *testing.T) {
 		{ID: "acme.semsource.golang.sys.package.pkg", Triples: nil}, // no path predicate at all
 	}
 	stat := func(_ string) bool { t.Fatalf("stat should never be called for a pathless entity"); return false }
-	toMark, toClear, paths := decideLifecycleActions(entities, "/repo", source.LifecycleReasonFileDeleted, stat)
+	toMark, toClear, paths := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
 	if len(toMark) != 0 || len(toClear) != 0 || paths != 0 {
 		t.Errorf("expected no action for a pathless entity: toMark=%v toClear=%v paths=%d", toMark, toClear, paths)
 	}
@@ -189,7 +189,7 @@ func TestDecideLifecycleActions_GroupsMultipleEntitiesUnderOnePath(t *testing.T)
 		codeEntityAt("acme.semsource.golang.sys.function.a-go-Bar", "a.go", false),
 	}
 	stat := func(_ string) bool { return false }
-	toMark, _, paths := decideLifecycleActions(entities, "/repo", source.LifecycleReasonFileDeleted, stat)
+	toMark, _, paths := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
 	if paths != 1 {
 		t.Errorf("Paths = %d, want 1 (single distinct path)", paths)
 	}

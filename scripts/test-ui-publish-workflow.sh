@@ -4,6 +4,7 @@ set -eu
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 workflow="$project_dir/.github/workflows/ci.yml"
 profile_smoke="$project_dir/scripts/ui-profile-smoke.sh"
+task_action="$project_dir/.github/actions/setup-task/action.yml"
 
 fail() {
 	echo "UI publish workflow contract test failed: $*" >&2
@@ -28,7 +29,6 @@ require_text "github.event_name == 'push'"
 require_text "ghcr.io/c360studio/semsource-ui"
 require_text "./scripts/ui-image-metadata.sh"
 require_text "platforms: linux/amd64,linux/arm64"
-require_text "go-task/setup-task@v2"
 require_text "npx playwright install --with-deps chromium"
 require_text "npm run test:a11y"
 require_text "npm run test:e2e"
@@ -56,12 +56,31 @@ require_text 'semsource-ui-smoke-failure-${{ github.sha }}-attempt-${{ github.ru
 require_text "path: test-results/ui-profile/**"
 require_text "if-no-files-found: warn"
 
-task_action_count=$(grep -Fc "uses: go-task/setup-task@v2" "$workflow")
-[ "$task_action_count" = "2" ] ||
-	fail "workflow must use exactly two maintained go-task/setup-task@v2 actions"
-if grep -F "arduino/setup-task" "$workflow" >/dev/null; then
-	fail "workflow must not use the obsolete arduino/setup-task action"
+# The Task runner is installed through one local composite action, so the
+# pinned version has a single home instead of a copy in every job that needs
+# it. That indirection is the thing under test here: the workflow must reach
+# Task only through it, and it must be the maintained upstream action.
+[ -f "$task_action" ] ||
+	fail "missing $task_action — the Task runner pin must have one home"
+grep -F "go-task/setup-task@v2" "$task_action" >/dev/null ||
+	fail "the setup-task composite action must use the maintained go-task/setup-task@v2"
+
+if grep -F "uses: go-task/setup-task@v2" "$workflow" >/dev/null; then
+	fail "workflow must install Task through ./.github/actions/setup-task, not by pinning it inline"
 fi
+
+# Exactly the jobs that run Task, and no others: lint (task lint), ui-quality
+# (task ui:*), and ui-release-smoke (task ui:smoke). A new job that needs the
+# runner should raise this count deliberately rather than by accident.
+task_action_count=$(grep -Fc "uses: ./.github/actions/setup-task" "$workflow")
+[ "$task_action_count" = "3" ] ||
+	fail "workflow must install Task in exactly three jobs (lint, ui-quality, ui-release-smoke), found $task_action_count"
+
+for file in "$workflow" "$task_action"; do
+	if grep -F "arduino/setup-task" "$file" >/dev/null; then
+		fail "$file must not use the obsolete arduino/setup-task action"
+	fi
+done
 
 core_publish=$(awk '
   /^  build-and-push:/ { in_job = 1 }
