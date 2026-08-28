@@ -41,10 +41,9 @@ Status: `candidate` (not yet filed) · `filed #NNN` · `local-stopgap` · `wontf
 >
 > **Three of eight were already solved upstream, in the version we already depend on** — but
 > only **one** is still unadopted here. Ask 2 was adopted without this document being updated;
-> ask 5 is an operation we describe for consumers and never call. That leaves ask 1:
-> `vocabulary/bfo/hierarchy.go` says in its own doc comment that it "retires the per-consumer
-> subclass stopgaps (e.g. semsource's source/ontology static subtree)", and ours is still
-> there. Tracked as OpenSpec change `adopt-upstream-ontology-ranking`.
+> ask 5 is an operation we describe for consumers and never call. Ask 1 is stranger still:
+> upstream shipped the subclass helper naming our stopgap, but **nothing here ever called our
+> stopgap either**, so the answer is deletion rather than adoption.
 >
 > The correction is the point. Two of the three "we should adopt this" conclusions did not
 > survive contact with the code — one was already done, one was never needed. A status line
@@ -74,9 +73,11 @@ salience), #5 (name→ranked-IDs index) below.
 > we already depend on, and its doc comment names our stopgap: it "retires the per-consumer
 > subclass stopgaps (e.g. semsource's source/ontology static subtree)". Our
 > `source/ontology/hierarchy.go` (28 hand-encoded mappings) still carries a comment saying
-> upstreaming is tracked here. Adopting it is local work, not an upstream ask — every class
-> we map is present in upstream's tree, so the swap is clean rather than partial. Tracked as
-> OpenSpec change `adopt-upstream-ontology-ranking`.
+> upstreaming is tracked here, and every class it maps is present in upstream's tree. But the
+> adoption question turned out to be moot: **nothing calls it.** `Ancestors`, `Depth`, and
+> `Distance` have no caller outside their own tests, and no ranking requirement in
+> `retrieval-ranking` references ontology distance. The stopgap was built for a ranker it was
+> never wired into. Being removed rather than adopted; see the follow-up PR.
 `vocabulary/bfo` and `vocabulary/cco` ship IRI constants only, no subclass graph.
 Ontology-distance ranking needs the (fixed, standard) BFO/CCO subclass tree. A
 `SubClassOf` map or `Parents(iri)`/`IsA(child, parent)` helper in those packages
