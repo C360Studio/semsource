@@ -35,9 +35,9 @@ Status: `candidate` (not yet filed) · `filed #NNN` · `local-stopgap` · `wontf
 > | 5. name→ranked-IDs index | **Shipped in beta.161** — and we do not consume it; nothing to adopt |
 > | 7. Service-level auth primitive | Adjacent issues exist ([#882](https://github.com/C360Studio/semstreams/issues/882), #854, #211); the cross-surface primitive is still unfiled |
 > | 9b. GraphQL capabilities route | Upstream [#784](https://github.com/C360Studio/semstreams/issues/784) **CLOSED**; needs a local re-check before filing anything |
-> | 4. `vocabulary/export` IRI-as-literal | **Still real** in beta.161, no upstream issue — file |
-> | 6. RPC reply subject prefix | **Still real**, no upstream issue, self-described low urgency for us |
-> | 12. S3-compatible `storage.Store` | Upstream still ships none — but **we built one**; reframe as an offer, not a request |
+> | 4. `vocabulary/export` IRI-as-literal | Confirmed in beta.162 — **filed [#1142](https://github.com/C360Studio/semstreams/issues/1142)** |
+> | 6. RPC reply subject prefix | Re-checked in beta.162 and **narrowed** — **filed [#1143](https://github.com/C360Studio/semstreams/issues/1143)** |
+> | 12. S3-compatible `storage.Store` | Upstream still ships none — **holding**: we have one, and no second consumer yet |
 >
 > **Three of eight were already solved upstream, in the version we already depend on** — but
 > only **one** is still unadopted here. Ask 2 was adopted without this document being updated;
@@ -108,7 +108,10 @@ call/import relations). These are software-engineering-domain relations.
 since they're our domain — but if a general software ontology is wanted framework-side,
 propose upstream. Do not force a bad mapping onto an existing CCO relation.
 
-### 4. `vocabulary/export` renders absolute-IRI objects as literals — framework-shaped — candidate
+### 4. `vocabulary/export` renders absolute-IRI objects as literals — framework-shaped — filed [semstreams#1142](https://github.com/C360Studio/semstreams/issues/1142)
+
+> Re-verified unchanged in beta.162 before filing: `classifyString` still yields a resource only
+> for a 6-part entity ID. Still not exercised here (export deferred).
 `export/object.go` `classifyString` treats a string object as an IRI resource only
 when `message.IsValidEntityID(s)` (a 6-part dotted ID). A full IRI object like
 `http://…/CommonCoreOntologies/Algorithm` is classified as a string literal, so the
@@ -245,7 +248,20 @@ it happens, goes through an issue against semstreams, never a PR.
 
 ## Transport / subject taxonomy
 
-### 6. RPC reply subjects share the `graph.ingest.*` prefix with the persisted data plane — framework-shaped — candidate
+### 6. RPC reply subjects share the `graph.ingest.*` prefix with the persisted data plane — framework-shaped — filed [semstreams#1143](https://github.com/C360Studio/semstreams/issues/1143)
+
+> **Re-checked against beta.162 before filing, and the entry below overstated it in one
+> direction and understated us in the other.** Upstream's own defaults do not collide:
+> graph-ingest's default `entity_stream` binds `entity.>` on the `ENTITY` stream, and the
+> strings `graph.ingest.entity` / `graph.ingest.data` survive in beta.162 only as examples in
+> `component/flowgraph/doc.go`. The RPC plane (`graph.ingest.query.*`) is real and unmoved,
+> and there is still no reserved sub-tree, no `graph.rpc.*` separation, and no documentation
+> of the hazard — so the ask is now *the shared prefix has no stated boundary*, not *the
+> framework ships a collision*.
+>
+> Our own protection is also stronger than the note below says. The boot guard was removed,
+> but `TestGraphStreamConfig_SubjectsExplicit_NoRPCOverlap` in `cmd/semsource/run_test.go`
+> pins the GRAPH stream's five explicit subjects and fails on any added subject or wildcard.
 graph-ingest serves core request/reply on `graph.ingest.query.{entity,batch,prefix,
 suffix}` and the curator workflow on `graph.ingest.add/remove.*`, while the persisted
 entity stream binds `graph.ingest.entity`. Because the RPC plane and the persisted
