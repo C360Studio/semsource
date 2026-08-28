@@ -136,8 +136,8 @@ to follow any returned entity with a deterministic query.
 
 SemSource SHALL NOT compute community membership, community summaries, or retrieval rankings
 locally; its role is routing, disclosure, and truthful reporting. Where the pinned semstreams version
-does not offer a contract SemSource needs, the gap SHALL be recorded in
-`docs/upstream/semstreams-asks.md` and raised as a semstreams issue, and the affected tool SHALL
+does not offer a contract SemSource needs, the gap SHALL be raised as a semstreams issue,
+and the affected tool SHALL
 state only what it can derive from the substrate's own response.
 
 #### Scenario: A missing substrate signal is not reimplemented

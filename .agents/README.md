@@ -57,7 +57,7 @@ Four decision heuristics live in `skills/`, each in one of two modes recorded in
 | `query-pattern` | **forked** | Upstream's copy says there is no canonical graph MCP surface yet, which is true of the framework. We ship one (`processor/mcp-gateway`), so MCP is a real option here. |
 
 **vendored** — our copy must match the pinned upstream byte for byte. Do not edit it; if it is wrong,
-it is wrong upstream, and the fix is an issue against semstreams (see `docs/upstream/semstreams-asks.md`).
+it is wrong upstream, and the fix is a GitHub issue against semstreams.
 
 **forked** — ours by right. The manifest records the upstream digest we last reconciled against, so an
 upstream edit fails the check and forces a conscious re-read rather than silent divergence.

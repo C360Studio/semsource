@@ -16,7 +16,7 @@ context: |
   - SemStreams owns the governed substrate (Graphable ingestion, ENTITY_STATES,
     graph.mutation.* / graph.query.* APIs, indexing profiles, lifecycle
     primitives). Do NOT reimplement substrate; log framework gaps in
-    docs/upstream/semstreams-asks.md, triaged framework-shaped vs product-shaped,
+    GitHub issues against C360Studio/semstreams, triaged framework-shaped vs product-shaped,
     and communicate them via GitHub issues only (never a PR to semstreams).
   - SemOps owns COP/product semantics; SemSource may support it, not absorb it.
   - SemConnect owns the OGC Connected Systems API bridge unless a change

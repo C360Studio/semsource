@@ -81,7 +81,7 @@ SemStreams owns:
 - generic graph lifecycle or materialization primitives.
 
 SemSource must not implement a parallel graph substrate to support OKF. Any framework-shaped gap is
-recorded in `docs/upstream/semstreams-asks.md` and raised with the SemStreams team.
+raised with the SemStreams team as a GitHub issue.
 
 Graph contributions remain subject to SemSource's existing non-negotiables: deterministic six-part
 entity IDs, a semantic envelope on every write, and retention-first graph lifecycle. Historical

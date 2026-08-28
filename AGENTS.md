@@ -57,7 +57,6 @@ semstreams pin.
   scoping.
 - **`docs/adr/`** — genuine decision records (irreversible / cross-repo). The
   mechanics an ADR implies live in the capability spec, not the ADR.
-- **`docs/upstream/semstreams-asks.md`** — framework gaps, with triage status.
 
 ## Spec-driven development (OpenSpec)
 
@@ -93,6 +92,7 @@ assert the *shape* of the workflows and are not covered by the Go gate.
 - CI green before push: revive **warnings fail** (v1.15.0), gofmt, go vet, go test.
   `task lint` refuses to run against a missing or drifted revive rather than
   reporting a clean local lint that CI then contradicts.
-- SemStreams has its own team — file framework gaps as GitHub issues and record
-  them in `docs/upstream/semstreams-asks.md`. **Never open a PR, commit, branch,
-  or issue comment against that repository from here.**
+- SemStreams has its own team — file framework gaps directly as GitHub issues
+  against `C360Studio/semstreams`, with the mechanism, file:line evidence, a
+  reproduction, and our local workaround. **Never open a PR, commit, branch, or
+  issue comment against that repository from here.**

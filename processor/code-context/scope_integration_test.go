@@ -26,7 +26,7 @@ import (
 //
 // The scope FILTER itself (candidate prefix-matching via graph.MatchesAnyIDPrefix
 // in graph-embedding) is framework code, validated in semstreams and in the live
-// httpx dogfood (docs/upstream/semstreams-asks.md #16). This test owns the
+// httpx dogfood (semstreams#463, adopted in beta.141). This test owns the
 // semsource seam — that the correct scope is SELECTED per lens and reaches the
 // wire — deterministically, without standing up the embedding subsystem (the
 // governance harness deliberately keeps the NL path out; validated separately).

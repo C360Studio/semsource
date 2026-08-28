@@ -150,7 +150,7 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 		// The GRAPH stream must bind ONLY the entity ingest subject, NOT a
 		// wildcard like "graph.ingest.>": a wildcard also matches graph-query's
 		// request/reply forwards and races a PubAck onto the reply inbox, silently
-		// zeroing batch/prefix results (docs/upstream/semstreams-asks.md #6).
+		// zeroing batch/prefix results (semstreams#1143).
 		natsclient.WithStreams(natsclient.TestStreamConfig{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
