@@ -117,8 +117,8 @@ To keep the core pragmatic/performant and the semweb baggage contained:
   **optional edge for later**. The class IRI is in the graph, so it's *cheap* —
   but not literally free: `vocabulary/export` currently renders an absolute-IRI
   string object as a literal, not a resource, so it must first learn to emit
-  `rdf:type` with an IRI-node object (upstream ask #4 in
-  `docs/upstream/semstreams-asks.md`). Built only when a real consumer asks.
+  `rdf:type` with an IRI-node object ([semstreams#1142](https://github.com/C360Studio/semstreams/issues/1142)).
+  Built only when a real consumer asks.
 - **Not full ontology coverage.** Software-specific relations CCO lacks
   (`code.relationship.calls`, `code.dependency.imports`) stay domain-local or
   take a `semsource/`-prefixed **extension** IRI (ADR-042 extension scheme) —

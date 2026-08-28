@@ -26,7 +26,7 @@ import (
 
 // truncationLimit is graph-embedding's hard-coded, unconfigurable text cap
 // (`maxTextLen` in processor/graph-embedding/component.go, passed to
-// WithMaxSourceTextLen; docs/upstream/semstreams-asks.md #22). Before passage chunking,
+// WithMaxSourceTextLen; semstreams#602, fixed in beta.158). Before passage chunking,
 // doc ingestion emitted ONE entity per file carrying the whole body, and the substrate
 // embeds exactly one vector per entity from text truncated at this many characters at a
 // word boundary — with no error, metric, or log at producer level. Everything past the
@@ -49,7 +49,7 @@ const tailMarker = "The nonsense marker phrase zzqfx9182-tail-only-marker appear
 //
 // Before this change, doc ingestion emitted a single entity carrying the entire file
 // body. graph-embedding truncates the text it embeds at 8000 characters (unconfigurable,
-// docs/upstream/semstreams-asks.md #22) with no error or metric, so any phrase living past
+// semstreams#602) with no error or metric, so any phrase living past
 // that cut was semantically unreachable: it existed on disk and in the raw entity body,
 // but no query could ever surface it. Passage chunking instead emits one entity per
 // document passage, each independently offloaded and embedded, so a phrase in the
@@ -67,7 +67,7 @@ func TestIntegration_DocTailPhraseSurvivesPassageChunking(t *testing.T) {
 		natsclient.WithKV(),
 		// Bind ONLY the entity ingest subject, never a wildcard — a wildcard also
 		// matches graph-query's request/reply forwards and races a PubAck onto the
-		// reply inbox (docs/upstream/semstreams-asks.md #6).
+		// reply inbox (semstreams#1143).
 		natsclient.WithStreams(natsclient.TestStreamConfig{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},

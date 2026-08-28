@@ -134,4 +134,4 @@ SemStreams'; this change only reports what the publisher already knows.
   out of scope; `degraded` is sticky until a clean re-pass, and clearing it is
   operator-driven.
 - **Substrate work.** Any gap found in SemStreams' delivery guarantees goes to
-  `docs/upstream/semstreams-asks.md` and a GitHub issue, never a PR.
+  a GitHub issue against semstreams, never a PR.

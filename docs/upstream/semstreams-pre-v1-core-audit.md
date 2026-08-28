@@ -4,6 +4,11 @@ Date: 2026-07-21
 
 Status: proposed release program
 
+> **Note (2026-08-28):** this is a dated record and is kept as written. It references
+> `docs/upstream/semstreams-asks.md`, which has since been retired — framework gaps are now
+> filed directly as GitHub issues against `C360Studio/semstreams`. The retired document's
+> content is in git history.
+
 Reviewed baseline: `C360Studio/semstreams` `main` at `a16a1b42`, plus the open issue queue through #609
 
 Review basis: issue and PR triage, architecture and Go-path review, configuration-use search, and focused race tests

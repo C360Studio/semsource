@@ -46,7 +46,7 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 		natsclient.WithKV(),
 		// Bind ONLY the entity ingest subject, never a wildcard — a wildcard also
 		// matches graph-query's request/reply forwards and races a PubAck onto the
-		// reply inbox (docs/upstream/semstreams-asks.md #6).
+		// reply inbox (semstreams#1143).
 		natsclient.WithStreams(natsclient.TestStreamConfig{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},

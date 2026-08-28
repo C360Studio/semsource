@@ -246,8 +246,8 @@ answerable for the values it hands over.
 
 Where a substrate default produces an unwanted result, SemSource SHALL correct it by supplying
 different configuration through the supported seam. SemSource SHALL NOT reimplement the substrate
-behavior locally, and where no configuration seam exists the gap SHALL be recorded in
-`docs/upstream/semstreams-asks.md` and raised as a semstreams issue.
+behavior locally, and where no configuration seam exists the gap SHALL be raised as a
+semstreams issue.
 
 #### Scenario: A configurable default is corrected by configuration
 

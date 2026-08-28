@@ -221,7 +221,7 @@ as an ordinary unknown field, and `SEMSOURCE_MODE` has no effect.
 (The JetStream `PubAck`-wins-the-race footgun that the old headless boot-time guard checked
 for only arose when a *host* owned the `GRAPH` stream; with SemSource owning its own stream
 and binding only the explicit data-plane subjects, it no longer applies. The framework-level
-subject-taxonomy concern behind it is tracked upstream — see `docs/upstream/semstreams-asks.md`.)
+subject-taxonomy concern behind it is tracked upstream as [semstreams#1143](https://github.com/C360Studio/semstreams/issues/1143).)
 
 ## SemSpec Integration Checklist
 
