@@ -31,18 +31,24 @@ Status: `candidate` (not yet filed) · `filed #NNN` · `local-stopgap` · `wontf
 > | Ask | Verdict |
 > | --- | --- |
 > | 1. BFO/CCO `SubClassOf` helper | **Shipped in beta.161** ([#396](https://github.com/C360Studio/semstreams/issues/396)) — **not yet adopted here** |
-> | 2. Predicate role / salience | **Shipped in beta.161** ([#396](https://github.com/C360Studio/semstreams/issues/396)) — **not yet adopted here** |
-> | 5. name→ranked-IDs index | **Shipped in beta.161** — `graph-query.handleQueryByName` (gh#376) |
+> | 2. Predicate role / salience | **Shipped in beta.161** ([#396](https://github.com/C360Studio/semstreams/issues/396)) — **already ADOPTED** |
+> | 5. name→ranked-IDs index | **Shipped in beta.161** — and we do not consume it; nothing to adopt |
 > | 7. Service-level auth primitive | Adjacent issues exist ([#882](https://github.com/C360Studio/semstreams/issues/882), #854, #211); the cross-surface primitive is still unfiled |
 > | 9b. GraphQL capabilities route | Upstream [#784](https://github.com/C360Studio/semstreams/issues/784) **CLOSED**; needs a local re-check before filing anything |
 > | 4. `vocabulary/export` IRI-as-literal | **Still real** in beta.161, no upstream issue — file |
 > | 6. RPC reply subject prefix | **Still real**, no upstream issue, self-described low urgency for us |
 > | 12. S3-compatible `storage.Store` | Upstream still ships none — but **we built one**; reframe as an offer, not a request |
 >
-> **Three of eight were already solved upstream, in the version we already depend on, and
-> we are still running the stopgaps.** `vocabulary/bfo/hierarchy.go` says so in its own doc
-> comment: it "retires the per-consumer subclass stopgaps (e.g. semsource's source/ontology
-> static subtree)". Adopting those is worth more than filing anything.
+> **Three of eight were already solved upstream, in the version we already depend on** — but
+> only **one** is still unadopted here. Ask 2 was adopted without this document being updated;
+> ask 5 is an operation we describe for consumers and never call. That leaves ask 1:
+> `vocabulary/bfo/hierarchy.go` says in its own doc comment that it "retires the per-consumer
+> subclass stopgaps (e.g. semsource's source/ontology static subtree)", and ours is still
+> there. Tracked as OpenSpec change `adopt-upstream-ontology-ranking`.
+>
+> The correction is the point. Two of the three "we should adopt this" conclusions did not
+> survive contact with the code — one was already done, one was never needed. A status line
+> written when an ask was raised is a claim about the past, not the present.
 
 ---
 
@@ -68,19 +74,26 @@ salience), #5 (name→ranked-IDs index) below.
 > we already depend on, and its doc comment names our stopgap: it "retires the per-consumer
 > subclass stopgaps (e.g. semsource's source/ontology static subtree)". Our
 > `source/ontology/hierarchy.go` (28 hand-encoded mappings) still carries a comment saying
-> upstreaming is tracked here. Adopting it is local work, not an upstream ask.
+> upstreaming is tracked here. Adopting it is local work, not an upstream ask — every class
+> we map is present in upstream's tree, so the swap is clean rather than partial. Tracked as
+> OpenSpec change `adopt-upstream-ontology-ranking`.
 `vocabulary/bfo` and `vocabulary/cco` ship IRI constants only, no subclass graph.
 Ontology-distance ranking needs the (fixed, standard) BFO/CCO subclass tree. A
 `SubClassOf` map or `Parents(iri)`/`IsA(child, parent)` helper in those packages
 would serve every consumer instead of each re-encoding it.
 **Stopgap:** static subclass subtree in `source/ontology/` (only the classes we use).
 
-### 2. Predicate role / salience in the vocabulary registry — framework-shaped — RESOLVED in beta.161 ([semstreams#396](https://github.com/C360Studio/semstreams/issues/396)) — **NOT YET ADOPTED**
+### 2. Predicate role / salience in the vocabulary registry — framework-shaped — RESOLVED in beta.161 ([semstreams#396](https://github.com/C360Studio/semstreams/issues/396)) — **ADOPTED**
 
-> `vocabulary.Register` takes `WithRole(PredicateRole)` and `WithWeight(float64)` in the
-> version we depend on — and upstream went further than the ask: weights are **signed**, so a
-> predicate can be down-ranked, not merely ranked. Our salience table in `source/ast/` and the
-> fusion ranker are the unretired stopgap.
+> `vocabulary.Register` takes `WithRole(PredicateRole)` and `WithWeight(float64)`, and upstream
+> went further than the ask: weights are **signed**, so a predicate can be down-ranked rather
+> than merely ranked.
+>
+> We already use it, and had for some time before this line was corrected: `source/ast/vocabulary.go`
+> registers with `WithWeight(2.0)` / `WithWeight(-2.0)`, `source/vocabulary/lifecycle.go:36` uses
+> `WithWeight(-3.0)`, and `processor/code-context/component.go:209` folds them in through
+> `fusionvocab.New()` against the framework registries. There is no stopgap left to retire — the
+> earlier "not yet adopted" note was wrong.
 Predicate roles (identity/relationship/metric/…) are pattern-matched in semsource
 `processor/source-manifest/status.go`, not stored. A `WithRole`/`WithWeight` option
 on `vocabulary.Register` (carried in `PredicateMetadata`) would make salience a
@@ -105,11 +118,17 @@ IRI node). `export` should recognize absolute-IRI string objects (`http(s)://`,
 not hold for class/relation IRIs.
 **Surfaced by:** ADR-0005 A0 review. Not exercised today (export deferred).
 
-### 5. No name→ranked-IDs index for symbol resolution — framework-shaped — RESOLVED in beta.161 (gh#376)
+### 5. No name→ranked-IDs index for symbol resolution — framework-shaped — RESOLVED in beta.161 (gh#376) — nothing for us to adopt
 
-> `processor/graph-query/query.go:649` `handleQueryByName` serves "deterministic
-> name→ranked-IDs requests (gh#376)" over the `byName` operation, passing through to
-> graph-index's `graph.index.query.byName`. Confirm what we consume before closing this out.
+> `processor/graph-query/query.go` `handleQueryByName` serves "deterministic name→ranked-IDs
+> requests (gh#376)" over the `byName` operation, passing through to graph-index's
+> `graph.index.query.byName`.
+>
+> Checked on our side: we never call it. The only `byName` references here are readiness
+> *gating* for consumers — `processor/source-manifest/readiness.go` and the MCP readiness tool
+> description both tell callers to gate `byName` on `index.ready`. We describe the operation;
+> we do not consume it. Should a symbol-resolution path ever need it, the framework operation
+> is there and no local index is warranted.
 `graph.query.*` has no subject that maps a bare symbol NAME (e.g. "OnEvent") to a
 ranked list of entity IDs. `entityByAlias` returns a single canonical ID (only if
 the name is a registered alias); `semantic` is embedding-based. So the fusion code
