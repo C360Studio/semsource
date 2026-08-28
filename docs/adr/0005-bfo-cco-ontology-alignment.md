@@ -8,6 +8,21 @@
 > `processor/ast-source/component.go`). Ontology-specificity ranking now lives in the
 > converged semstreams `pkg/fusion` engine (see ADR-0004's convergence note), consumed via
 > its predicate-salience/ontology signals.
+>
+> **Update (2026-08-28):** the local subclass subtree proposed below
+> (`source/ontology/hierarchy.go`) has been **removed**. The convergence recorded
+> above moved ontology ranking into semstreams `pkg/fusion`, which orphaned the
+> table — `Ancestors`/`Depth`/`Distance` ended with no caller outside their own
+> tests, and no `retrieval-ranking` requirement referenced ontology distance.
+> semstreams has since shipped `vocabulary/bfo|cco.SubClassOf`
+> ([gh#396](https://github.com/C360Studio/semstreams/issues/396)) — the upstreaming
+> this ADR anticipated as a "candidate ... later" — and how ontology distance
+> should figure in retrieval is being settled in the production-GraphRAG epic
+> ([semstreams#1137](https://github.com/C360Studio/semstreams/issues/1137)). The
+> class mapping and the `entity.ontology.class` stamp, which this ADR's decision
+> also covers, remain in place and in use. Sections below describing the subtree
+> and hierarchy-distance ranking are kept as the record of what was decided, not
+> as a description of the code.
 
 ## Context
 
