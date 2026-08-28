@@ -1,8 +1,19 @@
 // Package ontology aligns semsource entity kinds and predicates to the BFO/CCO
-// upper ontologies for standards-aligned ("standards at work") ranking. The IRI
+// upper ontologies for standards-aligned ("standards at work") stamping. The IRI
 // constants live in semstreams (vocabulary/bfo, vocabulary/cco); this package
-// owns only the semsource-specific class mapping and a minimal subclass table
-// (hierarchy.go) used to rank fused results.
+// owns only the semsource-specific class mapping and the triple that stamps it.
+//
+// It carried a hand-encoded subclass table too (hierarchy.go), for ranking fused
+// results by ontology distance. That ranking converged into the semstreams
+// pkg/fusion engine — ADR-0005's own status note records the move — which
+// orphaned the table: Ancestors, Depth, and Distance had no caller outside
+// their own tests, and no requirement in the retrieval-ranking capability
+// referenced ontology distance. It was removed rather than migrated.
+//
+// semstreams now ships the real thing (vocabulary/bfo.SubClassOf, gh#396), and
+// how ontology distance should figure in retrieval is being settled upstream in
+// the production-GraphRAG epic (semstreams#1137). A local re-encoding would be a
+// third answer to a question two other places are already answering.
 //
 // It is alignment, not reasoning: no OWL inferencing, no SPARQL. RDF/JSON-LD
 // export is a separate, optional edge (semstreams vocabulary/export), built only
