@@ -60,3 +60,24 @@
   open/attach migration PR: https://github.com/C360Studio/semsource/pull/213 (draft).
 - [x] 5.4 Retain holds until full matrix passes; later exclusive SemEngine branch qualification is
   separate, and mainline cutover waits for the complete semembed-backed workload.
+
+
+## 6. AST integration fixture authority correction (#218)
+
+The full integration rerun exposed three AST cases whose direct constructor fixtures omitted
+`Dependencies.Platform`. The same failures reproduce on pristine migration commit `75a17f7`,
+independently of the MinIO fixture repair. Normal unit gates exclude these integration-tagged
+files, and the manually selected CI integration lane did not include AST. Keep production
+validation and every existing test assertion unchanged; provide the same explicit test authority
+that the composition root supplies in production.
+
+- [x] 6.1 Supply matching `PlatformMeta` in the two AST integration constructor fixtures; prove
+  `TestIntegration_StartReturnsWhilePathsUnavailable`, `TestIntegration_StopDuringInFlightSeedWaits`,
+  and `TestIntegration_SubmoduleExpansionSeedsScopedEntities` reach and pass their behavior checks.
+- [x] 6.2 Add `processor/ast-source` to the existing CI integration package list, retaining
+  `internal/sourcespawn` and all other selected packages; run the workflow shell contract suite.
+- [x] 6.3 Run the AST integration package with `-race`, lint and OpenSpec validation, then obtain
+  independent Go reviewer sign-off on this test-only compatibility correction.
+  Named regression cases and the full AST integration package pass with `-race`; lint, workflow
+  shell contracts, and strict OpenSpec validation pass. Independent Go review approved the scoped
+  test/CI correction; production authority validation and existing assertions remain unchanged.

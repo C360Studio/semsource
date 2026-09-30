@@ -38,7 +38,10 @@ func startedComponent(t *testing.T, watchRoot string) (*Component, func()) {
 		t.Fatalf("marshal config: %v", err)
 	}
 
-	comp, err := NewComponent(raw, component.Dependencies{NATSClient: tc.Client})
+	comp, err := NewComponent(raw, component.Dependencies{
+		NATSClient: tc.Client,
+		Platform:   component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+	})
 	if err != nil {
 		t.Fatalf("NewComponent: %v", err)
 	}
