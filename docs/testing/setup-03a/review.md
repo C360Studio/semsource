@@ -1,7 +1,8 @@
 # SETUP 03A review and admission state
 
-This migration is prepared for a **draft PR**. It stays on the frozen SemStreams revision and does not
-link SemEngine. Running the comparison matrix is separate from passing it, and neither replaces
+This migration is delivered in [draft PR #213](https://github.com/C360Studio/semsource/pull/213).
+It stays on the frozen SemStreams revision and does not link SemEngine. Running the comparison matrix
+is separate from passing it, and neither replaces
 independent implementation review.
 
 ## Independent review

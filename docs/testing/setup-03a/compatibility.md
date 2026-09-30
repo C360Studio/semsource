@@ -1,8 +1,9 @@
 # SETUP 03A compatibility and evidence contract
 
 This is the migration ledger for [SemSource #212](https://github.com/C360Studio/semsource/issues/212)
-and [SemEngine #7](https://github.com/C360Studio/semengine/issues/7). Delivery is a reviewable **draft**
-migration PR. Executed comparisons and code changes do not constitute SETUP 03A admission or merge
+and [SemEngine #7](https://github.com/C360Studio/semengine/issues/7). The migration is delivered in
+[draft PR #213](https://github.com/C360Studio/semsource/pull/213). Executed comparisons and code changes
+do not constitute SETUP 03A admission or merge
 approval. [Review and remaining blockers](review.md) keep those decisions explicit.
 
 ## Immutable baselines

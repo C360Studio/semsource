@@ -56,7 +56,7 @@
   is approved, including the removal supplement and its retained failure.
   Graph review approves defined scopes but requests removal replay/enumeration/error fixes; full
   implementation merge and qualification sign-off remain withheld.
-- [ ] 5.3 Update migration/results docs with pins, changes, provider manifest, outcomes, blockers;
-  open/attach migration PR.
+- [x] 5.3 Update migration/results docs with pins, changes, provider manifest, outcomes, blockers;
+  open/attach migration PR: https://github.com/C360Studio/semsource/pull/213 (draft).
 - [x] 5.4 Retain holds until full matrix passes; later exclusive SemEngine branch qualification is
   separate, and mainline cutover waits for the complete semembed-backed workload.
