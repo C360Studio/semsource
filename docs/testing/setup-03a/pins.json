@@ -1,0 +1,29 @@
+{
+  "recorded_before_first_neural_run": true,
+  "semstreams_before": {
+    "version": "v1.0.0-beta.161",
+    "commit": "9d0ff67f377ea3dd82dca2f3bf614871c0100766"
+  },
+  "semstreams_after": {
+    "version": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+    "commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+    "selection": "beta.163 absent at start; newest main frozen"
+  },
+  "semsource_base": "34bda6406fb06fd723a040988647b204204a1583",
+  "provider": {
+    "image": "ghcr.io/c360studio/semembed:latest@sha256:7972174f8e3462fd38bf3ad95d94870f406bb3d1350e0ea3280ce002cb2e09b2",
+    "image_id": "sha256:7972174f8e3462fd38bf3ad95d94870f406bb3d1350e0ea3280ce002cb2e09b2",
+    "build_revision": "7ceb5281c96b3664321f3f28c9d7f96acbb41843",
+    "executable_sha256": "1719c6213740e19d1c27fa418fa25be63506c80b2f16f2ad6916bfb6271a7b3a",
+    "boot_model": "Snowflake/snowflake-arctic-embed-s",
+    "artifact_revision": "e596f507467533e48a2e17c007f0e1dacc837b33",
+    "onnx_sha256": "579c1f1778a0993eb0d2a1403340ffb491c769247fb46acc4f5cf8ac5b89c1e1",
+    "dimensions": 384,
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "document_prefix": "",
+    "cpu_limit": 2,
+    "memory_limit_bytes": 2147483648,
+    "same_container_for_both_runs": true,
+    "cache_identity_rule": "Any image, served artifact, dimension, or preprocessing change invalidates comparison and requires fresh graph/index/cache plus rerunning both points."
+  }
+}

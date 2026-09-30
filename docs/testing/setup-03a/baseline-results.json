@@ -1,0 +1,1178 @@
+{
+  "source_commit": "34bda6406fb06fd723a040988647b204204a1583",
+  "upstream_version": "v1.0.0-beta.161",
+  "upstream_commit": "9d0ff67f377ea3dd82dca2f3bf614871c0100766",
+  "unit_suite": "go test ./... passed",
+  "profiles": [
+    {
+      "profile": "bm25",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-09-30T19:44:49.330919Z",
+      "binary_sha256": "16962d42348196f4e1260d62e45a816abba1508677eecc1a63a8a31874068b10",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "configuration": {
+        "graph": {
+          "coalesce_ms": 200,
+          "embedder_type": "bm25",
+          "gateway_bind": "127.0.0.1:54232",
+          "index_workers": 4
+        },
+        "http_port": 54229,
+        "metrics": {
+          "port": 54230
+        },
+        "namespace": "setup03a",
+        "source_roots": [
+          "/tmp/semsource-setup03a-evidence/beta161-bm25-v2/source"
+        ],
+        "sources": [
+          {
+            "languages": [
+              "go"
+            ],
+            "path": "/tmp/semsource-setup03a-evidence/beta161-bm25-v2/source",
+            "project": "setup03a",
+            "type": "ast",
+            "version": "corpus-v1",
+            "watch": true
+          },
+          {
+            "paths": [
+              "/tmp/semsource-setup03a-evidence/beta161-bm25-v2/source/docs"
+            ],
+            "project": "setup03a-docs",
+            "type": "docs",
+            "watch": true
+          }
+        ],
+        "websocket_bind": "127.0.0.1:54231"
+      },
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/beta161-bm25-v2",
+      "observations": [
+        {
+          "name": "ingestion_ready",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_run",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "initial_provenance",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_content",
+          "passed": true
+        },
+        {
+          "name": "cold_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "cold_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "cold_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "warm_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "warm_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "warm_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "graph_search_public_query",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_run",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "edited_provenance",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_content",
+          "passed": true
+        },
+        {
+          "name": "deleted_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "deleted_retains_stale_history",
+          "passed": true
+        },
+        {
+          "name": "deleted_query_visibility",
+          "passed": true
+        },
+        {
+          "name": "recreated_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "recreated_same_identity_not_stale",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_run",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "recreated_provenance",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_content",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_run",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "application_restart_provenance",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_content",
+          "passed": true
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_run",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_relationship",
+          "passed": false,
+          "error": "calls=[setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Farewell] want exactly setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Greet"
+        },
+        {
+          "name": "broker_restart_reingested_provenance",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_content",
+          "passed": false,
+          "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true
+        }
+      ],
+      "recorded_failures": 2,
+      "checks": 56,
+      "diagnostics": [
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true,
+          "detail": {
+            "ack": {
+              "stream": "GRAPH",
+              "seq": 37
+            },
+            "authority_after_ack": 28,
+            "authority_before": 28,
+            "storage": "memory"
+          }
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true,
+          "detail": {
+            "contract": "source re-ingestion, not publish-ack durability",
+            "pending_sequence": 37,
+            "survived": false
+          }
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true,
+          "detail": {
+            "bucket": "ENTITY_STATES",
+            "entity": {
+              "id": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+              "triples": [
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.type",
+                  "object": "function",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.title",
+                  "object": "Run",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.path",
+                  "object": "alpha/greet.go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.project",
+                  "object": "setup03a",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.version",
+                  "object": "corpus-v1",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.language",
+                  "object": "golang",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.visibility",
+                  "object": "public",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.exported",
+                  "object": "true",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.start-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.end-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.lines",
+                  "object": 1,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.comment",
+                  "object": "Run uses Greet to select the cobalt lantern route.\n",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.signature",
+                  "object": "func Run() string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.structure.belongs",
+                  "object": "setup03a.semsource.golang.setup03a-corpus-v1.file.alpha-greet-go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.calls",
+                  "object": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Farewell",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.returns",
+                  "object": "builtin:string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.created",
+                  "object": "2026-09-30T14:45:20-05:00",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.body.store",
+                  "object": "objectstore",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.body.key",
+                  "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "entity.ontology.class",
+                  "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+                  "source": "semsource",
+                  "timestamp": "2026-09-30T14:45:20.377206-05:00",
+                  "confidence": 1
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "entity.indexing.profile",
+                  "object": "content",
+                  "source": "graph-ingest-indexing-profile",
+                  "timestamp": "2026-09-30T14:44:49.730801-05:00",
+                  "confidence": 1
+                }
+              ],
+              "storage_ref": {
+                "storage_instance": "objectstore",
+                "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                "content_type": "text/plain; charset=utf-8",
+                "size": 39
+              },
+              "message_type": {
+                "domain": "semsource",
+                "category": "entity",
+                "version": "v1"
+              },
+              "version": 5,
+              "updated_at": "2026-09-30T14:45:20.392347-05:00"
+            },
+            "revision": 28
+          }
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true,
+          "detail": {
+            "stream": "GRAPH",
+            "seq": 21
+          }
+        }
+      ]
+    },
+    {
+      "profile": "neural",
+      "semengine_slices": [
+        0,
+        2
+      ],
+      "started": "2026-09-30T19:47:09.823849Z",
+      "binary_sha256": "16962d42348196f4e1260d62e45a816abba1508677eecc1a63a8a31874068b10",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "configuration": {
+        "graph": {
+          "coalesce_ms": 200,
+          "embedder_type": "http",
+          "gateway_bind": "127.0.0.1:54319",
+          "index_workers": 4
+        },
+        "http_port": 54316,
+        "metrics": {
+          "port": 54317
+        },
+        "model_registry": {
+          "capabilities": {
+            "embedding": {
+              "preferred": [
+                "semembed"
+              ]
+            }
+          },
+          "endpoints": {
+            "semembed": {
+              "model": "Snowflake/snowflake-arctic-embed-s",
+              "provider": "openai",
+              "query_prefix": "Represent this sentence for searching relevant passages: ",
+              "url": "http://127.0.0.1:53492/v1"
+            }
+          }
+        },
+        "namespace": "setup03a",
+        "source_roots": [
+          "/tmp/semsource-setup03a-evidence/beta161-neural/source"
+        ],
+        "sources": [
+          {
+            "languages": [
+              "go"
+            ],
+            "path": "/tmp/semsource-setup03a-evidence/beta161-neural/source",
+            "project": "setup03a",
+            "type": "ast",
+            "version": "corpus-v1",
+            "watch": true
+          },
+          {
+            "paths": [
+              "/tmp/semsource-setup03a-evidence/beta161-neural/source/docs"
+            ],
+            "project": "setup03a-docs",
+            "type": "docs",
+            "watch": true
+          }
+        ],
+        "websocket_bind": "127.0.0.1:54318"
+      },
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/beta161-neural",
+      "observations": [
+        {
+          "name": "provider_metrics_before",
+          "passed": true
+        },
+        {
+          "name": "ingestion_ready",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_run",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "initial_provenance",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_content",
+          "passed": true
+        },
+        {
+          "name": "cold_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "cold_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "cold_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "provider_metrics_after_cold",
+          "passed": true
+        },
+        {
+          "name": "warm_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "warm_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "warm_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "provider_metrics_after_warm",
+          "passed": true
+        },
+        {
+          "name": "neural_paraphrase",
+          "passed": true
+        },
+        {
+          "name": "graph_search_public_query",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_run",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "edited_provenance",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_content",
+          "passed": true
+        },
+        {
+          "name": "deleted_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "deleted_retains_stale_history",
+          "passed": true
+        },
+        {
+          "name": "deleted_query_visibility",
+          "passed": true
+        },
+        {
+          "name": "recreated_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "recreated_same_identity_not_stale",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_run",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "recreated_provenance",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_content",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_run",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "application_restart_provenance",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_content",
+          "passed": true
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_run",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_relationship",
+          "passed": false,
+          "error": "calls=[setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Farewell] want exactly setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Greet"
+        },
+        {
+          "name": "broker_restart_reingested_provenance",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_content",
+          "passed": false,
+          "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true
+        }
+      ],
+      "recorded_failures": 2,
+      "checks": 60,
+      "diagnostics": [
+        {
+          "name": "provider_metrics_before",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 1
+          }
+        },
+        {
+          "name": "provider_metrics_after_cold",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 14
+          }
+        },
+        {
+          "name": "provider_metrics_after_warm",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 17
+          }
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true,
+          "detail": {
+            "ack": {
+              "stream": "GRAPH",
+              "seq": 37
+            },
+            "authority_after_ack": 28,
+            "authority_before": 28,
+            "storage": "memory"
+          }
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true,
+          "detail": {
+            "contract": "source re-ingestion, not publish-ack durability",
+            "pending_sequence": 37,
+            "survived": false
+          }
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true,
+          "detail": {
+            "bucket": "ENTITY_STATES",
+            "entity": {
+              "id": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+              "triples": [
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.type",
+                  "object": "function",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.title",
+                  "object": "Run",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.path",
+                  "object": "alpha/greet.go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.project",
+                  "object": "setup03a",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.version",
+                  "object": "corpus-v1",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.language",
+                  "object": "golang",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.visibility",
+                  "object": "public",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.exported",
+                  "object": "true",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.start-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.end-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.lines",
+                  "object": 1,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.comment",
+                  "object": "Run uses Greet to select the cobalt lantern route.\n",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.signature",
+                  "object": "func Run() string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.structure.belongs",
+                  "object": "setup03a.semsource.golang.setup03a-corpus-v1.file.alpha-greet-go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.calls",
+                  "object": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Farewell",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.returns",
+                  "object": "builtin:string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.created",
+                  "object": "2026-09-30T14:47:41-05:00",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.body.store",
+                  "object": "objectstore",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "code.body.key",
+                  "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "entity.ontology.class",
+                  "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+                  "source": "semsource",
+                  "timestamp": "2026-09-30T14:47:41.131636-05:00",
+                  "confidence": 1
+                },
+                {
+                  "subject": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+                  "predicate": "entity.indexing.profile",
+                  "object": "content",
+                  "source": "graph-ingest-indexing-profile",
+                  "timestamp": "2026-09-30T14:47:10.319436-05:00",
+                  "confidence": 1
+                }
+              ],
+              "storage_ref": {
+                "storage_instance": "objectstore",
+                "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                "content_type": "text/plain; charset=utf-8",
+                "size": 39
+              },
+              "message_type": {
+                "domain": "semsource",
+                "category": "entity",
+                "version": "v1"
+              },
+              "version": 5,
+              "updated_at": "2026-09-30T14:47:41.145698-05:00"
+            },
+            "revision": 28
+          }
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true,
+          "detail": {
+            "stream": "GRAPH",
+            "seq": 21
+          }
+        }
+      ]
+    }
+  ],
+  "status": "Baseline recorded; two broker-recovery failures in each profile. Not qualification approval.",
+  "capacity": {
+    "corpus_sha": "235c0eabf24b6d6137b499b4402943d2794b70e6",
+    "reason": "all_offered_work_accounted",
+    "elapsed_s": 60.91,
+    "application_exit": 0,
+    "cleanup_exit": 0,
+    "graph": {
+      "messages": 32726,
+      "bytes": 239367163,
+      "first_seq": 1,
+      "first_ts": "2026-09-30T19:40:36.649158173Z",
+      "last_seq": 32726,
+      "last_ts": "2026-09-30T19:41:36.678410881Z",
+      "num_subjects": 4,
+      "consumer_count": 2
+    },
+    "source_status": {
+      "embedding": {
+        "available": true,
+        "ready": false,
+        "state": "building",
+        "indexed_revision": 19561,
+        "target_revision": 32720,
+        "lag": 13159,
+        "revision": "19561",
+        "last_synced": "2026-09-30T19:41:36Z"
+      },
+      "index": {
+        "available": true,
+        "ready": false,
+        "state": "degraded",
+        "indexed_revision": 1940,
+        "target_revision": 32720,
+        "lag": 30780,
+        "revision": "1940",
+        "last_synced": "2026-09-30T19:40:56Z"
+      },
+      "namespace": "setup03a",
+      "note": "readiness is honest (semstreams ADR-066): index.ready means the structural index (NAME_INDEX) has caught up to the latest committed write \u2014 byName / code_context / code_impact are reliable. embedding.ready means the semantic pipeline has caught up \u2014 code_search is reliable (surfaced, not gated). A miss is a genuine absence only when status.phase is \"ready\" (every configured source has finished its initial seed) AND the relevant index signal is ready; while status.phase is \"seeding\" a miss may simply be not-yet-ingested. For exact read-your-write freshness, compare the numeric indexed_revision field against your write's revision.",
+      "phase": "ready",
+      "sources": [
+        {
+          "bodies_offloaded": 30221,
+          "delivered_total": 32570,
+          "entity_count": 29275,
+          "error_count": 0,
+          "files_parsed": 1952,
+          "instance_name": "ast-source-semsource-setup03a-osh",
+          "lost_total": 0,
+          "offered_total": 32570,
+          "phase": "watching",
+          "seed_lost": 0,
+          "source_type": "ast",
+          "type_counts": {
+            "code.folder": 396,
+            "code.repo": 1,
+            "java.class": 1958,
+            "java.enum": 36,
+            "java.file": 1932,
+            "java.interface": 437,
+            "java.method": 16522,
+            "java.var": 5448,
+            "javascript.const": 4,
+            "javascript.file": 20,
+            "javascript.function": 430,
+            "javascript.var": 2091
+          }
+        },
+        {
+          "delivered_total": 115,
+          "entity_count": 115,
+          "error_count": 0,
+          "instance_name": "doc-source-semsource-setup03a-osh",
+          "lost_total": 0,
+          "offered_total": 115,
+          "phase": "watching",
+          "seed_lost": 0,
+          "source_type": "docs",
+          "type_counts": {
+            "web.chunk": 100,
+            "web.doc": 15
+          }
+        },
+        {
+          "delivered_total": 35,
+          "entity_count": 32,
+          "error_count": 0,
+          "instance_name": "cfgfile-source-semsource-setup03a-osh",
+          "lost_total": 0,
+          "offered_total": 35,
+          "phase": "watching",
+          "seed_lost": 0,
+          "source_type": "config",
+          "type_counts": {
+            "config.dependency": 15,
+            "config.project": 17
+          }
+        }
+      ],
+      "timestamp": "2026-09-30T14:41:36.678965-05:00",
+      "total_entities": 29422
+    },
+    "limitation": "Current SemSource asset guards reduce historical issue178 corpus tail from77802 to32720 offers. This does not establish a fix to the historical regression or qualify structural/neural index completion."
+  }
+}
