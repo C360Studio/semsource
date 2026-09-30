@@ -497,14 +497,15 @@ func TestAddWithChecker_DetectsExisting(t *testing.T) {
 	}
 }
 
-func TestRemove_DeletesByInstanceName(t *testing.T) {
+func TestRemove_DisablesByInstanceName(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	if err := store.cfg.Mutate(func(c *semconfig.Config) error {
 		c.Components["url-source-example-com"] = types.ComponentConfig{
-			Type:   "processor",
-			Name:   "url-source",
-			Config: json.RawMessage(`{}`),
+			Type:    "processor",
+			Name:    "url-source",
+			Enabled: true,
+			Config:  json.RawMessage(`{"urls":["https://example.com"]}`),
 		}
 		return nil
 	}); err != nil {
@@ -513,8 +514,12 @@ func TestRemove_DeletesByInstanceName(t *testing.T) {
 	if err := Remove(context.Background(), "url-source-example-com", store); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if len(store.deletes) != 1 || store.deletes[0] != "url-source-example-com" {
-		t.Errorf("deletes = %v, want [url-source-example-com]", store.deletes)
+	if len(store.deletes) != 0 {
+		t.Fatalf("deleted desired key instead of retaining override: %v", store.deletes)
+	}
+	tombstone, exists := store.puts["url-source-example-com"]
+	if !exists || tombstone.Enabled || tombstone.Name != "url-source" || tombstone.Type != "processor" || string(tombstone.Config) != `{"urls":["https://example.com"]}` {
+		t.Fatalf("removal did not preserve disabled envelope: %+v", tombstone)
 	}
 }
 

@@ -21,6 +21,13 @@ content edits independently of component composition changes.
 - **THEN** the result reports restart required
 - **AND** the running component's observed status is not silently reclassified as stopped
 
+#### Scenario: Removal overrides an original file-defined source
+
+- **GIVEN** a source was declared by the original JSON and admitted at boot
+- **WHEN** its desired removal succeeds and the application restarts with the same JSON and retained store
+- **THEN** the source remains excluded from boot admission and default query scopes
+- **AND** a later explicit re-add restores next-boot admission without changing deployment authority
+
 #### Scenario: A watched file changes inside an existing source
 
 - **GIVEN** a source component was admitted at boot and supports file watching
@@ -32,7 +39,8 @@ content edits independently of component composition changes.
 SemSource SHALL accept `platform_id` as the declared deployment stem, defaulting to `semsource` when
 omitted. It SHALL validate the declared authority through the substrate contract and use the
 framework-established effective authority after configuration startup. Different environments sharing
-a broker SHALL use distinct stems; an environment label alone is not an isolation boundary.
+a broker SHALL use distinct stems; an environment label alone is not an isolation boundary. Stems
+separate configuration and identity only; independent graph deployments require broker/account isolation.
 
 SemSource SHALL construct owned entity identities as `org.platform.system.domain.type.instance`, using
 the effective platform authority established by the substrate configuration manager. Constructors

@@ -170,3 +170,23 @@ func TestManifestRemovalReconcilesEveryOwningDescription(t *testing.T) {
 		t.Fatalf("must retain only repo with surviving siblings: %+v", c.manifestSources)
 	}
 }
+
+func TestManifestRemovalIgnoresDisabledRepoSiblings(t *testing.T) {
+	opts := sourcespawn.Options{Org: "acme", WorkspaceDir: "/tmp/work"}
+	source := config.SourceEntry{Type: "repo", Path: "/tmp/repo", Branch: "main"}
+	store := newDesiredStore(t)
+	built, err := sourcespawn.Build(source, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var handle string
+	for name, envelope := range built {
+		envelope.Enabled = false
+		store.components[name] = envelope
+		handle = name
+	}
+	c := &Component{manifestSources: []ManifestSource{sourceEntryToManifestSource(source)}}
+	if !c.removeManifestSourceByInstance(handle, opts, store) || len(c.manifestSources) != 0 {
+		t.Fatalf("disabled tombstones retained a removed repo descriptor: %+v", c.manifestSources)
+	}
+}

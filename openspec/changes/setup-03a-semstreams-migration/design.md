@@ -77,3 +77,12 @@ reduced probes. Use `go list -deps -test` plus production measurement with equal
 Missing evidence blocks the affected claim, not independent implementation. Independent code approval
 is distinct from SETUP 03A baseline acceptance. Keep the change unarchived and PR draft when mandatory
 qualification remains incomplete.
+
+## Removal across file bootstrap
+
+The pinned ConfigManager overlays retained component keys onto file-defined components. Deleting a KV
+key alone therefore resurrects an original file component at restart (SemStreams #1443). SemSource
+persists an explicit disabled component envelope as its desired-removal tombstone. Boot admission,
+query scopes, expected counts, and surviving-repo-sibling checks exclude disabled entries. An explicit
+re-add enables the same deterministic handle; retry can repair a separately failed manifest write.
+This preserves desired state without modifying the framework or treating absence as an override.

@@ -10,6 +10,7 @@ import (
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/sourcespawn"
+	semconfig "github.com/c360studio/semstreams/config"
 )
 
 const (
@@ -229,7 +230,7 @@ func (c *Component) removeManifestSourceByInstance(instanceName string, opts sou
 			if cfg := store.GetConfig().Get(); cfg != nil {
 				for sibling := range built {
 					if sibling != instanceName {
-						if _, alive := cfg.Components[sibling]; alive {
+						if siblingConfig, exists := cfg.Components[sibling]; exists && siblingConfig.Enabled {
 							keep = true
 							break
 						}
@@ -346,7 +347,7 @@ func manifestSourcesEqual(a, b ManifestSource, opts sourcespawn.Options) bool {
 	return true
 }
 
-// handleRemoveRequest deletes a component config from the KV store.
+// handleRemoveRequest persists a source disable for the next application boot.
 func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg IngestHandlerConfig) ([]byte, error) {
 	var req RemoveRequest
 	if err := json.Unmarshal(data, &req); err != nil {
@@ -361,7 +362,7 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 	return marshalRemoveReply(c.removeSource(ctx, req.InstanceName, req.Provenance.Actor, cfg))
 }
 
-// removeSource deletes a component config from the KV store and returns the
+// removeSource persists a disabled component config in KV and returns the
 // RemoveReply. Shared by the NATS ingest handler and the HTTP façade. Removal
 // changes the next boot's composition; current ingestion continues until restart.
 // Entity history is retained. Durable source_removed replay remains a migration
@@ -371,9 +372,9 @@ func (c *Component) removeSource(ctx context.Context, instanceName, actor string
 	defer c.desiredMu.Unlock()
 	if err := sourcespawn.Remove(ctx, instanceName, cfg.Store); err != nil {
 		var spawnErr *sourcespawn.Error
-		// A prior delete can commit before the manifest write fails. Only a known
+		// A prior disable can commit before the manifest write fails. Only a known
 		// stale desired manifest entry authorizes retry repair; typos stay NOT_FOUND.
-		if !errors.As(err, &spawnErr) || spawnErr.Code != sourcespawn.CodeNotFound || !desiredManifestOwns(instanceName, cfg) {
+		if !errors.As(err, &spawnErr) || spawnErr.Code != sourcespawn.CodeNotFound || !desiredManifestNeedsRemovalRepair(instanceName, cfg) {
 			return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(err), Timestamp: time.Now()}
 		}
 	}
@@ -405,15 +406,8 @@ func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandle
 		view.removeManifestSourceByInstance(removed, cfg.Spawn, cfg.Store)
 	}
 	desired.Sources = view.manifestSources
-	desired.ExpectedSourceCount = 0
-	for _, component := range snapshot.Components {
-		if component.Enabled {
-			switch component.Name {
-			case "ast-source", "git-source", "doc-source", "cfgfile-source", "url-source", "image-source", "audio-source", "video-source", "objectstore-source":
-				desired.ExpectedSourceCount++
-			}
-		}
-	}
+	desired.ExpectedSourceCount = enabledSourceComponentCount(snapshot.Components)
+
 	raw, err := json.Marshal(desired)
 	if err != nil {
 		return fmt.Errorf("encode desired source-manifest: %w", err)
@@ -479,7 +473,7 @@ func marshalRemoveReply(reply *RemoveReply) ([]byte, error) {
 	return json.Marshal(reply)
 }
 
-func desiredManifestOwns(instance string, cfg IngestHandlerConfig) bool {
+func desiredManifestNeedsRemovalRepair(instance string, cfg IngestHandlerConfig) bool {
 	snapshot := cfg.Store.GetConfig().Get()
 	if snapshot == nil {
 		return false
@@ -496,9 +490,25 @@ func desiredManifestOwns(instance string, cfg IngestHandlerConfig) bool {
 		built, err := sourcespawn.InstanceNames(manifestSourceToSourceEntry(src), cfg.Spawn)
 		if err == nil {
 			if _, ok := built[instance]; ok {
-				return true
+				view := &Component{manifestSources: append([]ManifestSource(nil), desired.Sources...)}
+				return view.removeManifestSourceByInstance(instance, cfg.Spawn, cfg.Store) ||
+					desired.ExpectedSourceCount != enabledSourceComponentCount(snapshot.Components)
 			}
 		}
 	}
 	return false
+}
+
+// Disabled envelopes preserve removal intent without counting as admitted sources.
+func enabledSourceComponentCount(components semconfig.ComponentConfigs) int {
+	count := 0
+	for _, component := range components {
+		if component.Enabled {
+			switch component.Name {
+			case "ast-source", "git-source", "doc-source", "cfgfile-source", "url-source", "image-source", "audio-source", "video-source", "objectstore-source":
+				count++
+			}
+		}
+	}
+	return count
 }
