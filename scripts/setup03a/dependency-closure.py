@@ -98,6 +98,14 @@ def main():
         "port_own_tests": summarize(run("port-own-tests", ["-test"], port), port),
         "port_tagged_tests": summarize(run("port-tagged-tests", ["-test", "-tags=" + args.test_tags], port), port),
     }
+    # Test every retained production directory, not only the direct/composed
+    # roots. A transitive package can have its own additional test dependencies.
+    retained = result["port_production"]["packages"]
+    result["port_all_package_tests"] = summarize(run("port-all-package-tests", ["-test"], retained), retained)
+    result["port_all_package_tagged_tests"] = summarize(
+        run("port-all-package-tagged-tests", ["-test", "-tags=" + args.test_tags], retained), retained)
+    result["go_environment"] = json.loads(subprocess.check_output(
+        ["go", "env", "-json", "GOOS", "GOARCH", "GOVERSION", "CGO_ENABLED"], cwd=args.repo, text=True))
     result["commands"] = commands
     modules = subprocess.run(["go", "list", "-mod=readonly", "-modfile=" + str(modfile), "-m", "-json", "all"],
                              cwd=args.repo, capture_output=True, text=True, timeout=300, check=True)

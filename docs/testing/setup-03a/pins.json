@@ -24,6 +24,51 @@
     "cpu_limit": 2,
     "memory_limit_bytes": 2147483648,
     "same_container_for_both_runs": true,
-    "cache_identity_rule": "Any image, served artifact, dimension, or preprocessing change invalidates comparison and requires fresh graph/index/cache plus rerunning both points."
+    "cache_identity_rule": "Any image, served artifact, dimension, or preprocessing change invalidates comparison and requires fresh graph/index/cache plus rerunning both points.",
+    "final_verification": {
+      "verified_at": "2026-09-30T21:33:53.226840+00:00",
+      "container_id": "43a9b25212c426e87c71b5fe6799520720346f89d86d4a8494eb4ecf5a88617e",
+      "started_at": "2026-09-30T19:32:40.960895842Z",
+      "image_id": "sha256:7972174f8e3462fd38bf3ad95d94870f406bb3d1350e0ea3280ce002cb2e09b2",
+      "health": "healthy",
+      "restart_count": 0,
+      "boot_model": {
+        "SEMEMBED_MODEL": "Snowflake/snowflake-arctic-embed-s"
+      },
+      "artifact_revision": "e596f507467533e48a2e17c007f0e1dacc837b33",
+      "executable_sha256": "1719c6213740e19d1c27fa418fa25be63506c80b2f16f2ad6916bfb6271a7b3a",
+      "onnx_sha256": "579c1f1778a0993eb0d2a1403340ffb491c769247fb46acc4f5cf8ac5b89c1e1",
+      "cpu_quota_nanos": 2000000000,
+      "memory_bytes": 2147483648,
+      "matches_frozen_identity": true
+    },
+    "prior_snapshot_verification": {
+      "verified_at": "2026-09-30T21:02:46.121703+00:00",
+      "container_id": "43a9b25212c426e87c71b5fe6799520720346f89d86d4a8494eb4ecf5a88617e",
+      "started_at": "2026-09-30T19:32:40.960895842Z",
+      "image_id": "sha256:7972174f8e3462fd38bf3ad95d94870f406bb3d1350e0ea3280ce002cb2e09b2",
+      "health": "healthy",
+      "boot_model": {
+        "SEMEMBED_MODEL": "Snowflake/snowflake-arctic-embed-s"
+      },
+      "artifact_revision": "e596f507467533e48a2e17c007f0e1dacc837b33",
+      "executable_sha256": "1719c6213740e19d1c27fa418fa25be63506c80b2f16f2ad6916bfb6271a7b3a",
+      "onnx_sha256": "579c1f1778a0993eb0d2a1403340ffb491c769247fb46acc4f5cf8ac5b89c1e1",
+      "cpu_quota_nanos": 2000000000,
+      "memory_bytes": 2147483648,
+      "matches_frozen_identity": true
+    },
+    "cleanup": {
+      "removed_at": "2026-09-30T21:36:39.860883+00:00",
+      "container_id": "43a9b25212c426e87c71b5fe6799520720346f89d86d4a8494eb4ecf5a88617e",
+      "owner_label": "semsource-setup03a",
+      "exit_code": 0,
+      "detail": "43a9b25212c426e87c71b5fe6799520720346f89d86d4a8494eb4ecf5a88617e",
+      "evidence_preserved": true
+    }
+  },
+  "broker": {
+    "image": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+    "comparison_rule": "Same immutable image for paired runs; each run owns an isolated broker and persistent /data store."
   }
 }

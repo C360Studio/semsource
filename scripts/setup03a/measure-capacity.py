@@ -83,6 +83,13 @@ def accounted(status):
     )
 
 
+def transport_succeeded(reason, failure, application_exit, cleanup_exit, sources):
+    return (reason == "all_offered_work_accounted" and not failure
+            and application_exit == 0 and cleanup_exit == 0 and bool(sources)
+            and all(source.get("lost_total", 0) == 0 and source.get("seed_lost", 0) == 0
+                    and source.get("error_count", 0) == 0 for source in sources))
+
+
 def main():
     args = arguments()
     binary, corpus, out = args.binary.resolve(), args.corpus.resolve(), args.out.resolve()
@@ -138,7 +145,7 @@ def main():
             "websocket_bind": "127.0.0.1:" + str(free_port()),
         }
         if args.identity == "governed":
-            config["platform_id"] = "setup03a-capacity"
+            config["platform_id"] = "semsource"
         save(out, "config.json", config)
         save(out, "resources.json", {
             "container": container, "name": name, "nats_binding": nats_binding,
@@ -221,14 +228,12 @@ def main():
             cleanup_exit, cleanup_detail = -1, "owned-container cleanup failed: " + str(error)
         final = observations[-1] if observations else None
         sources = (final or {}).get("source_status", {}).get("sources", [])
-        transport_passed = reason == "all_offered_work_accounted" and cleanup_exit == 0 and all(
-            source.get("lost_total", 0) == 0 and source.get("seed_lost", 0) == 0
-            and source.get("error_count", 0) == 0 for source in sources
-        )
+        application_exit = process.returncode if process else None
+        transport_passed = transport_succeeded(reason, failure, application_exit, cleanup_exit, sources)
         result = {
             "label": args.label, "reason": reason, "failure": failure,
             "transport_passed": transport_passed,
-            "application_exit": process.returncode if process else None,
+            "application_exit": application_exit,
             "cleanup_exit": cleanup_exit, "cleanup_detail": cleanup_detail,
             "elapsed_s": round(time.monotonic() - started, 2), "final_observation": final,
             "limitation": "Transport-only probe; parser guard excludes minified assets before publish."

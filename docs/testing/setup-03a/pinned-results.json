@@ -1,0 +1,3398 @@
+{
+  "upstream_version": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+  "upstream_commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+  "source_base": "34bda6406fb06fd723a040988647b204204a1583",
+  "evidence_status": "Final executable matrix and canonical guarded capacity complete. BM25 61/63, neural 65/67: same two broker-recovery failures. Provider supplement 6/6. Removal/re-add supplement 9/10: missing source_removed markers remain. Independent evidence approved; merge/system qualification/cutover blocked.",
+  "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+  "profiles": [
+    {
+      "profile": "bm25",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-09-30T21:29:04.955911Z",
+      "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "configuration": {
+        "graph": {
+          "coalesce_ms": 200,
+          "embedder_type": "bm25",
+          "gateway_bind": "127.0.0.1:58158",
+          "index_workers": 4
+        },
+        "http_port": 58155,
+        "metrics": {
+          "port": 58156
+        },
+        "namespace": "setup03a",
+        "source_roots": [
+          "/tmp/semsource-setup03a-evidence/pinned-complete-bm25/source"
+        ],
+        "sources": [
+          {
+            "languages": [
+              "go"
+            ],
+            "path": "/tmp/semsource-setup03a-evidence/pinned-complete-bm25/source",
+            "project": "setup03a",
+            "type": "ast",
+            "version": "corpus-v1",
+            "watch": true
+          },
+          {
+            "paths": [
+              "/tmp/semsource-setup03a-evidence/pinned-complete-bm25/source/docs"
+            ],
+            "project": "setup03a-docs",
+            "type": "docs",
+            "watch": true
+          }
+        ],
+        "websocket_bind": "127.0.0.1:58157"
+      },
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-complete-bm25",
+      "checks": {
+        "total": 63,
+        "passed": 61
+      },
+      "observations": [
+        {
+          "name": "ingestion_ready",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_run",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "initial_provenance",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_content",
+          "passed": true
+        },
+        {
+          "name": "cold_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "cold_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "cold_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "warm_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "warm_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "warm_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "graph_search_public_query",
+          "passed": true
+        },
+        {
+          "name": "edited_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_run",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "edited_provenance",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_content",
+          "passed": true
+        },
+        {
+          "name": "deleted_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "deleted_retains_stale_history",
+          "passed": true
+        },
+        {
+          "name": "deleted_query_visibility",
+          "passed": true
+        },
+        {
+          "name": "recreated_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "recreated_same_identity_not_stale",
+          "passed": true
+        },
+        {
+          "name": "recreated_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_run",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "recreated_provenance",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_content",
+          "passed": true
+        },
+        {
+          "name": "application_restart_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_run",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "application_restart_provenance",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_content",
+          "passed": true
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true
+        },
+        {
+          "name": "content_survives_broker_restart_before_reingest",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_run",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_relationship",
+          "passed": false,
+          "error": "calls=[setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+        },
+        {
+          "name": "broker_restart_reingested_provenance",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_content",
+          "passed": false,
+          "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true
+        }
+      ],
+      "durability_evidence": [
+        {
+          "name": "governed_identity_authority",
+          "passed": true,
+          "detail": {
+            "expected_entities": {
+              "farewell": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+              "greet_alpha": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+              "greet_beta": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+              "run": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+            },
+            "platform": "semsource-06f95d",
+            "wire": {
+              "data": {
+                "matches": [
+                  {
+                    "entity_id": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "matched_name": "Run",
+                    "predicate": "dc.terms.title",
+                    "exact_case": true
+                  }
+                ]
+              },
+              "timestamp": "2026-09-30T16:29:36.029584-05:00"
+            }
+          }
+        },
+        {
+          "name": "initial_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-06f95d",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "edited_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-06f95d",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "recreated_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-06f95d",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "application_restart_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-06f95d",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true,
+          "detail": {
+            "ack": {
+              "stream": "GRAPH",
+              "seq": 37
+            },
+            "authority_after_ack": 33,
+            "authority_before": 33,
+            "storage": "memory"
+          }
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true,
+          "detail": {
+            "contract": "source re-ingestion, not publish-ack durability",
+            "observation_error": "nats: API error: code=404 err_code=10059 description=stream not found",
+            "pending_sequence": 37,
+            "survived": false
+          }
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true,
+          "detail": {
+            "bucket": "ENTITY_STATES",
+            "entity": {
+              "id": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "triples": [
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.type",
+                  "object": "function",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.title",
+                  "object": "Run",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.path",
+                  "object": "alpha/greet.go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.project",
+                  "object": "setup03a",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.version",
+                  "object": "corpus-v1",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.language",
+                  "object": "golang",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.visibility",
+                  "object": "public",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.exported",
+                  "object": "true",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.start-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.end-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.lines",
+                  "object": 1,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.comment",
+                  "object": "Run uses Greet to select the cobalt lantern route.\n",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.signature",
+                  "object": "func Run() string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.structure.belongs",
+                  "object": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.file.alpha-greet-go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.calls",
+                  "object": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.returns",
+                  "object": "builtin:string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.created",
+                  "object": "2026-09-30T16:29:36-05:00",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.body.store",
+                  "object": "objectstore",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.body.key",
+                  "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "entity.ontology.class",
+                  "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+                  "source": "semsource",
+                  "timestamp": "2026-09-30T16:29:36.626915-05:00",
+                  "confidence": 1
+                },
+                {
+                  "subject": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "entity.indexing.profile",
+                  "object": "content",
+                  "source": "graph-ingest-indexing-profile",
+                  "timestamp": "2026-09-30T16:29:05.864021-05:00",
+                  "confidence": 1
+                }
+              ],
+              "storage_ref": {
+                "storage_instance": "objectstore",
+                "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                "content_type": "text/plain; charset=utf-8",
+                "size": 39
+              },
+              "message_type": {
+                "domain": "semsource",
+                "category": "entity",
+                "version": "v1"
+              },
+              "version": 5,
+              "updated_at": "2026-09-30T16:29:36.640685-05:00"
+            },
+            "revision": 33
+          }
+        },
+        {
+          "name": "content_survives_broker_restart_before_reingest",
+          "passed": true,
+          "detail": "func Run() string { return Farewell() }"
+        },
+        {
+          "name": "broker_restart_reingested_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-06f95d",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true,
+          "detail": {
+            "stream": "GRAPH",
+            "seq": 21
+          }
+        }
+      ],
+      "restart_guard": {
+        "applied_sequence": 33,
+        "guard_key": "setup03a.semsource-06f95d.setup03a-corpus-v1.golang.function.alpha-greet-go-Run/GRAPH",
+        "restarted_stream_last_sequence": 20,
+        "run_payload_sequences": [
+          9,
+          12
+        ]
+      }
+    },
+    {
+      "profile": "neural",
+      "semengine_slices": [
+        0,
+        2
+      ],
+      "started": "2026-09-30T21:31:18.454707Z",
+      "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "configuration": {
+        "graph": {
+          "coalesce_ms": 200,
+          "embedder_type": "http",
+          "gateway_bind": "127.0.0.1:58446",
+          "index_workers": 4
+        },
+        "http_port": 58443,
+        "metrics": {
+          "port": 58444
+        },
+        "model_registry": {
+          "capabilities": {
+            "embedding": {
+              "preferred": [
+                "semembed"
+              ]
+            }
+          },
+          "endpoints": {
+            "semembed": {
+              "model": "Snowflake/snowflake-arctic-embed-s",
+              "provider": "openai",
+              "query_prefix": "Represent this sentence for searching relevant passages: ",
+              "url": "http://127.0.0.1:53492/v1"
+            }
+          }
+        },
+        "namespace": "setup03a",
+        "source_roots": [
+          "/tmp/semsource-setup03a-evidence/pinned-complete-neural/source"
+        ],
+        "sources": [
+          {
+            "languages": [
+              "go"
+            ],
+            "path": "/tmp/semsource-setup03a-evidence/pinned-complete-neural/source",
+            "project": "setup03a",
+            "type": "ast",
+            "version": "corpus-v1",
+            "watch": true
+          },
+          {
+            "paths": [
+              "/tmp/semsource-setup03a-evidence/pinned-complete-neural/source/docs"
+            ],
+            "project": "setup03a-docs",
+            "type": "docs",
+            "watch": true
+          }
+        ],
+        "websocket_bind": "127.0.0.1:58445"
+      },
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-complete-neural",
+      "checks": {
+        "total": 67,
+        "passed": 65
+      },
+      "observations": [
+        {
+          "name": "provider_metrics_before",
+          "passed": true
+        },
+        {
+          "name": "ingestion_ready",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_run",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "initial_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "initial_provenance",
+          "passed": true
+        },
+        {
+          "name": "initial_exact_content",
+          "passed": true
+        },
+        {
+          "name": "cold_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "cold_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "cold_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "cold_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "provider_metrics_after_cold",
+          "passed": true
+        },
+        {
+          "name": "warm_duplicate_name_anchors",
+          "passed": true
+        },
+        {
+          "name": "warm_exact_absence",
+          "passed": true
+        },
+        {
+          "name": "warm_code_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_scope_before_limit",
+          "passed": true
+        },
+        {
+          "name": "warm_doc_exact_passage_content",
+          "passed": true
+        },
+        {
+          "name": "provider_metrics_after_warm",
+          "passed": true
+        },
+        {
+          "name": "neural_paraphrase",
+          "passed": true
+        },
+        {
+          "name": "graph_search_public_query",
+          "passed": true
+        },
+        {
+          "name": "edited_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_run",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "edited_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "edited_provenance",
+          "passed": true
+        },
+        {
+          "name": "edited_exact_content",
+          "passed": true
+        },
+        {
+          "name": "deleted_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "deleted_retains_stale_history",
+          "passed": true
+        },
+        {
+          "name": "deleted_query_visibility",
+          "passed": true
+        },
+        {
+          "name": "recreated_lifecycle_pass",
+          "passed": true
+        },
+        {
+          "name": "recreated_same_identity_not_stale",
+          "passed": true
+        },
+        {
+          "name": "recreated_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_run",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "recreated_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "recreated_provenance",
+          "passed": true
+        },
+        {
+          "name": "recreated_exact_content",
+          "passed": true
+        },
+        {
+          "name": "application_restart_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_run",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "application_restart_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_relationship",
+          "passed": true
+        },
+        {
+          "name": "application_restart_provenance",
+          "passed": true
+        },
+        {
+          "name": "application_restart_exact_content",
+          "passed": true
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true
+        },
+        {
+          "name": "content_survives_broker_restart_before_reingest",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_persisted_authority",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_run",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_alpha",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_greet_beta",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_entity_farewell",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_relationship",
+          "passed": false,
+          "error": "calls=[setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+        },
+        {
+          "name": "broker_restart_reingested_provenance",
+          "passed": true
+        },
+        {
+          "name": "broker_restart_reingested_exact_content",
+          "passed": false,
+          "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true
+        }
+      ],
+      "durability_evidence": [
+        {
+          "name": "provider_metrics_before",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 216
+          }
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true,
+          "detail": {
+            "expected_entities": {
+              "farewell": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+              "greet_alpha": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+              "greet_beta": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+              "run": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+            },
+            "platform": "semsource-38fd73",
+            "wire": {
+              "data": {
+                "matches": [
+                  {
+                    "entity_id": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "matched_name": "Run",
+                    "predicate": "dc.terms.title",
+                    "exact_case": true
+                  }
+                ]
+              },
+              "timestamp": "2026-09-30T16:31:48.899556-05:00"
+            }
+          }
+        },
+        {
+          "name": "initial_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-38fd73",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "provider_metrics_after_cold",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 230
+          }
+        },
+        {
+          "name": "provider_metrics_after_warm",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 233
+          }
+        },
+        {
+          "name": "edited_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-38fd73",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "recreated_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-38fd73",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "application_restart_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-38fd73",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "accepted_unindexed_before_broker_restart",
+          "passed": true,
+          "detail": {
+            "ack": {
+              "stream": "GRAPH",
+              "seq": 37
+            },
+            "authority_after_ack": 31,
+            "authority_before": 31,
+            "storage": "memory"
+          }
+        },
+        {
+          "name": "memory_transport_not_durable",
+          "passed": true,
+          "detail": {
+            "contract": "source re-ingestion, not publish-ack durability",
+            "observation_error": "nats: API error: code=404 err_code=10059 description=stream not found",
+            "pending_sequence": 37,
+            "survived": false
+          }
+        },
+        {
+          "name": "authority_survives_broker_restart_before_reingest",
+          "passed": true,
+          "detail": {
+            "bucket": "ENTITY_STATES",
+            "entity": {
+              "id": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "triples": [
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.type",
+                  "object": "function",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.title",
+                  "object": "Run",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.path",
+                  "object": "alpha/greet.go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.project",
+                  "object": "setup03a",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.version",
+                  "object": "corpus-v1",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.language",
+                  "object": "golang",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.visibility",
+                  "object": "public",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.artifact.exported",
+                  "object": "true",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.start-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.end-line",
+                  "object": 7,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.metric.lines",
+                  "object": 1,
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.comment",
+                  "object": "Run uses Greet to select the cobalt lantern route.\n",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.doc.signature",
+                  "object": "func Run() string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.structure.belongs",
+                  "object": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.file.alpha-greet-go",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.calls",
+                  "object": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.relationship.returns",
+                  "object": "builtin:string",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "dc.terms.created",
+                  "object": "2026-09-30T16:31:49-05:00",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.body.store",
+                  "object": "objectstore",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "code.body.key",
+                  "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                  "source": "",
+                  "timestamp": "0001-01-01T00:00:00Z",
+                  "confidence": 0
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "entity.ontology.class",
+                  "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+                  "source": "semsource",
+                  "timestamp": "2026-09-30T16:31:49.386312-05:00",
+                  "confidence": 1
+                },
+                {
+                  "subject": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                  "predicate": "entity.indexing.profile",
+                  "object": "content",
+                  "source": "graph-ingest-indexing-profile",
+                  "timestamp": "2026-09-30T16:31:18.804098-05:00",
+                  "confidence": 1
+                }
+              ],
+              "storage_ref": {
+                "storage_instance": "objectstore",
+                "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                "content_type": "text/plain; charset=utf-8",
+                "size": 39
+              },
+              "message_type": {
+                "domain": "semsource",
+                "category": "entity",
+                "version": "v1"
+              },
+              "version": 5,
+              "updated_at": "2026-09-30T16:31:49.400876-05:00"
+            },
+            "revision": 31
+          }
+        },
+        {
+          "name": "content_survives_broker_restart_before_reingest",
+          "passed": true,
+          "detail": "func Run() string { return Farewell() }"
+        },
+        {
+          "name": "broker_restart_reingested_persisted_authority",
+          "passed": true,
+          "detail": {
+            "id": "semsource-38fd73",
+            "org": "setup03a",
+            "stem": "semsource"
+          }
+        },
+        {
+          "name": "rpc_wildcard_collision_reproduced",
+          "passed": true,
+          "detail": {
+            "stream": "GRAPH",
+            "seq": 21
+          }
+        }
+      ],
+      "restart_guard": {
+        "applied_sequence": 33,
+        "guard_key": "setup03a.semsource-38fd73.setup03a-corpus-v1.golang.function.alpha-greet-go-Run/GRAPH",
+        "restarted_stream_last_sequence": 20,
+        "run_payload_sequences": [
+          8,
+          12
+        ]
+      }
+    }
+  ],
+  "provider_fault_supplement": {
+    "profile": "neural-provider-faults",
+    "started": "2026-09-30T21:31:04.752749Z",
+    "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+    "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+    "observations": [
+      {
+        "name": "provider_metrics_before",
+        "passed": true,
+        "detail": {
+          "endpoint": "http://127.0.0.1:53492/metrics",
+          "requests": 204
+        }
+      },
+      {
+        "name": "real_provider_initial_passage",
+        "passed": true,
+        "detail": {
+          "nodes": [
+            {
+              "Name": "Cobalt lantern routing",
+              "Path": "routing.md",
+              "Body": "# Cobalt lantern routing\n\nThe cobalt lantern routing protocol sends blue parcels to the north depot.\nThe exact qualification token is cobalt-lantern-v1.\n",
+              "Handle": "setup03a.semsource-69be72.setup03a-docs.web.chunk.routing-md-0000",
+              "body_reason": "",
+              "relations": {
+                "parent_document": [
+                  {
+                    "Name": "Cobalt lantern routing",
+                    "Path": "routing.md"
+                  }
+                ]
+              }
+            }
+          ],
+          "deferred": false,
+          "unhydrated": null,
+          "misses": null,
+          "index": {
+            "ready": true,
+            "state": "ready",
+            "bootstrap_complete": true
+          }
+        }
+      },
+      {
+        "name": "provider_unavailable_is_not_absence",
+        "passed": true,
+        "detail": {
+          "injected_requests": 1,
+          "response": {
+            "nodes": null,
+            "deferred": false,
+            "unhydrated": null,
+            "misses": null,
+            "index": {
+              "ready": false,
+              "state": "",
+              "bootstrap_complete": false
+            }
+          },
+          "transport_error": "HTTP 503: {\"error\":{\"contract_version\":\"1\",\"code\":\"dependency_unavailable\",\"class\":\"transient\",\"message\":\"graph query service is temporarily unavailable\",\"retryable\":true}}\n"
+        }
+      },
+      {
+        "name": "provider_deadline_is_bounded_and_not_absence",
+        "passed": true,
+        "detail": {
+          "elapsed_ms": 5001,
+          "injected_requests": 1,
+          "response": {
+            "nodes": null,
+            "deferred": false,
+            "unhydrated": null,
+            "misses": null,
+            "index": {
+              "ready": false,
+              "state": "",
+              "bootstrap_complete": false
+            }
+          },
+          "transport_error": "HTTP 504: {\"error\":{\"contract_version\":\"1\",\"code\":\"upstream_timeout\",\"class\":\"transient\",\"message\":\"graph query service timed out\",\"retryable\":true}}\n"
+        }
+      },
+      {
+        "name": "provider_recovery_returns_exact_passage",
+        "passed": true,
+        "detail": {
+          "nodes": [
+            {
+              "Name": "Cobalt lantern routing",
+              "Path": "routing.md",
+              "Body": "# Cobalt lantern routing\n\nThe cobalt lantern routing protocol sends blue parcels to the north depot.\nThe exact qualification token is cobalt-lantern-v1.\n",
+              "Handle": "setup03a.semsource-69be72.setup03a-docs.web.chunk.routing-md-0000",
+              "body_reason": "",
+              "relations": {
+                "parent_document": [
+                  {
+                    "Name": "Cobalt lantern routing",
+                    "Path": "routing.md"
+                  }
+                ]
+              }
+            }
+          ],
+          "deferred": false,
+          "unhydrated": null,
+          "misses": null,
+          "index": {
+            "ready": true,
+            "state": "ready",
+            "bootstrap_complete": true
+          }
+        }
+      },
+      {
+        "name": "provider_metrics_after_recovery",
+        "passed": true,
+        "detail": {
+          "endpoint": "http://127.0.0.1:53492/metrics",
+          "requests": 216
+        }
+      }
+    ],
+    "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-complete-neural/provider-faults",
+    "checks": {
+      "total": 6,
+      "passed": 6
+    },
+    "deadline_surface_comparison": "Baseline caller context deadline at about 5 seconds; final target HTTP 504 upstream_timeout at 5001ms. This is a timing-dependent surface at the shared deadline boundary; both satisfy bounded non-absence. Raw errors are not identical."
+  },
+  "qualification_approved": false,
+  "review_status": "Independent final comparison-evidence approval and scoped implementation draft approvals at c884d11e80dfdb6398aaf65e08ffef4fb3f03610. Full merge/qualification sign-off withheld for removal replay, incomplete enumeration/mutation errors, disabled dynamic discovery, and remaining upstream/evidence holds.",
+  "binary_path": "/tmp/semsource-setup03a-evidence/semsource-pinned-complete",
+  "comparison_contract": "All baseline assertions remain. Target adds six checks for ADR-104 effective authority and its retained config record. Semantic fixture and provider inputs are unchanged; dynamic ports/source-root locations differ.",
+  "superseded_target_evidence": [
+    "pinned-bm25-final",
+    "pinned-neural-final",
+    "pinned-boot-probe-2",
+    "pinned-neural-probe"
+  ],
+  "superseded_reason": "Earlier executables predate final review, cleanup, and the disabled-envelope workaround; only pinned-complete profiles are the final executable comparison.",
+  "admission_blockers": [
+    "Missing deferred source_removed replay after desired source retirement, plus incomplete enumeration and swallowed mutation errors.",
+    "Dynamic branch and remote submodule discovery explicitly unsupported.",
+    "SemStreams #1442 broker-generation guard suppresses current-source re-ingestion.",
+    "SemStreams #1143 wildcard stream/RPC collision remains.",
+    "Historical unguarded GRAPH capacity regression and MinIO-backed integration paths remain unqualified.",
+    "Proposed 65-package production port set exceeds the 63-package ceiling; SETUP 03B architect decision required."
+  ],
+  "verification_gates": {
+    "unit_race": "passed on final complete executable source",
+    "final_touched_race": "passed",
+    "lint": "passed on final complete source (gofmt, vet, pinned revive)",
+    "available_integration": "passed on final source: internal/sourcespawn, internal/governance, processor/mcp-gateway, processor/code-context; two MinIO-dependent governance tests explicitly skipped",
+    "full_integration": "blocked: image retrieval failure independently reproduced at beta.161",
+    "e2e_local": {
+      "status": "passed",
+      "elapsed_seconds": 47.509,
+      "command_option": "-count=1",
+      "log": "/tmp/semsource-setup03a-evidence/e2e-local-complete.log"
+    },
+    "agents_check": "passed after final source changes",
+    "openspec_strict": "passed on finalized artifacts"
+  },
+  "diagnostic_capacity": [
+    {
+      "corpus_sha": "235c0eabf24b6d6137b499b4402943d2794b70e6",
+      "corpus_tree_sha256": "eb10388f5b6d710c4dac7e156823cacca5370ba856bb97233803d6f61bdd62c9",
+      "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+      "reason": "all_offered_work_accounted",
+      "elapsed_s": 61.11,
+      "application_exit": 0,
+      "cleanup_exit": 0,
+      "transport_passed": true,
+      "graph": {
+        "messages": 32726,
+        "bytes": 251436442,
+        "first_seq": 1,
+        "first_ts": "2026-09-30T21:02:12.671447508Z",
+        "last_seq": 32726,
+        "last_ts": "2026-09-30T21:03:12.682991258Z",
+        "num_subjects": 4,
+        "consumer_count": 2
+      },
+      "source_status": {
+        "embedding": {
+          "available": true,
+          "ready": false,
+          "state": "building",
+          "indexed_revision": 13207,
+          "target_revision": 32720,
+          "lag": 19513,
+          "revision": "13207",
+          "last_synced": "2026-09-30T21:03:12Z"
+        },
+        "index": {
+          "available": true,
+          "ready": false,
+          "state": "degraded",
+          "indexed_revision": 2715,
+          "target_revision": 32720,
+          "lag": 30005,
+          "revision": "2715",
+          "last_synced": "2026-09-30T21:02:37Z"
+        },
+        "namespace": "setup03a",
+        "note": "readiness is honest (semstreams ADR-066): index.ready means the structural index (NAME_INDEX) has caught up to the latest committed write \u2014 byName / code_context / code_impact are reliable. embedding.ready means the semantic pipeline has caught up \u2014 code_search is reliable (surfaced, not gated). A miss is a genuine absence only when status.phase is \"ready\" (every configured source has finished its initial seed) AND the relevant index signal is ready; while status.phase is \"seeding\" a miss may simply be not-yet-ingested. For exact read-your-write freshness, compare the numeric indexed_revision field against your write's revision.",
+        "phase": "ready",
+        "sources": [
+          {
+            "delivered_total": 35,
+            "entity_count": 32,
+            "error_count": 0,
+            "instance_name": "cfgfile-source-semsource-setup03a-osh",
+            "lost_total": 0,
+            "offered_total": 35,
+            "phase": "watching",
+            "seed_lost": 0,
+            "source_type": "config",
+            "type_counts": {
+              "config.dependency": 15,
+              "config.project": 17
+            }
+          },
+          {
+            "delivered_total": 115,
+            "entity_count": 115,
+            "error_count": 0,
+            "instance_name": "doc-source-semsource-setup03a-osh",
+            "lost_total": 0,
+            "offered_total": 115,
+            "phase": "watching",
+            "seed_lost": 0,
+            "source_type": "docs",
+            "type_counts": {
+              "web.chunk": 100,
+              "web.doc": 15
+            }
+          },
+          {
+            "bodies_offloaded": 30221,
+            "delivered_total": 32570,
+            "entity_count": 29275,
+            "error_count": 0,
+            "files_parsed": 1952,
+            "instance_name": "ast-source-semsource-setup03a-osh",
+            "lost_total": 0,
+            "offered_total": 32570,
+            "phase": "watching",
+            "seed_lost": 0,
+            "source_type": "ast",
+            "type_counts": {
+              "code.folder": 396,
+              "code.repo": 1,
+              "java.class": 1958,
+              "java.enum": 36,
+              "java.file": 1932,
+              "java.interface": 437,
+              "java.method": 16522,
+              "java.var": 5448,
+              "javascript.const": 4,
+              "javascript.file": 20,
+              "javascript.function": 430,
+              "javascript.var": 2091
+            }
+          }
+        ],
+        "timestamp": "2026-09-30T16:03:12.683721-05:00",
+        "total_entities": 29422
+      },
+      "configuration_difference": "Target capacity runner declares platform_id=setup03a-capacity; beta161 uses its fixed semsource authority. The longer declared stem adds a byte-size variable beyond mandatory minting.",
+      "graph_bytes_delta": 12069279,
+      "graph_bytes_delta_attribution": "Observed increase; exact byte contribution from authority/configuration/envelope changes has not been isolated. Do not treat this as a controlled memory regression measurement.",
+      "limitation": "Transport-only probe; parser guard excludes minified assets before publish. Does not reproduce the historical unguarded payload volume or prove query correctness.",
+      "reproduction_script": "scripts/setup03a/measure-capacity.py",
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/capacity-pinned-final",
+      "status": "Superseded for paired bytes by default-stem capacity-pinned-reviewed"
+    }
+  ],
+  "capacity": {
+    "corpus_sha": "235c0eabf24b6d6137b499b4402943d2794b70e6",
+    "corpus_tree_sha256": "eb10388f5b6d710c4dac7e156823cacca5370ba856bb97233803d6f61bdd62c9",
+    "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+    "reason": "all_offered_work_accounted",
+    "elapsed_s": 61.04,
+    "application_exit": 0,
+    "cleanup_exit": 0,
+    "transport_passed": true,
+    "failure": null,
+    "graph": {
+      "messages": 32726,
+      "bytes": 244999958,
+      "first_seq": 1,
+      "first_ts": "2026-09-30T21:33:29.161140293Z",
+      "last_seq": 32726,
+      "last_ts": "2026-09-30T21:34:29.241438668Z",
+      "num_subjects": 4,
+      "consumer_count": 2
+    },
+    "source_status": {
+      "embedding": {
+        "available": true,
+        "ready": false,
+        "state": "building",
+        "indexed_revision": 12522,
+        "target_revision": 32720,
+        "lag": 20198,
+        "revision": "12522",
+        "last_synced": "2026-09-30T21:34:29Z"
+      },
+      "index": {
+        "available": true,
+        "ready": false,
+        "state": "building",
+        "indexed_revision": 4393,
+        "target_revision": 32720,
+        "lag": 28327,
+        "revision": "4393",
+        "last_synced": "2026-09-30T21:34:14Z"
+      },
+      "namespace": "setup03a",
+      "note": "readiness is honest (semstreams ADR-066): index.ready means the structural index (NAME_INDEX) has caught up to the latest committed write \u2014 byName / code_context / code_impact are reliable. embedding.ready means the semantic pipeline has caught up \u2014 code_search is reliable (surfaced, not gated). A miss is a genuine absence only when status.phase is \"ready\" (every configured source has finished its initial seed) AND the relevant index signal is ready; while status.phase is \"seeding\" a miss may simply be not-yet-ingested. For exact read-your-write freshness, compare the numeric indexed_revision field against your write's revision.",
+      "phase": "ready",
+      "sources": [
+        {
+          "delivered_total": 115,
+          "entity_count": 115,
+          "error_count": 0,
+          "instance_name": "doc-source-semsource-setup03a-osh",
+          "lost_total": 0,
+          "offered_total": 115,
+          "phase": "watching",
+          "seed_lost": 0,
+          "source_type": "docs",
+          "type_counts": {
+            "web.chunk": 100,
+            "web.doc": 15
+          }
+        },
+        {
+          "bodies_offloaded": 30221,
+          "delivered_total": 32570,
+          "entity_count": 29275,
+          "error_count": 0,
+          "files_parsed": 1952,
+          "instance_name": "ast-source-semsource-setup03a-osh",
+          "lost_total": 0,
+          "offered_total": 32570,
+          "phase": "watching",
+          "seed_lost": 0,
+          "source_type": "ast",
+          "type_counts": {
+            "code.folder": 396,
+            "code.repo": 1,
+            "java.class": 1958,
+            "java.enum": 36,
+            "java.file": 1932,
+            "java.interface": 437,
+            "java.method": 16522,
+            "java.var": 5448,
+            "javascript.const": 4,
+            "javascript.file": 20,
+            "javascript.function": 430,
+            "javascript.var": 2091
+          }
+        },
+        {
+          "delivered_total": 35,
+          "entity_count": 32,
+          "error_count": 0,
+          "instance_name": "cfgfile-source-semsource-setup03a-osh",
+          "lost_total": 0,
+          "offered_total": 35,
+          "phase": "watching",
+          "seed_lost": 0,
+          "source_type": "config",
+          "type_counts": {
+            "config.dependency": 15,
+            "config.project": 17
+          }
+        }
+      ],
+      "timestamp": "2026-09-30T16:34:29.242062-05:00",
+      "total_entities": 29422
+    },
+    "totals": {
+      "offered_total": 32720,
+      "delivered_total": 32720,
+      "lost_total": 0,
+      "error_count": 0
+    },
+    "configuration_comparison": "Same full corpus fingerprint, paths, languages, BM25 settings, resources and declared/default semsource stem; target requires minted effective authority under ADR-102/104.",
+    "graph_bytes_delta": 5633008,
+    "graph_bytes_delta_attribution": "Observed alongside the mandated wire-identity change. No exact per-field byte decomposition or performance benchmark is claimed.",
+    "limitation": "Transport-only probe; parser guard excludes minified assets before publish. Does not reproduce the historical unguarded payload volume or prove query correctness.",
+    "reproduction_script": "scripts/setup03a/measure-capacity.py",
+    "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/capacity-pinned-complete"
+  },
+  "restart_evidence_limit": "The qualification harness stop(false) does not assert the child Wait error. Its semantic restart report alone does not certify graceful application exit. Separate passing E2E runs and canonical capacity application_exit=0 provide the recorded graceful-exit evidence.",
+  "comparison_evidence_approved": true,
+  "comparison_evidence_approval_scope": "Final executable SHA256 7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198, all final primary/provider-fault/removal/capacity artifacts, provider controls and complete retained-package test closure. Evidence approval only; not merge, system qualification, or cutover approval.",
+  "removal_supplement": {
+    "profile": "bm25-source-removal",
+    "started": "2026-09-30T21:29:05.969841Z",
+    "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+    "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+    "checks": {
+      "total": 10,
+      "passed": 9
+    },
+    "observations": [
+      {
+        "name": "removal_initial_settled_sources",
+        "passed": true
+      },
+      {
+        "name": "governed_identity_authority",
+        "passed": true
+      },
+      {
+        "name": "removal_initial_document_entities",
+        "passed": true
+      },
+      {
+        "name": "removal_receipt",
+        "passed": true
+      },
+      {
+        "name": "removal_deferred_until_restart",
+        "passed": true
+      },
+      {
+        "name": "removal_activated",
+        "passed": true
+      },
+      {
+        "name": "removed_parent_and_passage_retained_with_source_removed",
+        "passed": false,
+        "error": "retained entity setup03a.semsource-8aceaf.setup03a-docs.web.chunk.routing-md-0000 marker=<nil>, want source_removed\nretained entity setup03a.semsource-8aceaf.setup03a-docs.web.doc.routing-md marker=<nil>, want source_removed"
+      },
+      {
+        "name": "readd_receipt_same_disabled_handle",
+        "passed": true
+      },
+      {
+        "name": "readd_deferred_until_restart",
+        "passed": true
+      },
+      {
+        "name": "readd_activated_after_restart",
+        "passed": true
+      }
+    ],
+    "remove_receipt": {
+      "desired_changed": true,
+      "runtime_changed": false,
+      "restart_required": true,
+      "instance_name": "doc-source-setup03a-docs",
+      "removed": true,
+      "timestamp": "2026-09-30T16:29:36.473107-05:00"
+    },
+    "readd_receipt": {
+      "desired_changed": true,
+      "runtime_changed": false,
+      "restart_required": true,
+      "components": [
+        {
+          "instance_name": "doc-source-setup03a-docs",
+          "factory_name": "doc-source",
+          "source_type": "docs",
+          "created": true
+        }
+      ],
+      "status_subject": "graph.ingest.status",
+      "ready_when": "after application restart: source_status.phase in ['watching', 'idle']",
+      "timestamp": "2026-09-30T16:29:56.724073-05:00"
+    },
+    "automatic_lifecycle_requests": [],
+    "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-removal-complete",
+    "approval": "Final executable supplement independently reviewed and approved as evidence: 9/10 with one unresolved missing-marker failure. No system or merge approval."
+  },
+  "final_source_verification_pending": false,
+  "prior_reviewed_snapshot": {
+    "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+    "binary_path": "/tmp/semsource-setup03a-evidence/semsource-pinned-reviewed",
+    "profiles": [
+      {
+        "profile": "bm25",
+        "semengine_slices": [
+          0,
+          1
+        ],
+        "started": "2026-09-30T20:57:51.248449Z",
+        "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+        "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+        "configuration": {
+          "graph": {
+            "coalesce_ms": 200,
+            "embedder_type": "bm25",
+            "gateway_bind": "127.0.0.1:57063",
+            "index_workers": 4
+          },
+          "http_port": 57060,
+          "metrics": {
+            "port": 57061
+          },
+          "namespace": "setup03a",
+          "source_roots": [
+            "/tmp/semsource-setup03a-evidence/pinned-reviewed-bm25/source"
+          ],
+          "sources": [
+            {
+              "languages": [
+                "go"
+              ],
+              "path": "/tmp/semsource-setup03a-evidence/pinned-reviewed-bm25/source",
+              "project": "setup03a",
+              "type": "ast",
+              "version": "corpus-v1",
+              "watch": true
+            },
+            {
+              "paths": [
+                "/tmp/semsource-setup03a-evidence/pinned-reviewed-bm25/source/docs"
+              ],
+              "project": "setup03a-docs",
+              "type": "docs",
+              "watch": true
+            }
+          ],
+          "websocket_bind": "127.0.0.1:57062"
+        },
+        "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-reviewed-bm25",
+        "checks": {
+          "total": 63,
+          "passed": 61
+        },
+        "observations": [
+          {
+            "name": "ingestion_ready",
+            "passed": true
+          },
+          {
+            "name": "governed_identity_authority",
+            "passed": true
+          },
+          {
+            "name": "initial_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_run",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "initial_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "initial_provenance",
+            "passed": true
+          },
+          {
+            "name": "initial_exact_content",
+            "passed": true
+          },
+          {
+            "name": "cold_duplicate_name_anchors",
+            "passed": true
+          },
+          {
+            "name": "cold_exact_absence",
+            "passed": true
+          },
+          {
+            "name": "cold_code_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "cold_doc_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "cold_doc_exact_passage_content",
+            "passed": true
+          },
+          {
+            "name": "warm_duplicate_name_anchors",
+            "passed": true
+          },
+          {
+            "name": "warm_exact_absence",
+            "passed": true
+          },
+          {
+            "name": "warm_code_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "warm_doc_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "warm_doc_exact_passage_content",
+            "passed": true
+          },
+          {
+            "name": "graph_search_public_query",
+            "passed": true
+          },
+          {
+            "name": "edited_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_run",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "edited_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "edited_provenance",
+            "passed": true
+          },
+          {
+            "name": "edited_exact_content",
+            "passed": true
+          },
+          {
+            "name": "deleted_lifecycle_pass",
+            "passed": true
+          },
+          {
+            "name": "deleted_retains_stale_history",
+            "passed": true
+          },
+          {
+            "name": "deleted_query_visibility",
+            "passed": true
+          },
+          {
+            "name": "recreated_lifecycle_pass",
+            "passed": true
+          },
+          {
+            "name": "recreated_same_identity_not_stale",
+            "passed": true
+          },
+          {
+            "name": "recreated_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_run",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "recreated_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "recreated_provenance",
+            "passed": true
+          },
+          {
+            "name": "recreated_exact_content",
+            "passed": true
+          },
+          {
+            "name": "application_restart_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_run",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "application_restart_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "application_restart_provenance",
+            "passed": true
+          },
+          {
+            "name": "application_restart_exact_content",
+            "passed": true
+          },
+          {
+            "name": "accepted_unindexed_before_broker_restart",
+            "passed": true
+          },
+          {
+            "name": "memory_transport_not_durable",
+            "passed": true
+          },
+          {
+            "name": "authority_survives_broker_restart_before_reingest",
+            "passed": true
+          },
+          {
+            "name": "content_survives_broker_restart_before_reingest",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_run",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_exact_relationship",
+            "passed": false,
+            "error": "calls=[setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+          },
+          {
+            "name": "broker_restart_reingested_provenance",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_exact_content",
+            "passed": false,
+            "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+          },
+          {
+            "name": "rpc_wildcard_collision_reproduced",
+            "passed": true
+          }
+        ],
+        "durability_evidence": [
+          {
+            "name": "governed_identity_authority",
+            "passed": true,
+            "detail": {
+              "expected_entities": {
+                "farewell": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+                "greet_alpha": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+                "greet_beta": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+                "run": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+              },
+              "platform": "semsource-fa2873",
+              "wire": {
+                "data": {
+                  "matches": [
+                    {
+                      "entity_id": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                      "matched_name": "Run",
+                      "predicate": "dc.terms.title",
+                      "exact_case": true
+                    }
+                  ]
+                },
+                "timestamp": "2026-09-30T15:58:22.415861-05:00"
+              }
+            }
+          },
+          {
+            "name": "initial_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-fa2873",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "edited_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-fa2873",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "recreated_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-fa2873",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "application_restart_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-fa2873",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "accepted_unindexed_before_broker_restart",
+            "passed": true,
+            "detail": {
+              "ack": {
+                "stream": "GRAPH",
+                "seq": 37
+              },
+              "authority_after_ack": 32,
+              "authority_before": 32,
+              "storage": "memory"
+            }
+          },
+          {
+            "name": "memory_transport_not_durable",
+            "passed": true,
+            "detail": {
+              "contract": "source re-ingestion, not publish-ack durability",
+              "observation_error": "nats: API error: code=404 err_code=10059 description=stream not found",
+              "pending_sequence": 37,
+              "survived": false
+            }
+          },
+          {
+            "name": "authority_survives_broker_restart_before_reingest",
+            "passed": true,
+            "detail": {
+              "bucket": "ENTITY_STATES",
+              "entity": {
+                "id": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                "triples": [
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.type",
+                    "object": "function",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "dc.terms.title",
+                    "object": "Run",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.path",
+                    "object": "alpha/greet.go",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.project",
+                    "object": "setup03a",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.version",
+                    "object": "corpus-v1",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.language",
+                    "object": "golang",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.visibility",
+                    "object": "public",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.exported",
+                    "object": "true",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.metric.start-line",
+                    "object": 7,
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.metric.end-line",
+                    "object": 7,
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.metric.lines",
+                    "object": 1,
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.doc.comment",
+                    "object": "Run uses Greet to select the cobalt lantern route.\n",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.doc.signature",
+                    "object": "func Run() string",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.structure.belongs",
+                    "object": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.file.alpha-greet-go",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.relationship.calls",
+                    "object": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.relationship.returns",
+                    "object": "builtin:string",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "dc.terms.created",
+                    "object": "2026-09-30T15:58:23-05:00",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.body.store",
+                    "object": "objectstore",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.body.key",
+                    "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "entity.ontology.class",
+                    "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+                    "source": "semsource",
+                    "timestamp": "2026-09-30T15:58:23.013976-05:00",
+                    "confidence": 1
+                  },
+                  {
+                    "subject": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "entity.indexing.profile",
+                    "object": "content",
+                    "source": "graph-ingest-indexing-profile",
+                    "timestamp": "2026-09-30T15:57:52.222106-05:00",
+                    "confidence": 1
+                  }
+                ],
+                "storage_ref": {
+                  "storage_instance": "objectstore",
+                  "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                  "content_type": "text/plain; charset=utf-8",
+                  "size": 39
+                },
+                "message_type": {
+                  "domain": "semsource",
+                  "category": "entity",
+                  "version": "v1"
+                },
+                "version": 5,
+                "updated_at": "2026-09-30T15:58:23.028062-05:00"
+              },
+              "revision": 32
+            }
+          },
+          {
+            "name": "content_survives_broker_restart_before_reingest",
+            "passed": true,
+            "detail": "func Run() string { return Farewell() }"
+          },
+          {
+            "name": "broker_restart_reingested_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-fa2873",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "rpc_wildcard_collision_reproduced",
+            "passed": true,
+            "detail": {
+              "stream": "GRAPH",
+              "seq": 21
+            }
+          }
+        ],
+        "restart_guard": {
+          "applied_sequence": 31,
+          "guard_key": "setup03a.semsource-fa2873.setup03a-corpus-v1.golang.function.alpha-greet-go-Run/GRAPH",
+          "restarted_stream_last_sequence": 20,
+          "run_payload_sequences": [
+            10,
+            12
+          ]
+        }
+      },
+      {
+        "profile": "neural",
+        "semengine_slices": [
+          0,
+          2
+        ],
+        "started": "2026-09-30T21:00:17.227292Z",
+        "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+        "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+        "configuration": {
+          "graph": {
+            "coalesce_ms": 200,
+            "embedder_type": "http",
+            "gateway_bind": "127.0.0.1:57241",
+            "index_workers": 4
+          },
+          "http_port": 57238,
+          "metrics": {
+            "port": 57239
+          },
+          "model_registry": {
+            "capabilities": {
+              "embedding": {
+                "preferred": [
+                  "semembed"
+                ]
+              }
+            },
+            "endpoints": {
+              "semembed": {
+                "model": "Snowflake/snowflake-arctic-embed-s",
+                "provider": "openai",
+                "query_prefix": "Represent this sentence for searching relevant passages: ",
+                "url": "http://127.0.0.1:53492/v1"
+              }
+            }
+          },
+          "namespace": "setup03a",
+          "source_roots": [
+            "/tmp/semsource-setup03a-evidence/pinned-reviewed-neural/source"
+          ],
+          "sources": [
+            {
+              "languages": [
+                "go"
+              ],
+              "path": "/tmp/semsource-setup03a-evidence/pinned-reviewed-neural/source",
+              "project": "setup03a",
+              "type": "ast",
+              "version": "corpus-v1",
+              "watch": true
+            },
+            {
+              "paths": [
+                "/tmp/semsource-setup03a-evidence/pinned-reviewed-neural/source/docs"
+              ],
+              "project": "setup03a-docs",
+              "type": "docs",
+              "watch": true
+            }
+          ],
+          "websocket_bind": "127.0.0.1:57240"
+        },
+        "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-reviewed-neural",
+        "checks": {
+          "total": 67,
+          "passed": 65
+        },
+        "observations": [
+          {
+            "name": "provider_metrics_before",
+            "passed": true
+          },
+          {
+            "name": "ingestion_ready",
+            "passed": true
+          },
+          {
+            "name": "governed_identity_authority",
+            "passed": true
+          },
+          {
+            "name": "initial_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_run",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "initial_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "initial_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "initial_provenance",
+            "passed": true
+          },
+          {
+            "name": "initial_exact_content",
+            "passed": true
+          },
+          {
+            "name": "cold_duplicate_name_anchors",
+            "passed": true
+          },
+          {
+            "name": "cold_exact_absence",
+            "passed": true
+          },
+          {
+            "name": "cold_code_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "cold_doc_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "cold_doc_exact_passage_content",
+            "passed": true
+          },
+          {
+            "name": "provider_metrics_after_cold",
+            "passed": true
+          },
+          {
+            "name": "warm_duplicate_name_anchors",
+            "passed": true
+          },
+          {
+            "name": "warm_exact_absence",
+            "passed": true
+          },
+          {
+            "name": "warm_code_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "warm_doc_scope_before_limit",
+            "passed": true
+          },
+          {
+            "name": "warm_doc_exact_passage_content",
+            "passed": true
+          },
+          {
+            "name": "provider_metrics_after_warm",
+            "passed": true
+          },
+          {
+            "name": "neural_paraphrase",
+            "passed": true
+          },
+          {
+            "name": "graph_search_public_query",
+            "passed": true
+          },
+          {
+            "name": "edited_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_run",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "edited_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "edited_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "edited_provenance",
+            "passed": true
+          },
+          {
+            "name": "edited_exact_content",
+            "passed": true
+          },
+          {
+            "name": "deleted_lifecycle_pass",
+            "passed": true
+          },
+          {
+            "name": "deleted_retains_stale_history",
+            "passed": true
+          },
+          {
+            "name": "deleted_query_visibility",
+            "passed": true
+          },
+          {
+            "name": "recreated_lifecycle_pass",
+            "passed": true
+          },
+          {
+            "name": "recreated_same_identity_not_stale",
+            "passed": true
+          },
+          {
+            "name": "recreated_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_run",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "recreated_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "recreated_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "recreated_provenance",
+            "passed": true
+          },
+          {
+            "name": "recreated_exact_content",
+            "passed": true
+          },
+          {
+            "name": "application_restart_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_run",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "application_restart_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "application_restart_exact_relationship",
+            "passed": true
+          },
+          {
+            "name": "application_restart_provenance",
+            "passed": true
+          },
+          {
+            "name": "application_restart_exact_content",
+            "passed": true
+          },
+          {
+            "name": "accepted_unindexed_before_broker_restart",
+            "passed": true
+          },
+          {
+            "name": "memory_transport_not_durable",
+            "passed": true
+          },
+          {
+            "name": "authority_survives_broker_restart_before_reingest",
+            "passed": true
+          },
+          {
+            "name": "content_survives_broker_restart_before_reingest",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_persisted_authority",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_run",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_greet_alpha",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_greet_beta",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_entity_farewell",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_exact_relationship",
+            "passed": false,
+            "error": "calls=[setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+          },
+          {
+            "name": "broker_restart_reingested_provenance",
+            "passed": true
+          },
+          {
+            "name": "broker_restart_reingested_exact_content",
+            "passed": false,
+            "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+          },
+          {
+            "name": "rpc_wildcard_collision_reproduced",
+            "passed": true
+          }
+        ],
+        "durability_evidence": [
+          {
+            "name": "provider_metrics_before",
+            "passed": true,
+            "detail": {
+              "endpoint": "http://127.0.0.1:53492/metrics",
+              "requests": 177
+            }
+          },
+          {
+            "name": "governed_identity_authority",
+            "passed": true,
+            "detail": {
+              "expected_entities": {
+                "farewell": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+                "greet_alpha": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+                "greet_beta": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+                "run": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+              },
+              "platform": "semsource-90b22f",
+              "wire": {
+                "data": {
+                  "matches": [
+                    {
+                      "entity_id": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                      "matched_name": "Run",
+                      "predicate": "dc.terms.title",
+                      "exact_case": true
+                    }
+                  ]
+                },
+                "timestamp": "2026-09-30T16:00:47.638516-05:00"
+              }
+            }
+          },
+          {
+            "name": "initial_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-90b22f",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "provider_metrics_after_cold",
+            "passed": true,
+            "detail": {
+              "endpoint": "http://127.0.0.1:53492/metrics",
+              "requests": 191
+            }
+          },
+          {
+            "name": "provider_metrics_after_warm",
+            "passed": true,
+            "detail": {
+              "endpoint": "http://127.0.0.1:53492/metrics",
+              "requests": 194
+            }
+          },
+          {
+            "name": "edited_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-90b22f",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "recreated_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-90b22f",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "application_restart_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-90b22f",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "accepted_unindexed_before_broker_restart",
+            "passed": true,
+            "detail": {
+              "ack": {
+                "stream": "GRAPH",
+                "seq": 37
+              },
+              "authority_after_ack": 32,
+              "authority_before": 32,
+              "storage": "memory"
+            }
+          },
+          {
+            "name": "memory_transport_not_durable",
+            "passed": true,
+            "detail": {
+              "contract": "source re-ingestion, not publish-ack durability",
+              "observation_error": "nats: API error: code=404 err_code=10059 description=stream not found",
+              "pending_sequence": 37,
+              "survived": false
+            }
+          },
+          {
+            "name": "authority_survives_broker_restart_before_reingest",
+            "passed": true,
+            "detail": {
+              "bucket": "ENTITY_STATES",
+              "entity": {
+                "id": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                "triples": [
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.type",
+                    "object": "function",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "dc.terms.title",
+                    "object": "Run",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.path",
+                    "object": "alpha/greet.go",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.project",
+                    "object": "setup03a",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.version",
+                    "object": "corpus-v1",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.language",
+                    "object": "golang",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.visibility",
+                    "object": "public",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.artifact.exported",
+                    "object": "true",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.metric.start-line",
+                    "object": 7,
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.metric.end-line",
+                    "object": 7,
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.metric.lines",
+                    "object": 1,
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.doc.comment",
+                    "object": "Run uses Greet to select the cobalt lantern route.\n",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.doc.signature",
+                    "object": "func Run() string",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.structure.belongs",
+                    "object": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.file.alpha-greet-go",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.relationship.calls",
+                    "object": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.relationship.returns",
+                    "object": "builtin:string",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "dc.terms.created",
+                    "object": "2026-09-30T16:00:48-05:00",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.body.store",
+                    "object": "objectstore",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "code.body.key",
+                    "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                    "source": "",
+                    "timestamp": "0001-01-01T00:00:00Z",
+                    "confidence": 0
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "entity.ontology.class",
+                    "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+                    "source": "semsource",
+                    "timestamp": "2026-09-30T16:00:48.242644-05:00",
+                    "confidence": 1
+                  },
+                  {
+                    "subject": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                    "predicate": "entity.indexing.profile",
+                    "object": "content",
+                    "source": "graph-ingest-indexing-profile",
+                    "timestamp": "2026-09-30T16:00:17.587546-05:00",
+                    "confidence": 1
+                  }
+                ],
+                "storage_ref": {
+                  "storage_instance": "objectstore",
+                  "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+                  "content_type": "text/plain; charset=utf-8",
+                  "size": 39
+                },
+                "message_type": {
+                  "domain": "semsource",
+                  "category": "entity",
+                  "version": "v1"
+                },
+                "version": 5,
+                "updated_at": "2026-09-30T16:00:48.258538-05:00"
+              },
+              "revision": 32
+            }
+          },
+          {
+            "name": "content_survives_broker_restart_before_reingest",
+            "passed": true,
+            "detail": "func Run() string { return Farewell() }"
+          },
+          {
+            "name": "broker_restart_reingested_persisted_authority",
+            "passed": true,
+            "detail": {
+              "id": "semsource-90b22f",
+              "org": "setup03a",
+              "stem": "semsource"
+            }
+          },
+          {
+            "name": "rpc_wildcard_collision_reproduced",
+            "passed": true,
+            "detail": {
+              "stream": "GRAPH",
+              "seq": 21
+            }
+          }
+        ],
+        "restart_guard": {
+          "applied_sequence": 33,
+          "guard_key": "setup03a.semsource-90b22f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run/GRAPH",
+          "restarted_stream_last_sequence": 20,
+          "run_payload_sequences": [
+            9,
+            12
+          ]
+        }
+      }
+    ],
+    "provider_fault_supplement": {
+      "profile": "neural-provider-faults",
+      "started": "2026-09-30T21:00:03.4605Z",
+      "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "observations": [
+        {
+          "name": "provider_metrics_before",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 164
+          }
+        },
+        {
+          "name": "real_provider_initial_passage",
+          "passed": true,
+          "detail": {
+            "nodes": [
+              {
+                "Name": "Cobalt lantern routing",
+                "Path": "routing.md",
+                "Body": "# Cobalt lantern routing\n\nThe cobalt lantern routing protocol sends blue parcels to the north depot.\nThe exact qualification token is cobalt-lantern-v1.\n",
+                "Handle": "setup03a.semsource-3efa97.setup03a-docs.web.chunk.routing-md-0000",
+                "body_reason": "",
+                "relations": {
+                  "parent_document": [
+                    {
+                      "Name": "Cobalt lantern routing",
+                      "Path": "routing.md"
+                    }
+                  ]
+                }
+              }
+            ],
+            "deferred": false,
+            "unhydrated": null,
+            "misses": null,
+            "index": {
+              "ready": true,
+              "state": "ready",
+              "bootstrap_complete": true
+            }
+          }
+        },
+        {
+          "name": "provider_unavailable_is_not_absence",
+          "passed": true,
+          "detail": {
+            "injected_requests": 1,
+            "response": {
+              "nodes": null,
+              "deferred": false,
+              "unhydrated": null,
+              "misses": null,
+              "index": {
+                "ready": false,
+                "state": "",
+                "bootstrap_complete": false
+              }
+            },
+            "transport_error": "HTTP 503: {\"error\":{\"contract_version\":\"1\",\"code\":\"dependency_unavailable\",\"class\":\"transient\",\"message\":\"graph query service is temporarily unavailable\",\"retryable\":true}}\n"
+          }
+        },
+        {
+          "name": "provider_deadline_is_bounded_and_not_absence",
+          "passed": true,
+          "detail": {
+            "elapsed_ms": 5002,
+            "injected_requests": 1,
+            "response": {
+              "nodes": null,
+              "deferred": false,
+              "unhydrated": null,
+              "misses": null,
+              "index": {
+                "ready": false,
+                "state": "",
+                "bootstrap_complete": false
+              }
+            },
+            "transport_error": "Post \"http://127.0.0.1:57199/doc-context/context\": context deadline exceeded"
+          }
+        },
+        {
+          "name": "provider_recovery_returns_exact_passage",
+          "passed": true,
+          "detail": {
+            "nodes": [
+              {
+                "Name": "Cobalt lantern routing",
+                "Path": "routing.md",
+                "Body": "# Cobalt lantern routing\n\nThe cobalt lantern routing protocol sends blue parcels to the north depot.\nThe exact qualification token is cobalt-lantern-v1.\n",
+                "Handle": "setup03a.semsource-3efa97.setup03a-docs.web.chunk.routing-md-0000",
+                "body_reason": "",
+                "relations": {
+                  "parent_document": [
+                    {
+                      "Name": "Cobalt lantern routing",
+                      "Path": "routing.md"
+                    }
+                  ]
+                }
+              }
+            ],
+            "deferred": false,
+            "unhydrated": null,
+            "misses": null,
+            "index": {
+              "ready": true,
+              "state": "ready",
+              "bootstrap_complete": true
+            }
+          }
+        },
+        {
+          "name": "provider_metrics_after_recovery",
+          "passed": true,
+          "detail": {
+            "endpoint": "http://127.0.0.1:53492/metrics",
+            "requests": 177
+          }
+        }
+      ],
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-reviewed-neural/provider-faults",
+      "checks": {
+        "total": 6,
+        "passed": 6
+      }
+    },
+    "capacity": {
+      "corpus_sha": "235c0eabf24b6d6137b499b4402943d2794b70e6",
+      "corpus_tree_sha256": "eb10388f5b6d710c4dac7e156823cacca5370ba856bb97233803d6f61bdd62c9",
+      "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+      "reason": "all_offered_work_accounted",
+      "elapsed_s": 60.86,
+      "application_exit": 0,
+      "cleanup_exit": 0,
+      "transport_passed": true,
+      "graph": {
+        "messages": 32726,
+        "bytes": 244999996,
+        "first_seq": 1,
+        "first_ts": "2026-09-30T21:08:15.148476635Z",
+        "last_seq": 32726,
+        "last_ts": "2026-09-30T21:09:15.16047326Z",
+        "num_subjects": 4,
+        "consumer_count": 2
+      },
+      "source_status": {
+        "embedding": {
+          "available": true,
+          "ready": false,
+          "state": "building",
+          "indexed_revision": 19320,
+          "target_revision": 32720,
+          "lag": 13400,
+          "revision": "19320",
+          "last_synced": "2026-09-30T21:09:15Z"
+        },
+        "index": {
+          "available": true,
+          "ready": false,
+          "state": "building",
+          "indexed_revision": 3725,
+          "target_revision": 32720,
+          "lag": 28995,
+          "revision": "3725",
+          "last_synced": "2026-09-30T21:09:10Z"
+        },
+        "namespace": "setup03a",
+        "note": "readiness is honest (semstreams ADR-066): index.ready means the structural index (NAME_INDEX) has caught up to the latest committed write \u2014 byName / code_context / code_impact are reliable. embedding.ready means the semantic pipeline has caught up \u2014 code_search is reliable (surfaced, not gated). A miss is a genuine absence only when status.phase is \"ready\" (every configured source has finished its initial seed) AND the relevant index signal is ready; while status.phase is \"seeding\" a miss may simply be not-yet-ingested. For exact read-your-write freshness, compare the numeric indexed_revision field against your write's revision.",
+        "phase": "ready",
+        "sources": [
+          {
+            "delivered_total": 35,
+            "entity_count": 32,
+            "error_count": 0,
+            "instance_name": "cfgfile-source-semsource-setup03a-osh",
+            "lost_total": 0,
+            "offered_total": 35,
+            "phase": "watching",
+            "seed_lost": 0,
+            "source_type": "config",
+            "type_counts": {
+              "config.dependency": 15,
+              "config.project": 17
+            }
+          },
+          {
+            "bodies_offloaded": 30221,
+            "delivered_total": 32570,
+            "entity_count": 29275,
+            "error_count": 0,
+            "files_parsed": 1952,
+            "instance_name": "ast-source-semsource-setup03a-osh",
+            "lost_total": 0,
+            "offered_total": 32570,
+            "phase": "watching",
+            "seed_lost": 0,
+            "source_type": "ast",
+            "type_counts": {
+              "code.folder": 396,
+              "code.repo": 1,
+              "java.class": 1958,
+              "java.enum": 36,
+              "java.file": 1932,
+              "java.interface": 437,
+              "java.method": 16522,
+              "java.var": 5448,
+              "javascript.const": 4,
+              "javascript.file": 20,
+              "javascript.function": 430,
+              "javascript.var": 2091
+            }
+          },
+          {
+            "delivered_total": 115,
+            "entity_count": 115,
+            "error_count": 0,
+            "instance_name": "doc-source-semsource-setup03a-osh",
+            "lost_total": 0,
+            "offered_total": 115,
+            "phase": "watching",
+            "seed_lost": 0,
+            "source_type": "docs",
+            "type_counts": {
+              "web.chunk": 100,
+              "web.doc": 15
+            }
+          }
+        ],
+        "timestamp": "2026-09-30T16:09:15.161204-05:00",
+        "total_entities": 29422
+      },
+      "configuration_comparison": "Same full corpus fingerprint, paths, languages, BM25 settings, and declared/default semsource stem; target requires minted effective authority under ADR-102/104.",
+      "graph_bytes_delta": 5633046,
+      "graph_bytes_delta_attribution": "Observed alongside the mandated wire-identity change. No exact per-field byte decomposition or performance benchmark is claimed.",
+      "limitation": "Transport-only probe; parser guard excludes minified assets before publish. Does not reproduce the historical unguarded payload volume or prove query correctness.",
+      "reproduction_script": "scripts/setup03a/measure-capacity.py",
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/capacity-pinned-reviewed",
+      "failure": null,
+      "totals": {
+        "offered_total": 32720,
+        "delivered_total": 32720,
+        "lost_total": 0,
+        "error_count": 0
+      }
+    },
+    "comparison_evidence_approved": true,
+    "comparison_evidence_approval_scope": "Versioned known-answer matrix, pins/provider controls, defect probes, canonical capacity pair and complete retained-package test closure. Excludes the pending removal runtime supplement; not system/merge/cutover approval.",
+    "removal_supplement": {
+      "profile": "bm25-source-removal",
+      "started": "2026-09-30T21:12:04.449839Z",
+      "binary_sha256": "b7bcb79447ed00260919297da9f5ba5bbfcdd7e9ffa32e3bd83216ce2400b894",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "checks": {
+        "total": 7,
+        "passed": 5
+      },
+      "observations": [
+        {
+          "name": "removal_initial_settled_sources",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "removal_initial_document_entities",
+          "passed": true
+        },
+        {
+          "name": "removal_receipt",
+          "passed": true
+        },
+        {
+          "name": "removal_deferred_until_restart",
+          "passed": true
+        },
+        {
+          "name": "removal_activated",
+          "passed": false,
+          "error": "removed source remains admitted"
+        },
+        {
+          "name": "removed_parent_and_passage_retained_with_source_removed",
+          "passed": false,
+          "error": "retained entity setup03a.semsource-f5d810.setup03a-docs.web.chunk.routing-md-0000 marker=<nil>, want source_removed\nretained entity setup03a.semsource-f5d810.setup03a-docs.web.doc.routing-md marker=<nil>, want source_removed"
+        }
+      ],
+      "remove_receipt": {
+        "desired_changed": true,
+        "runtime_changed": false,
+        "restart_required": true,
+        "instance_name": "doc-source-setup03a-docs",
+        "removed": true,
+        "timestamp": "2026-09-30T16:12:34.996274-05:00"
+      },
+      "automatic_lifecycle_requests": [],
+      "raw_evidence_directory": "/tmp/semsource-setup03a-evidence/pinned-removal",
+      "approval": "Superseded red reproduction retained as provenance; final supplement and workaround reviewed separately."
+    },
+    "status": "Superseded by the disabled-envelope workaround; provenance only, not the final executable comparison."
+  },
+  "implementation_commit": "c884d11e80dfdb6398aaf65e08ffef4fb3f03610"
+}

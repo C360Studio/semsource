@@ -33,7 +33,8 @@ python3 scripts/setup03a/measure-capacity.py \
 ```
 
 Use a fresh output directory for each run. Identity selection is explicit: the governed revision supplies the
-`setup03a-capacity` platform stem; beta.161 uses its historical composition. Both use BM25, four index workers,
+default `semsource` platform stem; beta.161 uses its historical fixed `semsource` authority.
+Only the governed revision adds the required minted suffix. Both use BM25, four index workers,
 200 ms coalescing, AST's same six languages, docs, and config ingestion. The default 256 MiB memory GRAPH transport
 ceiling remains unchanged. NATS is pinned by version and digest in the script, with one CPU and 1 GiB RAM.
 HTTP, metrics, WebSocket, GraphQL, and broker ports are per-run dynamic loopback ports.
@@ -63,7 +64,10 @@ python3 scripts/setup03a/dependency-closure.py \
 
 The output directory must not already exist. The script records raw JSON, commands, package lists,
 module identities, and counts for production, consumer tests, direct imports, the registration cut,
-and the graph port set with its own tests. The default test tags are `integration,e2e,qualification`;
+and the graph port set with tests of its direct roots and, separately, every retained production package.
+The all-package rows expose test dependencies of transitive production packages; test-only dependencies'
+own unrelated test suites are not recursively added. The measured Go environment is recorded.
+The default test tags are `integration,e2e,qualification`;
 use the same tags for paired measurements. It reads every non-test Go file in each unique upstream
 source directory, including files for inactive build tags. Synthetic test binaries and external-test
 variants are not extra source directories, but their imported dependencies remain included.
