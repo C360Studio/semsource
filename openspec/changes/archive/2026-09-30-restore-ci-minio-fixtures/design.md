@@ -2,12 +2,16 @@
 
 ## Status and ownership
 
-This is the pre-implementation contract for #214. The architect approved the exact-upstream Thanos
-mirror and the fixture lifecycle scope. The parent owns claiming/publishing and the implementation
-handoff. A clean pull and the old failing case have been recorded; repaired-suite qualification and
-architecture-specific runtime proof remain pending. No implementation is complete in this change.
+This is the fixture contract for #214, claimed in draft PR #217. The architect approved the
+exact-upstream Thanos mirror and the fixture lifecycle scope. Mainline implementation and local ARM64
+integration, combined Garage, unit-race, lint, and workflow-contract checks pass, with independent Go
+review approval. Remote CI and combined Garage pass, with reviewed AMD64 runtime proof.
+The first migration overlay exposed pre-existing AST authority-input failures; #218 separately
+corrected the test wiring in #213. The corrected overlay passes full integration and combined Garage,
+with the original failure evidence retained. Independent Go review approves the final identical-tree
+results and unchanged pins. These approvals close only fixture and test-setup evidence gaps.
 
-## Verified starting point
+## Verified starting point before the repair
 
 - `internal/miniotest/miniotest.go` selects `minio/minio:RELEASE.2025-09-07T16-13-09Z`
   and starts it through testcontainers with HTTP liveness readiness.
@@ -48,6 +52,11 @@ architecture; metadata availability alone does not qualify both architectures.
 Preserve the Garage image and bootstrap. The combined workflow still executes both backends, and its
 path filter must include `internal/miniotest/**` so a shared MinIO change selects that validation.
 
+The provenance and current validation scope are documented in
+[the fixture guide](../../../../docs/testing/ci-fixtures.md) and its compact JSON evidence record.
+That guide distinguishes the archived artifact from a maintained distribution and separates verified
+registry identities, passing mainline ARM64/AMD64 suites, and separately recorded corrected-overlay results.
+
 ## Fixture lifecycle contract
 
 Each fixture run owns the resources it creates: containers, networks, temporary data, credentials,
@@ -86,8 +95,9 @@ that unrelated migration blockers are resolved by restored fixtures.
 
 ## Risks and remaining qualification
 
-- The mirror's immutable content and acquisition are verified, but fixture/API behavior must pass
-  the unchanged selected suites before this issue can close.
+- The mirror's immutable content, cold acquisition, and local ARM64 fixture/API behavior pass the
+  unchanged selected suites. AMD64 CI and the corrected migration overlay also pass. Registry
+  availability remains an external dependency; no alternate image is selected silently.
 - Architecture metadata is verified for amd64/arm64. Record each actual runtime environment and
   leave unexecuted architecture claims explicit rather than silently switching platforms.
 - Failure cleanup changes can accidentally hide an existing nonzero test result. Regression tests

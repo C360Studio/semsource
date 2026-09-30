@@ -1,0 +1,510 @@
+{
+  "schema_version": 1,
+  "issue": "https://github.com/C360Studio/semsource/issues/214",
+  "pull_request": "https://github.com/C360Studio/semsource/pull/217",
+  "mainline_base": "34bda6406fb06fd723a040988647b204204a1583",
+  "semstreams_mainline": "v1.0.0-beta.161",
+  "status": {
+    "implementation": "independently_approved",
+    "standalone_validation": "All required local gates and remote CI passed.",
+    "migration_overlay_validation": "Corrected overlay full integration, combined Garage, unit-race and lint passed; independent evidence review approved. Original failed overlay retained.",
+    "independent_implementation_review": "Approved for mainline implementation, local ARM64 suites, and CI AMD64 combined Garage runtime evidence."
+  },
+  "artifact": {
+    "image": "quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+    "release": "RELEASE.2025-09-07T16-13-09Z",
+    "index_digest": "sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+    "source_commit": "07c3a429bfed433e49018cb0f78a52145d4bedeb",
+    "source_tag_object": "01ce918d8279a20e4706b96a64396146894adee4",
+    "source_tag_verified": true,
+    "image_signature_verified": false,
+    "role": "Archived integration fixture; no renewed MinIO maintenance commitment."
+  },
+  "platforms": {
+    "linux/amd64": {
+      "manifest_digest": "sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2",
+      "config_digest": "sha256:69b2ec208575b69597784255eec6fa6a2985ee9e1a47f4411a51f7f5fdd193a9",
+      "manifest_http_status": 200,
+      "response_body_sha256_matches_digest": true,
+      "layer_and_config_head_checks": {
+        "total": 10,
+        "http_200": 10
+      },
+      "version_probe_checked": false,
+      "suite_qualified": true,
+      "qualification_scope": "CI combined MinIO/Garage: explicit GOARCH and GOHOSTARCH amd64, exact digest startup, 83 passes, no skips or failures, both owned containers terminated.",
+      "runtime_log": "/tmp/semsource-ci214-evidence/ci-garage-amd64.log",
+      "independent_review": "approved"
+    },
+    "linux/arm64": {
+      "manifest_digest": "sha256:9966a92a734f9411e32f4f41d7d9d826fcdc0f68c4e20b70295bd4e7c11f8a2f",
+      "config_digest": "sha256:8f08aee614800a237906bd48114d733e5ac5bfac4ccdf731f141b0e880d7a253",
+      "manifest_http_status": 200,
+      "response_body_sha256_matches_digest": true,
+      "layer_and_config_head_checks": {
+        "total": 10,
+        "http_200": 10
+      },
+      "version_probe_checked": true,
+      "suite_qualified": true,
+      "qualification_scope": "Mainline full integration and combined MinIO/Garage suites, local runtime"
+    }
+  },
+  "provenance": {
+    "checked_at": "2026-09-30T22:48:46Z",
+    "mirror_statement": "https://github.com/thanos-io/thanos/pull/9029",
+    "statement": "Thanos maintainer bwplotka records mirroring MinIO onto Thanos Quay; PR merged 2026-09-15.",
+    "upstream_digest_corroboration": [
+      {
+        "url": "https://www.ibm.com/support/pages/node/7289585",
+        "description": "IBM withdrawal advisory dated 2026-09-25 records original quay.io/minio/minio reference with the identical index digest."
+      },
+      {
+        "url": "https://hub.docker.com/layers/minio/minio/latest-cicd/images/sha256-9966a92a734f9411e32f4f41d7d9d826fcdc0f68c4e20b70295bd4e7c11f8a2f",
+        "description": "Official MinIO Docker Hub metadata retrieved via web tool records identical index and ARM64 digests; historical metadata is not evidence of current pull availability."
+      }
+    ],
+    "source_tag_api": "https://api.github.com/repos/minio/minio/git/tags/01ce918d8279a20e4706b96a64396146894adee4",
+    "registry_index_http_status": 200,
+    "index_response_sha256_matches_digest": true,
+    "raw_registry_bodies_saved": false,
+    "unqualified_index_platforms": [
+      "linux/ppc64le"
+    ]
+  },
+  "acquisition": {
+    "image_absent_before_pull": true,
+    "pull_exit_code": 0,
+    "platform": "linux/arm64",
+    "version_probe": {
+      "version": "RELEASE.2025-09-07T16-13-09Z",
+      "commit": "07c3a429bfed433e49018cb0f78a52145d4bedeb",
+      "go_runtime": "go1.24.6"
+    },
+    "raw_evidence_directory": "/tmp/semsource-ci214-evidence",
+    "files": [
+      "mirror-cache-before.json",
+      "mirror-pull.log",
+      "mirror-local-identity.txt",
+      "mirror-version.txt"
+    ],
+    "scope": "Cold pull and version identity verified; mainline ARM64 integration and combined Garage suites separately passed."
+  },
+  "old_fixture_reproduction": {
+    "result": "failed acquisition",
+    "exit_code": 1,
+    "log": "/tmp/semsource-ci214-evidence/before-minio.log"
+  },
+  "test_results": [
+    {
+      "gate": "UI image/workflow shell contracts",
+      "command": "task ui:image:release:test",
+      "result": "passed",
+      "exit_code": 0,
+      "log": "/tmp/semsource-ci214-evidence/ui-contract.log"
+    },
+    {
+      "gate": "Full mainline integration",
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "-tags=integration",
+        "./..."
+      ],
+      "result": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 98.86705,
+      "started_at": "2026-09-30T22:58:12.933423+00:00",
+      "log": "/tmp/semsource-ci214-evidence/main-integration.log",
+      "counts_including_subtests": {
+        "pass": 2533,
+        "skip": 9
+      },
+      "fixture_dependent_skips": [],
+      "existing_nonfixture_skips": [
+        {
+          "package": "github.com/c360studio/semsource/config",
+          "test": "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json"
+        },
+        {
+          "package": "github.com/c360studio/semsource/config",
+          "test": "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json"
+        },
+        {
+          "package": "github.com/c360studio/semsource/config",
+          "test": "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json"
+        },
+        {
+          "package": "github.com/c360studio/semsource/handler/doc",
+          "test": "TestBoundsSweep"
+        },
+        {
+          "package": "github.com/c360studio/semsource/handler/doc",
+          "test": "TestDilutionMargin"
+        },
+        {
+          "package": "github.com/c360studio/semsource/handler/doc",
+          "test": "TestDilutionMarginReproducesLiveOrdering"
+        },
+        {
+          "package": "github.com/c360studio/semsource/handler/doc",
+          "test": "TestRankProbe"
+        },
+        {
+          "package": "github.com/c360studio/semsource/source/ast/c",
+          "test": "TestMeasureCrossTUCollisions"
+        },
+        {
+          "package": "github.com/c360studio/semsource/source/ast/svelte",
+          "test": "TestParser_RealPlanCard"
+        }
+      ],
+      "skip_summary": "3 optional model-registry configurations, 4 optional document/model probes, 1 C measurement, 1 absent legacy Svelte fixture; zero storage/governance skips."
+    },
+    {
+      "gate": "Full unit race",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "./..."
+      ],
+      "result": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 41.809826,
+      "started_at": "2026-09-30T22:58:28.056816+00:00",
+      "log": "/tmp/semsource-ci214-evidence/main-unit-race.log"
+    },
+    {
+      "gate": "Combined MinIO/Garage",
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "-tags=integration,garage",
+        "-v",
+        "-timeout",
+        "15m",
+        "./storage/s3store/"
+      ],
+      "result": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 37.381919,
+      "started_at": "2026-09-30T23:00:30.889442+00:00",
+      "log": "/tmp/semsource-ci214-evidence/main-garage.log",
+      "counts_including_subtests": {
+        "pass": 83,
+        "skip": 0,
+        "fail": 0
+      }
+    },
+    {
+      "gate": "Final lint",
+      "command": [
+        "task",
+        "lint"
+      ],
+      "result": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 4.09043,
+      "started_at": "2026-09-30T23:00:08.513010+00:00",
+      "log": "/tmp/semsource-ci214-evidence/main-lint-final.log"
+    }
+  ],
+  "limitations": [
+    "Digest pinning establishes content identity, not indefinite registry availability.",
+    "Source-tag verification is not image-signature verification.",
+    "Registry response bodies and blob HEAD results were observed in tool outputs, not archived separately.",
+    "ARM64 local integration and combined Garage suites passed; AMD64 combined Garage passed in CI. No ppc64le runtime claim."
+  ],
+  "migration_baseline_policy": "Do not alter the frozen SETUP 03A ledgers or SemStreams/provider pins. Record a later overlay with its own commits and results.",
+  "retained_cases": {
+    "baseline_commit": "34bda6406fb06fd723a040988647b204204a1583",
+    "existing_test_files": 29,
+    "existing_test_functions": 76,
+    "changed_existing_files": [
+      "storage/s3store/main_test.go"
+    ],
+    "assertion_bearing_files_byte_identical": true,
+    "raw_evidence": "/tmp/semsource-ci214-evidence/retained-cases.json"
+  },
+  "ci": {
+    "implementation_run": "All PR #217 checks succeeded or were intentionally skipped publish jobs at cba2279624e547d10096bcdbdf484bb2d3a04116.",
+    "planning_only_run": {
+      "url": "https://github.com/C360Studio/semsource/actions/runs/36787797040",
+      "conclusion": "cancelled",
+      "qualification_evidence": false
+    },
+    "latest_implementation_checks": "https://github.com/C360Studio/semsource/pull/217/checks",
+    "completed_implementation_runs": [
+      {
+        "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485",
+        "head_sha": "cba2279624e547d10096bcdbdf484bb2d3a04116",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "lint",
+            "conclusion": "success",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110137833088"
+          },
+          {
+            "name": "ui-quality",
+            "conclusion": "success",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110137833346"
+          },
+          {
+            "name": "test-integration",
+            "conclusion": "success",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110137833358"
+          },
+          {
+            "name": "e2e-local",
+            "conclusion": "success",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110137833360"
+          },
+          {
+            "name": "test",
+            "conclusion": "success",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110137833488"
+          },
+          {
+            "name": "build-and-push",
+            "conclusion": "skipped",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110138462123"
+          },
+          {
+            "name": "publish-ui",
+            "conclusion": "skipped",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110138563246"
+          },
+          {
+            "name": "ui-release-smoke",
+            "conclusion": "skipped",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110138563422"
+          },
+          {
+            "name": "alert-red-main",
+            "conclusion": "skipped",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209485/job/110138564830"
+          }
+        ]
+      },
+      {
+        "url": "https://github.com/C360Studio/semsource/actions/runs/36789209271",
+        "head_sha": "cba2279624e547d10096bcdbdf484bb2d3a04116",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "garage-compat",
+            "conclusion": "success",
+            "url": "https://github.com/C360Studio/semsource/actions/runs/36789209271/job/110137832100"
+          }
+        ]
+      }
+    ],
+    "all_checks_record": "/tmp/semsource-ci214-evidence/implementation-pr-checks.json"
+  },
+  "migration_overlay": {
+    "baseline_commit": "75a17f7d6297c3fa18102f3e09f8a0a4a10750bf",
+    "applied_files": [
+      {
+        "path": ".github/workflows/garage-compat.yml",
+        "sha256": "131cd995bf31c2ffa62c78a7f8bc9819a62709aae63bca740cb941b7880a7faf"
+      },
+      {
+        "path": "internal/miniotest/miniotest.go",
+        "sha256": "874d5395b59d93b147b408f170a3bc4d08384570030695c085dc22f27923b12b"
+      },
+      {
+        "path": "internal/miniotest/lifecycle_test.go",
+        "sha256": "493c1a22da38439cec600730dd81142e4e636d3e12372b42eabf62b86a3ffc60"
+      },
+      {
+        "path": "internal/miniotest/start_test.go",
+        "sha256": "86ed7d5817d34bfedb4e7c1438488bd3a3173c62f256016ece320f449a6a842b"
+      },
+      {
+        "path": "internal/garagetest/garagetest.go",
+        "sha256": "c2a0bd57476415347dd7641d09d6f1dd77f7ef22891235d7456581d8b56d15a3"
+      },
+      {
+        "path": "internal/garagetest/lifecycle_test.go",
+        "sha256": "2b856521da0450ae24841063cd9ab798efdabc49c9321e77d84438d595d6c3ab"
+      },
+      {
+        "path": "storage/s3store/main_test.go",
+        "sha256": "8382f16cf55ace3dfa6894c901c2a668dddd992a878c7e8978d333100051d0b1"
+      },
+      {
+        "path": "internal/governance/main_test.go",
+        "sha256": "a1d80edfddcf7e9b5f62b48f2baaa6ce03f5144ff3c6f66f8e270e0e1e8dc453"
+      }
+    ],
+    "go_mod_unchanged": true,
+    "sourcespawn_ci_retained": true,
+    "overlay_commit": "8676299c0df129561132cfda4d61c69c2466106b",
+    "status": "Historical first overlay: three pre-existing AST authority-input setup failures. Fixture-dependent cases and Garage passed; superseding corrected overlay recorded separately.",
+    "results": [
+      {
+        "name": "migration-integration",
+        "command": [
+          "go",
+          "test",
+          "-json",
+          "-count=1",
+          "-tags=integration",
+          "./..."
+        ],
+        "exit_code": 1,
+        "seconds": 105.361564,
+        "log": "/tmp/semsource-ci214-evidence/migration-integration.log",
+        "result": "failed",
+        "counts_including_subtests": {
+          "pass": 2612,
+          "skip": 9,
+          "fail": 3
+        }
+      },
+      {
+        "name": "migration-garage",
+        "command": [
+          "go",
+          "test",
+          "-json",
+          "-count=1",
+          "-tags=integration,garage",
+          "-v",
+          "-timeout",
+          "15m",
+          "./storage/s3store/"
+        ],
+        "exit_code": 0,
+        "seconds": 15.181448,
+        "log": "/tmp/semsource-ci214-evidence/migration-garage.log",
+        "result": "passed",
+        "counts_including_subtests": {
+          "pass": 83
+        }
+      },
+      {
+        "name": "migration-original-ast",
+        "command": [
+          "go",
+          "test",
+          "-json",
+          "-count=1",
+          "-tags=integration",
+          "./processor/ast-source/",
+          "-run",
+          "^(TestIntegration_StartReturnsWhilePathsUnavailable|TestIntegration_StopDuringInFlightSeedWaits|TestIntegration_SubmoduleExpansionSeedsScopedEntities)$"
+        ],
+        "exit_code": 1,
+        "seconds": 3.671998,
+        "log": "/tmp/semsource-ci214-evidence/migration-original-ast.log",
+        "result": "failed"
+      }
+    ],
+    "fixture_dependent_results": {
+      "s3_pass": 64,
+      "governance_pass": 49,
+      "source_spawn_pass": 47,
+      "fixture_dependent_skips": 0
+    },
+    "separate_correction_issue": "https://github.com/C360Studio/semsource/issues/218"
+  },
+  "implementation_commit": "cba2279624e547d10096bcdbdf484bb2d3a04116",
+  "corrected_migration_overlay": {
+    "pr213_ast_correction_commit": "c8a74e7208c089f128b524b63fa5f88d8b9952b4",
+    "pr213_with_fixture_commit": "8d104988e4fb7924b5dffc4f54f7254eeaa8fb9a",
+    "fixture_source_commit": "cba2279624e547d10096bcdbdf484bb2d3a04116",
+    "corrected_overlay_commit": "ee39cc22901edce3ec09d5a7faa0100da65e008a",
+    "identical_tree_to_pr213": true,
+    "correction_issue": "https://github.com/C360Studio/semsource/issues/218",
+    "correction_scope": "Two AST test constructors receive the required dependency authority; AST integration package is retained in CI. No production semantics or dependency/provider pins change.",
+    "architecture": "linux/arm64",
+    "results": [
+      {
+        "name": "migration-corrected-integration",
+        "command": [
+          "go",
+          "test",
+          "-json",
+          "-count=1",
+          "-tags=integration",
+          "./..."
+        ],
+        "exit_code": 0,
+        "seconds": 92.717051,
+        "log": "/tmp/semsource-ci214-evidence/migration-corrected-integration.log",
+        "result": "passed",
+        "counts_including_subtests": {
+          "pass": 2615,
+          "skip": 9,
+          "fail": 0
+        }
+      },
+      {
+        "name": "migration-corrected-garage",
+        "command": [
+          "go",
+          "test",
+          "-json",
+          "-count=1",
+          "-tags=integration,garage",
+          "-v",
+          "-timeout",
+          "15m",
+          "./storage/s3store/"
+        ],
+        "exit_code": 0,
+        "seconds": 12.917499,
+        "log": "/tmp/semsource-ci214-evidence/migration-corrected-garage.log",
+        "result": "passed",
+        "counts_including_subtests": {
+          "pass": 83,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "name": "migration-final-unit-race",
+        "command": [
+          "go",
+          "test",
+          "-race",
+          "-count=1",
+          "./..."
+        ],
+        "exit_code": 0,
+        "seconds": 25.723198,
+        "log": "/tmp/semsource-ci214-evidence/migration-final-unit-race.log",
+        "result": "passed"
+      },
+      {
+        "name": "migration-final-lint",
+        "command": [
+          "task",
+          "lint"
+        ],
+        "exit_code": 0,
+        "seconds": 7.687979,
+        "log": "/tmp/semsource-ci214-evidence/migration-final-lint.log",
+        "result": "passed"
+      }
+    ],
+    "fixture_and_corrected_package_results": {
+      "s3_pass": 64,
+      "governance_pass": 49,
+      "source_spawn_pass": 47,
+      "ast_pass": 60,
+      "fixture_dependent_skips": 0
+    },
+    "independent_review": "Approved for final identical-tree integration, Garage, unit-race, lint and unchanged pins; closes fixture evidence and AST test-setup gaps only. No semantic migration merge or cutover approval.",
+    "tree_sha": "db27494ec31762f0351ed43062b104d3693453fe",
+    "both_owned_garage_and_minio_containers_terminated": true
+  }
+}

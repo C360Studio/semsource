@@ -17,7 +17,8 @@ is validated against migration #213. It must not acquire migration behavior as a
 ## What Changes
 
 - Use the architect-approved Thanos mirror of the exact existing upstream MinIO release, pinned
-  by the verified manifest digest recorded in design.md. Runtime qualification remains pending.
+  by the verified manifest digest recorded in design.md. Runtime qualification is recorded in the
+  completed tasks and fixture guide.
 - Record immutable artifact identity, upstream mirror provenance, supported architecture, and
   clean-acquisition proof; use the same selected fixture contract locally and in CI.
 - Keep all existing S3, Garage, and governance cases and assertions. Selected tests fail visibly
