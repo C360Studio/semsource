@@ -10,6 +10,7 @@ package miniotest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -27,8 +28,9 @@ import (
 
 // Image pins the S3 server integration tests run against. It has one home
 // here; every suite that needs a bucket reads it from this package rather than
-// keeping a copy that drifts.
-const Image = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+// keeping a copy that drifts. The digest selects the original upstream release
+// mirrored by Thanos after the original registry stopped serving it.
+const Image = "quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
 
 // Container credentials. MinIO requires a root password of at least eight
 // characters and refuses to start otherwise.
@@ -73,7 +75,11 @@ func Terminate() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return terminate(ctx)
+	if err := terminate(ctx); err != nil {
+		return fmt.Errorf("terminate MinIO container: %w", err)
+	}
+	terminate = nil
+	return nil
 }
 
 // RunTests wraps m.Run so a package gets container teardown with one line in
@@ -81,12 +87,24 @@ func Terminate() error {
 //
 //	func TestMain(m *testing.M) { os.Exit(miniotest.RunTests(m)) }
 //
-// It wraps rather than exits so the teardown runs through a normal return
-// path — os.Exit would skip it.
-func RunTests(m interface{ Run() int }) int {
+// It wraps rather than exits so teardown runs through a normal return path.
+// Additional cleanups let a package own multiple lazy fixtures. Every cleanup
+// runs, and a cleanup failure fails an otherwise successful test process.
+func RunTests(m interface{ Run() int }, extraCleanup ...func() error) int {
 	code := m.Run()
 	if err := Terminate(); err != nil {
-		fmt.Printf("terminate the MinIO container: %v\n", err)
+		fmt.Printf("%v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	for _, cleanup := range extraCleanup {
+		if err := cleanup(); err != nil {
+			fmt.Printf("terminate additional test fixture: %v\n", err)
+			if code == 0 {
+				code = 1
+			}
+		}
 	}
 	return code
 }
@@ -171,7 +189,14 @@ func start() (string, func(context.Context) error, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	return startWithCreator(ctx, testcontainers.GenericContainer)
+}
+
+func startWithCreator(
+	ctx context.Context,
+	create func(context.Context, testcontainers.GenericContainerRequest) (testcontainers.Container, error),
+) (address string, stop func(context.Context) error, startErr error) {
+	container, err := create(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        Image,
 			ExposedPorts: []string{"9000/tcp"},
@@ -190,10 +215,26 @@ func start() (string, func(context.Context) error, error) {
 		},
 		Started: true,
 	})
-	if err != nil {
-		return "", nil, fmt.Errorf("start container: %w", err)
+	if container != nil {
+		stop = func(ctx context.Context) error { return container.Terminate(ctx) }
 	}
-	stop := func(ctx context.Context) error { return container.Terminate(ctx) }
+	// GenericContainer can return ownership together with an error. Startup's
+	// context may already be canceled, so cleanup gets an independent budget.
+	defer func() {
+		if startErr == nil || stop == nil {
+			return
+		}
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		if cleanupErr := stop(cleanupCtx); cleanupErr != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("cleanup failed startup: %w", cleanupErr))
+			return // Retain the exact handle for TestMain's bounded retry.
+		}
+		stop = nil
+	}()
+	if err != nil {
+		return "", stop, fmt.Errorf("start container: %w", err)
+	}
 
 	host, err := container.Host(ctx)
 	if err != nil {
