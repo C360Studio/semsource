@@ -22,13 +22,13 @@ func TestIngestEntityStates_ProjectOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := dochandler.NewWithOrg("acme",
+	h := dochandler.NewWithAuthority(testAuthority("acme"),
 		dochandler.WithProject("github-com-acme-shared-sub"),
 		dochandler.WithBodyStore(newMemStore(), bodyStoreInstance))
 	states, err := h.IngestEntityStates(
 		context.Background(),
 		sourceConfig{typ: "docs", path: root},
-		"acme",
+		testAuthority("acme"),
 	)
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)

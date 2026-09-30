@@ -26,7 +26,7 @@ import (
 // It is the preamble every passage test shares.
 func ingestDocs(t *testing.T, h *dochandler.Handler, dir string) []*handler.EntityState {
 	t.Helper()
-	states, err := h.IngestEntityStates(context.Background(), sourceConfig{typ: "docs", path: dir}, "acme")
+	states, err := h.IngestEntityStates(context.Background(), sourceConfig{typ: "docs", path: dir}, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}

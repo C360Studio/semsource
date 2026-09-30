@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -54,6 +57,7 @@ func (s *sourceCfg) GetPollInterval() string { return s.pollInterval }
 // package, which handles SSRF-safe retrieval, ETag-based conditional fetching,
 // and content-hash diffing.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -96,6 +100,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new url-source processor component.
@@ -107,8 +112,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
+	}
 
-	h := urlhandler.NewWithOrg(deps.GetLogger(), config.Org)
+	h := urlhandler.NewWithAuthority(deps.GetLogger(), authority)
 
 	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
 		// Publish-boundary telemetry, keyed by instance so one stalled source
@@ -119,6 +128,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
+		authority:  authority,
 		name:       "url-source",
 		config:     config,
 		publisher:  pub,
@@ -219,7 +229,7 @@ func (c *Component) ingestAll(ctx context.Context) error {
 			watchEnabled: false,
 		}
 
-		states, err := c.handler.IngestEntityStates(ctx, sc, c.config.Org)
+		states, err := c.handler.IngestEntityStates(ctx, sc, c.authority)
 		if err != nil {
 			c.logger.Warn("URL ingest failed",
 				"url", rawURL,
@@ -283,7 +293,8 @@ func (c *Component) startPolling(ctx context.Context, rawURL string) context.Can
 		"url", rawURL,
 		"poll_interval", c.config.PollInterval)
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-pollCtx.Done():
@@ -295,7 +306,7 @@ func (c *Component) startPolling(ctx context.Context, rawURL string) context.Can
 				c.handleChangeEvent(pollCtx, event)
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -437,7 +448,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -451,44 +462,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and the
-	// seed itself takes it, so waiting under the lock deadlocks. Draining first
-	// also keeps shutdown safe — stopping the publisher closes its buffer.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.publisher.Stop()
-	c.logger.Info("entity publisher stats",
-		"published", c.publisher.Published(),
-		"dropped", c.publisher.Dropped(),
-		"retries", c.publisher.Retries())
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
+
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
 	c.running = false
-
-	c.logger.Info("URL-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
-
+	c.mu.Unlock()
 	return nil
 }
 

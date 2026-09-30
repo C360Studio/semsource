@@ -1,6 +1,7 @@
 package objectstoresource
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/c360studio/semstreams/component"
@@ -20,6 +21,7 @@ func Register(registry RegistryInterface) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
 		Name:        "objectstore-source",
 		Factory:     NewComponent,
+		Ports:       DeclarePorts,
 		Schema:      objectStoreSourceSchema,
 		Type:        "processor",
 		Protocol:    "s3",
@@ -27,4 +29,19 @@ func Register(registry RegistryInterface) error {
 		Description: "S3-compatible object store source for semsource document artifact ingestion",
 		Version:     "0.1.0",
 	})
+}
+
+// DeclarePorts reports the constructor's ports without acquiring runtime resources.
+func DeclarePorts(raw json.RawMessage, _ string) (component.PortConfig, error) {
+	cfg := DefaultConfig()
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return component.PortConfig{}, fmt.Errorf("decode config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return component.PortConfig{}, err
+	}
+	if cfg.Ports == nil {
+		return component.PortConfig{}, nil
+	}
+	return component.PortConfig{Outputs: cfg.Ports.Outputs}, nil
 }

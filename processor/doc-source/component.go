@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"path/filepath"
 	"reflect"
@@ -63,6 +65,7 @@ func (s *sourceCfg) GetCoalesceMs() int          { return s.coalesceMs }
 // It delegates all filesystem operations to the existing handler/doc package,
 // which handles directory walking, content hashing, and fsnotify-based watching.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -118,6 +121,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new doc-source processor component.
@@ -128,6 +132,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
 	}
 
 	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
@@ -141,7 +149,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
 	// with the wired body store (which needs a context to attach). The live
 	// handler is the one built in Start.
-	h := dochandler.NewWithOrg(config.Org, dochandler.WithProject(config.Project))
+	h := dochandler.NewWithAuthority(authority, dochandler.WithProject(config.Project))
 
 	sc := &sourceCfg{
 		paths:        config.Paths,
@@ -150,6 +158,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
+		authority:     authority,
 		name:          "doc-source",
 		config:        config,
 		publisher:     pub,
@@ -184,8 +193,6 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
-	c.publisher.Start(ctx)
-
 	// Assemble handler storage: the fusion verbatim-body store, so doc-context
 	// hydrates passages by handle (ADR-062) and graph-embedding embeds the same
 	// offloaded body via the shared StoreRegistry (ADR-063). One CONTENT blob,
@@ -204,10 +211,11 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("doc-source requires the verbatim body store (bucket %q): %w",
 			graph.BodyStoreBucket, err)
 	}
-	c.handler = dochandler.NewWithOrg(c.config.Org,
+	c.handler = dochandler.NewWithAuthority(c.authority,
 		dochandler.WithProject(c.config.Project),
 		dochandler.WithBodyStore(bodyStore, graph.BodyStoreInstance))
 
+	c.publisher.Start(ctx)
 	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
 
@@ -290,7 +298,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 // ingestOnce runs a single ingest pass: calls IngestEntityStates on the doc
 // handler and publishes each EntityPayload to NATS.
 func (c *Component) ingestOnce(ctx context.Context) error {
-	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.config.Org)
+	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.authority)
 	if err != nil {
 		c.ingestErrors.Add(1)
 		return fmt.Errorf("doc handler ingest: %w", err)
@@ -345,7 +353,8 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 
 	c.logger.Info("Doc-source fsnotify watching started", "paths", c.config.Paths)
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-watchCtx.Done():
@@ -357,7 +366,7 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 				c.handleChangeEvent(watchCtx, event)
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -525,7 +534,7 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string
 		RootPath: root,
 		Reason:   reason,
 	}
-	go func() {
+	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
 		defer cancel()
 		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
@@ -537,7 +546,7 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string
 		} else {
 			c.lifecycleFailing.Clear(c.logger, "staleness lifecycle trigger recovered")
 		}
-	}()
+	})
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -624,7 +633,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -638,45 +647,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and
-	// the seed itself takes it, so waiting under the lock deadlocks. Draining
-	// first also keeps shutdown safe — stopping the publisher closes its
-	// buffer, and a live seed would publish into a closed one.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.logger.Info("entity publisher stats",
-		"published", c.publisher.Published(),
-		"dropped", c.publisher.Dropped(),
-		"retries", c.publisher.Retries())
-	c.publisher.Stop()
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
+
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
 	c.running = false
-
-	c.logger.Info("Doc-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
-
+	c.mu.Unlock()
 	return nil
 }
 

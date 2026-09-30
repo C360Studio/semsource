@@ -53,7 +53,7 @@ func testdataDir(t *testing.T) string {
 // --- Supports ---
 
 func TestASTHandler_Supports(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 
 	tests := []struct {
 		name       string
@@ -77,7 +77,7 @@ func TestASTHandler_Supports(t *testing.T) {
 }
 
 func TestASTHandler_SourceType(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	if h.SourceType() != "ast" {
 		t.Errorf("SourceType() = %q, want %q", h.SourceType(), "ast")
 	}
@@ -86,7 +86,7 @@ func TestASTHandler_SourceType(t *testing.T) {
 // --- Ingest ---
 
 func TestASTHandler_Ingest_GoFixture(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),
@@ -124,7 +124,7 @@ func TestASTHandler_Ingest_GoFixture(t *testing.T) {
 }
 
 func TestASTHandler_Ingest_ProducesFunction(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),
@@ -150,7 +150,7 @@ func TestASTHandler_Ingest_ProducesFunction(t *testing.T) {
 }
 
 func TestASTHandler_Ingest_ProducesStruct(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),
@@ -177,7 +177,7 @@ func TestASTHandler_Ingest_ProducesStruct(t *testing.T) {
 }
 
 func TestASTHandler_Ingest_ProducesInterface(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),
@@ -204,7 +204,7 @@ func TestASTHandler_Ingest_ProducesInterface(t *testing.T) {
 }
 
 func TestASTHandler_Ingest_DomainIsGolang(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),
@@ -226,7 +226,7 @@ func TestASTHandler_Ingest_DomainIsGolang(t *testing.T) {
 }
 
 func TestASTHandler_Ingest_ContextCancelled(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),
@@ -247,7 +247,7 @@ func TestASTHandler_Ingest_ContextCancelled(t *testing.T) {
 
 func TestASTHandler_Ingest_EmptyDir(t *testing.T) {
 	tmp := t.TempDir()
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       tmp,
@@ -266,7 +266,7 @@ func TestASTHandler_Ingest_EmptyDir(t *testing.T) {
 }
 
 func TestASTHandler_Watch_NilWhenWatchDisabled(t *testing.T) {
-	h := asthandler.New(newTestLogger())
+	h := asthandler.New(newTestLogger(), testAuthority("acme"))
 	cfg := &stubConfig{
 		sourceType: "ast",
 		path:       testdataDir(t),

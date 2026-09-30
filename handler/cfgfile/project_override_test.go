@@ -24,7 +24,7 @@ func TestIngestEntityStates_ProjectOverride(t *testing.T) {
 
 	h := cfgfile.New(&cfgfile.Config{Project: "github-com-acme-shared-sub"})
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}

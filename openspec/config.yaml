@@ -32,8 +32,10 @@ context: |
 
   Non-negotiables to reflect in specs/tasks:
   - Entity IDs are deterministic 6-part IDs
-    {org}.{platform}.{domain}.{system}.{type}.{instance}, valid NATS KV keys and
-    matching the per-segment regex; construct via entityid.* only.
+    {org}.{platform}.{system}.{domain}.{type}.{instance}, valid NATS KV keys and
+    matching the per-segment regex; construct via entityid.* only. The composition
+    root resolves platform_id as a stem into retained effective authority; source
+    handlers receive that authority, never a product-name constant.
   - Raw binary bytes never enter triples — store by reference, project metadata,
     hashes, offsets, provenance.
   - Every graph write carries a semantic envelope (semstreams ADR-055); no source

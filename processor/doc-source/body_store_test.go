@@ -61,7 +61,7 @@ func unstartedComponent(t *testing.T, root string) *Component {
 // walk the whole corpus and publish entities whose bodies are unretrievable.
 func TestComponentStart_FailsWhenBodyStoreUnavailable(t *testing.T) {
 	c := unstartedComponent(t, t.TempDir())
-	defer c.publisher.Stop()
+	defer c.publisher.Stop(context.Background())
 
 	err := c.Start(context.Background())
 	if err == nil {
@@ -79,7 +79,7 @@ func TestComponentStart_FailsWhenBodyStoreUnavailable(t *testing.T) {
 // remove — a supervisor polling health would see nothing wrong.
 func TestComponentStart_StaysUnhealthyWhenBodyStoreUnavailable(t *testing.T) {
 	c := unstartedComponent(t, t.TempDir())
-	defer c.publisher.Stop()
+	defer c.publisher.Stop(context.Background())
 
 	if err := c.Start(context.Background()); err == nil {
 		t.Fatal("Start() error = nil with an unavailable body store, want an error")

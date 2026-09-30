@@ -133,7 +133,7 @@ func (c *Component) minifiedFileResult(pw *pathWatcher, filePath, routeLang stri
 	hash := semsourceast.ComputeHash(content)
 	ext := strings.ToLower(filepath.Ext(filePath))
 	fileEntity := semsourceast.NewCodeEntity(
-		pw.config.Org,
+		c.authority,
 		entityDomainForRoute(routeLang, ext),
 		pw.scopedSystem,
 		semsourceast.TypeFile,

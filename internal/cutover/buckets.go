@@ -52,6 +52,9 @@ var Purged = []string{
 // A SemSource cutover deleting another component's durable state would reach
 // outside its own blast radius. Retaining it also proves the cutover does not
 // overreach, which is worth an assertion in its own right.
+// semstreams_config includes the create-once deployment authority. A graph-only
+// reset must retain it; the beta.163 adoption instead provisions a separate store.
 var Retained = []string{
+	"semstreams_config",
 	"TOOL_CALL_OUTCOMES",
 }

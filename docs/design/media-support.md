@@ -3,6 +3,10 @@
 > **Status:** Draft | **Date:** March 2026
 > **Scope:** Image ingestion (Phase 1), Video + keyframe extraction (Phase 2)
 >
+> **SETUP 03A update (2026-09):** The ID examples below are historical. Current media IDs use
+> `org.platform.system.domain.type.instance` and effective retained deployment authority; see
+> `docs/testing/setup-03a/compatibility.md`.
+>
 > **Update (2026-07):** Phases 1–2 shipped (image + video/audio metadata handlers/processors;
 > ffmpeg keyframe extraction still deferred). **Storage decision:** media binaries are stored on
 > the local **filestore** (`storage/filestore`, wired via `file_store_root` / `media_store_dir`),

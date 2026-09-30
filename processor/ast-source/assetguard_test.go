@@ -2,6 +2,7 @@ package astsource
 
 import (
 	"context"
+	"github.com/c360studio/semsource/entityid"
 	"io"
 	"log/slog"
 	"os"
@@ -68,7 +69,7 @@ func TestMinifiedFileResult_FileEntityIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	parser, err := semsourceast.DefaultRegistry.CreateParser("javascript", "acme", "proj", root)
+	parser, err := semsourceast.DefaultRegistry.CreateParser("javascript", entityid.Authority{Org: "acme", Platform: "test"}, "proj", root)
 	if err != nil {
 		t.Fatalf("create parser: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestMinifiedFileResult_FileEntityIdentity(t *testing.T) {
 		t.Fatal("parser produced no file entity")
 	}
 
-	c := &Component{logger: slog.Default()}
+	c := &Component{logger: slog.Default(), authority: entityid.Authority{Org: "acme", Platform: "test"}}
 	pw := &pathWatcher{
 		root:         root,
 		scopedSystem: "proj",
@@ -133,7 +134,7 @@ func TestParseFileWithWatcher_MinifiedSkipsSymbols(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	parser, err := semsourceast.DefaultRegistry.CreateParser("javascript", "acme", "proj", root)
+	parser, err := semsourceast.DefaultRegistry.CreateParser("javascript", entityid.Authority{Org: "acme", Platform: "test"}, "proj", root)
 	if err != nil {
 		t.Fatalf("create parser: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestParseFileWithWatcher_MinifiedSkipsSymbols(t *testing.T) {
 		parsers:      map[string]semsourceast.FileParser{"javascript": parser},
 		routes:       map[string]string{".js": "javascript"},
 	}
-	c := &Component{logger: slog.Default()}
+	c := &Component{logger: slog.Default(), authority: entityid.Authority{Org: "acme", Platform: "test"}}
 
 	minRes, err := c.parseFileWithWatcher(context.Background(), pw, minPath)
 	if err != nil {

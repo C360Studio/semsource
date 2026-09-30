@@ -70,7 +70,7 @@ func TestModuleToRelPath(t *testing.T) {
 	mustWrite(t, root, "pkg/sub/__init__.py", "")
 	mustWrite(t, root, "pkg/client.py", "")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 
 	cases := []struct {
 		name    string
@@ -106,7 +106,7 @@ func TestParseFile_CrossFileInheritance(t *testing.T) {
 	clientPath := mustWrite(t, root, "pkg/client.py",
 		"from pkg.base import BaseClient\n\nclass AsyncClient(BaseClient):\n    pass\n")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 
 	baseRes, err := p.ParseFile(context.Background(), basePath)
 	if err != nil {
@@ -142,7 +142,7 @@ func TestParseFile_CrossFileInheritance_OrderIndependent(t *testing.T) {
 	clientPath := mustWrite(t, root, "pkg/client.py",
 		"from pkg.base import BaseClient\n\nclass AsyncClient(BaseClient):\n    pass\n")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 
 	// Parse the referrer FIRST (base not yet parsed).
 	clientRes, err := p.ParseFile(context.Background(), clientPath)
@@ -175,7 +175,7 @@ func TestParseFile_CrossFileInheritance_RelativeAndAliased(t *testing.T) {
 	aliasPath := mustWrite(t, root, "pkg/alias.py",
 		"import pkg.base as pb\n\nclass AliasSub(pb.Base):\n    pass\n")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	baseRes, err := p.ParseFile(context.Background(), basePath)
 	if err != nil {
 		t.Fatalf("parse base: %v", err)
@@ -213,7 +213,7 @@ func TestParseFile_UnresolvedReferencesStayInert(t *testing.T) {
 	clientPath := mustWrite(t, root, "app/client.py",
 		"from requests import Session\nfrom mystuff import *\n\nclass MyClient(Session):\n    pass\n")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	res, err := p.ParseFile(context.Background(), clientPath)
 	if err != nil {
 		t.Fatalf("parse: %v", err)

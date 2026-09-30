@@ -78,7 +78,6 @@ func (s *Supervisor) Start(ctx context.Context, logger *slog.Logger, seed func(c
 func (s *Supervisor) Stop(ctx context.Context, logger *slog.Logger) {
 	s.mu.Lock()
 	cancel, done := s.cancel, s.done
-	s.cancel, s.done = nil, nil
 	s.mu.Unlock()
 
 	if cancel == nil {
@@ -90,6 +89,13 @@ func (s *Supervisor) Stop(ctx context.Context, logger *slog.Logger) {
 	}
 	select {
 	case <-done:
+		// A timed-out stop must retain the exact seed so another Stop can
+		// finish joining it before the publisher or stores are torn down.
+		s.mu.Lock()
+		if s.done == done {
+			s.cancel, s.done = nil, nil
+		}
+		s.mu.Unlock()
 	case <-ctx.Done():
 		if logger != nil {
 			logger.Warn("shutdown context expired before the initial seed stopped",

@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semstreams/pkg/projection"
 	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
@@ -25,6 +26,9 @@ func RegisterPayloads(reg *payloadregistry.Registry) error {
 		Version:     "v1",
 		Description: "SemSource entity payload for graph ingestion",
 		Factory:     func() any { return &EntityPayload{} },
+		// Per-entity profiles remain authoritative; unprofiled births are control.
+		IndexingProfile: semvocab.IndexingProfileControl,
+		Contracts:       []projection.Contract{SourceEntityContract()},
 	})
 }
 

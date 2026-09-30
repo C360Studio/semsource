@@ -214,14 +214,14 @@ func reportCorpus(ctx context.Context, js jetstream.JetStream) error {
 }
 
 // systemOf returns the {system} segment of a six-part entity ID
-// ({org}.{platform}.{domain}.{system}.{type}.{instance}), or "?" when the ID
+// ({org}.{platform}.{system}.{domain}.{type}.{instance}), or "?" when the ID
 // does not have that shape.
 func systemOf(entityID string) string {
 	parts := strings.Split(entityID, ".")
 	if len(parts) < 4 {
 		return "?"
 	}
-	return parts[3]
+	return parts[2]
 }
 
 func distinctSystems(members []string) map[string]int {

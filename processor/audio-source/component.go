@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -53,6 +56,7 @@ func (s *sourceCfg) GetCoalesceMs() int          { return s.coalesceMs }
 // watching. When FileStoreRoot is configured, binary content is stored in the
 // local filesystem via filestore; otherwise only metadata entities are published.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -97,6 +101,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new audio-source processor component.
@@ -108,9 +113,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
+	}
 
 	// Build handler options; start with org for entity ID construction.
-	opts := []audiohandler.Option{audiohandler.WithOrg(config.Org)}
+	opts := []audiohandler.Option{audiohandler.WithAuthority(authority)}
 
 	// Wire binary storage when a root directory is configured.
 	var fs *filestore.Store
@@ -140,6 +149,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
+		authority:  authority,
 		name:       "audio-source",
 		config:     config,
 		publisher:  pub,
@@ -237,7 +247,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 // handler and publishes each EntityState directly as a graph.EntityPayload,
 // bypassing the normalizer entirely.
 func (c *Component) ingestOnce(ctx context.Context) error {
-	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.config.Org)
+	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.authority)
 	if err != nil {
 		c.ingestErrors.Add(1)
 		return fmt.Errorf("audio handler ingest: %w", err)
@@ -290,7 +300,8 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 
 	c.logger.Info("Audio-source fsnotify watching started", "paths", c.config.Paths)
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-watchCtx.Done():
@@ -302,7 +313,7 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 				c.handleChangeEvent(watchCtx, event)
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -435,7 +446,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -449,50 +460,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and the
-	// seed itself takes it, so waiting under the lock deadlocks. Draining first
-	// also keeps shutdown safe — stopping the publisher closes its buffer.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.logger.Info("entity publisher stats",
-		"published", c.publisher.Published(),
-		"dropped", c.publisher.Dropped(),
-		"retries", c.publisher.Retries())
-	c.publisher.Stop()
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
-	c.running = false
 
-	if c.fileStore != nil {
-		if err := c.fileStore.Close(); err != nil {
-			c.logger.Warn("Failed to close file store", "error", err)
-		}
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
 	}
-
-	c.logger.Info("Audio-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
-
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.running = false
+	c.mu.Unlock()
 	return nil
 }
 

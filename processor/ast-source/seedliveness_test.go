@@ -2,6 +2,7 @@ package astsource
 
 import (
 	"context"
+	"github.com/c360studio/semsource/entityid"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ func TestParseDirectoryAdvancesFilesParsed(t *testing.T) {
 	write("pkg/b.py", "class B:\n    pass\n")
 	write("notes.txt", "not code — no parser routes .txt\n")
 
-	parser, err := semsourceast.DefaultRegistry.CreateParser("python", "acme", "proj", root)
+	parser, err := semsourceast.DefaultRegistry.CreateParser("python", entityid.Authority{Org: "acme", Platform: "test"}, "proj", root)
 	if err != nil {
 		t.Fatalf("create parser: %v", err)
 	}

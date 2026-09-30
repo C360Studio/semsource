@@ -20,7 +20,7 @@ func parseJS(t *testing.T, src string) (map[string]*ast.CodeEntity, []*ast.CodeE
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NewParser("test-org", "test-project", dir).ParseFile(context.Background(), path)
+	result, err := NewParser(testAuthority("test-org"), "test-project", dir).ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}

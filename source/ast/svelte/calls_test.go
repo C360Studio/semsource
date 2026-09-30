@@ -45,7 +45,7 @@ func parseTree(t *testing.T, files map[string]string) []*ast.CodeEntity {
 	sort.Strings(rels)
 
 	var all []*ast.CodeEntity
-	p := NewParser("acme", "test", root)
+	p := NewParser(testAuthority("acme"), "test", root)
 	for _, rel := range rels {
 		res, err := p.ParseFile(context.Background(), filepath.Join(root, rel))
 		if err != nil {
@@ -164,7 +164,7 @@ func TestSvelteScriptImportsAndCallsInTreeFunction(t *testing.T) {
 			"</script>\n",
 	})
 	run := entityNamed(t, ents, "run")
-	want := ast.NewCodeEntity("acme", "typescript", "test", ast.TypeFunction, "helper", "lib/util.ts")
+	want := ast.NewCodeEntity(testAuthority("acme"), "typescript", "test", ast.TypeFunction, "helper", "lib/util.ts")
 	if !hasCall(run.Calls, want.ID) {
 		t.Fatalf("run calls = %v, want it to contain util.ts's helper definition ID %q", run.Calls, want.ID)
 	}

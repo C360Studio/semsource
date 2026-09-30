@@ -35,10 +35,10 @@ type Config struct {
 	// WatchConfig is forwarded to the underlying FSWatcher.
 	Watch fswatcher.WatchConfig
 
-	// Org is the organisation namespace used when building typed EntityState
+	// Authority is the effective deployment authority used when building typed EntityState
 	// values via IngestEntityStates and Watch. Required for the normalizer-free
 	// processor path.
-	Org string
+	Authority entityid.Authority
 
 	// Project, when non-empty, overrides the path-derived entity-ID system
 	// slug. Submodule expansion depends on this: the same canonical project
@@ -139,9 +139,12 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 
 // IngestEntityStates walks all configured paths, parses recognised config
 // files, and returns fully-typed entity states that embed vocabulary-predicate
-// triples directly — bypassing the normalizer entirely. The org parameter is
-// the organisation namespace (e.g. "acme") used in the 6-part entity ID.
-func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// triples directly — bypassing the normalizer entirely. The authority parameter is
+// the effective deployment authority (e.g. "acme") used in the 6-part entity ID.
+func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	paths := resolvePaths(cfg)
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("cfgfile: at least one path is required")
@@ -183,7 +186,7 @@ func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.Sour
 				return nil
 			}
 
-			parsed := h.parseFileEntityStates(base, path, content, root, org, now)
+			parsed := h.parseFileEntityStates(base, path, content, root, authority, now)
 			states = append(states, parsed...)
 			return nil
 		})
@@ -298,8 +301,8 @@ func (h *ConfigHandler) fanOut(ctx context.Context, root string, in <-chan handl
 				Timestamp: now,
 				Entities:  entities,
 			}
-			if h.cfg.Org != "" {
-				enriched.EntityStates = h.parseFileEntityStates(base, ev.Path, content, root, h.cfg.Org, now.UTC())
+			if h.cfg.Authority.Org != "" {
+				enriched.EntityStates = h.parseFileEntityStates(base, ev.Path, content, root, h.cfg.Authority, now.UTC())
 			}
 			select {
 			case out <- enriched:

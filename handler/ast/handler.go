@@ -35,7 +35,7 @@ type Config interface {
 	handler.SourceConfig
 	// GetLanguage returns the source language (e.g. "go", "ts"). Defaults to "go".
 	GetLanguage() string
-	// GetOrg returns the org namespace for entity IDs. Defaults to "public".
+	// GetOrg optionally confirms the deployment org; a mismatch is refused.
 	GetOrg() string
 	// GetProject returns the project slug for entity IDs.
 	// Defaults to a slug derived from the path.
@@ -45,12 +45,13 @@ type Config interface {
 // Handler implements handler.SourceHandler for AST-based code indexing.
 // It is safe for concurrent use.
 type Handler struct {
-	logger *slog.Logger
+	logger    *slog.Logger
+	authority entityid.Authority
 }
 
 // New creates an ASTHandler.
-func New(logger *slog.Logger) *Handler {
-	return &Handler{logger: logger}
+func New(logger *slog.Logger, authority entityid.Authority) *Handler {
+	return &Handler{logger: logger, authority: authority}
 }
 
 // SourceType returns "ast".
@@ -70,7 +71,13 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 		return nil, err
 	}
 
-	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, org, project, root)
+	if err := h.authority.Validate(); err != nil {
+		return nil, err
+	}
+	if org != "" && org != h.authority.Org {
+		return nil, fmt.Errorf("source org %q differs from deployment org %q", org, h.authority.Org)
+	}
+	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, h.authority, project, root)
 	if err != nil {
 		return nil, fmt.Errorf("asthandler: create %s parser: %w", lang, err)
 	}
@@ -101,7 +108,13 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 		return nil, err
 	}
 
-	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, org, project, root)
+	if err := h.authority.Validate(); err != nil {
+		return nil, err
+	}
+	if org != "" && org != h.authority.Org {
+		return nil, fmt.Errorf("source org %q differs from deployment org %q", org, h.authority.Org)
+	}
+	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, h.authority, project, root)
 	if err != nil {
 		return nil, fmt.Errorf("asthandler: create %s parser for watch: %w", lang, err)
 	}
@@ -111,7 +124,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 
 	wcfg := semsourceast.WatcherConfig{
 		RepoRoot:       root,
-		Org:            org,
+		Authority:      h.authority,
 		Project:        project,
 		DebounceDelay:  100 * time.Millisecond,
 		Logger:         h.logger,
@@ -133,10 +146,12 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 
 	go func() {
 		defer close(out)
+		// Output closure acknowledges the child join. Preserve this cleanup
+		// owner after the caller cancels; parsing already sees cancellation.
+		defer func() { _ = watcher.Stop(context.WithoutCancel(ctx)) }()
 		for {
 			select {
 			case <-ctx.Done():
-				watcher.Stop() //nolint:errcheck
 				return
 			case ev, ok := <-watcher.Events():
 				if !ok {
@@ -146,7 +161,6 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 				select {
 				case out <- ce:
 				case <-ctx.Done():
-					watcher.Stop() //nolint:errcheck
 					return
 				}
 			}
@@ -208,7 +222,7 @@ func parseDirectory(ctx context.Context, parser semsourceast.FileParser, root st
 func resolveConfig(cfg handler.SourceConfig) (lang, org, project, root string) {
 	root = cfg.GetPath()
 	lang = "go"
-	org = "public"
+	org = ""
 	project = pathToSystemSlug(root)
 
 	if ac, ok := cfg.(Config); ok {

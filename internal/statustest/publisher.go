@@ -59,7 +59,7 @@ func LossyPublisher(t *testing.T, n int) (*entitypub.Publisher, int64) {
 	pub.Start(ctx)
 	t.Cleanup(func() {
 		cancel()
-		pub.Stop()
+		_ = pub.Stop(context.Background())
 	})
 
 	var accepted int64

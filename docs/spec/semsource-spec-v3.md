@@ -4,8 +4,11 @@
 > **Status:** Draft | **Version:** 0.3.0 | **Date:** March 2026
 >
 > **Historical note (updated 2026-07):** This spec records the original WebSocket/federation-era
-> design. Several sections below are **superseded** and will mislead if read as current — treat only
-> the 6-part entity ID scheme (§4) as authoritative. Superseded specifics:
+> design. Several sections below are **superseded** and will mislead if read as current.
+> **SETUP 03A update (2026-09):** §4 is also historical. Current IDs use
+> `org.platform.system.domain.type.instance` with retained deployment authority, not product-name
+> authority or unconditional public merges. See `docs/testing/setup-03a/compatibility.md`.
+> Other superseded specifics:
 > - **Transport / consumers (§§ Transport Model, 8.2):** the WebSocket-server → `input/websocket`
 >   (ModeClient) → per-consumer `FederationProcessor` model is gone. `FederationProcessor` does **not**
 >   exist in code; consumers query over NATS `graph.query.*` (external-service model, ADR-0006,

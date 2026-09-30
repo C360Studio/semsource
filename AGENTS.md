@@ -38,8 +38,8 @@ a reviewer outside its scope returns noise. The owner session keeps the decision
 these roles return findings, never commits. Massively-parallel `Workflow`
 orchestration is a separate question and remains opt-in.
 
-Four shared decision skills live in `.agents/skills/` — `kv-or-stream` and
-`orchestration-check` are **vendored** from semstreams (framework truth we do not
+Five shared decision skills live in `.agents/skills/` — `kv-or-stream`,
+`entity-or-bucket`, and `orchestration-check` are **vendored** from semstreams (framework truth we do not
 own), `new-payload` and `query-pattern` are **deliberate forks** where our
 conventions genuinely differ. Read the canonical `.agents/skills/<name>/SKILL.md`
 directly; the `.claude/skills/` entries of the same names are thin adapters.
@@ -85,8 +85,9 @@ assert the *shape* of the workflows and are not covered by the Go gate.
 
 ## Non-negotiables (also in openspec/config.yaml)
 
-- Entity IDs are deterministic 6-part IDs, valid NATS KV keys; construct via
-  `entityid.*` only. Raw binary bytes never enter triples (store by reference).
+- Entity IDs follow `org.platform.system.domain.type.instance`, remain deterministic
+  within the retained deployment authority, and are valid NATS KV keys. Construct via
+  `entityid.*` only; pass effective authority from component dependencies. Raw binary bytes never enter triples (store by reference).
 - Every graph write carries a semantic envelope (semstreams ADR-055).
 - The live graph is retention-first — never NATS TTL/MaxBytes for graph lifecycle.
 - CI green before push: revive **warnings fail** (v1.15.0), gofmt, go vet, go test.

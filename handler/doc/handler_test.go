@@ -325,7 +325,7 @@ func TestDocHandler_IngestEntityStates_ReturnsStates(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestDocHandler_IngestEntityStates_BodyHandle(t *testing.T) {
 	h, store := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestDocHandler_IngestEntityStates_ParentCarriesNoBody(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestDocHandler_IngestEntityStates_ParentStaysNavigable(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestDocHandler_IngestEntityStates_EveryPassageIsHydratable(t *testing.T) {
 	h, store := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestDocHandler_IngestEntityStates_NoRetiredSummaryTriple(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -567,7 +567,7 @@ func TestDocHandler_IngestEntityStates_DocumentTextStoredExactlyOnce(t *testing.
 	h, store := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -618,7 +618,7 @@ func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -633,8 +633,8 @@ func TestDocHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	if parts[0] != "acme" {
 		t.Errorf("ID org segment = %q, want %q", parts[0], "acme")
 	}
-	if parts[2] != "web" {
-		t.Errorf("ID domain segment = %q, want %q", parts[2], "web")
+	if parts[3] != "web" {
+		t.Errorf("ID domain segment = %q, want %q", parts[3], "web")
 	}
 	if parts[4] != "doc" {
 		t.Errorf("ID type segment = %q, want %q", parts[4], "doc")
@@ -651,7 +651,7 @@ func TestDocHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -694,7 +694,7 @@ func TestDocHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -713,11 +713,11 @@ func TestDocHandler_IngestEntityStates_DeterministicID(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states1, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("first IngestEntityStates() error: %v", err)
 	}
-	states2, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states2, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("second IngestEntityStates() error: %v", err)
 	}
@@ -741,13 +741,13 @@ func TestDocHandler_IngestEntityStates_IDStableAcrossContentChange(t *testing.T)
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states1, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states1, _ := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 
 	if err := os.WriteFile(path, []byte("# Second\nDifferent content."), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	states2, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states2, _ := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 
 	if len(states1) == 0 || len(states2) == 0 {
 		t.Fatal("expected states from both ingests")
@@ -768,7 +768,7 @@ func TestDocHandler_IngestEntityStates_TitleFromFirstHeading(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -792,7 +792,7 @@ func TestDocHandler_IngestEntityStates_NoTitleFallback(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -825,7 +825,7 @@ func TestDocHandler_IngestEntityStates_FiltersByExtension(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -867,7 +867,7 @@ func TestDocHandler_IngestEntityStates_MultiplePaths(t *testing.T) {
 		paths: []string{dirA, dirB},
 	}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -899,7 +899,7 @@ func TestDocHandler_IngestEntityStates_ContentChangeUpdatesHash(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states1, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("first IngestEntityStates() error: %v", err)
 	}
@@ -909,7 +909,7 @@ func TestDocHandler_IngestEntityStates_ContentChangeUpdatesHash(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	states2, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states2, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("second IngestEntityStates() error: %v", err)
 	}
@@ -940,7 +940,7 @@ func TestDocHandler_IngestEntityStates_EmptyDir(t *testing.T) {
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -959,7 +959,7 @@ func TestDocHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled
 
-	_, err := h.IngestEntityStates(ctx, cfg, "acme")
+	_, err := h.IngestEntityStates(ctx, cfg, testAuthority("acme"))
 	if err == nil {
 		t.Error("expected error on cancelled context")
 	}
@@ -1034,10 +1034,10 @@ func TestDocHandler_IngestEntityStates_StoreFailureIsFatal(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "doc.md", "# Doc\n"+strings.Repeat("word ", 200))
 
-	h := dochandler.NewWithOrg("acme", dochandler.WithBodyStore(&failStore{}, bodyStoreInstance))
+	h := dochandler.NewWithAuthority(testAuthority("acme"), dochandler.WithBodyStore(&failStore{}, bodyStoreInstance))
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err == nil {
 		t.Fatalf("IngestEntityStates() error = nil with a failing body store, want an error; got %d states instead",
 			len(states))
@@ -1074,10 +1074,10 @@ func TestDocHandler_IngestEntityStates_NoStoreIsFatal(t *testing.T) {
 	dir := t.TempDir()
 	writeMD(t, dir, "large.md", "# Large Doc\n"+strings.Repeat("word ", 200))
 
-	h := dochandler.NewWithOrg("acme")
+	h := dochandler.NewWithAuthority(testAuthority("acme"))
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err == nil {
 		t.Fatalf("IngestEntityStates() error = nil with no body store, want %v; got %d states instead",
 			dochandler.ErrBodyStoreRequired, len(states))
@@ -1108,7 +1108,7 @@ func TestDocHandler_IngestEntityStates_UnreadableFileIsSkippedNotFatal(t *testin
 	h, _ := docsHandler(t)
 	cfg := sourceConfig{typ: "docs", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error = %v, want nil; one unreadable document must not fail the walk", err)
 	}

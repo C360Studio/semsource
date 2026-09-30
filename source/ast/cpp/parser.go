@@ -22,8 +22,8 @@ func init() {
 	// is decided per watch path from the declared language set, not by this
 	// registration — see processor/ast-source/routing.go.
 	ast.DefaultRegistry.Register("cpp", []string{".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".h"},
-		func(org, project, repoRoot string) ast.FileParser {
-			return NewParser(org, project, repoRoot)
+		func(authority entityid.Authority, project, repoRoot string) ast.FileParser {
+			return NewParser(authority, project, repoRoot)
 		})
 }
 
@@ -35,21 +35,21 @@ func init() {
 // and class chain, which is what keeps two same-named methods on different
 // classes — or the same class compiled into two files — from colliding.
 type Parser struct {
-	org      string
-	project  string
-	repoRoot string
-	parser   *sitter.Parser
+	authority entityid.Authority
+	project   string
+	repoRoot  string
+	parser    *sitter.Parser
 }
 
 // NewParser creates a new C++ AST parser.
-func NewParser(org, project, repoRoot string) *Parser {
+func NewParser(authority entityid.Authority, project, repoRoot string) *Parser {
 	p := sitter.NewParser()
 	p.SetLanguage(cpp.GetLanguage())
 	return &Parser{
-		org:      org,
-		project:  project,
-		repoRoot: repoRoot,
-		parser:   p,
+		authority: authority,
+		project:   project,
+		repoRoot:  repoRoot,
+		parser:    p,
 	}
 }
 
@@ -82,7 +82,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		Entities: make([]*ast.CodeEntity, 0),
 	}
 
-	fileEntity := ast.NewCodeEntity(p.org, "cpp", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.authority, "cpp", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Hash = hash
 	fileEntity.StartLine = 1
 	fileEntity.EndLine = int(root.EndPoint().Row) + 1
@@ -414,13 +414,12 @@ func (p *Parser) overloadID(t ast.CodeEntityType, name, relPath string, scope []
 		sum := sha256.Sum256([]byte(collapseSpace(params.Content(content))))
 		instance += "-" + hex.EncodeToString(sum[:3])
 	}
-	return entityid.Build(p.org, entityid.PlatformSemsource, "cpp",
-		entityid.SystemSlug(p.project), string(t), instance)
+	return p.authority.Build(entityid.SystemSlug(p.project), "cpp", string(t), instance)
 }
 
 // newEntity constructs a scoped entity with the fields every kind shares.
 func (p *Parser) newEntity(t ast.CodeEntityType, name, relPath string, scope []string, node *sitter.Node) *ast.CodeEntity {
-	entity := ast.NewScopedCodeEntity(p.org, "cpp", p.project, t, scope, name, relPath)
+	entity := ast.NewScopedCodeEntity(p.authority, "cpp", p.project, t, scope, name, relPath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	return entity

@@ -146,11 +146,11 @@ func (e *KeyframeEntity) EntityState() *handler.EntityState {
 // videoEntityFromRaw converts a RawEntity with EntityType "video" produced by
 // ingestFile into a typed Entity using canonical vocabulary predicates.
 // The system slug is taken from RawEntity.System (already set by ingestFile).
-func videoEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
+func videoEntityFromRaw(authority entityid.Authority, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
 	ve := &Entity{
-		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "video", r.Instance),
+		ID:          authority.Build(r.System, "media", "video", r.Instance),
 		System:      r.System,
-		Org:         org,
+		Org:         authority.Org,
 		IndexedAt:   now,
 		StoreBucket: storeBucket,
 	}
@@ -199,12 +199,12 @@ func videoEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.T
 // keyframeEntityFromRaw converts a RawEntity with EntityType "keyframe" produced
 // by ingestFile into a typed KeyframeEntity. videoID is the fully-qualified
 // entity ID of the parent video, used to emit the keyframe_of relationship triple.
-func keyframeEntityFromRaw(org, videoID, storeBucket string, r handler.RawEntity, now time.Time) *KeyframeEntity {
+func keyframeEntityFromRaw(authority entityid.Authority, videoID, storeBucket string, r handler.RawEntity, now time.Time) *KeyframeEntity {
 	ke := &KeyframeEntity{
-		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "keyframe", r.Instance),
+		ID:          authority.Build(r.System, "media", "keyframe", r.Instance),
 		VideoID:     videoID,
 		System:      r.System,
-		Org:         org,
+		Org:         authority.Org,
 		IndexedAt:   now,
 		StoreBucket: storeBucket,
 	}
@@ -228,9 +228,12 @@ func keyframeEntityFromRaw(org, videoID, storeBucket string, r handler.RawEntity
 
 // IngestEntityStates walks every path in cfg, extracts video and keyframe
 // entities, and returns fully-typed EntityState values with vocabulary-predicate
-// triples — bypassing the normalizer entirely. The org parameter is the
-// organisation namespace used in the 6-part entity ID.
-func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// triples — bypassing the normalizer entirely. The authority parameter is the
+// effective deployment authority used in the 6-part entity ID.
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	rawEntities, err := h.Ingest(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -245,7 +248,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 
 	for _, r := range rawEntities {
 		if r.EntityType == "video" {
-			ve := videoEntityFromRaw(org, h.storeBucket, r, now)
+			ve := videoEntityFromRaw(authority, h.storeBucket, r, now)
 			videoIDByInstance[r.Instance] = ve.ID
 			states = append(states, ve.EntityState())
 		}
@@ -263,7 +266,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 			videoInstance = r.Instance[:6]
 		}
 		videoID := videoIDByInstance[videoInstance]
-		ke := keyframeEntityFromRaw(org, videoID, h.storeBucket, r, now)
+		ke := keyframeEntityFromRaw(authority, videoID, h.storeBucket, r, now)
 		states = append(states, ke.EntityState())
 	}
 

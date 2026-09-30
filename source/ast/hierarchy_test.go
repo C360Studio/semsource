@@ -13,7 +13,7 @@ import (
 func TestBuildHierarchy_SingleRootFile(t *testing.T) {
 	// A file at the root level should be contained by the repo entity directly.
 	file := &ast.CodeEntity{
-		ID:        entityid.Build("acme", entityid.PlatformSemsource, "golang", "my-project", "file", "main-go"),
+		ID:        entityid.Build("acme", "test-platform", "my-project", "golang", "file", "main-go"),
 		Type:      ast.TypeFile,
 		Name:      "main.go",
 		Path:      "main.go",
@@ -25,7 +25,7 @@ func TestBuildHierarchy_SingleRootFile(t *testing.T) {
 		Path:       "main.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "my-project")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "my-project")
 
 	// Should get exactly one entity: the repo
 	var repo *ast.CodeEntity
@@ -60,7 +60,7 @@ func TestBuildHierarchy_NestedFile(t *testing.T) {
 	// A file at pkg/auth/handler.go should produce:
 	// repo → folder(pkg) → folder(pkg/auth) → file
 	file := &ast.CodeEntity{
-		ID:        entityid.Build("acme", entityid.PlatformSemsource, "golang", "my-project", "file", "pkg-auth-handler-go"),
+		ID:        entityid.Build("acme", "test-platform", "my-project", "golang", "file", "pkg-auth-handler-go"),
 		Type:      ast.TypeFile,
 		Name:      "handler.go",
 		Path:      "pkg/auth/handler.go",
@@ -72,7 +72,7 @@ func TestBuildHierarchy_NestedFile(t *testing.T) {
 		Path:       "pkg/auth/handler.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "my-project")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "my-project")
 
 	// Should have repo + 2 folders
 	var repo *ast.CodeEntity
@@ -132,14 +132,14 @@ func TestBuildHierarchy_NestedFile(t *testing.T) {
 func TestBuildHierarchy_MultipleFilesInSameFolder(t *testing.T) {
 	// Two files in the same folder should produce one folder entity with both files.
 	file1 := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.pkg-handler-go",
+		ID:        "acme.test-platform.proj.golang.file.pkg-handler-go",
 		Type:      ast.TypeFile,
 		Name:      "handler.go",
 		Path:      "pkg/handler.go",
 		IndexedAt: time.Now(),
 	}
 	file2 := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.pkg-service-go",
+		ID:        "acme.test-platform.proj.golang.file.pkg-service-go",
 		Type:      ast.TypeFile,
 		Name:      "service.go",
 		Path:      "pkg/service.go",
@@ -150,7 +150,7 @@ func TestBuildHierarchy_MultipleFilesInSameFolder(t *testing.T) {
 		{FileEntity: file2, Entities: []*ast.CodeEntity{file2}, Path: "pkg/service.go"},
 	}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	var folderCount int
 	for _, e := range entities {
@@ -174,7 +174,7 @@ func TestBuildHierarchy_DeterministicIDs(t *testing.T) {
 	// Same inputs must produce identical entity IDs.
 	makeFile := func() *ast.CodeEntity {
 		return &ast.CodeEntity{
-			ID:        "acme.semsource.golang.proj.file.src-main-go",
+			ID:        "acme.test-platform.proj.golang.file.src-main-go",
 			Type:      ast.TypeFile,
 			Name:      "main.go",
 			Path:      "src/main.go",
@@ -184,11 +184,11 @@ func TestBuildHierarchy_DeterministicIDs(t *testing.T) {
 
 	file1 := makeFile()
 	results1 := []*ast.ParseResult{{FileEntity: file1, Entities: []*ast.CodeEntity{file1}, Path: "src/main.go"}}
-	entities1 := ast.BuildHierarchy(results1, "acme", "proj")
+	entities1 := ast.BuildHierarchy(results1, testAuthority("acme"), "proj")
 
 	file2 := makeFile()
 	results2 := []*ast.ParseResult{{FileEntity: file2, Entities: []*ast.CodeEntity{file2}, Path: "src/main.go"}}
-	entities2 := ast.BuildHierarchy(results2, "acme", "proj")
+	entities2 := ast.BuildHierarchy(results2, testAuthority("acme"), "proj")
 
 	if len(entities1) != len(entities2) {
 		t.Fatalf("different entity counts: %d vs %d", len(entities1), len(entities2))
@@ -203,7 +203,7 @@ func TestBuildHierarchy_DeterministicIDs(t *testing.T) {
 func TestBuildHierarchy_RepoAndFoldersUseCodeDomain(t *testing.T) {
 	// Repo and folder entities should use "code" domain, not a language-specific one.
 	file := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.main-go",
+		ID:        "acme.test-platform.proj.golang.file.main-go",
 		Type:      ast.TypeFile,
 		Name:      "main.go",
 		Path:      "main.go",
@@ -215,15 +215,15 @@ func TestBuildHierarchy_RepoAndFoldersUseCodeDomain(t *testing.T) {
 		Path:       "main.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	for _, e := range entities {
-		// ID format: org.platform.domain.system.type.instance
+		// ID format: org.platform.system.domain.type.instance
 		parts := strings.Split(e.ID, ".")
 		if len(parts) < 6 {
 			t.Fatalf("entity ID has fewer than 6 parts: %q", e.ID)
 		}
-		domain := parts[2]
+		domain := parts[3]
 		if domain != "code" {
 			t.Errorf("entity %q domain = %q, want \"code\"", e.ID, domain)
 		}
@@ -233,7 +233,7 @@ func TestBuildHierarchy_RepoAndFoldersUseCodeDomain(t *testing.T) {
 func TestBuildHierarchy_NoLanguageOnStructuralEntities(t *testing.T) {
 	// Repo and folder entities should not have Language set (it's not a programming language).
 	file := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.src-main-go",
+		ID:        "acme.test-platform.proj.golang.file.src-main-go",
 		Type:      ast.TypeFile,
 		Name:      "main.go",
 		Path:      "src/main.go",
@@ -245,7 +245,7 @@ func TestBuildHierarchy_NoLanguageOnStructuralEntities(t *testing.T) {
 		Path:       "src/main.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	for _, e := range entities {
 		if e.Language != "" {
@@ -258,7 +258,7 @@ func TestBuildHierarchy_NoLanguageOnStructuralEntities(t *testing.T) {
 func TestBuildHierarchy_FolderEntityNames(t *testing.T) {
 	// Folder entities should be named after their last path segment.
 	file := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.pkg-auth-handler-go",
+		ID:        "acme.test-platform.proj.golang.file.pkg-auth-handler-go",
 		Type:      ast.TypeFile,
 		Name:      "handler.go",
 		Path:      "pkg/auth/handler.go",
@@ -270,7 +270,7 @@ func TestBuildHierarchy_FolderEntityNames(t *testing.T) {
 		Path:       "pkg/auth/handler.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	for _, e := range entities {
 		if e.Type == ast.TypeFolder {
@@ -285,7 +285,7 @@ func TestBuildHierarchy_FolderEntityNames(t *testing.T) {
 func TestBuildHierarchy_NATSKVSafeIDs(t *testing.T) {
 	// All generated entity IDs must be valid NATS KV keys.
 	file := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.src-deep-nested-file-go",
+		ID:        "acme.test-platform.proj.golang.file.src-deep-nested-file-go",
 		Type:      ast.TypeFile,
 		Name:      "file.go",
 		Path:      "src/deep/nested/file.go",
@@ -297,7 +297,7 @@ func TestBuildHierarchy_NATSKVSafeIDs(t *testing.T) {
 		Path:       "src/deep/nested/file.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	for _, e := range entities {
 		if err := entityid.ValidateNATSKVKey(e.ID); err != nil {
@@ -307,12 +307,12 @@ func TestBuildHierarchy_NATSKVSafeIDs(t *testing.T) {
 }
 
 func TestBuildHierarchy_EmptyResults(t *testing.T) {
-	entities := ast.BuildHierarchy(nil, "acme", "proj")
+	entities := ast.BuildHierarchy(nil, testAuthority("acme"), "proj")
 	if len(entities) != 0 {
 		t.Errorf("expected no entities for nil results, got %d", len(entities))
 	}
 
-	entities = ast.BuildHierarchy([]*ast.ParseResult{}, "acme", "proj")
+	entities = ast.BuildHierarchy([]*ast.ParseResult{}, testAuthority("acme"), "proj")
 	if len(entities) != 0 {
 		t.Errorf("expected no entities for empty results, got %d", len(entities))
 	}
@@ -321,7 +321,7 @@ func TestBuildHierarchy_EmptyResults(t *testing.T) {
 func TestBuildHierarchy_NilFileEntity(t *testing.T) {
 	// ParseResults with nil FileEntity should be skipped without panicking.
 	goodFile := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.proj.file.main-go",
+		ID:        "acme.test-platform.proj.golang.file.main-go",
 		Type:      ast.TypeFile,
 		Name:      "main.go",
 		Path:      "main.go",
@@ -332,7 +332,7 @@ func TestBuildHierarchy_NilFileEntity(t *testing.T) {
 		{FileEntity: goodFile, Entities: []*ast.CodeEntity{goodFile}, Path: "main.go"},
 	}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	var repo *ast.CodeEntity
 	for _, e := range entities {
@@ -355,11 +355,11 @@ func TestBuildHierarchy_NilFileEntity(t *testing.T) {
 func TestBuildHierarchy_ContainsSorted(t *testing.T) {
 	// Contains lists should be deterministically sorted.
 	fileA := &ast.CodeEntity{
-		ID: "acme.semsource.golang.proj.file.pkg-z-go", Type: ast.TypeFile,
+		ID: "acme.test-platform.proj.golang.file.pkg-z-go", Type: ast.TypeFile,
 		Name: "z.go", Path: "pkg/z.go", IndexedAt: time.Now(),
 	}
 	fileB := &ast.CodeEntity{
-		ID: "acme.semsource.golang.proj.file.pkg-a-go", Type: ast.TypeFile,
+		ID: "acme.test-platform.proj.golang.file.pkg-a-go", Type: ast.TypeFile,
 		Name: "a.go", Path: "pkg/a.go", IndexedAt: time.Now(),
 	}
 	results := []*ast.ParseResult{
@@ -367,7 +367,7 @@ func TestBuildHierarchy_ContainsSorted(t *testing.T) {
 		{FileEntity: fileB, Entities: []*ast.CodeEntity{fileB}, Path: "pkg/a.go"},
 	}
 
-	entities := ast.BuildHierarchy(results, "acme", "proj")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "proj")
 
 	for _, e := range entities {
 		if len(e.Contains) > 1 {
@@ -382,7 +382,7 @@ func TestBuildHierarchy_ContainsSorted(t *testing.T) {
 func TestBuildHierarchy_SystemSlugApplied(t *testing.T) {
 	// Project names with URL-like values should be slugified in the system segment.
 	file := &ast.CodeEntity{
-		ID:        "acme.semsource.golang.github.com-acme-repo.file.main-go",
+		ID:        "acme.test-platform.github.golang.com-acme-repo.file.main-go",
 		Type:      ast.TypeFile,
 		Name:      "main.go",
 		Path:      "main.go",
@@ -394,7 +394,7 @@ func TestBuildHierarchy_SystemSlugApplied(t *testing.T) {
 		Path:       "main.go",
 	}}
 
-	entities := ast.BuildHierarchy(results, "acme", "https://github.com/acme/repo")
+	entities := ast.BuildHierarchy(results, testAuthority("acme"), "https://github.com/acme/repo")
 
 	repo := entities[0]
 	// The repo ID should contain the slugified system segment, not raw URL
@@ -409,7 +409,7 @@ func TestBuildHierarchy_SystemSlugApplied(t *testing.T) {
 }
 
 func TestBuildFolderChain(t *testing.T) {
-	entities := ast.BuildFolderChain("pkg/auth/handler.go", "acme", "proj")
+	entities := ast.BuildFolderChain("pkg/auth/handler.go", testAuthority("acme"), "proj")
 
 	folders := make(map[string]*ast.CodeEntity)
 	for _, e := range entities {
@@ -449,7 +449,7 @@ func TestBuildFolderChain(t *testing.T) {
 
 func TestBuildFolderChain_RootFile(t *testing.T) {
 	// A root-level file should produce no folder entities.
-	entities := ast.BuildFolderChain("main.go", "acme", "proj")
+	entities := ast.BuildFolderChain("main.go", testAuthority("acme"), "proj")
 	if len(entities) != 0 {
 		t.Errorf("expected no entities for root file, got %d", len(entities))
 	}

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/handler/internal/fswatcher"
 )
@@ -69,7 +70,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 	for i, w := range watchers {
 		wg.Add(1)
 		root := roots[i]
-		org := h.org
+		authority := h.authority
 		go func(w *fswatcher.FSWatcher, root string) {
 			defer wg.Done()
 			defer func() { _ = w.Stop() }()
@@ -81,7 +82,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 					if !ok {
 						return
 					}
-					enriched := h.enrichEvent(ctx, ev, root, org)
+					enriched := h.enrichEvent(ctx, ev, root, authority)
 					select {
 					case out <- enriched:
 					case <-ctx.Done():
@@ -101,9 +102,9 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 }
 
 // enrichEvent re-reads the changed file and populates ev.EntityStates when an
-// org is available. Delete events remain path-only. An unscoped non-delete
+// authority is available. Delete events remain path-only. An unscoped non-delete
 // event stays empty so its processor can report the typed-state contract error.
-func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
+func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string, authority entityid.Authority) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
 		ev.Timestamp = time.Now()
 		return ev
@@ -117,8 +118,8 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root,
 		return ev
 	}
 
-	if org != "" {
-		ev = h.enrichEventEntityStates(ctx, ev, root, org)
+	if authority.Org != "" {
+		ev = h.enrichEventEntityStates(ctx, ev, root, authority)
 	}
 
 	ev.Timestamp = time.Now()

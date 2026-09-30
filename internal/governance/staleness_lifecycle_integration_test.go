@@ -85,7 +85,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	qc := tc.Client
 
 	system := entityid.ScopedSystemSlug(project, "")
-	prefix := org + "." + entityid.PlatformSemsource + ".golang." + system
+	prefix := org + ".test-a1b2c3." + system + ".golang"
 
 	// Wait until both symbols are indexed by the real ast-source component.
 	var liveEntity, deletedEntity *semgraph.EntityState

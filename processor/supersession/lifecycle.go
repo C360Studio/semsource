@@ -11,7 +11,6 @@ import (
 
 	"errors"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
@@ -77,7 +76,10 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 		return graph.LifecycleRunResponse{}, fmt.Errorf("supersession not started")
 	}
 
-	prefix := req.Org + "." + entityid.PlatformSemsource
+	if req.Org != c.authority.Org {
+		return graph.LifecycleRunResponse{}, fmt.Errorf("lifecycle request org %q differs from deployment authority", req.Org)
+	}
+	prefix := c.authority.Org + "." + c.authority.Platform
 	entities, _, err := q.queryPrefixAll(ctx, prefix, c.config.maxEntities())
 	if err != nil {
 		return graph.LifecycleRunResponse{}, fmt.Errorf("enumerate entities: %w", err)
@@ -291,7 +293,7 @@ func entityIDSystem(id string) string {
 	if len(parts) < 6 {
 		return ""
 	}
-	return parts[3]
+	return parts[2]
 }
 
 // isMarkedStale reports whether triples already carries the staleness marker.

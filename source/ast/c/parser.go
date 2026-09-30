@@ -11,13 +11,14 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/c"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/ast"
 )
 
 func init() {
 	ast.DefaultRegistry.Register("c", []string{".c", ".h"},
-		func(org, project, repoRoot string) ast.FileParser {
-			return NewParser(org, project, repoRoot)
+		func(authority entityid.Authority, project, repoRoot string) ast.FileParser {
+			return NewParser(authority, project, repoRoot)
 		})
 }
 
@@ -30,10 +31,10 @@ func init() {
 // ast.BuildScopedInstanceID), which is what keeps two files that each define a
 // static function of the same name from collapsing onto one entity.
 type Parser struct {
-	org      string
-	project  string
-	repoRoot string
-	parser   *sitter.Parser
+	authority entityid.Authority
+	project   string
+	repoRoot  string
+	parser    *sitter.Parser
 
 	// Call-resolution state (calls.go): per-file definition-name sets validated
 	// by content hash, the name→files inversion, and the files revalidated
@@ -45,14 +46,14 @@ type Parser struct {
 }
 
 // NewParser creates a new C AST parser.
-func NewParser(org, project, repoRoot string) *Parser {
+func NewParser(authority entityid.Authority, project, repoRoot string) *Parser {
 	p := sitter.NewParser()
 	p.SetLanguage(c.GetLanguage())
 	return &Parser{
-		org:      org,
-		project:  project,
-		repoRoot: repoRoot,
-		parser:   p,
+		authority: authority,
+		project:   project,
+		repoRoot:  repoRoot,
+		parser:    p,
 	}
 }
 
@@ -93,7 +94,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		Entities: make([]*ast.CodeEntity, 0),
 	}
 
-	fileEntity := ast.NewCodeEntity(p.org, "c", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.authority, "c", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Hash = hash
 	fileEntity.StartLine = 1
 	fileEntity.EndLine = int(root.EndPoint().Row) + 1
@@ -275,7 +276,7 @@ func (p *Parser) macroEntity(node *sitter.Node, content []byte, relPath string) 
 
 // newEntity constructs an entity with the fields every kind shares.
 func (p *Parser) newEntity(t ast.CodeEntityType, name, relPath string, node *sitter.Node) *ast.CodeEntity {
-	entity := ast.NewCodeEntity(p.org, "c", p.project, t, name, relPath)
+	entity := ast.NewCodeEntity(p.authority, "c", p.project, t, name, relPath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	return entity

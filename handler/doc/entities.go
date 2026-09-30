@@ -61,9 +61,9 @@ type Entity struct {
 // updates content triples in place instead of minting an orphaned sibling
 // entity every save. The content hash still travels as the DocFileHash triple
 // for change detection — it just no longer feeds identity.
-func newEntity(org, title, filePath, mimeType, contentHash, system string, indexedAt time.Time) *Entity {
+func newEntity(authority entityid.Authority, title, filePath, mimeType, contentHash, system string, indexedAt time.Time) *Entity {
 	return &Entity{
-		ID:          DocumentEntityID(org, system, filePath),
+		ID:          DocumentEntityID(authority, system, filePath),
 		Title:       title,
 		FilePath:    filePath,
 		MimeType:    mimeType,
@@ -82,8 +82,8 @@ func newEntity(org, title, filePath, mimeType, contentHash, system string, index
 // silently. The ingest path calls this too, so there is only ever one.
 //
 // logicalPath must be slash-delimited — see IngestContentEntityStates.
-func DocumentEntityID(org, system, logicalPath string) string {
-	return entityid.Build(org, entityid.PlatformSemsource, "web", system, "doc", entityid.SanitizeInstance(logicalPath))
+func DocumentEntityID(authority entityid.Authority, system, logicalPath string) string {
+	return authority.Build(system, "web", "doc", entityid.SanitizeInstance(logicalPath))
 }
 
 // Triples converts the Entity to a slice of message.Triple using canonical
@@ -170,9 +170,9 @@ func passageTitle(parentTitle string, path []string, ordinal int) string {
 }
 
 // newPassageEntity builds a passage entity for one split of a document.
-func newPassageEntity(org, system, parentID, parentTitle, filePath, mimeType string, p passage, indexedAt time.Time) *PassageEntity {
+func newPassageEntity(authority entityid.Authority, system, parentID, parentTitle, filePath, mimeType string, p passage, indexedAt time.Time) *PassageEntity {
 	return &PassageEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "web", system, "chunk", chunkInstance(filePath, p.Ordinal)),
+		ID:        authority.Build(system, "web", "chunk", chunkInstance(filePath, p.Ordinal)),
 		ParentID:  parentID,
 		Title:     passageTitle(parentTitle, p.headingPath(), p.Ordinal),
 		Section:   p.Heading,
@@ -237,9 +237,12 @@ func (e *Entity) EntityState() *handler.EntityState {
 }
 
 // IngestEntityStates walks all configured paths and returns fully-typed entity
-// states that embed vocabulary-predicate triples directly. org is the
-// organisation namespace (e.g. "acme") used in the 6-part entity ID.
-func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// states that embed vocabulary-predicate triples directly. authority is the
+// effective deployment authority (e.g. "acme") used in the 6-part entity ID.
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	roots, err := resolvePaths(cfg)
 	if err != nil {
 		return nil, err
@@ -276,7 +279,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 				return nil
 			}
 
-			fileStates, err := h.ingestFileEntityStates(ctx, path, root, system, org, now)
+			fileStates, err := h.ingestFileEntityStates(ctx, path, root, system, authority, now)
 			if err != nil {
 				// An unreadable file is one document's problem: skip it. A body
 				// store that cannot be written to is the deployment's problem,
@@ -306,14 +309,14 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 //
 // filePath is named for the "path" package this file now imports; the parameter
 // used to be called path and would shadow it.
-func (h *Handler) ingestFileEntityStates(ctx context.Context, filePath, root, system, org string, now time.Time) ([]*handler.EntityState, error) {
+func (h *Handler) ingestFileEntityStates(ctx context.Context, filePath, root, system string, authority entityid.Authority, now time.Time) ([]*handler.EntityState, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("read %q: %w", filePath, err)
 	}
 
 	relPath, _ := filepath.Rel(root, filePath)
-	return h.IngestContentEntityStates(ctx, content, filepath.ToSlash(relPath), system, org, now)
+	return h.IngestContentEntityStates(ctx, content, filepath.ToSlash(relPath), system, authority, now)
 }
 
 // IngestContentEntityStates builds the parent entity followed by one entity per
@@ -334,7 +337,10 @@ func (h *Handler) ingestFileEntityStates(ctx context.Context, filePath, root, sy
 // on a platform whose separator is not "/", filepath would disagree with an
 // object key about where the basename starts. The filesystem caller normalizes
 // with filepath.ToSlash before calling in.
-func (h *Handler) IngestContentEntityStates(ctx context.Context, content []byte, logicalPath, system, org string, now time.Time) ([]*handler.EntityState, error) {
+func (h *Handler) IngestContentEntityStates(ctx context.Context, content []byte, logicalPath, system string, authority entityid.Authority, now time.Time) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	hash := contentHash(content)
 	ext := path.Ext(logicalPath)
 	format := formatForExt(ext)
@@ -342,13 +348,13 @@ func (h *Handler) IngestContentEntityStates(ctx context.Context, content []byte,
 	mime := mimeForExt(ext)
 	passages := splitPassages(content, format)
 
-	parent := newEntity(org, title, logicalPath, mime, hash, system, now)
+	parent := newEntity(authority, title, logicalPath, mime, hash, system, now)
 	parent.ChunkCount = len(passages)
 
 	states := make([]*handler.EntityState, 0, len(passages)+1)
 	states = append(states, parent.EntityState())
 	for _, p := range passages {
-		pe := newPassageEntity(org, system, parent.ID, title, logicalPath, mime, p, now)
+		pe := newPassageEntity(authority, system, parent.ID, title, logicalPath, mime, p, now)
 		if err := offloadPassageBody(ctx, pe, h.bodyStore, h.bodyInstance); err != nil {
 			return nil, err
 		}
@@ -415,18 +421,18 @@ func putBody(ctx context.Context, store storage.Store, instance, body, mimeType 
 }
 
 // enrichEventEntityStates re-reads the changed file and populates ev.EntityStates
-// using vocabulary-predicate triples. org is required so
+// using vocabulary-predicate triples. authority is required so
 // entity IDs are deterministic. For delete events the file is gone and
 // EntityStates remains empty.
-func (h *Handler) enrichEventEntityStates(ctx context.Context, ev handler.ChangeEvent, root, org string) handler.ChangeEvent {
-	if ev.Operation == handler.OperationDelete || org == "" {
+func (h *Handler) enrichEventEntityStates(ctx context.Context, ev handler.ChangeEvent, root string, authority entityid.Authority) handler.ChangeEvent {
+	if ev.Operation == handler.OperationDelete || authority.Org == "" {
 		return ev
 	}
 
 	now := time.Now().UTC()
 	system := h.system(root)
 
-	states, err := h.ingestFileEntityStates(ctx, ev.Path, root, system, org, now)
+	states, err := h.ingestFileEntityStates(ctx, ev.Path, root, system, authority, now)
 	if err == nil {
 		ev.EntityStates = states
 	}

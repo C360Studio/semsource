@@ -70,6 +70,9 @@ func CodeOf(err error) ErrorCode {
 // Options carries deployment-wide settings the per-type config builders need.
 // Mirrors the fields of config.Config that flow into source components.
 type Options struct {
+	// Identity lookups must never resolve remote branches.
+	skipRemoteResolution bool
+
 	// Org is the namespace ("c360", "noaa", etc.) used as the entity-ID org
 	// segment and propagated into source components.
 	Org string
@@ -281,6 +284,24 @@ func Build(src config.SourceEntry, opts Options) (map[string]types.ComponentConf
 		}
 	}
 	return out, nil
+}
+
+// InstanceNames returns deterministic component handles without remote branch lookup.
+// It uses the same builders as Add; configuration descriptions are not identities.
+func InstanceNames(src config.SourceEntry, opts Options) (map[string]struct{}, error) {
+	if len(src.Branches) > 0 {
+		return nil, &Error{Code: CodeUnsupportedType, Message: "multi-branch identity requires boot expansion"}
+	}
+	opts.skipRemoteResolution = true
+	built, err := Build(src, opts)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{}, len(built))
+	for name := range built {
+		names[name] = struct{}{}
+	}
+	return names, nil
 }
 
 // Remove deletes the component config from the ConfigManager KV store.

@@ -78,7 +78,7 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		resp, ferr := engine.Fuse(ctx, fusion.Request{
-			Query: "acme.semsource.python.ml",
+			Query: "acme.test-a1b2c3.ml.python",
 			Want:  []fusion.Want{fusion.WantRelations},
 		}, lens)
 		if ferr != nil {

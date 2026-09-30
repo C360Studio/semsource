@@ -47,9 +47,9 @@ type Config struct {
 	// variables. SSH URLs ignore the token and rely on the user's SSH agent.
 	Token string
 
-	// Org is the organisation namespace used when building typed EntityState values
+	// Authority is the effective deployment authority used when building typed EntityState values
 	// via IngestEntityStates. Required for the git-source processor's normalizer-free path.
-	Org string
+	Authority entityid.Authority
 
 	// BranchSlug, when non-empty, scopes entity IDs to a specific branch.
 	// Used in multi-branch mode to prevent entity ID collisions across branches.
@@ -191,9 +191,12 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 
 // IngestEntityStates resolves the repo path, walks commit history, and returns
 // fully-typed entity states that embed vocabulary-predicate triples directly —
-// bypassing the normalizer entirely. The org parameter is the organisation
-// namespace (e.g. "acme") used in the 6-part entity ID.
-func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// bypassing the normalizer entirely. The authority parameter is the effective org/platform
+// pair established at boot and used in the 6-part entity ID.
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -225,19 +228,19 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	seenAuthors := make(map[string]bool)
 
 	for _, c := range commits {
-		ce := newCommitEntity(org, c.sha, c.authorFull, c.subject, system, now)
+		ce := newCommitEntity(authority, c.sha, c.authorFull, c.subject, system, now)
 		ce.TouchedFiles = c.files
 		ce.AuthorEmail = c.authorEmail
 		states = append(states, ce.EntityState())
 
 		if !seenAuthors[c.authorEmail] {
 			seenAuthors[c.authorEmail] = true
-			ae := newAuthorEntity(org, c.authorName, c.authorEmail, system, now)
+			ae := newAuthorEntity(authority, c.authorName, c.authorEmail, system, now)
 			states = append(states, ae.EntityState())
 		}
 	}
 
-	be := newBranchEntity(org, branch, head, system, now)
+	be := newBranchEntity(authority, branch, head, system, now)
 	states = append(states, be.EntityState())
 
 	return states, nil
@@ -307,8 +310,8 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 				continue
 			}
 			var entityStates []*handler.EntityState
-			if h.cfg.Org != "" {
-				entityStates, _ = h.IngestEntityStates(ctx, lc, h.cfg.Org)
+			if h.cfg.Authority.Org != "" {
+				entityStates, _ = h.IngestEntityStates(ctx, lc, h.cfg.Authority)
 			}
 
 			select {

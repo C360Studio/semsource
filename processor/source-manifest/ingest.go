@@ -10,7 +10,6 @@ import (
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/sourcespawn"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 const (
@@ -25,7 +24,7 @@ const (
 	// ingestReadyWhen is the canonical readiness condition returned in
 	// AddReply.ReadyWhen. Callers wait until the matching SourceStatus on
 	// graph.ingest.status reports a phase in this set.
-	ingestReadyWhen = "source_status.phase in ['watching', 'idle']"
+	ingestReadyWhen = "after application restart: source_status.phase in ['watching', 'idle']"
 
 	// lifecycleTriggerTimeout bounds the background NATS round trip
 	// triggering a staleness lifecycle pass after remove_source. Fire-and-
@@ -101,11 +100,7 @@ func (c *Component) RegisterIngestHandlers(ctx context.Context, cfg IngestHandle
 		return c.handleRemoveRequest(reqCtx, data, cfg)
 	})
 	if err != nil {
-		// Roll back addSub: remove from c.ingestSubs and unsubscribe.
-		c.mu.Lock()
-		c.ingestSubs = removeSub2(c.ingestSubs, addSub)
-		c.mu.Unlock()
-		_ = addSub.Unsubscribe()
+		// Retain addSub so manager-owned failed-Start Stop drains active callbacks.
 		return fmt.Errorf("subscribe %s: %w", removeSubject, err)
 	}
 	c.mu.Lock()
@@ -123,19 +118,6 @@ func (c *Component) RegisterIngestHandlers(ctx context.Context, cfg IngestHandle
 	return nil
 }
 
-// removeSub2 returns subs with target removed (first match). Caller holds c.mu.
-func removeSub2(subs []*natsclient.Subscription, target *natsclient.Subscription) []*natsclient.Subscription {
-	for i, s := range subs {
-		if s == target {
-			return append(subs[:i], subs[i+1:]...)
-		}
-	}
-	return subs
-}
-
-// handleAddRequest validates an AddRequest, dispatches to sourcespawn, and
-// returns a marshaled AddReply. Errors in the reply envelope rather than
-// returning Go errors so callers always get a structured response.
 func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg IngestHandlerConfig) ([]byte, error) {
 	var req AddRequest
 	if err := json.Unmarshal(data, &req); err != nil {
@@ -155,6 +137,8 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 // HTTP façade (ADR-0007). Transport-level concerns (auth, path allowlisting)
 // are the caller's responsibility and must run BEFORE this.
 func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHandlerConfig) *AddReply {
+	c.desiredMu.Lock()
+	defer c.desiredMu.Unlock()
 	results, err := sourcespawn.AddWithChecker(ctx, req.Source, cfg.Store, cfg.Checker, cfg.Spawn)
 
 	// AddWithChecker may return partial results alongside an error when a
@@ -170,18 +154,15 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 			SourceType:   r.SourceType,
 			Created:      r.Created,
 		})
-		// Re-adding a previously removed instance makes its status reports
-		// welcome again (see the removedSources guard in handleStatusReport).
-		c.statusMu.Lock()
-		delete(c.removedSources, r.InstanceName)
-		c.statusMu.Unlock()
 	}
 
 	reply := &AddReply{
-		Components:    components,
-		StatusSubject: statusSubject,
-		ReadyWhen:     ingestReadyWhen,
-		Timestamp:     time.Now(),
+		Components:      components,
+		DesiredChanged:  len(components) > 0,
+		RestartRequired: len(components) > 0,
+		StatusSubject:   statusSubject,
+		ReadyWhen:       ingestReadyWhen,
+		Timestamp:       time.Now(),
 	}
 	if err != nil {
 		reply.Error = mapSpawnError(err)
@@ -194,13 +175,14 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 		"error", err,
 		"actor", req.Provenance.Actor)
 
-	// Refresh the manifest only when at least one component landed. Partial
-	// success is enough — the refreshed manifest will reflect what's actually
-	// in KV, not what the caller intended.
+	// ADRs 094/100 keep the running component set immutable. Persist the desired
+	// manifest for next boot; do not change live status or promise activation.
 	if len(components) > 0 {
-		c.appendManifestSources(req.Source)
-		if err := c.publishManifest(ctx); err != nil {
-			c.logger.Warn("failed to republish manifest after add", "error", err)
+		if persistErr := c.persistDesiredManifest(ctx, cfg, &req.Source, ""); persistErr != nil {
+			if err != nil {
+				persistErr = errors.Join(err, persistErr)
+			}
+			reply.Error = &IngestError{Code: CodeKVWriteFailed, Message: persistErr.Error()}
 		}
 	}
 
@@ -211,16 +193,21 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 // "repo" entry is recorded as itself (not its expanded children) so the
 // manifest preserves the caller's intent. Idempotent on the manifest level:
 // duplicate adds (same Type+identifier) are skipped.
-func (c *Component) appendManifestSources(src config.SourceEntry) {
+func (c *Component) appendManifestSources(src config.SourceEntry, options ...sourcespawn.Options) {
+	opts := sourcespawn.Options{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
 	entry := sourceEntryToManifestSource(src)
 	c.manifestMu.Lock()
 	defer c.manifestMu.Unlock()
+	kept := c.manifestSources[:0]
 	for _, existing := range c.manifestSources {
-		if manifestSourcesEqual(existing, entry) {
-			return
+		if !manifestSourcesEqual(existing, entry, opts) {
+			kept = append(kept, existing)
 		}
 	}
-	c.manifestSources = append(c.manifestSources, entry)
+	c.manifestSources = append(kept, entry)
 }
 
 // removeManifestSourceByInstance keeps the manifest in sync with the KV on
@@ -232,32 +219,32 @@ func (c *Component) appendManifestSources(src config.SourceEntry) {
 func (c *Component) removeManifestSourceByInstance(instanceName string, opts sourcespawn.Options, store sourcespawn.ConfigStore) bool {
 	c.manifestMu.Lock()
 	defer c.manifestMu.Unlock()
-	for i, existing := range c.manifestSources {
-		built, err := sourcespawn.Build(manifestSourceToSourceEntry(existing), opts)
-		if err != nil {
-			continue
-		}
-		if _, ok := built[instanceName]; !ok {
-			continue
-		}
-		// This entry owns the removed instance. Keep the entry while any
-		// sibling instance of the same expansion remains registered.
-		if store != nil {
+	kept := c.manifestSources[:0]
+	removed := false
+	for _, existing := range c.manifestSources {
+		built, err := sourcespawn.InstanceNames(manifestSourceToSourceEntry(existing), opts)
+		_, owns := built[instanceName]
+		keep := err != nil || !owns
+		if !keep && store != nil {
 			if cfg := store.GetConfig().Get(); cfg != nil {
 				for sibling := range built {
-					if sibling == instanceName {
-						continue
-					}
-					if _, alive := cfg.Components[sibling]; alive {
-						return false
+					if sibling != instanceName {
+						if _, alive := cfg.Components[sibling]; alive {
+							keep = true
+							break
+						}
 					}
 				}
 			}
 		}
-		c.manifestSources = append(c.manifestSources[:i], c.manifestSources[i+1:]...)
-		return true
+		if keep {
+			kept = append(kept, existing)
+		} else {
+			removed = true
+		}
 	}
-	return false
+	c.manifestSources = kept
+	return removed
 }
 
 // dropSourceStatus removes a deregistered source from the status aggregator
@@ -284,52 +271,75 @@ func (c *Component) dropSourceStatus(ctx context.Context, instanceName string) {
 	}
 }
 
+// ManifestSourceFromEntry preserves identity fields needed for desired-state handle matching.
+func ManifestSourceFromEntry(src config.SourceEntry) ManifestSource {
+	return sourceEntryToManifestSource(src)
+}
+
 func sourceEntryToManifestSource(src config.SourceEntry) ManifestSource {
 	return ManifestSource{
-		Type:          src.Type,
-		Path:          src.Path,
-		Paths:         src.Paths,
-		URL:           src.URL,
-		URLs:          src.URLs,
-		Language:      src.Language,
-		Branch:        src.Branch,
-		Watch:         src.Watch,
-		PollInterval:  src.PollInterval,
-		IndexInterval: src.IndexInterval,
+		Type:           src.Type,
+		Path:           src.Path,
+		Paths:          src.Paths,
+		URL:            src.URL,
+		URLs:           src.URLs,
+		Language:       src.Language,
+		Languages:      src.Languages,
+		Project:        src.Project,
+		Version:        src.Version,
+		BranchSlug:     src.BranchSlug,
+		InstanceSuffix: src.InstanceSuffix,
+		Bucket:         src.Bucket,
+		Prefix:         src.Prefix,
+		Endpoint:       src.Endpoint,
+		Region:         src.Region,
+		PathStyle:      src.PathStyle,
+		Branch:         src.Branch,
+		Watch:          src.Watch,
+		PollInterval:   src.PollInterval,
+		IndexInterval:  src.IndexInterval,
 	}
 }
 
 func manifestSourceToSourceEntry(m ManifestSource) config.SourceEntry {
 	return config.SourceEntry{
-		Type:          m.Type,
-		Path:          m.Path,
-		Paths:         m.Paths,
-		URL:           m.URL,
-		URLs:          m.URLs,
-		Language:      m.Language,
-		Branch:        m.Branch,
-		Watch:         m.Watch,
-		PollInterval:  m.PollInterval,
-		IndexInterval: m.IndexInterval,
+		Type:           m.Type,
+		Path:           m.Path,
+		Paths:          m.Paths,
+		URL:            m.URL,
+		URLs:           m.URLs,
+		Language:       m.Language,
+		Languages:      m.Languages,
+		Project:        m.Project,
+		Version:        m.Version,
+		BranchSlug:     m.BranchSlug,
+		InstanceSuffix: m.InstanceSuffix,
+		Bucket:         m.Bucket,
+		Prefix:         m.Prefix,
+		Endpoint:       m.Endpoint,
+		Region:         m.Region,
+		PathStyle:      m.PathStyle,
+		Branch:         m.Branch,
+		Watch:          m.Watch,
+		PollInterval:   m.PollInterval,
+		IndexInterval:  m.IndexInterval,
 	}
 }
 
-func manifestSourcesEqual(a, b ManifestSource) bool {
-	if a.Type != b.Type || a.Path != b.Path || a.URL != b.URL || a.Branch != b.Branch {
+func manifestSourcesEqual(a, b ManifestSource, opts sourcespawn.Options) bool {
+	if a.Type != b.Type {
 		return false
 	}
-	if !stringSliceEqual(a.Paths, b.Paths) || !stringSliceEqual(a.URLs, b.URLs) {
+	left, err := sourcespawn.InstanceNames(manifestSourceToSourceEntry(a), opts)
+	if err != nil {
 		return false
 	}
-	return true
-}
-
-func stringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
+	right, err := sourcespawn.InstanceNames(manifestSourceToSourceEntry(b), opts)
+	if err != nil || len(left) != len(right) {
 		return false
 	}
-	for i := range a {
-		if a[i] != b[i] {
+	for name := range left {
+		if _, ok := right[name]; !ok {
 			return false
 		}
 	}
@@ -353,53 +363,66 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 
 // removeSource deletes a component config from the KV store and returns the
 // RemoveReply. Shared by the NATS ingest handler and the HTTP façade. Removal
-// stops ingestion but does NOT retract entities — eager retraction is parked
-// behind the fact-layer provenance model (ADR-0007 sequencing guardrail).
-// Retained entities instead get a source_removed staleness marker
-// (entity-staleness spec D4), completing the removal-integrity deferral.
+// changes the next boot's composition; current ingestion continues until restart.
+// Entity history is retained. Durable source_removed replay remains a migration
+// merge blocker (docs/testing/setup-03a/compatibility.md).
 func (c *Component) removeSource(ctx context.Context, instanceName, actor string, cfg IngestHandlerConfig) *RemoveReply {
-	// Captured BEFORE the KV delete below removes the component config —
-	// systemsForRemovedInstance reads it back to scope the lifecycle trigger.
-	systems := systemsForRemovedInstance(instanceName, cfg.Store)
-
+	c.desiredMu.Lock()
+	defer c.desiredMu.Unlock()
 	if err := sourcespawn.Remove(ctx, instanceName, cfg.Store); err != nil {
-		return &RemoveReply{
-			InstanceName: instanceName,
-			Error:        mapSpawnError(err),
-			Timestamp:    time.Now(),
+		var spawnErr *sourcespawn.Error
+		// A prior delete can commit before the manifest write fails. Only a known
+		// stale desired manifest entry authorizes retry repair; typos stay NOT_FOUND.
+		if !errors.As(err, &spawnErr) || spawnErr.Code != sourcespawn.CodeNotFound || !desiredManifestOwns(instanceName, cfg) {
+			return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(err), Timestamp: time.Now()}
 		}
 	}
+	reply := &RemoveReply{InstanceName: instanceName, Removed: true, DesiredChanged: true, RestartRequired: true, Timestamp: time.Now()}
+	if err := c.persistDesiredManifest(ctx, cfg, nil, instanceName); err != nil {
+		reply.Error = &IngestError{Code: CodeKVWriteFailed, Message: err.Error()}
+	}
+	c.logger.Info("source removal persisted for next application boot", "namespace", cfg.Namespace, "instance_name", instanceName, "actor", actor)
+	return reply
+}
 
-	c.logger.Info("source removed via ingest API",
-		"namespace", cfg.Namespace,
-		"instance_name", instanceName,
-		"actor", actor)
-
-	// Drop the removed source from status aggregation immediately — before
-	// this, removed sources reported as phantom "watching" entries forever
-	// (audit 2026-07-19, live-confirmed at a 20-minute horizon).
-	c.dropSourceStatus(ctx, instanceName)
-
-	if c.removeManifestSourceByInstance(instanceName, cfg.Spawn, cfg.Store) {
-		if err := c.publishManifest(ctx); err != nil {
-			c.logger.Warn("failed to republish manifest after remove", "error", err)
+// persistDesiredManifest is a second KV write, not a transaction with the
+// component writes. Callers expose committed components on partial failure so
+// deterministic retries can repair it. Live manifest and status stay unchanged.
+func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandlerConfig, added *config.SourceEntry, removed string) error {
+	snapshot := cfg.Store.GetConfig().Get()
+	envelope, ok := snapshot.Components["source-manifest"]
+	if !ok {
+		return errors.New("source components committed but next-boot source-manifest config is absent")
+	}
+	desired := DefaultConfig()
+	if err := json.Unmarshal(envelope.Config, &desired); err != nil {
+		return fmt.Errorf("decode desired source-manifest: %w", err)
+	}
+	view := &Component{manifestSources: append([]ManifestSource(nil), desired.Sources...)}
+	if added != nil {
+		view.appendManifestSources(*added, cfg.Spawn)
+	} else {
+		view.removeManifestSourceByInstance(removed, cfg.Spawn, cfg.Store)
+	}
+	desired.Sources = view.manifestSources
+	desired.ExpectedSourceCount = 0
+	for _, component := range snapshot.Components {
+		if component.Enabled {
+			switch component.Name {
+			case "ast-source", "git-source", "doc-source", "cfgfile-source", "url-source", "image-source", "audio-source", "video-source", "objectstore-source":
+				desired.ExpectedSourceCount++
+			}
 		}
 	}
-
-	// Async, best-effort: retro-mark the removed source's retained entities.
-	// No root_path — the source itself is gone, so every in-scope entity is
-	// unconditionally marked, not just entities whose file happens to be
-	// missing (design D4). A resolution miss (unrecognized factory type, no
-	// client) degrades staleness marking; it never fails the removal itself.
-	if len(systems) > 0 {
-		c.triggerRemovalLifecycleRun(ctx, cfg.Spawn.Org, systems)
+	raw, err := json.Marshal(desired)
+	if err != nil {
+		return fmt.Errorf("encode desired source-manifest: %w", err)
 	}
-
-	return &RemoveReply{
-		InstanceName: instanceName,
-		Removed:      true,
-		Timestamp:    time.Now(),
+	envelope.Config = raw
+	if err := cfg.Store.PutComponentToKV(ctx, "source-manifest", envelope); err != nil {
+		return fmt.Errorf("source components committed but next-boot manifest write failed: %w", err)
 	}
+	return nil
 }
 
 // triggerRemovalLifecycleRun announces the removed source's scope to the
@@ -454,4 +477,28 @@ func marshalAddReply(reply *AddReply) ([]byte, error) {
 
 func marshalRemoveReply(reply *RemoveReply) ([]byte, error) {
 	return json.Marshal(reply)
+}
+
+func desiredManifestOwns(instance string, cfg IngestHandlerConfig) bool {
+	snapshot := cfg.Store.GetConfig().Get()
+	if snapshot == nil {
+		return false
+	}
+	envelope, ok := snapshot.Components["source-manifest"]
+	if !ok {
+		return false
+	}
+	var desired Config
+	if json.Unmarshal(envelope.Config, &desired) != nil {
+		return false
+	}
+	for _, src := range desired.Sources {
+		built, err := sourcespawn.InstanceNames(manifestSourceToSourceEntry(src), cfg.Spawn)
+		if err == nil {
+			if _, ok := built[instance]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }

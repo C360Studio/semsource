@@ -40,12 +40,12 @@ func TestIsTestPath(t *testing.T) {
 // TestCodeEntity_TestMarkerEmission pins the demotion marker: present (and
 // only present) on entities from test paths.
 func TestCodeEntity_TestMarkerEmission(t *testing.T) {
-	testEntity := ast.NewCodeEntity("acme", "golang", "repo", ast.TypeFunction,
+	testEntity := ast.NewCodeEntity(testAuthority("acme"), "golang", "repo", ast.TypeFunction,
 		"TestBuild", "entityid/entityid_test.go")
 	if !hasTriple(testEntity, ast.CodeTest, "true") {
 		t.Error("test-file entity lacks the code.artifact.test marker")
 	}
-	prodEntity := ast.NewCodeEntity("acme", "golang", "repo", ast.TypeFunction,
+	prodEntity := ast.NewCodeEntity(testAuthority("acme"), "golang", "repo", ast.TypeFunction,
 		"Build", "entityid/entityid.go")
 	if hasTriple(prodEntity, ast.CodeTest, "true") {
 		t.Error("production entity carries the code.artifact.test marker")

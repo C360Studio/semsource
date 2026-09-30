@@ -95,7 +95,7 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := dochandler.New(dochandler.WithBodyStore(store, semsourcegraph.BodyStoreInstance))
-	states, err := h.IngestEntityStates(ctx, docSourceConfig{typ: "docs", path: docDir}, "acme")
+	states, err := h.IngestEntityStates(ctx, docSourceConfig{typ: "docs", path: docDir}, fixtureAuthority())
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}

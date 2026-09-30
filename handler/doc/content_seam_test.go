@@ -99,13 +99,13 @@ func TestContentSeam_MatchesFileIngest(t *testing.T) {
 
 			h := seamHandler(t)
 			fileStates, err := h.IngestEntityStates(context.Background(),
-				sourceConfig{typ: "docs", path: dir}, "acme")
+				sourceConfig{typ: "docs", path: dir}, testAuthority("acme"))
 			if err != nil {
 				t.Fatalf("IngestEntityStates() error: %v", err)
 			}
 
 			contentStates, err := h.IngestContentEntityStates(context.Background(),
-				[]byte(fx.content), fx.relPath, system, "acme", time.Now().UTC())
+				[]byte(fx.content), fx.relPath, system, testAuthority("acme"), time.Now().UTC())
 			if err != nil {
 				t.Fatalf("IngestContentEntityStates() error: %v", err)
 			}
@@ -177,7 +177,7 @@ func TestContentSeam_DerivesFromSlashLogicalPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := seamHandler(t)
 			states, err := h.IngestContentEntityStates(context.Background(),
-				[]byte(tc.content), tc.logical, system, "acme", time.Now().UTC())
+				[]byte(tc.content), tc.logical, system, testAuthority("acme"), time.Now().UTC())
 			if err != nil {
 				t.Fatalf("IngestContentEntityStates() error: %v", err)
 			}

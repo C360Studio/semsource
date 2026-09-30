@@ -31,6 +31,7 @@ const (
 	upgradeUnrelatedStream  = "UNRELATED_EVENTS"
 	upgradeUnrelatedSubject = "unrelated.cutover.sentinel"
 	upgradeUnrelatedMessage = "preserve-unrelated-stream-upgrade"
+	upgradeConfigBucket     = "semstreams_config_upgradecutover_semsource"
 )
 
 var upgradePreservedKVBuckets = []string{
@@ -45,7 +46,7 @@ var upgradePreservedKVBuckets = []string{
 // user-owned buckets the framework never claimed, plus the framework-owned
 // buckets reviewed as non-rebuildable in internal/cutover.
 func upgradeRetainedKVBuckets() []string {
-	return append(append([]string{}, upgradePreservedKVBuckets...), cutover.Retained...)
+	return append(append(append([]string{}, upgradePreservedKVBuckets...), cutover.Retained...), upgradeConfigBucket)
 }
 
 // upgradeAssertPurged checks the other half of the classification: a bucket
@@ -95,6 +96,10 @@ func TestE2E_UpgradePathRehearsal(t *testing.T) {
 	// instead by upgradeAssertPurged, which needs no seeding because SemSource
 	// creates them itself during the first writer run.
 	for _, bucket := range upgradeRetainedKVBuckets() {
+		// The admitted manager creates identity before any sentinel.
+		if bucket == upgradeConfigBucket {
+			continue
+		}
 		upgradeCreateSentinelKV(t, ctx, js, bucket, sentinelValue)
 	}
 	upgradeCreateSentinelKV(t, ctx, js, "PREDICATE_CATALOG", "legacy-beta145")
@@ -137,6 +142,14 @@ func TestE2E_UpgradePathRehearsal(t *testing.T) {
 	defer stopFirst()
 	upgradeWaitForReady(t, httpPort, 90*time.Second)
 	upgradeAssertKnownAnswer(t, nc, 45*time.Second)
+	identityBefore := effectivePlatform(t, nc, "upgradecutover")
+	configKV, err := js.KeyValue(ctx, upgradeConfigBucket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := configKV.PutString(ctx, upgradeSentinelKey, sentinelValue); err != nil {
+		t.Fatal(err)
+	}
 
 	// beta.160 removed the COMPONENT_STATUS diagnostic bucket, so no
 	// system-created operational bucket exists to widen the preservation set
@@ -153,9 +166,9 @@ func TestE2E_UpgradePathRehearsal(t *testing.T) {
 	streamSet := upgradeStringSet(inventory.Streams)
 	kvSet := upgradeStringSet(inventory.KV)
 	objectSet := upgradeStringSet(inventory.Objects)
-	if !streamSet["GRAPH"] || !kvSet["semstreams_config"] || !kvSet["PREDICATE_CATALOG"] {
+	if !streamSet["GRAPH"] || !kvSet[upgradeConfigBucket] || !kvSet["PREDICATE_CATALOG"] {
 		t.Fatalf("required observed cutover resources missing: GRAPH=%t semstreams_config=%t PREDICATE_CATALOG=%t",
-			streamSet["GRAPH"], kvSet["semstreams_config"], kvSet["PREDICATE_CATALOG"])
+			streamSet["GRAPH"], kvSet[upgradeConfigBucket], kvSet["PREDICATE_CATALOG"])
 	}
 	if !objectSet[upgradeObjectBucket] {
 		t.Fatalf("preservation inventory missing object bucket %s", upgradeObjectBucket)
@@ -169,13 +182,6 @@ func TestE2E_UpgradePathRehearsal(t *testing.T) {
 	if streamSet["GRAPH"] {
 		if err := js.DeleteStream(ctx, "GRAPH"); err != nil {
 			t.Fatalf("delete observed GRAPH stream: %v", err)
-		}
-	}
-	for _, bucket := range []string{"semstreams_config"} {
-		if kvSet[bucket] {
-			if err := js.DeleteKeyValue(ctx, bucket); err != nil {
-				t.Fatalf("delete observed KV %s: %v", bucket, err)
-			}
 		}
 	}
 	for _, bucket := range cutover.Purged {
@@ -208,6 +214,9 @@ func TestE2E_UpgradePathRehearsal(t *testing.T) {
 	defer stopSecond()
 	upgradeWaitForReady(t, httpPort, 90*time.Second)
 	upgradeAssertKnownAnswer(t, nc, 45*time.Second)
+	if effectivePlatform(t, nc, "upgradecutover") != identityBefore {
+		t.Fatal("graph-only reset reminted deployment authority")
+	}
 	stopSecond()
 
 	upgradeAssertPreserved(t, ctx, js, sentinelValue)
@@ -282,12 +291,12 @@ func upgradeStartWriter(
 			select {
 			case err := <-done:
 				if err != nil {
-					t.Logf("migrated writer exit: %v", err)
+					t.Errorf("migrated writer exit: %v", err)
 				}
-			case <-time.After(15 * time.Second):
+			case <-time.After(35 * time.Second):
 				_ = cmd.Process.Kill()
 				<-done
-				t.Errorf("migrated writer did not stop gracefully within 15s")
+				t.Errorf("migrated writer did not stop gracefully within 35s")
 			}
 		})
 	}

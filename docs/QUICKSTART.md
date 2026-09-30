@@ -151,13 +151,14 @@ Auth, readiness gating, and the tool cheat-sheet:
 ## Several repositories, explicit identity
 
 Registering multiple repositories is where identity starts to matter. Every
-entity ID is six parts — `{org}.{platform}.{domain}.{system}.{type}.{instance}`
-— and two levers decide how repositories relate in one graph:
+entity ID is six parts — `{org}.{platform}.{system}.{domain}.{type}.{instance}`
+— and these settings decide how repositories relate in one graph:
 
-- **Namespace (org).** Your configured `namespace` is sovereign: entities in
-  `acme.*` never merge with another org's. The reserved `public.*` namespace
-  is the opposite — deterministic IDs for open-source entities that merge
-  unconditionally across every instance that ingests them.
+- **Deployment authority.** Your `namespace` supplies org; `platform_id` supplies
+  a stem (default `semsource`). The framework mints the effective platform once
+  and retains it in the namespaced config bucket. Independent deployments have
+  distinct authority. Open-source inputs use the same local authority rules;
+  `public` does not authorize merging or writing across deployments.
 - **`project` + `version` per source.** A source's project identity is
   derived automatically (from a repository URL, or from the path for local
   sources). Declare `project` explicitly when the automatic value would be
@@ -166,11 +167,17 @@ entity ID is six parts — `{org}.{platform}.{domain}.{system}.{type}.{instance}
   revision. Registering the *same* `project` at two `version`s is what
   lights up version diffs (`code_changes`).
 
-The same rules make git submodules Just Work: a submodule's code is scoped to
+On the SETUP 03A migration pin, dynamic branch discovery and automatic admission of
+submodules that appear only after a remote clone remain unqualified. Pre-materialize and
+register pinned child sources before boot. The example below includes an explicit local child;
+it does not prove automatic remote submodule discovery. See the
+[migration hold ledger](testing/setup-03a/compatibility.md).
+
+Within a pre-expanded boot configuration: a submodule's code is scoped to
 its **own** project (from its resolved URL) at a version derived from the
 pinned gitlink SHA — never blended into the parent's identity. The same pin
 ingested via any number of parents (or registered standalone, as below)
-yields byte-identical entity IDs and merges into one entity
+yields byte-identical entity IDs within the same retained deployment authority
 ([ADR-0012](adr/0012-submodule-identity.md)).
 
 The multi-repository steps register a **remote + local mix**: the remote

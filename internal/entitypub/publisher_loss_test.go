@@ -91,7 +91,7 @@ func TestSend_SustainedOverflowDropsLoudly(t *testing.T) {
 	// Unblock shutdown: release the gate so the wedged publish completes.
 	close(gp.gate)
 	cancel()
-	pub.Stop()
+	pub.Stop(context.Background())
 }
 
 // TestSend_TransientOverflowLosesNothing pins the transient case: a full
@@ -140,7 +140,7 @@ func TestSend_TransientOverflowLosesNothing(t *testing.T) {
 		t.Errorf("Dropped() = %d, want 0 for transient overflow", got)
 	}
 	cancel()
-	pub.Stop()
+	pub.Stop(context.Background())
 }
 
 // TestFailed_TerminalPublishErrorsAreCounted pins that entities leaving the
@@ -169,7 +169,7 @@ func TestFailed_TerminalPublishErrorsAreCounted(t *testing.T) {
 		t.Errorf("Lost() = %d, want >= 1", pub.Lost())
 	}
 	cancel()
-	pub.Stop()
+	pub.Stop(context.Background())
 }
 
 type failingPublisher struct{}

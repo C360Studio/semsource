@@ -13,19 +13,20 @@ You are a specialized reviewer for SemSource graph event handling — entity ide
 ## Review Checklist
 
 ### Entity Identity (6-Part ID)
-- [ ] Format: `{org}.{platform}.{domain}.{system}.{type}.{instance}`
-- [ ] IDs are purely intrinsic — no timestamps, instance IDs, insertion-order
-- [ ] Two independent instances processing the same source produce identical IDs
-- [ ] `public.*` used for open-source / intrinsic entities
-- [ ] `{org}.*` used for organization-sovereign entities
+- [ ] Format: `{org}.{platform}.{system}.{domain}.{type}.{instance}`
+- [ ] Source identity is deterministic within retained effective authority; no timestamps or insertion order
+- [ ] Same-store restarts retain authority and IDs; independent deployment authorities produce isolated subjects
+- [ ] Local subjects always use effective dependencies Org/Platform, including open-source inputs
+- [ ] Source org overrides cannot bypass authority; foreign subjects require a separately admitted import contract
 - [ ] System segment: dots/slashes replaced with dashes
 - [ ] All IDs are valid NATS KV keys
 
 ### ID Construction by Entity Type
-- [ ] Code symbol: `org + semsource + language + canonical_module_path + symbol_type + symbol_name`
-- [ ] Git commit: `org + semsource + git + repo_slug + commit + short_sha`
-- [ ] URL/doc: `org + semsource + web + domain_slug + doc + sha256(canonical_url)[:6]`
-- [ ] Config file: `org + semsource + config + repo_slug + file_type + sha256(content)[:6]`
+- [ ] All subject and relationship IDs use `entityid` helpers with the same immutable effective Authority
+- [ ] System names the source/repo/project; domain names the language or content taxonomy
+- [ ] Symbols, files, references, hierarchy edges, and provenance agree on canonical system slugs
+- [ ] Query source scopes enumerate complete source/system and taxonomy prefixes before ranking/limiting
+- [ ] ID length budgets include the retained platform suffix and preserve collision-resistant instance suffixes
 
 ### URL Canonicalization
 - [ ] Lowercase scheme and host
@@ -35,27 +36,26 @@ You are a specialized reviewer for SemSource graph event handling — entity ide
 - [ ] Strip fragments
 
 ### Event Semantics
-- [ ] SEED emitted on start and consumer reconnect — carries full current graph
-- [ ] DELTA emitted from watch triggers — additive upsert semantics
-- [ ] RETRACT emitted on entity removal — consumers must honor retractions
-- [ ] HEARTBEAT emitted on configurable interval during quiet periods
-- [ ] Events wrapped in standard MessageEnvelope for WebSocket transport
+- [ ] Initial ingest and watch updates publish current typed entities through `graph.ingest.entity`
+- [ ] Messages carry the registered `semsource.entity.v1` payload and required semantic envelope
+- [ ] Removal matches retained stale-history contract; do not infer physical deletion from a watch event
+- [ ] Export events preserve the declared wire contract; do not infer retired GraphEvent/SEED/DELTA envelopes
 - [ ] `at-least-once` delivery mode used
 
-### Federation / Merge Policy
-- [ ] `public.*` nodes merge unconditionally across any SemSource instance
-- [ ] `{org}.*` nodes are sovereign — owning org controls identity
-- [ ] Cross-org overwrite rejected
-- [ ] Edge conflicts use union semantics
-- [ ] Provenance always appended, never replaced
-- [ ] RETRACT only removes within correct namespace scope
+### Authority / Merge Policy
+- [ ] Local writes cannot cross effective org/platform authority
+- [ ] Effective identity is minted once and retained in the namespaced config bucket
+- [ ] Source disappearance follows declared stale retention; physical purge is a separately admitted operation
+- [ ] Full current updates replace obsolete owned relationships rather than accumulating stale edges
+- [ ] Semantic envelope source, time, confidence, and correlation metadata survive retained paths
+- [ ] No public-namespace union or foreign-write behavior is inferred from historical product conventions
 
 ### Watch / Real-Time
-- [ ] Initial seeding is first pass of continuous event loop (no separate batch mode)
+- [ ] Initial seeding and continuous watch converge on the same authority and full current entity state
 - [ ] File watchers use fsnotify correctly (not polling for local files)
 - [ ] Git watch uses hook or polling as configured
 - [ ] URL watch uses configurable poll interval with content hash change detection
-- [ ] Re-SEED emitted on consumer reconnect
+- [ ] Application and broker restarts meet the declared transport-loss/re-ingestion contract; accepted publish alone is not durable indexing
 
 ## Output Format
 

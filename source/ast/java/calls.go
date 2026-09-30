@@ -742,7 +742,7 @@ func (p *Parser) methodIDIn(start classRef, method string) string {
 	if !ok {
 		return ""
 	}
-	return ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeMethod,
+	return ast.NewScopedCodeEntity(p.authority, "java", p.project, ast.TypeMethod,
 		decl.cm.methodScope, method, decl.rel).ID
 }
 
@@ -755,7 +755,7 @@ func (p *Parser) constructorTargetID(node *sitter.Node, content []byte, cs callS
 	if cm == nil || !cm.hasCtor {
 		return ""
 	}
-	return ast.NewScopedCodeEntity(p.org, "java", p.project, ast.TypeMethod,
+	return ast.NewScopedCodeEntity(p.authority, "java", p.project, ast.TypeMethod,
 		cm.methodScope, cm.name, rel).ID
 }
 

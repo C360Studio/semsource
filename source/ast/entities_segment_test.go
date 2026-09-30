@@ -71,7 +71,7 @@ func TestNewScopedCodeEntity_AuditShapesPassSubstrateValidation(t *testing.T) {
 		{"golang", "Demo", "_examples/demo/demo.go", ast.TypeFunction},
 	}
 	for _, c := range cases {
-		e := ast.NewCodeEntity("acme", c.language, "myapp", c.entityType, c.name, c.path)
+		e := ast.NewCodeEntity(testAuthority("acme"), c.language, "myapp", c.entityType, c.name, c.path)
 		if err := semtypes.ValidateEntityID(e.ID); err != nil {
 			t.Errorf("NewCodeEntity(%s %q in %q) ID %q fails graph-ingest contract: %v",
 				c.language, c.name, c.path, e.ID, err)
@@ -95,7 +95,7 @@ func TestBuildScopedInstanceID_Deterministic(t *testing.T) {
 // the same helpers byte-matches the symbol's own entity ID — the property that
 // keeps Contains/Calls edges attached after sanitization.
 func TestEdgeEndpointParity(t *testing.T) {
-	node := ast.NewCodeEntity("acme", "svelte", "myapp", ast.TypeComponent, "+page", "src/routes/+page.svelte")
+	node := ast.NewCodeEntity(testAuthority("acme"), "svelte", "myapp", ast.TypeComponent, "+page", "src/routes/+page.svelte")
 	// Edge builders construct endpoint IDs through BuildInstanceID with the
 	// same inputs (see svelte componentNameToEntityID).
 	edgeInstance := ast.BuildInstanceID("src/routes/+page.svelte", "+page", ast.TypeComponent)
@@ -119,7 +119,7 @@ func TestNewCodeEntity_OverlongSymbolsStillLand(t *testing.T) {
 	deepPath := "ui/node_modules/@eslint/eslintrc/lib/config-array/" +
 		"config-array-factory/normalize/extends/resolver/index.js"
 
-	entity := ast.NewScopedCodeEntity("c360", "javascript", "workspace", ast.TypeConst,
+	entity := ast.NewScopedCodeEntity(testAuthority("c360"), "javascript", "workspace", ast.TypeConst,
 		[]string{"ConfigArrayFactory", "normalizeExtends", "resolveModule"}, pattern, deepPath)
 
 	if err := semtypes.ValidateEntityID(entity.ID); err != nil {
@@ -137,9 +137,9 @@ func TestNewCodeEntity_OverlongSiblingsStayDistinct(t *testing.T) {
 	scope := []string{"ConfigArrayFactory", "normalizeExtends", "resolveModule"}
 	long := "cliConfigArray, configArrayFactory, finalizeCache, loadConfigFile, normalize"
 
-	a := ast.NewScopedCodeEntity("c360", "javascript", "workspace", ast.TypeConst,
+	a := ast.NewScopedCodeEntity(testAuthority("c360"), "javascript", "workspace", ast.TypeConst,
 		scope, long+"Alpha", deepPath)
-	b := ast.NewScopedCodeEntity("c360", "javascript", "workspace", ast.TypeConst,
+	b := ast.NewScopedCodeEntity(testAuthority("c360"), "javascript", "workspace", ast.TypeConst,
 		scope, long+"Beta", deepPath)
 
 	if a.ID == b.ID {

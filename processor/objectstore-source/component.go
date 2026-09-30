@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -59,6 +62,7 @@ func (s *sourceCfg) GetSceneThreshold() float64  { return 0 }
 // handler/objectstore; this component owns the lifecycle, publication, status,
 // and retraction around them.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -118,6 +122,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new objectstore-source processor component.
@@ -128,6 +133,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
 	}
 
 	// Credentials are read here, from the environment, and nowhere else.
@@ -153,12 +162,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		docOpts = append(docOpts, dochandler.WithBodyStore(bodies, config.InstanceName))
 	}
 
-	h := objectstore.New(store, dochandler.New(docOpts...), config.Org,
+	h := objectstore.New(store, dochandler.New(docOpts...), authority,
 		objectstore.WithProject(config.Project),
 		objectstore.WithVersion(config.Version),
 		objectstore.WithPollInterval(config.PollInterval()))
 
 	c := &Component{
+		authority:  authority,
 		name:       "objectstore-source",
 		config:     config,
 		publisher:  pub,
@@ -368,7 +378,7 @@ func (c *Component) retract(ctx context.Context, removed []objectstore.Removal) 
 		c.handler.Forget(removal.Key)
 	}
 
-	go func() {
+	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
 		defer cancel()
 		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
@@ -380,7 +390,7 @@ func (c *Component) retract(ctx context.Context, removed []objectstore.Removal) 
 			return
 		}
 		c.lifecycleFailing.Clear(c.logger, "staleness lifecycle trigger recovered")
-	}()
+	})
 }
 
 // startPolling starts the watch goroutine and returns its cancel func, or nil
@@ -405,7 +415,8 @@ func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
 		"prefix", c.config.Prefix,
 		"poll_interval", c.config.PollInterval())
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-pollCtx.Done():
@@ -417,7 +428,7 @@ func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
 				c.handleChangeEvent(pollCtx, event)
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
@@ -548,7 +559,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // always has fresh data. Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -562,40 +573,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and
-	// the seed itself takes it, so waiting under the lock deadlocks. Draining
-	// first also keeps shutdown safe — stopping the publisher closes its
-	// buffer.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.publisher.Stop()
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
-	c.running = false
 
-	c.logger.Info("Objectstore-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.running = false
+	c.mu.Unlock()
 	return nil
 }
 

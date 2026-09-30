@@ -11,9 +11,9 @@ import (
 )
 
 func TestNewParser(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp/repo")
-	if p.org != "acme" {
-		t.Errorf("org = %q, want %q", p.org, "acme")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp/repo")
+	if p.authority.Org != "acme" {
+		t.Errorf("org = %q, want %q", p.authority.Org, "acme")
 	}
 	if p.project != "myproject" {
 		t.Errorf("project = %q, want %q", p.project, "myproject")
@@ -37,7 +37,7 @@ def add(a: int, b: int) -> int:
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -85,8 +85,8 @@ def add(a: int, b: int) -> int:
 	}
 
 	// Check entity ID format
-	if !strings.HasPrefix(addFunc.ID, "acme.semsource.python.test.function.") {
-		t.Errorf("ID = %q, want prefix 'acme.semsource.python.test.function.'", addFunc.ID)
+	if !strings.HasPrefix(addFunc.ID, "acme.test-platform.test.python.function.") {
+		t.Errorf("ID = %q, want prefix 'acme.test-platform.test.python.function.'", addFunc.ID)
 	}
 }
 
@@ -106,7 +106,7 @@ class Bar:
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -150,7 +150,7 @@ func TestParseFile_Class(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -200,7 +200,7 @@ class Dog(Animal):
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -251,7 +251,7 @@ class Point:
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -289,7 +289,7 @@ func TestParseFile_AsyncFunction(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -334,7 +334,7 @@ _PRIVATE_CONST = 2
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -380,7 +380,7 @@ from mypackage.submodule import MyClass
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -413,7 +413,7 @@ _INTERNAL_FLAG = True
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -459,7 +459,7 @@ def expensive_computation(n: int) -> int:
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -498,7 +498,7 @@ def some_function():
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -533,7 +533,7 @@ func TestParseDirectory(t *testing.T) {
 		}
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	results, err := p.ParseDirectory(context.Background(), tmpDir)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)
@@ -565,7 +565,7 @@ func TestParseDirectory_SkipsVenv(t *testing.T) {
 		}
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	results, err := p.ParseDirectory(context.Background(), tmpDir)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)
@@ -578,7 +578,7 @@ func TestParseDirectory_SkipsVenv(t *testing.T) {
 }
 
 func TestParseFile_NonExistent(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	_, err := p.ParseFile(context.Background(), "/tmp/nonexistent.py")
 	if err == nil {
 		t.Error("expected error for non-existent file")
@@ -586,7 +586,7 @@ func TestParseFile_NonExistent(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_Builtin(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 
 	builtins := []string{"int", "str", "bool", "float", "dict", "list", "Any", "Optional"}
 	for _, b := range builtins {
@@ -599,7 +599,7 @@ func TestTypeNameToEntityID_Builtin(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_Generic(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 
 	// Generic types should resolve to their base type
 	result := p.typeNameToEntityID("List[int]", "test.py")
@@ -614,13 +614,13 @@ func TestTypeNameToEntityID_Generic(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_LocalType(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp")
 
 	// A local type reference (base class / annotation) must resolve to the SAME id
 	// the class DEFINITION gets, so extends/reference edges actually connect
 	// (task #43). Previously it built a ".type." segment that matched no entity.
 	result := p.typeNameToEntityID("User", "models/user.py")
-	want := ast.NewCodeEntity("acme", "python", "myproject", ast.TypeClass, "User", "models/user.py").ID
+	want := ast.NewCodeEntity(testAuthority("acme"), "python", "myproject", ast.TypeClass, "User", "models/user.py").ID
 	if result != want {
 		t.Errorf("typeNameToEntityID(User) = %q, want %q (must match the class definition id)", result, want)
 	}
@@ -630,7 +630,7 @@ func TestTypeNameToEntityID_LocalType(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_ExternalType(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 
 	result := p.typeNameToEntityID("module.ClassName", "test.py")
 	if result != "external:module.ClassName" {
@@ -639,7 +639,7 @@ func TestTypeNameToEntityID_ExternalType(t *testing.T) {
 }
 
 func TestExtractModuleName(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 
 	tests := []struct {
 		relPath  string
@@ -695,7 +695,7 @@ func TestParseDirectory_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	_, err := p.ParseDirectory(ctx, tmpDir)
 	if err == nil {
 		t.Error("expected error for cancelled context")

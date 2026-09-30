@@ -166,7 +166,7 @@ func gitComponentConfig(ctx context.Context, src config.SourceEntry, org string,
 	// resolution failure, branch stays empty; workspace.clone then omits
 	// --branch, and git uses the remote's actual default.
 	branch := src.Branch
-	if branch == "" && src.URL != "" {
+	if branch == "" && src.URL != "" && !opts.skipRemoteResolution {
 		if resolved, err := workspace.ResolveDefaultBranch(ctx, src.URL, opts.GitToken); err == nil {
 			branch = resolved
 			slog.Debug("resolved remote default branch", "url", src.URL, "branch", resolved)

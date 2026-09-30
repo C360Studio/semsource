@@ -161,12 +161,12 @@ func (p *Parser) hierarchyRefID(name string, kind ast.CodeEntityType, fromRelPat
 		return "external:" + name // e.g. React.Component / NS.Type
 	}
 	if rel, origin, ok := p.resolveTSImport(name, fromRelPath); ok {
-		return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, kind, origin, rel).ID
+		return ast.NewCodeEntity(p.authority, p.detectLanguage(rel), p.project, kind, origin, rel).ID
 	}
 	if _, imported := p.importBindings[name]; imported {
 		return "external:" + name // bare specifier or unresolved relative import
 	}
-	return ast.NewCodeEntity(p.org, p.detectLanguage(fromRelPath), p.project, kind, name, fromRelPath).ID
+	return ast.NewCodeEntity(p.authority, p.detectLanguage(fromRelPath), p.project, kind, name, fromRelPath).ID
 }
 
 // typeRefID builds the entity ID for an unknown-kind reference (a parameter or
@@ -186,9 +186,9 @@ func (p *Parser) typeRefID(name, fromRelPath string) string {
 	}
 	lang := p.detectLanguage(fromRelPath)
 	if kind, ok := p.localKinds[name]; ok {
-		return ast.NewCodeEntity(p.org, lang, p.project, kind, name, fromRelPath).ID
+		return ast.NewCodeEntity(p.authority, lang, p.project, kind, name, fromRelPath).ID
 	}
-	return ast.NewCodeEntity(p.org, lang, p.project, ast.TypeType, name, fromRelPath).ID
+	return ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeType, name, fromRelPath).ID
 }
 
 // resolveTSImport resolves an imported name to (definingRelPath, originName) when

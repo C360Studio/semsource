@@ -56,8 +56,8 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, query.Stop) })
 
 	const (
-		caller = "acme.semsource.golang.gw.function.dispatch"
-		callee = "acme.semsource.golang.gw.function.onevent"
+		caller = "acme.test-a1b2c3.gw.golang.function.dispatch"
+		callee = "acme.test-a1b2c3.gw.golang.function.onevent"
 	)
 	// Caller carries the call edge (subject=caller → object=callee).
 	publishSemsourceEntity(t, ctx, tc.Client, caller, semsourcegraph.IndexingProfileContent, []message.Triple{
@@ -103,7 +103,7 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	})
 
 	t.Run("Entity absent is clean nil", func(t *testing.T) {
-		e, err := gc.Entity(ctx, "acme.semsource.golang.gw.function.ghost")
+		e, err := gc.Entity(ctx, "acme.test-a1b2c3.gw.golang.function.ghost")
 		if err != nil || e != nil {
 			t.Fatalf("absent entity should be (nil,nil), got (%v,%v)", e, err)
 		}
@@ -126,7 +126,7 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 		ids := retryUntilReady(t, "Resolve prefix", func() ([]string, error) {
 			// Prefix resolve reports no similarity (HasSimilarity false), so the
 			// seed identities are the whole payload here — project and assert those.
-			seeds, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.semsource.golang.gw", Mode: fusion.ResolveModePrefix, Limit: 10})
+			seeds, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.test-a1b2c3.gw.golang", Mode: fusion.ResolveModePrefix, Limit: 10})
 			return fusion.SeedIDs(seeds), err
 		})
 		if !containsID(ids, caller) || !containsID(ids, callee) {
@@ -190,8 +190,8 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	}
 
 	const (
-		caller = "acme.semsource.golang.gw.function.dispatch"
-		callee = "acme.semsource.golang.gw.function.onevent"
+		caller = "acme.test-a1b2c3.gw.golang.function.dispatch"
+		callee = "acme.test-a1b2c3.gw.golang.function.onevent"
 	)
 	publishSemsourceEntity(t, ctx, tc.Client, caller, semsourcegraph.IndexingProfileContent, []message.Triple{
 		{Subject: caller, Predicate: ast.DcTitle, Object: "Dispatch"},
@@ -228,7 +228,7 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	// (the symbol path needs graph-embedding, validated elsewhere). The query is
 	// the shared ID prefix, matching exactly these entities.
 	lens := prefixLens{code.New()}
-	const prefix = "acme.semsource.golang.gw"
+	const prefix = "acme.test-a1b2c3.gw.golang"
 
 	var resp fusion.Response
 	var dispatch *fusion.Node

@@ -93,13 +93,13 @@ func (p *Parser) hierarchyRefID(name string, kind ast.CodeEntityType, fromRelPat
 		return "external:" + name // already-qualified reference (stdlib/third-party)
 	}
 	if rel, ext, ok := p.resolveJavaType(name, fromRelPath); ok {
-		return ast.NewCodeEntity(p.org, "java", p.project, kind, name, rel).ID
+		return ast.NewCodeEntity(p.authority, "java", p.project, kind, name, rel).ID
 	} else if ext != "" {
 		return "external:" + ext
 	}
 	// Unknown: assume the type is defined in the current file (a same-file base
 	// type). Builds the definition ID when true; an inert (dropped) target if not.
-	return ast.NewCodeEntity(p.org, "java", p.project, kind, name, fromRelPath).ID
+	return ast.NewCodeEntity(p.authority, "java", p.project, kind, name, fromRelPath).ID
 }
 
 // typeRefID builds the entity ID for an unknown-kind reference (a field, return,
@@ -118,11 +118,11 @@ func (p *Parser) typeRefID(name, fromRelPath string) string {
 		return "external:" + name
 	}
 	if kind, ok := p.localKinds[name]; ok {
-		return ast.NewCodeEntity(p.org, "java", p.project, kind, name, fromRelPath).ID
+		return ast.NewCodeEntity(p.authority, "java", p.project, kind, name, fromRelPath).ID
 	}
 	// Unresolved cross-file / unknown-kind: keep the historical local construction
 	// (now via NewCodeEntity, so SystemSlug is applied). Inert if no entity exists.
-	return ast.NewCodeEntity(p.org, "java", p.project, ast.TypeType, name, fromRelPath).ID
+	return ast.NewCodeEntity(p.authority, "java", p.project, ast.TypeType, name, fromRelPath).ID
 }
 
 // resolveJavaType resolves an unqualified type name to the repo-root-relative

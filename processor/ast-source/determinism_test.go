@@ -3,6 +3,7 @@ package astsource
 import (
 	"bytes"
 	"context"
+	"github.com/c360studio/semsource/entityid"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -162,8 +163,9 @@ func runASTPass(ctx context.Context, t *testing.T, watchPaths []WatchPathConfig)
 
 	var logBuf bytes.Buffer
 	c := &Component{
-		config: Config{WatchPaths: watchPaths},
-		logger: slog.New(slog.NewTextHandler(&logBuf, nil)),
+		config:    Config{WatchPaths: watchPaths},
+		authority: entityid.Authority{Org: watchPaths[0].Org, Platform: "test"},
+		logger:    slog.New(slog.NewTextHandler(&logBuf, nil)),
 	}
 	if err := c.initializeWatchers(); err != nil {
 		t.Fatalf("initializeWatchers: %v", err)
@@ -185,7 +187,7 @@ func runASTPass(ctx context.Context, t *testing.T, watchPaths []WatchPathConfig)
 				out = append(out, fromASTState(entity.EntityState()))
 			}
 		}
-		for _, entity := range semsourceast.BuildHierarchy(results, pw.config.Org, pw.scopedSystem) {
+		for _, entity := range semsourceast.BuildHierarchy(results, c.authority, pw.scopedSystem) {
 			out = append(out, fromASTState(entity.EntityState()))
 		}
 	}

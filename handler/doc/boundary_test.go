@@ -37,7 +37,7 @@ func TestIngestEntityStates_SkipsGitBoundaries(t *testing.T) {
 	states, err := h.IngestEntityStates(
 		context.Background(),
 		sourceConfig{typ: "docs", path: root},
-		"acme",
+		testAuthority("acme"),
 	)
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)

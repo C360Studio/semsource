@@ -54,6 +54,8 @@ type harness struct {
 	js                                                           jetstream.JetStream
 	cmd                                                          *exec.Cmd
 	done                                                         chan error
+	exited                                                       chan struct{}
+	exitErr                                                      error
 	log                                                          *os.File
 	starts                                                       int
 	result                                                       report
@@ -301,6 +303,8 @@ func (h *harness) broker() {
 		image = "nats:2.14.4-alpine"
 	}
 	name := fmt.Sprintf("semsource-setup03a-%d-%d", os.Getpid(), time.Now().UnixNano())
+	// Retain the unique owned name even if docker returns an uncertain outcome.
+	h.container = name
 	out, err := h.command("docker", "run", "-d", "--name", name, "--label", "semsource.qualification=setup03a", "--cpus", "1", "--memory", "512m", "-p", "127.0.0.1::4222", image, "-js", "-sd", "/data")
 	if err != nil {
 		h.t.Fatalf("broker: %v: %s", err, out)
@@ -402,12 +406,23 @@ func (h *harness) start() {
 	cmd.Stdout = f
 	cmd.Stderr = f
 	if err = cmd.Start(); err != nil {
+		if closeErr := f.Close(); closeErr != nil {
+			h.t.Error(closeErr)
+		}
+		h.log = nil
 		h.t.Fatal(err)
 	}
 	h.cmd = cmd
 	h.done = make(chan error, 1)
-	done := h.done
-	go func() { done <- cmd.Wait() }()
+	h.exited = make(chan struct{})
+	h.exitErr = nil
+	done, exited := h.done, h.exited
+	go func() {
+		waitErr := cmd.Wait()
+		h.exitErr = waitErr
+		close(exited)
+		done <- waitErr
+	}()
 	h.t.Logf("application pid=%d container=%s evidence=%s", h.cmd.Process.Pid, h.container, h.out)
 }
 func (h *harness) stop(force bool) {
@@ -479,8 +494,11 @@ func (h *harness) poll(timeout time.Duration, probe func() bool) bool {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if h.applicationExit() != nil {
+			return false
+		}
 		if probe() {
-			return true
+			return h.applicationExit() == nil
 		}
 		select {
 		case <-ctx.Done():
@@ -493,6 +511,10 @@ func (h *harness) check(name string, timeout time.Duration, probe func() (any, e
 	var detail any
 	var err error
 	ok := h.poll(timeout, func() bool { detail, err = probe(); return err == nil })
+	if exitErr := h.applicationExit(); exitErr != nil {
+		ok = false
+		err = exitErr
+	}
 	o := observation{Name: name, Passed: ok, Detail: detail}
 	if err != nil {
 		o.Error = err.Error()
@@ -867,9 +889,10 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 		_, err = stream.GetMsg(h.ctx, ack.Sequence)
 		pendingSurvived = err == nil
 	}
-	h.result.Observations = append(h.result.Observations, observation{Name: "memory_transport_not_durable", Passed: !pendingSurvived, Detail: map[string]any{"pending_sequence": ack.Sequence, "survived": pendingSurvived, "contract": "source re-ingestion, not publish-ack durability"}})
-	if pendingSurvived {
-		h.t.Error("memory transport unexpectedly survived; review durability observation")
+	observedAbsent := errors.Is(err, jetstream.ErrStreamNotFound) || errors.Is(err, jetstream.ErrMsgNotFound)
+	h.result.Observations = append(h.result.Observations, observation{Name: "memory_transport_not_durable", Passed: observedAbsent, Detail: map[string]any{"pending_sequence": ack.Sequence, "survived": pendingSurvived, "observation_error": fmt.Sprint(err), "contract": "source re-ingestion, not publish-ack durability"}})
+	if !observedAbsent {
+		h.t.Errorf("memory transport absence not established: survived=%t error=%v", pendingSurvived, err)
 	}
 	h.check("authority_survives_broker_restart_before_reingest", 10*time.Second, func() (any, error) {
 		persisted, openErr := h.js.KeyValue(h.ctx, kv.Bucket())
@@ -1010,5 +1033,19 @@ func (h *harness) captureRestartGuard() {
 	raw, err := json.MarshalIndent(map[string]any{"guard_key": entry.Key(), "applied_sequence": binary.BigEndian.Uint64(entry.Value()), "restarted_stream_last_sequence": info.State.LastSeq, "run_payload_sequences": sequences}, "", "  ")
 	if err == nil {
 		h.save("restart-guard.json", raw)
+	}
+}
+
+// The closed exit channel publishes exitErr without consuming the join result;
+// cleanup remains the sole owner of h.done and still joins every child.
+func (h *harness) applicationExit() error {
+	if h.cmd == nil || h.exited == nil {
+		return nil
+	}
+	select {
+	case <-h.exited:
+		return fmt.Errorf("application pid %d exited before check completion: %v", h.cmd.Process.Pid, h.exitErr)
+	default:
+		return nil
 	}
 }

@@ -1,6 +1,7 @@
 package urlsource
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/c360studio/semstreams/component"
@@ -19,6 +20,7 @@ func Register(registry RegistryInterface) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
 		Name:        "url-source",
 		Factory:     NewComponent,
+		Ports:       DeclarePorts,
 		Schema:      urlSourceSchema,
 		Type:        "processor",
 		Protocol:    "url",
@@ -26,4 +28,19 @@ func Register(registry RegistryInterface) error {
 		Description: "HTTP/S URL source for semsource web page entity extraction and change detection",
 		Version:     "0.1.0",
 	})
+}
+
+// DeclarePorts reports the constructor's ports without acquiring runtime resources.
+func DeclarePorts(raw json.RawMessage, _ string) (component.PortConfig, error) {
+	cfg := DefaultConfig()
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return component.PortConfig{}, fmt.Errorf("decode config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return component.PortConfig{}, err
+	}
+	if cfg.Ports == nil {
+		return component.PortConfig{}, nil
+	}
+	return component.PortConfig{Outputs: cfg.Ports.Outputs}, nil
 }

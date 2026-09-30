@@ -40,9 +40,9 @@ type Handler struct {
 	store       storage.Store // nil = no binary storage (metadata only)
 	storeBucket string        // ObjectStore bucket name for StorageReference
 	logger      *slog.Logger
-	// org is the organisation namespace used when building EntityState values
+	// authority is the effective deployment authority used when building EntityState values
 	// via IngestEntityStates and enrichEvent. Empty disables the typed path.
-	org string
+	authority entityid.Authority
 }
 
 // Option is a functional option for configuring a Handler.
@@ -64,10 +64,10 @@ func WithLogger(l *slog.Logger) Option {
 	return func(h *Handler) { h.logger = l }
 }
 
-// WithOrg sets the organisation namespace used when building typed EntityState
+// WithAuthority sets the effective deployment authority used when building typed EntityState
 // values via IngestEntityStates and Watch enrichment.
-func WithOrg(org string) Option {
-	return func(h *Handler) { h.org = org }
+func WithAuthority(authority entityid.Authority) Option {
+	return func(h *Handler) { h.authority = authority }
 }
 
 // New returns a ready-to-use Handler configured by the provided options.

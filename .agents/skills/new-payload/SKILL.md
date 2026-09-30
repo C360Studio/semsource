@@ -4,11 +4,9 @@ description: Step-by-step checklist for adding a new payload type to the registr
 argument-hint: [PayloadTypeName]
 ---
 
-> **Deliberately diverges from upstream.** semstreams registers payloads in `init()`
-> with blank imports; SemSource registers explicitly at bootstrap — each package exposes
-> `RegisterPayloads(reg)`, wired into `buildPayloadRegistry()` in `cmd/semsource/run.go`.
-> No `init()` side effects, no blank imports. Do not replace this with upstream's copy;
-> see `.agents/README.md` for the ownership rule.
+> **Product-specific recipe.** Both repositories now register explicitly at bootstrap (ADR-103).
+> This fork keeps SemSource's package references and composition root. The pinned registry owns
+> payload schema, indexing-profile floors, and projection contracts; no `init()` or blank imports.
 
 # New Payload Type Checklist
 
@@ -39,7 +37,7 @@ type YourPayload struct {
 ## Step 2: Implement message.Payload
 
 `Schema()` must return the same Domain/Category/Version the registration
-declares — a mismatch deserializes as `*message.GenericPayload` downstream.
+declares. Registration rejects a mismatch; the production decoder rejects an unregistered type.
 
 ```go
 // Schema implements message.Payload.
@@ -90,6 +88,9 @@ func RegisterPayloads(reg *payloadregistry.Registry) error {
             Version:     "v1",
             Description: "One-line description of the message",
             Factory:     func() any { return &YourPayload{} },
+            IndexingProfile: vocabulary.IndexingProfileControl,
+            // For graph facts, bind the applicable projection contracts here.
+            // Contracts: []contract.Contract{YourBirthContract()},
         }),
     )
 }
@@ -108,6 +109,12 @@ if err := yourpackage.RegisterPayloads(reg); err != nil {
 ```
 
 The registry reaches every component via `service.Dependencies.PayloadRegistry`.
+
+The `IndexingProfile` floor applies when a producer omits its profile. Select it according to the
+payload's semantics; do not default content payloads to control. Bind graph birth/projection contracts
+on the registration (ADR-103). Contract `MessageType` is a structured `message.Type`; an empty value
+is filled by registration and a conflicting type is rejected. Every `entity.create` type must be
+registered or graph-ingest returns `message_type_unregistered`.
 
 ## Step 6: Round-Trip Test
 
@@ -132,9 +139,11 @@ func TestYourPayload_RoundTrip(t *testing.T) {
 }
 ```
 
-Also assert the registration resolves: build a registry, call
-`RegisterPayloads`, and check the factory yields your type for
-`YourPayloadType`.
+Also test the production decoder, not only direct JSON serialization: create a
+`payloadregistry.Registry`, call the package's `RegisterPayloads`, wrap the payload with
+`message.NewBaseMessage`, marshal it, and decode using `message.NewDecoder(reg).Decode`.
+Assert the typed payload, schema, and content. Include applicable floor/contract validation and
+unregistered-create rejection; a factory lookup alone cannot prove the wire registration path.
 
 ## Verification Checklist
 
@@ -142,14 +151,15 @@ Also assert the registration resolves: build a registry, call
 - [ ] Marshal/Unmarshal use a type alias (`type Alias YourPayload`) to prevent recursion
 - [ ] The package's `RegisterPayloads` includes the new `Registration`
 - [ ] `buildPayloadRegistry()` in `cmd/semsource/run.go` calls the package's `RegisterPayloads` (new packages only)
-- [ ] Round-trip + registration tests pass
+- [ ] Production-decoder round-trip, schema/floor/contract validation, and registration tests pass
 - [ ] `Validate()` rejects the zero value's missing required fields
 
 ## Common Mistakes
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Deserializes as `*message.GenericPayload` | `Schema()` vs `Registration` Domain/Category/Version mismatch | Make them identical (define the `message.Type` once as a package var) |
+| Registration schema-consistency error | `Schema()` and registration disagree | Define one `message.Type` and use its matching key |
+| Unregistered payload/create error | Missing bootstrap registration | Trace the executable registration call from the relevant binary |
 | Payload never resolvable at runtime | Package's `RegisterPayloads` not called at bootstrap | Add the call in `buildPayloadRegistry()` (`cmd/semsource/run.go`) |
 | Stack overflow on Marshal | No type alias in MarshalJSON/UnmarshalJSON | Add `type Alias YourPayload` before the call |
 | Consumer silently misses new fields | Consumer decodes into its own private copy of the struct | Both sides must import the ONE shared type; never re-declare a wire shape (see #188) |

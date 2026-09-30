@@ -11,9 +11,9 @@ import (
 )
 
 func TestNewParser(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp/repo")
-	if p.org != "acme" {
-		t.Errorf("org = %q, want %q", p.org, "acme")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp/repo")
+	if p.authority.Org != "acme" {
+		t.Errorf("org = %q, want %q", p.authority.Org, "acme")
 	}
 	if p.project != "myproject" {
 		t.Errorf("project = %q, want %q", p.project, "myproject")
@@ -39,7 +39,7 @@ func Add(a, b int) int {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -83,8 +83,8 @@ func Add(a, b int) int {
 	}
 
 	// Check entity ID format
-	if !strings.HasPrefix(addFunc.ID, "acme.semsource.golang.test.function.") {
-		t.Errorf("ID = %q, want prefix 'acme.semsource.golang.test.function.'", addFunc.ID)
+	if !strings.HasPrefix(addFunc.ID, "acme.test-platform.test.golang.function.") {
+		t.Errorf("ID = %q, want prefix 'acme.test-platform.test.golang.function.'", addFunc.ID)
 	}
 }
 
@@ -104,7 +104,7 @@ type User struct {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -145,7 +145,7 @@ type Saver interface {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -186,7 +186,7 @@ func (u *User) Greet() string {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -233,7 +233,7 @@ func (c *Client) Get() string { return "" }
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -278,7 +278,7 @@ func Foo() {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -318,7 +318,7 @@ const (
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -376,7 +376,7 @@ type Derived struct {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -421,7 +421,7 @@ func Main() {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -491,7 +491,7 @@ func decide(path string, stat func(string) bool) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -545,7 +545,7 @@ func TestParseDirectory(t *testing.T) {
 		}
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	results, err := p.ParseDirectory(context.Background(), tmpDir)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)
@@ -577,7 +577,7 @@ func TestParseDirectory_SkipsVendor(t *testing.T) {
 		}
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	results, err := p.ParseDirectory(context.Background(), tmpDir)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)
@@ -602,7 +602,7 @@ func broken( {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	_, err := p.ParseFile(context.Background(), filePath)
 	if err == nil {
 		t.Error("expected error for invalid Go file")
@@ -610,7 +610,7 @@ func broken( {
 }
 
 func TestParseFile_NonExistent(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	_, err := p.ParseFile(context.Background(), "/tmp/nonexistent.go")
 	if err == nil {
 		t.Error("expected error for non-existent file")
@@ -618,7 +618,7 @@ func TestParseFile_NonExistent(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_Builtin(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	p.importMap = make(map[string]string)
 
 	// Test built-in types
@@ -633,12 +633,12 @@ func TestTypeNameToEntityID_Builtin(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_LocalType(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp")
 	p.importMap = make(map[string]string)
 
 	result := p.typeNameToEntityID("User", "models/user.go")
-	if !strings.HasPrefix(result, "acme.semsource.golang.myproject.type.") {
-		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.semsource.golang.myproject.type.'", result)
+	if !strings.HasPrefix(result, "acme.test-platform.myproject.golang.type.") {
+		t.Errorf("typeNameToEntityID(User) = %q, want prefix 'acme.test-platform.myproject.golang.type.'", result)
 	}
 	if !strings.Contains(result, "User") {
 		t.Errorf("typeNameToEntityID(User) = %q, want to contain 'User'", result)
@@ -646,7 +646,7 @@ func TestTypeNameToEntityID_LocalType(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_ExternalType(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	p.importMap = map[string]string{
 		"context": "context",
 		"http":    "net/http",
@@ -671,7 +671,7 @@ func TestTypeNameToEntityID_ExternalType(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_AliasedImport(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	p.importMap = map[string]string{
 		"ctx": "context", // aliased import
 	}
@@ -683,7 +683,7 @@ func TestTypeNameToEntityID_AliasedImport(t *testing.T) {
 }
 
 func TestCallNameToEntityID_Builtin(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	p.importMap = make(map[string]string)
 
 	builtins := []string{"make", "len", "append", "panic", "recover"}
@@ -697,7 +697,7 @@ func TestCallNameToEntityID_Builtin(t *testing.T) {
 }
 
 func TestCallNameToEntityID_ExternalFunc(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	p.importMap = map[string]string{
 		"fmt":  "fmt",
 		"json": "encoding/json",
@@ -720,12 +720,12 @@ func TestCallNameToEntityID_ExternalFunc(t *testing.T) {
 }
 
 func TestCallNameToEntityID_LocalFunc(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp")
 	p.importMap = make(map[string]string)
 
 	result := p.callNameToEntityID("helper", "utils/helper.go")
-	if !strings.HasPrefix(result, "acme.semsource.golang.myproject.function.") {
-		t.Errorf("callNameToEntityID(helper) = %q, want prefix 'acme.semsource.golang.myproject.function.'", result)
+	if !strings.HasPrefix(result, "acme.test-platform.myproject.golang.function.") {
+		t.Errorf("callNameToEntityID(helper) = %q, want prefix 'acme.test-platform.myproject.golang.function.'", result)
 	}
 	if !strings.Contains(result, "helper") {
 		t.Errorf("callNameToEntityID(helper) = %q, want to contain 'helper'", result)
@@ -747,7 +747,7 @@ func TestParseDirectory_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	_, err := p.ParseDirectory(ctx, tmpDir)
 	if err == nil {
 		t.Error("expected error for cancelled context")

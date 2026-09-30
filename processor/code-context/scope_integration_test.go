@@ -100,15 +100,17 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 	newComp := func(lens string) *Component {
 		g := fusionnats.New(tc.Client, 0)
 		return &Component{
-			name:        "code-context",
-			lensKind:    lens,
-			subjectRoot: lens + ".v1.",
-			org:         "acme",
-			graph:       g,
-			engine:      fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{})),
-			logger:      slog.Default(),
-			running:     true,
-			startTime:   time.Now(),
+			name:          "code-context",
+			lensKind:      lens,
+			subjectRoot:   lens + ".v1.",
+			org:           "acme",
+			platform:      "test-a1b2c3",
+			sourceSystems: []string{"fixture"},
+			graph:         g,
+			engine:        fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{})),
+			logger:        slog.Default(),
+			running:       true,
+			startTime:     time.Now(),
 		}
 	}
 
@@ -131,7 +133,7 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 		got := fetchScope(t, newComp("docs"), `{"query":"how does retry work"}`)
 		// config joins web (search-ranking-and-reach D4): dependency/manifest
 		// questions answer through doc_context too, matching docScopeDomains.
-		want := []string{"acme.semsource.web", "acme.semsource.config"}
+		want := []string{"acme.test-a1b2c3.fixture.web", "acme.test-a1b2c3.fixture.config"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("semantic scope = %v, want %v", got, want)
 		}
@@ -140,14 +142,14 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 	t.Run("code lens defaults scope to the code-language domains on the wire", func(t *testing.T) {
 		got := fetchScope(t, newComp("code"), `{"query":"where is the retry handler"}`)
 		want := []string{
-			"acme.semsource.golang",
-			"acme.semsource.python",
-			"acme.semsource.typescript",
-			"acme.semsource.javascript",
-			"acme.semsource.java",
-			"acme.semsource.svelte",
-			"acme.semsource.c",
-			"acme.semsource.cpp",
+			"acme.test-a1b2c3.fixture.golang",
+			"acme.test-a1b2c3.fixture.python",
+			"acme.test-a1b2c3.fixture.typescript",
+			"acme.test-a1b2c3.fixture.javascript",
+			"acme.test-a1b2c3.fixture.java",
+			"acme.test-a1b2c3.fixture.svelte",
+			"acme.test-a1b2c3.fixture.c",
+			"acme.test-a1b2c3.fixture.cpp",
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("semantic scope = %v, want %v", got, want)
@@ -156,8 +158,8 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 
 	t.Run("a caller-provided scope is passed through verbatim", func(t *testing.T) {
 		got := fetchScope(t, newComp("docs"),
-			`{"query":"how does retry work","scope":["other.semsource.golang"]}`)
-		want := []string{"other.semsource.golang"}
+			`{"query":"how does retry work","scope":["other.platform.foreign.golang"]}`)
+		want := []string{"other.platform.foreign.golang"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("semantic scope = %v, want caller scope %v", got, want)
 		}

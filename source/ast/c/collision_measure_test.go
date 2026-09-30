@@ -18,7 +18,7 @@ func TestMeasureCrossTUCollisions(t *testing.T) {
 	if corpus == "" {
 		t.Skip("set C_MEASURE_CORPUS to run the measurement")
 	}
-	p := NewParser("acme", "measure", corpus)
+	p := NewParser(testAuthority("acme"), "measure", corpus)
 	defsByName := make(map[string]map[string]bool) // name -> set of files
 	total := 0
 	err := filepath.Walk(corpus, func(path string, info os.FileInfo, err error) error {

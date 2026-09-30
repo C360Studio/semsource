@@ -11,14 +11,15 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/python"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/source/ast"
 )
 
 func init() {
 	ast.DefaultRegistry.Register("python", []string{".py"},
-		func(org, project, repoRoot string) ast.FileParser {
-			return NewParser(org, project, repoRoot)
+		func(authority entityid.Authority, project, repoRoot string) ast.FileParser {
+			return NewParser(authority, project, repoRoot)
 		})
 }
 
@@ -33,7 +34,7 @@ func init() {
 // typeNameToEntityID can resolve a cross-file reference to its defining module
 // (task #44) without threading state through the extraction call chain.
 type Parser struct {
-	org        string
+	authority  entityid.Authority
 	project    string
 	repoRoot   string
 	parser     *sitter.Parser
@@ -55,14 +56,14 @@ type moduleRelPath struct {
 }
 
 // NewParser creates a new Python AST parser.
-func NewParser(org, project, repoRoot string) *Parser {
+func NewParser(authority entityid.Authority, project, repoRoot string) *Parser {
 	p := sitter.NewParser()
 	p.SetLanguage(python.GetLanguage())
 	return &Parser{
-		org:      org,
-		project:  project,
-		repoRoot: repoRoot,
-		parser:   p,
+		authority: authority,
+		project:   project,
+		repoRoot:  repoRoot,
+		parser:    p,
 	}
 }
 
@@ -116,7 +117,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	// Create file entity
-	fileEntity := ast.NewCodeEntity(p.org, "python", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.authority, "python", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Package = moduleName
 	fileEntity.Hash = hash
 	fileEntity.StartLine = 1
@@ -316,7 +317,7 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 	// Class scope is just the class itself; methods within will inherit it.
 	classScope := []string{name}
 
-	entity := ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, name, filePath)
+	entity := ast.NewCodeEntity(p.authority, "python", p.project, ast.TypeClass, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.determineVisibility(name)
@@ -398,7 +399,7 @@ func (p *Parser) extractFunction(node *sitter.Node, content []byte, filePath str
 		entityType = ast.TypeMethod
 	}
 
-	entity := ast.NewScopedCodeEntity(p.org, "python", p.project, entityType, scope, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, "python", p.project, entityType, scope, name, filePath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.determineVisibility(name)
@@ -492,7 +493,7 @@ func (p *Parser) extractAssignment(node *sitter.Node, content []byte, filePath s
 				entityType = ast.TypeConst
 			}
 
-			entity := ast.NewCodeEntity(p.org, "python", p.project, entityType, name, filePath)
+			entity := ast.NewCodeEntity(p.authority, "python", p.project, entityType, name, filePath)
 			entity.StartLine = int(node.StartPoint().Row) + 1
 			entity.EndLine = int(node.EndPoint().Row) + 1
 			entity.Visibility = p.determineVisibility(name)
@@ -653,7 +654,7 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	if module, origin, level, imported := lookupBinding(typeName, p.imports); imported {
 		if origin != "" {
 			if defRel, ok := p.moduleToRelPath(module, filePath, level); ok {
-				return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, origin, defRel).ID
+				return ast.NewCodeEntity(p.authority, "python", p.project, ast.TypeClass, origin, defRel).ID
 			}
 		}
 		// Imported but not resolvable to an in-tree definition (out-of-tree module,
@@ -675,7 +676,7 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// Bare local names are resolved class-only (a class is the only resolvable
 	// same-file target); a non-class name — a local TypeVar/alias — yields an inert
 	// dangling id the engine simply drops.
-	return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeClass, typeName, filePath).ID
+	return ast.NewCodeEntity(p.authority, "python", p.project, ast.TypeClass, typeName, filePath).ID
 }
 
 // isBuiltinType returns true if the type is a Python built-in type.

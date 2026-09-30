@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/source/weburl"
 )
@@ -35,10 +36,10 @@ type URLSourceConfig interface {
 type URLHandler struct {
 	fetcher *SafeFetcher
 	logger  *slog.Logger
-	// org is the organisation namespace used when building typed EntityState
+	// authority is the effective deployment authority used when building typed EntityState
 	// values via IngestEntityStates and Watch. When empty, EntityStates are not
 	// populated on watch events.
-	org string
+	authority entityid.Authority
 }
 
 // New creates a URLHandler with a default SSRF-safe HTTP client.
@@ -53,16 +54,16 @@ func New(logger *slog.Logger) *URLHandler {
 	}
 }
 
-// NewWithOrg creates a URLHandler that will populate EntityStates on watch
-// events using the given org namespace.
-func NewWithOrg(logger *slog.Logger, org string) *URLHandler {
+// NewWithAuthority creates a URLHandler that will populate EntityStates on watch
+// events using the given effective deployment authority.
+func NewWithAuthority(logger *slog.Logger, authority entityid.Authority) *URLHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &URLHandler{
-		fetcher: NewSafeFetcher(nil),
-		logger:  logger,
-		org:     org,
+		fetcher:   NewSafeFetcher(nil),
+		logger:    logger,
+		authority: authority,
 	}
 }
 
@@ -147,8 +148,8 @@ func (h *URLHandler) pollLoop(ctx context.Context, rawURL string, interval time.
 				Operation: handler.OperationCreate,
 				Timestamp: now,
 			}
-			if h.org != "" {
-				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.org, now.UTC())}
+			if h.authority.Org != "" {
+				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.authority, now.UTC())}
 			}
 			select {
 			case out <- ev:
@@ -197,8 +198,8 @@ func (h *URLHandler) pollLoop(ctx context.Context, rawURL string, interval time.
 				Operation: handler.OperationModify,
 				Timestamp: now,
 			}
-			if h.org != "" {
-				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.org, now.UTC())}
+			if h.authority.Org != "" {
+				ev.EntityStates = []*handler.EntityState{h.buildPageEntityState(rawURL, result, h.authority, now.UTC())}
 			}
 			select {
 			case out <- ev:
@@ -267,7 +268,7 @@ func domainSlug(rawURL string) string {
 	if domain == "" {
 		return "unknown"
 	}
-	return strings.ReplaceAll(strings.ToLower(domain), ".", "-")
+	return entityid.SystemSlug(strings.ToLower(domain))
 }
 
 // contentHash returns the hex-encoded SHA-256 of content.

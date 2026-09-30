@@ -22,7 +22,7 @@ type stubStore struct {
 }
 
 func (s stubStore) GetConfig() *semconfig.SafeConfig {
-	comps := map[string]types.ComponentConfig{}
+	comps := map[string]types.ComponentConfig{"source-manifest": {Name: "source-manifest", Enabled: true, Config: json.RawMessage(`{"namespace":"acme"}`)}}
 	for _, name := range s.components {
 		comps[name] = types.ComponentConfig{}
 	}

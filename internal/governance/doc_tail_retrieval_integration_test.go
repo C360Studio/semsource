@@ -137,7 +137,7 @@ func ingestTailFixture(
 
 	// Drive the REAL doc producer, exactly as production wiring does.
 	h := dochandler.New(dochandler.WithBodyStore(store, semsourcegraph.BodyStoreInstance))
-	states, err = h.IngestEntityStates(ctx, docSourceConfig{typ: "docs", path: docDir}, "acme")
+	states, err = h.IngestEntityStates(ctx, docSourceConfig{typ: "docs", path: docDir}, fixtureAuthority())
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}

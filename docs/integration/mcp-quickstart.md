@@ -82,8 +82,8 @@ an agent point SemSource at new sources at runtime; `source_status` is the readi
 | `doc_context` | Get the intended design from prose — READMEs, ADRs, docs — not just the code. | Structural over the doc graph. |
 | `graph_search` | Ask a corpus-wide thematic question across **all** entity types (*"how does readiness gating work"*). Returns a ranked match list — IDs, labels, relevance — to follow up on with `code_context`. | Substrate graph query. A router, not a content tool: it ranks so you know what to read. Every result carries a `retrieval` block saying how far the answer escalated. |
 | `source_status` | Check readiness: ingest phase, per-source counts, `index` (structural) + `embedding` (semantic). | Poll this before trusting a miss. |
-| `add_source` | Register a new source (repo/git/docs/config/url) to index at runtime. | Path sources must be under an allowlisted root. |
-| `remove_source` | Deregister a source by handle. | Stops ingestion; does not retract existing graph data. |
+| `add_source` | Persist a new source (repo/git/docs/config/url) for the next application boot. | Path sources must be under an allowlisted root. |
+| `remove_source` | Deregister a source by handle. | Persists removal for next boot; current ingestion continues until restart and existing graph data is retained. |
 
 ### Readiness is honest — gate on it
 
@@ -97,8 +97,12 @@ lag. In practice:
   after the structural index (first-index embedding is CPU-heavy; see
   [`configs/tiers/README.md`](../../configs/tiers/README.md)).
 
-So a good agent flow is: `add_source` (if needed) → poll `source_status` → `code_context` /
-`code_search` / `code_impact` / `doc_context`.
+After `add_source` or `remove_source`, inspect `desired_changed`, `runtime_changed`, and
+`restart_required`. Successful source changes require an application restart; current status continues
+to describe the running boot configuration. Restart through the deployment owner, then poll
+`source_status` before `code_context`, `code_search`, `code_impact`, or `doc_context`.
+A partial persistence error can still report `desired_changed: true`; preserve that receipt and retry
+instead of treating the operation as rolled back.
 
 ## Verify with a raw handshake (optional)
 

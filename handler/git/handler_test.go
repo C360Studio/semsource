@@ -174,8 +174,8 @@ func TestBuildAuthorEntity(t *testing.T) {
 				}
 			}
 			// Reference: ensure the constructed ID is what we expect.
-			_ = entityid.Build("acme", entityid.PlatformSemsource, e.Domain,
-				e.System, e.EntityType, e.Instance)
+			_ = entityid.Build("acme", "test-platform", e.System,
+				e.Domain, e.EntityType, e.Instance)
 		})
 	}
 }
@@ -210,8 +210,8 @@ func TestBuildBranchEntity(t *testing.T) {
 			if !entityIDSegmentRegex.MatchString(e.Instance) {
 				t.Errorf("branch Instance %q is not a valid entity-ID segment", e.Instance)
 			}
-			_ = entityid.Build("acme", entityid.PlatformSemsource, e.Domain,
-				e.System, e.EntityType, e.Instance)
+			_ = entityid.Build("acme", "test-platform", e.System,
+				e.Domain, e.EntityType, e.Instance)
 		})
 	}
 }
@@ -235,11 +235,11 @@ func TestCommitEntity_Triples(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filepath.Abs() error = %v", err)
 	}
-	h := githandler.New(githandler.Config{Org: "acme"})
+	h := githandler.New(githandler.Config{Authority: testAuthority("acme")})
 	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
 		typ:  "git",
 		path: repoPath, // current repo — always has at least one commit in CI
-	}, "acme")
+	}, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error = %v", err)
 	}
@@ -304,11 +304,11 @@ func TestCommitEntity_Triples(t *testing.T) {
 }
 
 func TestAuthorEntity_Triples(t *testing.T) {
-	h := githandler.New(githandler.Config{Org: "acme"})
+	h := githandler.New(githandler.Config{Authority: testAuthority("acme")})
 	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
 		typ:  "git",
 		path: ".",
-	}, "acme")
+	}, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error = %v", err)
 	}
@@ -343,11 +343,11 @@ func TestAuthorEntity_Triples(t *testing.T) {
 }
 
 func TestBranchEntity_Triples(t *testing.T) {
-	h := githandler.New(githandler.Config{Org: "acme"})
+	h := githandler.New(githandler.Config{Authority: testAuthority("acme")})
 	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
 		typ:  "git",
 		path: ".",
-	}, "acme")
+	}, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error = %v", err)
 	}
@@ -382,11 +382,11 @@ func TestBranchEntity_Triples(t *testing.T) {
 }
 
 func TestGitHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
-	h := githandler.New(githandler.Config{Org: "acme"})
+	h := githandler.New(githandler.Config{Authority: testAuthority("acme")})
 	states, err := h.IngestEntityStates(context.Background(), &srcCfg{
 		typ:  "git",
 		path: ".",
-	}, "acme")
+	}, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error = %v", err)
 	}
@@ -401,7 +401,7 @@ func TestGitHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 func TestIngestEntityStates_NoOrg_ReturnsError(t *testing.T) {
 	h := githandler.New(githandler.DefaultConfig())
 	// No path or URL — should fail at repo resolution, not org.
-	_, err := h.IngestEntityStates(context.Background(), &srcCfg{typ: "git"}, "acme")
+	_, err := h.IngestEntityStates(context.Background(), &srcCfg{typ: "git"}, testAuthority("acme"))
 	if err == nil {
 		t.Error("IngestEntityStates() with no path/url should return error")
 	}
@@ -412,7 +412,7 @@ func TestIngestEntityStates_ContextCancelled(t *testing.T) {
 	cancel() // cancel immediately
 
 	h := githandler.New(githandler.DefaultConfig())
-	_, err := h.IngestEntityStates(ctx, &srcCfg{typ: "git", path: "."}, "acme")
+	_, err := h.IngestEntityStates(ctx, &srcCfg{typ: "git", path: "."}, testAuthority("acme"))
 	if err == nil {
 		t.Error("IngestEntityStates() with cancelled context should return error")
 	}
