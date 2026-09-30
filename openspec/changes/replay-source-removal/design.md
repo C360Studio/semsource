@@ -296,7 +296,9 @@ remain narrow interfaces to permit deterministic failure tests. The agreed expor
 | `ProjectionResult` | Enumerated, Marked, Cleared, complete flag and failed entity details |
 
 `SeedManifest.Entries` is an in-process slice; the journal writes bounded per-entity records and a
-terminal count/digest rather than putting an unbounded JSON value in one KV entry. Error responses
+terminal count/digest rather than putting an unbounded JSON value in one KV entry. `LoadSeed` reads
+that exact binding/batch and verifies the terminal seal against its entries before returning it; it
+is the restart read seam, not permission to accept an incomplete manifest. Error responses
 remain typed results/errors, not strings that callers parse.
 
 ```go
@@ -308,6 +310,7 @@ type Journal interface {
     PutReceipt(ctx context.Context, receipt Receipt) error
     ListReceipts(ctx context.Context, binding Binding, batchID string) ([]Receipt, error)
     SealSeed(ctx context.Context, manifest SeedManifest) error
+    LoadSeed(ctx context.Context, binding Binding, batchID string) (SeedManifest, error)
 }
 
 type Projector interface {
