@@ -18,6 +18,7 @@ package garagetest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -118,7 +119,11 @@ func Terminate() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return terminate(ctx)
+	if err := terminate(ctx); err != nil {
+		return fmt.Errorf("terminate Garage container: %w", err)
+	}
+	terminate = nil
+	return nil
 }
 
 // NewBucket creates a bucket named after the running test and returns its
@@ -231,7 +236,14 @@ func start() (string, func(context.Context) error, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	return startWithCreator(ctx, testcontainers.GenericContainer)
+}
+
+func startWithCreator(
+	ctx context.Context,
+	create func(context.Context, testcontainers.GenericContainerRequest) (testcontainers.Container, error),
+) (address string, stop func(context.Context) error, startErr error) {
+	container, err := create(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        Image,
 			ExposedPorts: []string{s3Port, adminPort},
@@ -248,10 +260,26 @@ func start() (string, func(context.Context) error, error) {
 		},
 		Started: true,
 	})
-	if err != nil {
-		return "", nil, fmt.Errorf("start container: %w", err)
+	if container != nil {
+		stop = func(ctx context.Context) error { return container.Terminate(ctx) }
 	}
-	stop := func(ctx context.Context) error { return container.Terminate(ctx) }
+	// GenericContainer can return ownership together with an error. Startup's
+	// context may already be canceled, so cleanup gets an independent budget.
+	defer func() {
+		if startErr == nil || stop == nil {
+			return
+		}
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		if cleanupErr := stop(cleanupCtx); cleanupErr != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("cleanup failed startup: %w", cleanupErr))
+			return // Retain the exact handle for TestMain's bounded retry.
+		}
+		stop = nil
+	}()
+	if err != nil {
+		return "", stop, fmt.Errorf("start container: %w", err)
+	}
 
 	// Phase 2: give the single node a role, so the cluster has somewhere to
 	// put data, then create the credentials the tests authenticate with.

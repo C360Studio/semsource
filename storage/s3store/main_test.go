@@ -3,7 +3,6 @@
 package s3store_test
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -19,15 +18,5 @@ import (
 // providers start lazily, so naming both here costs a run nothing for the one
 // it did not use.
 func TestMain(m *testing.M) {
-	code := m.Run()
-
-	for name, terminate := range map[string]func() error{
-		"MinIO":  miniotest.Terminate,
-		"Garage": garagetest.Terminate,
-	} {
-		if err := terminate(); err != nil {
-			fmt.Printf("terminate the %s container: %v\n", name, err)
-		}
-	}
-	os.Exit(code)
+	os.Exit(miniotest.RunTests(m, garagetest.Terminate))
 }

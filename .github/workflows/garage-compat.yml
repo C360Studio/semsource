@@ -20,6 +20,7 @@ on:
     paths:
       - "storage/s3store/**"
       - "internal/garagetest/**"
+      - "internal/miniotest/**"
       - "go.mod"
       - "go.sum"
       - ".github/workflows/garage-compat.yml"
