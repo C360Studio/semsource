@@ -5,12 +5,9 @@ package supersession
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semsource/internal/sourceintent"
-	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/natsclient"
 )
@@ -30,11 +27,22 @@ func TestIntegrationSourceProjectionOwnsRefusalRPC(t *testing.T) {
 	if c.sourceSub == nil {
 		t.Fatal("refusal subscription not retained")
 	}
-	result, err := (sourcelifecycle.NATSProjector{Client: tc.Client}).ApplyRemoval(ctx, replayRemoval())
-	var blocked *sourceintent.Blocker
-	if !errors.As(err, &blocked) || blocked.Code != sourceintent.CodeOwnership || result.Complete || len(mut.writes) != 0 || len(queries.cursors) != 0 {
-		t.Fatalf("wire authorized effects: result=%+v error=%v", result, err)
+	raw, err := tc.Client.RequestClassified(ctx, sourceProjectionSubject, []byte(`{"removal":{}}`), time.Second)
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Error.Code != "SOURCE_LIFECYCLE_UNAVAILABLE" || len(mut.writes) != 0 || len(queries.cursors) != 0 {
+		t.Fatalf("wire authorized effects: %s", raw)
+	}
+
 	if err := c.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +60,7 @@ func TestIntegrationCanceledQueuedProjectionCannotMutate(t *testing.T) {
 	mut := &replayMutator{entities: map[string]gtypes.EntityState{e.ID: e}}
 	c := replayComponent(queries, mut)
 	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	sub, err := tc.Client.SubscribeForRequests(ctx, sourcelifecycle.ProjectionSubject, func(serverCtx context.Context, raw []byte) ([]byte, error) {
+	sub, err := tc.Client.SubscribeForRequests(ctx, sourceProjectionSubject, func(serverCtx context.Context, raw []byte) ([]byte, error) {
 		close(entered)
 		select {
 		case <-release:
@@ -67,15 +75,11 @@ func TestIntegrationCanceledQueuedProjectionCannotMutate(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.sourceSub = sub
-	request := replayRemoval()
-	raw, err := json.Marshal(sourcelifecycle.ProjectionRequest{Removal: &request})
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := []byte(`{"removal":{}}`)
 	callerCtx, callerCancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() {
-		_, err := tc.Client.RequestClassified(callerCtx, sourcelifecycle.ProjectionSubject, raw, time.Second)
+		_, err := tc.Client.RequestClassified(callerCtx, sourceProjectionSubject, raw, time.Second)
 		done <- err
 	}()
 	select {
@@ -106,7 +110,7 @@ func TestIntegrationCanceledQueuedProjectionCannotMutate(t *testing.T) {
 		t.Fatalf("incomplete drain lost ownership: %v retained=%v", stopErr, retained)
 	}
 	// Even after its original caller has returned, the old request cannot enter
-	// graph enumeration or mutation. Actual generation admission is coordinator-owned.
+	// graph enumeration or mutation. The retired route has no mutation capability.
 	if len(mut.writes) != 0 || len(queries.cursors) != 0 {
 		t.Fatalf("late request produced effects: writes=%v queries=%v", mut.writes, queries.cursors)
 	}

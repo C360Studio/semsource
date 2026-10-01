@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
-	"github.com/c360studio/semsource/internal/seedproof"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,16 +80,12 @@ type codeBody struct {
 // file. Any read/offload fault degrades that entity to no body rather than failing
 // ingest. Returns nil when no store is set.
 func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.ParseResult, root string) map[string]codeBody {
-	if c.bodyStore == nil {
-		seedproof.Report(ctx, fmt.Errorf("source body store unavailable during seed proof"))
-	}
 	if c.bodyStore == nil || result == nil || result.Path == "" {
 		return nil
 	}
 	absPath := filepath.Join(root, result.Path)
 	content, err := os.ReadFile(absPath)
 	if err != nil {
-		seedproof.Report(ctx, err)
 		c.logger.Debug("read source for body offload failed", "path", absPath, "error", err)
 		return nil
 	}
@@ -159,7 +153,6 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 			defer wg.Done()
 			defer func() { <-sem }()
 			if err := c.bodyStore.Put(ctx, w.key, []byte(w.body)); err != nil {
-				seedproof.Report(ctx, err)
 				c.logger.Warn("offload code body failed", "entity", w.entity, "error", err)
 				return // degrade this entity to no body, as before
 			}

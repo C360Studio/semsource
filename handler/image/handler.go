@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/c360studio/semsource/internal/seedproof"
 	"image"
 	_ "image/gif"  // register GIF decoder
 	_ "image/jpeg" // register JPEG decoder
@@ -138,7 +137,6 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 
 			entity, err := h.ingestFile(ctx, path, root)
 			if err != nil {
-				seedproof.Report(ctx, err)
 				// Non-fatal: skip unreadable or malformed files and continue.
 				return nil
 			}
@@ -196,13 +194,11 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 	if h.store != nil {
 		storageKey := fmt.Sprintf("images/%s/%s/original", slugify(root), instance)
 		if err := h.store.Put(ctx, storageKey, content); err != nil {
-			seedproof.Report(ctx, err)
 			h.logger.Warn("failed to store image binary", "path", path, "error", err)
 		} else {
 			entity.Properties["storage_ref"] = storageKey
 
 			thumbKey, err := h.generateAndStoreThumbnail(ctx, content, path, root, instance)
-			seedproof.Report(ctx, err)
 			if err == nil && thumbKey != "" {
 				entity.Properties["thumbnail_ref"] = thumbKey
 			}

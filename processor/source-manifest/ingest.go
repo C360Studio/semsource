@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	semconfig "github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/types"
 )
 
 const (
@@ -27,22 +26,16 @@ const (
 	// AddReply.ReadyWhen. Callers wait until the matching SourceStatus on
 	// graph.ingest.status reports a phase in this set.
 	ingestReadyWhen = "after application restart: source_status.phase in ['watching', 'idle']"
-
-	// lifecycleTriggerTimeout bounds the background NATS round trip
-	// triggering a staleness lifecycle pass after remove_source. Fire-and-
-	// forget from the caller's perspective — a missing or slow responder
-	// degrades staleness marking, it never blocks or fails removal.
-	lifecycleTriggerTimeout = 30 * time.Second
 )
 
 // IngestHandlerConfig wires the ingest add/remove subscriptions on
 // source-manifest. Callers must supply both Store (KV writes) and Spawn
 // (per-source defaults). Namespace is the per-namespace subject suffix.
 type IngestHandlerConfig struct {
-	Lifecycle *sourcelifecycle.Coordinator
-	Namespace string
-	Store     sourcespawn.ConfigStore
-	Spawn     sourcespawn.Options
+	ReadDesired func(context.Context, string) (types.ComponentConfig, bool, error)
+	Namespace   string
+	Store       sourcespawn.ConfigStore
+	Spawn       sourcespawn.Options
 	// Checker is optional. When non-nil, AddReply distinguishes new vs.
 	// refresh via the per-component Created flag.
 	Checker sourcespawn.ExistsChecker
@@ -140,15 +133,15 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 // HTTP façade (ADR-0007). Transport-level concerns (auth, path allowlisting)
 // are the caller's responsibility and must run BEFORE this.
 func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHandlerConfig) *AddReply {
-	release, gateErr := c.acquireDesired(ctx, cfg)
+	release, gateErr := c.desiredMu.acquire(ctx)
 	if gateErr != nil {
 		return &AddReply{Error: mapSpawnError(gateErr), Timestamp: time.Now()}
 	}
 	defer release()
-	if cfg.Lifecycle != nil {
-		if err := cfg.Lifecycle.CheckAdmission(ctx); err != nil {
-			return &AddReply{Error: mapSpawnError(err), Timestamp: time.Now()}
-		}
+	var readErr error
+	cfg, readErr = desiredRequestConfig(ctx, cfg, "")
+	if readErr != nil {
+		return &AddReply{Error: mapSpawnError(readErr), Timestamp: time.Now()}
 	}
 	results, err := sourcespawn.AddWithChecker(ctx, req.Source, cfg.Store, cfg.Checker, cfg.Spawn)
 
@@ -168,12 +161,13 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 	}
 
 	reply := &AddReply{
-		Components:      components,
-		DesiredChanged:  len(components) > 0,
-		RestartRequired: len(components) > 0,
-		StatusSubject:   statusSubject,
-		ReadyWhen:       ingestReadyWhen,
-		Timestamp:       time.Now(),
+		Components:       components,
+		ProjectionStatus: "unavailable",
+		DesiredChanged:   len(components) > 0,
+		RestartRequired:  len(components) > 0,
+		StatusSubject:    statusSubject,
+		ReadyWhen:        ingestReadyWhen,
+		Timestamp:        time.Now(),
 	}
 	if err != nil {
 		reply.Error = mapSpawnError(err)
@@ -189,13 +183,6 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 	// ADRs 094/100 keep the running component set immutable. Persist the desired
 	// manifest for next boot; do not change live status or promise activation.
 	if len(components) > 0 {
-		if cfg.Lifecycle != nil {
-			for _, added := range components {
-				if lifecycleErr := cfg.Lifecycle.RecordReadd(ctx, added.InstanceName); lifecycleErr != nil {
-					reply.Error = &IngestError{Code: CodeKVWriteFailed, Message: lifecycleErr.Error()}
-				}
-			}
-		}
 		if persistErr := c.persistDesiredManifest(ctx, cfg, &req.Source, ""); persistErr != nil {
 			if err != nil {
 				persistErr = errors.Join(err, persistErr)
@@ -382,29 +369,41 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 // removeSource persists a disabled component config in KV and returns the
 // RemoveReply. Shared by the NATS ingest handler and the HTTP façade. Removal
 // changes the next boot's composition; current ingestion continues until restart.
-// Entity history is retained. Durable source_removed replay remains a migration
-// merge blocker (docs/testing/setup-03a/compatibility.md).
+// Entity history is retained; automatic source-removal projection is unavailable.
 func (c *Component) removeSource(ctx context.Context, instanceName, actor string, cfg IngestHandlerConfig) *RemoveReply {
-	release, gateErr := c.acquireDesired(ctx, cfg)
+	release, gateErr := c.desiredMu.acquire(ctx)
 	if gateErr != nil {
 		return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(gateErr), Timestamp: time.Now()}
 	}
 	defer release()
-	if cfg.Lifecycle != nil {
-		return c.removeWithLifecycle(ctx, instanceName, cfg)
+	var readErr error
+	cfg, readErr = desiredRequestConfig(ctx, cfg, instanceName)
+	if readErr != nil {
+		return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(readErr), Timestamp: time.Now()}
 	}
-	if err := sourcespawn.Remove(ctx, instanceName, cfg.Store); err != nil {
+	previous, existed := cfg.Store.GetConfig().Get().Components[instanceName]
+	removeErr := sourcespawn.Remove(ctx, instanceName, cfg.Store)
+	if removeErr != nil {
 		var spawnErr *sourcespawn.Error
-		// A prior disable can commit before the manifest write fails. Only a known
-		// stale desired manifest entry authorizes retry repair; typos stay NOT_FOUND.
-		if !errors.As(err, &spawnErr) || spawnErr.Code != sourcespawn.CodeNotFound || !desiredManifestNeedsRemovalRepair(instanceName, cfg) {
-			return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(err), Timestamp: time.Now()}
+		repair := errors.As(removeErr, &spawnErr) && spawnErr.Code == sourcespawn.CodeNotFound && desiredManifestNeedsRemovalRepair(instanceName, cfg)
+		current, exists := cfg.Store.GetConfig().Get().Components[instanceName]
+		expected := previous
+		expected.Enabled = false
+		got, _ := json.Marshal(current)
+		want, _ := json.Marshal(expected)
+		committed := cfg.ReadDesired != nil && existed && previous.Enabled && exists && string(got) == string(want)
+		if !repair && !committed {
+			return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(removeErr), Timestamp: time.Now()}
+		}
+		if repair {
+			removeErr = nil
 		}
 	}
-	reply := &RemoveReply{InstanceName: instanceName, Removed: true, DesiredChanged: true, RestartRequired: true, Timestamp: time.Now()}
-	if err := c.persistDesiredManifest(ctx, cfg, nil, instanceName); err != nil {
+	reply := &RemoveReply{ProjectionStatus: "unavailable", InstanceName: instanceName, Removed: true, DesiredChanged: true, RestartRequired: true, Timestamp: time.Now()}
+	if err := errors.Join(removeErr, c.persistDesiredManifest(ctx, cfg, nil, instanceName)); err != nil {
 		reply.Error = &IngestError{Code: CodeKVWriteFailed, Message: err.Error()}
 	}
+
 	c.logger.Info("source removal persisted for next application boot", "namespace", cfg.Namespace, "instance_name", instanceName, "actor", actor)
 	return reply
 }
@@ -442,25 +441,6 @@ func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandle
 	return nil
 }
 
-// triggerRemovalLifecycleRun announces the removed source's scope to the
-// staleness lifecycle pass (processor/supersession), fired in the background
-// so remove_source's caller is never blocked on a full graph pass.
-func (c *Component) triggerRemovalLifecycleRun(ctx context.Context, org string, systems []string) {
-	req := graph.LifecycleRunRequest{
-		Org:     org,
-		Systems: systems,
-		Reason:  graph.LifecycleReasonSourceRemoved,
-	}
-	go func() {
-		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
-		defer cancel()
-		if _, err := graph.PublishLifecycleTrigger(runCtx, c.client, req); err != nil {
-			c.logger.Debug("lifecycle trigger failed (staleness marking degraded, not fatal)",
-				"org", org, "systems", systems, "error", err)
-		}
-	}()
-}
-
 // mapSpawnError maps a sourcespawn.Error code onto the wire IngestErrorCode.
 // Non-typed errors (json decode failures, anything that bypasses
 // sourcespawn.Error wrapping) become INTERNAL_ERROR — retryable, distinct
@@ -485,7 +465,13 @@ func mapSpawnError(err error) *IngestError {
 	case sourcespawn.CodeNotFound:
 		code = CodeNotFound
 	}
-	return &IngestError{Code: code, Message: serr.Message}
+	message := serr.Message
+	if code == CodeKVWriteFailed {
+		// A failed authoritative read leaves a write outcome unproved. Keep its
+		// cause visible instead of reducing it to the operation name alone.
+		message = err.Error()
+	}
+	return &IngestError{Code: code, Message: message}
 }
 
 func marshalAddReply(reply *AddReply) ([]byte, error) {
@@ -525,13 +511,19 @@ func desiredManifestNeedsRemovalRepair(instance string, cfg IngestHandlerConfig)
 // Disabled envelopes preserve removal intent without counting as admitted sources.
 func enabledSourceComponentCount(components semconfig.ComponentConfigs) int {
 	count := 0
-	for _, component := range components {
-		if component.Enabled {
-			switch component.Name {
-			case "ast-source", "git-source", "doc-source", "cfgfile-source", "url-source", "image-source", "audio-source", "video-source", "objectstore-source":
-				count++
-			}
+	for _, cc := range components {
+		if cc.Enabled && isSourceComponent(cc.Name) {
+			count++
 		}
 	}
 	return count
+}
+
+func isSourceComponent(name string) bool {
+	switch name {
+	case "ast-source", "git-source", "doc-source", "cfgfile-source", "url-source", "image-source", "audio-source", "video-source", "objectstore-source":
+		return true
+	default:
+		return false
+	}
 }

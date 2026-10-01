@@ -1,5 +1,19 @@
 # SETUP 03A baseline merge readiness
 
+## Superseding corrective ruling — 2026-10-01
+
+PR #213 merged as `3604a9ce`. The owner subsequently authorized [corrective PR #223][corrective-pr]
+to remove its unproven private source-recovery authority. The earlier architectural approval of that
+subsystem is withdrawn; the baseline measurements and independently retained migration fixes below
+remain historical evidence. See the [corrective contract and pending evidence][corrective-record].
+This notice does not change pins, frozen results or failed assertions. The corrective work, rather
+than 04A implementation, is the immediate authorized task; later engine admission gates remain intact.
+The following merge-readiness ruling describes its original snapshot, not approval to retain the
+withdrawn recovery architecture.
+
+[corrective-pr]: https://github.com/C360Studio/semsource/pull/223
+[corrective-record]: ../private-recovery-retirement/README.md
+
 Current owner ruling, **2026-10-01**: prepare [SemSource PR #213][pr] for merge as the pinned consumer
 baseline. Independent component/lifecycle and graph/event reviewers approve **baseline-only merge
 readiness at `705ae66`** and identify no remaining consumer-owned safety blocker in that scope.

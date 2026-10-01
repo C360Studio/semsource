@@ -86,7 +86,7 @@ func newPubMetrics(registry *metric.MetricsRegistry, subsystem string) *pubMetri
 		failed: counter("entities_failed_total",
 			"Entities that exhausted publish retries and were not delivered"),
 		dropped: counter("entities_dropped_total",
-			"Entities dropped after bounded backpressure (buffer full)"),
+			"Entities rejected before enqueue (invalid encoding or bounded backpressure)"),
 		retries: counter("publish_retries_total",
 			"Publish attempts retried because the transport applied backpressure"),
 		backpressure: prometheus.NewGauge(prometheus.GaugeOpts{

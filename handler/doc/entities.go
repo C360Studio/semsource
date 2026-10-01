@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/c360studio/semsource/internal/seedproof"
 	"os"
 	"path"
 	"path/filepath"
@@ -282,7 +281,6 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 
 			fileStates, err := h.ingestFileEntityStates(ctx, path, root, system, authority, now)
 			if err != nil {
-				seedproof.Report(ctx, err)
 				// An unreadable file is one document's problem: skip it. A body
 				// store that cannot be written to is the deployment's problem,
 				// and every document after this one would fail the same way —

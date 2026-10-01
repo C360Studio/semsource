@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/c360studio/semsource/internal/seedproof"
 	"net/url"
 	"strings"
 	"time"
@@ -210,7 +209,6 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 
 		states, err := h.ingestObject(ctx, info.Key, system, now)
 		if err != nil {
-			seedproof.Report(ctx, err)
 			// An unreadable object is one document's problem: skip it and say
 			// so. A body store that cannot be written to is the deployment's
 			// problem, and every document after this one would fail the same

@@ -97,8 +97,8 @@ func (c *Component) addSource(ctx context.Context, _ *mcp.CallToolRequest, in Ad
 	return textResult(resp), nil, nil
 }
 
-// removeSource deregisters a source by its handle. Removal stops ingestion; it
-// does NOT retract entities (ADR-0007 sequencing guardrail).
+// removeSource persists a desired disable; ingestion changes on application restart.
+// Retained graph history is unchanged and removal projection is unavailable.
 func (c *Component) removeSource(ctx context.Context, _ *mcp.CallToolRequest, in RemoveSourceInput) (*mcp.CallToolResult, any, error) {
 	if in.InstanceName == "" {
 		return nil, nil, fmt.Errorf("instance_name is required")
@@ -113,7 +113,7 @@ func (c *Component) removeSource(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, nil, fmt.Errorf("remove request failed: %w", err)
 	}
 	var reply sourcemanifest.RemoveReply
-	if json.Unmarshal(resp, &reply) == nil && reply.Error != nil {
+	if json.Unmarshal(resp, &reply) == nil && reply.Error != nil && !reply.DesiredChanged {
 		return nil, nil, fmt.Errorf("%s: %s", reply.Error.Code, reply.Error.Message)
 	}
 	return textResult(resp), nil, nil
