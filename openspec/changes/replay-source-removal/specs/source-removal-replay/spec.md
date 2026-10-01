@@ -24,8 +24,11 @@ runtime and graph projection. Partial desired writes SHALL be repairable and obs
 
 Within the supported single-process-per-authority replacement boundary, removal projection SHALL
 require the removed producer absent from the immutable boot snapshot and matching current desired
-intent. It SHALL require authoritative current graph-consumer settlement, not cached readiness or
-transport publication acknowledgments. Unknown ownership, backlog, or stream generation SHALL defer.
+intent. It SHALL require authoritative current graph-consumer settlement for a retained-state pass,
+not cached readiness or transport publication acknowledgments. Terminal removal completion SHALL
+additionally require a supported proof of the full applied/unresolved-input set. On the frozen pin
+that proof is unavailable: a successful current retained pass SHALL remain pending with
+applied_tail_unproven and periodic repair. Unknown ownership, backlog, or stream generation SHALL defer.
 
 #### Scenario: Desired removal in the requesting boot
 
@@ -38,6 +41,21 @@ transport publication acknowledgments. Unknown ownership, backlog, or stream gen
 - **WHEN** the replacement boots without that source
 - **THEN** removal remains pending until relevant delivery settles and authoritative query succeeds
 - **AND** failed observations or unresolved source ingestion errors cannot produce complete status
+
+#### Scenario: Parked work is invisible to current counters
+
+- **GIVEN** the old process retired and qualified current pending counters are zero
+- **WHEN** the pin provides no complete applied/unresolved-input proof
+- **THEN** a retained-state pass may mark its exact currently retained set
+- **AND** the intent remains pending with applied_tail_unproven even when that set is empty
+- **AND** AckFloor, missing advisories and private guard decoding cannot manufacture completion
+
+#### Scenario: An entity arrives after retained-state convergence
+
+- **GIVEN** removal remains pending with applied_tail_unproven and its producer stays absent
+- **WHEN** an entity later arrives in its proven source scope
+- **THEN** periodic repair includes that entity in a later retained-state pass
+- **AND** the prior partial progress was never reported as terminal removal completion
 
 ### Requirement: Exact complete scope is the completion boundary
 
@@ -116,7 +134,8 @@ intent or receipt SHALL expire or be evicted automatically.
 #### Scenario: Mutation service recovers without another request
 
 - **WHEN** projection fails and its dependency later recovers while the application remains running
-- **THEN** periodic repair retries the retained intent and records completion only after all effects
+- **THEN** periodic repair retries the retained intent and records current retained progress
+- **AND** terminal completion additionally requires supported applied-tail proof
 - **AND** the user need not resend removal or restart solely to recover the projection
 
 #### Scenario: Shutdown interrupts replay

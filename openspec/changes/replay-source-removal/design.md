@@ -4,8 +4,10 @@
 
 Architect contract approved for implementation, subject to the named proof gates below. This approval
 is not implementation or merge approval. Independent Go and graph/event reviewers approved this
-final contract for implementation on 2026-09-30; code, runtime evidence, and qualification still require
-review. Issue #215 extends migration PR #213; SemStreams remains
+initial contract for implementation on 2026-09-30. The pinned tail-evidence limitation and narrowed
+retained-state pass below are a subsequent architect ruling; independent reviewers must approve that
+implementation before integration. Code, runtime evidence, and qualification remain unapproved.
+Issue #215 extends migration PR #213; SemStreams remains
 `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` at
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. All frozen SETUP 03A ledgers remain unchanged.
 
@@ -33,7 +35,19 @@ an explicit retirement error.
 - `natsclient.GetStream`, `Stream.Consumer`, `Consumer.Info`: read-only current backlog observation is
   available. Do not take lifecycle authority over graph-ingest's consumer.
 - Graph-ingest `readiness.go`: `NumPending + NumAckPending` reports outstanding work; bootstrap is a
-  latch, readiness may include parked work, and cached `Ready` is not an applied-publication fence.
+  latch, MaxDeliver-parked work leaves BOTH pending counters, and cached `Ready` is not an
+  applied-publication fence. `graph/index_status.go:276-284` explicitly rejects AckFloor as proof.
+- `component/port_jetstream.go:130-149` defaults MaxDeliver to three; zero inherits the default and
+  negative declarations are refused by `component/port_codec.go:382`. There is no qualified declared
+  unlimited-delivery option on this pin. Even unlimited retries alone would not account for terminal
+  rejected input.
+- `MAX_DELIVERY_EVENTS` is a bounded seven-day, 64 MiB DiscardOld occurrence ledger. Its observer is
+  internal framework boot plumbing, not a current parked set or completeness API. Missing advisories
+  cannot prove absence of parked work before provisioning or beyond retention.
+- `GRAPH_INGEST_APPLIED_SEQ` is a cataloged operational redelivery guard. Its key construction and
+  eight-byte value decoding are private to graph-ingest. It stores only the last applied sequence for
+  an entity/stream, not an input census, and lacks stream-incarnation identity. The catalog reader's
+  availability does not turn private guard serialization into an adopted completion contract.
 
 ## Storage choice and ownership
 
@@ -164,14 +178,46 @@ was admitted, and refuse changes across boots. Capturing it first in the replace
 reset between processes and is insufficient. A missing consumer, unreadable
 state, negative/unknown counter, broker outage, or nonzero backlog defers projection with a specific
 reason. No arbitrary sleep, cached readiness boolean, stream PubAck, or publisher counter proves this
-barrier. Inspect poison/parked/degraded status as well: zero outstanding is transport settlement, not
-proof that an invalid source payload materialized. Do not report the source fully projected when that
-source's effects remain unresolved.
+barrier. A present poison/parked/degraded signal blocks stronger claims, but the absence of such a
+signal proves nothing about historical parked or terminally rejected input.
 
-A fresh authoritative prefix query must also succeed. A new query responder plus current consumer
-settlement permits retained-entity enumeration after the retired producer can no longer add keys.
+### Pinned completion limitation and safe useful boundary
+
+**Automatic terminal removal completion is blocked on this frozen pin.** No supported API establishes
+that every accepted source input was applied or reports a complete current unresolved-input census.
+An audit of the retained GRAPH stream cannot recover expired, evicted, or memory-lost input; its normal
+one-hour retention makes a negative scan especially insufficient. Do not decode private applied-guard
+values, import the internal advisory observer, infer completion from AckFloor, or add a new product
+outbox to conceal this framework gap. The contract request is
+[SemStreams #1444](https://github.com/C360Studio/semstreams/issues/1444), for an authoritative,
+stream-incarnation-aware applied/unresolved-input proof. This is a verified code-contract finding,
+not a newly induced runtime failure. Changing this migration pin is a separate baseline decision.
+
+The permitted production result is narrower and explicit:
+
+1. Proven old-process retirement plus unchanged qualified stream/consumer identity and policy and
+   zero CURRENT backlog admits a retained-state pass. A fresh authoritative prefix query must work.
+2. Fully enumerate the currently retained exact source scope and converge source_removed through the
+   existing mutation owner. This repairs the known missing-marker symptom for retained parents and
+   passages. Preserve all normal scope, error, cancellation and generation guards.
+3. Persist observed counts and progress, but keep the removal journal `pending` with the typed blocker
+   `applied_tail_unproven`. A successful retained pass is not terminal intent completion, even if its
+   currently retained set is empty. Periodic full repair remains active so a later source-scoped
+   authority arrival is marked while the removed producer remains absent.
+4. Any mutation/page failure remains a stronger immediate blocker with honest partial counts. Once it
+   recovers, a successful pass returns to `applied_tail_unproven`, not `complete`.
+5. Selective reactivation may complete on its independent current-epoch sealed manifest, acknowledged
+   publication and authoritative exact-source-fact proof. It does not claim that all historical source
+   publications materialized. Superseding removal generations and retained history safeguards remain.
+
+`ProjectionResult.Complete` means the explicitly requested retained set was traversed and all requested
+mutations verified; it does not authorize `Record.Phase=Complete` for removal. Qualification must assert
+that distinction. No production adapter in this frozen-pin change may fabricate stronger proof.
+
 Index/embedding readiness is not required to mutate retained authority, but later query acceptance
-must wait for the respective view's revision/normal qualification condition.
+must wait for the respective view's revision/normal qualification condition. The original full #215
+terminal-completion acceptance remains open behind the upstream proof gap; known-answer marker success
+must not be reported as full issue closure or migration qualification.
 
 The same contract applies to a dirty process death: the replacement follows observed process exit,
 retained JetStream work drains, then replay proceeds. Total loss of NATS persistence is outside this
@@ -195,7 +241,8 @@ Use narrow prefixes and follow every opaque cursor. Prefer page-at-a-time proces
 memory; never accept the old max-entity truncation boolean as success. Detect repeated/cyclic cursors,
 out-of-scope entities, malformed IDs, decoding errors, and any page error. Retry from the beginning
 unless a persisted cursor is proven safe; idempotent mutations make repeated successful pages cheap.
-Completion requires exhausted cursors for every scope and zero unresolved mutation failures.
+Retained-pass completion requires exhausted cursors for every scope and zero unresolved mutation
+failures. Terminal removal intent completion additionally needs the unavailable applied-tail proof.
 
 Route durable replay through a typed product lifecycle request with exact selectors, generation, and
 intent identity, or an equivalent injected operation seam. Keep legacy filesystem/absent-path requests
@@ -274,7 +321,9 @@ accepted work, then cancels and joins its Start-owned workers; no detached gorou
 
 Expose pending count, generation, current blocker/error, last progress and retry count in typed status
 and component health. Log failure/recovery transitions, not one warning per entity. Completed means
-all required source scope was traversed and every effect verified; partial progress remains partial.
+all required source scope was traversed and every effect verified, including required applied-tail
+evidence for removal; the frozen production adapter cannot supply that stronger proof. Partial
+progress remains partial.
 No automatic TTL, eviction, or physical graph purge is introduced. Receipt/history compaction requires
 an explicit later ownership proof and is not an implicit completion side effect.
 
@@ -293,7 +342,9 @@ remain narrow interfaces to permit deterministic failure tests. The agreed expor
 | `SeedManifest` | Binding, BatchID, Initial, successful enumeration, exact Entries, digest |
 | `Receipt` | Binding, BatchID, EntityID, source fingerprint, transport acknowledged |
 | `Record` | Version, Binding, Operation, Phase, retired config/scope/tail identities, status |
-| `ProjectionResult` | Enumerated, Marked, Cleared, complete flag and failed entity details |
+| `ProjectionResult` | Enumerated, Marked, Cleared, retained-pass complete flag and failed details |
+| `TailProof` | `current_retained` or `applied_complete`; zero/unknown values fail closed |
+| `TailEvidence` | Qualified current observations plus explicit Proof; diagnostics never imply proof |
 
 `SeedManifest.Entries` is an in-process slice; the journal writes bounded per-entity records and a
 terminal count/digest rather than putting an unbounded JSON value in one KV entry. `LoadSeed` reads
@@ -319,6 +370,8 @@ type Projector interface {
 }
 
 type TailObserver interface {
+    // nil error with Proof=current_retained permits only a retained-state pass.
+    // The production adapter at this frozen pin never emits Proof=applied_complete.
     Settled(ctx context.Context, scope SourceScope) (TailEvidence, error)
 }
 
@@ -341,6 +394,12 @@ type BindablePublisher interface {
     BindSourceLifecycle(binding Binding, observer PublicationObserver) error
 }
 ```
+
+Add `CodeAppliedTailUnproven = "applied_tail_unproven"` to the typed blocker vocabulary and `Proof`
+to TailEvidence. `TailProofCurrentRetained` permits the narrow pass described above;
+`TailProofAppliedComplete` represents the stronger contract for a future supported adapter and tests.
+No current production path may produce that latter value. The coordinator validates proof explicitly
+and cannot promote a removal record merely because the projector's retained-pass Complete is true.
 
 The coordinator exports `Acquire(ctx) (release func(), err error)`, `PrepareRemoval`,
 `RepairDesired`, `RecordReadd`, `BindBoot`, `PublisherObserver`, `ReconcileOnce`, and `Status`.

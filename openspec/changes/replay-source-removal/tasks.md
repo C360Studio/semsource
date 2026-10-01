@@ -26,6 +26,11 @@
 
 ## 3. Retirement, scope, and projection
 
+- [x] Record upstream applied/unresolved-input proof gap in SemStreams #1444. Do not decode private
+  GRAPH_INGEST_APPLIED_SEQ values or treat bounded advisory history as a parked-work census.
+- [ ] Add explicit TailProof and applied_tail_unproven status. Prove zero current backlog admits only
+  current retained projection and never terminal removal completion, including an empty retained set.
+
 - [ ] Add immutable boot admission and current graph-consumer settlement gates. Prove old boot stays
   pending, missing/failed/backlogged consumer stays pending, changed stream generation fails closed,
   and cached readiness is insufficient in `TestRemovalRetirementAndTailBarrier`. Capture stream
@@ -38,7 +43,8 @@
 - [ ] Converge exact source_removed markers on parents/passages, preserving retained history and source
   facts; prove duplicates and lost mutation replies converge in `TestRemovalReplayIdempotent`.
 - [ ] Implement startup plus periodic failed-work repair, honest status and bounded Stop/join.
-  Prove recovery without a new request and cancellation retaining pending work under `-race`.
+  Prove recovery without a new request and cancellation retaining pending work under `-race`. A
+  successful frozen-pin retained pass stays pending applied_tail_unproven and repeats after late arrivals.
 
 ## 4. Current publication receipts and reactivation
 
@@ -66,7 +72,8 @@
   receipt and durable intent, old producer still live, checked process exit, producer absent on new
   boot, exact retained parent/passage markers, sibling entity/content unchanged.
 - [ ] Kill after durable intent and before projection; restart the retained broker/application state
-  and prove completion without an operator resend. Use explicit state barriers, never fixed sleeps.
+  and prove retained-marker convergence without an operator resend, while asserting pending
+  applied_tail_unproven rather than fabricating terminal completion. Use explicit state barriers, never fixed sleeps.
 - [ ] Prove re-add before first restart supersedes old work with zero old-generation mutation, and
   removal-complete/re-add/new boot clears only actually current entity IDs.
 - [ ] Prove multi-page exact expected-ID set, deterministic query/mutation failure recovery and
@@ -76,9 +83,17 @@
 
 ## 6. Review and delivery
 
-- [ ] Independent Go reviewer approves context, serialization, error and stop ownership.
-- [ ] Independent graph/event reviewer approves exact scope, retention, replay and re-add freshness.
+- [ ] Independent Go reviewer approves amended retained-pass/pending-tail boundary plus context,
+  serialization, error and stop ownership.
+- [ ] Independent graph/event reviewer approves amended retained-pass/pending-tail boundary, exact
+  scope, retention, replay and re-add freshness.
 - [ ] Pass gofmt, pinned revive/vet, unit/race, complete required integration and process suites,
   `task agents:check`, and strict OpenSpec validation; record legitimate blockers without skipped gates.
 - [ ] Update PR #213 / issue #215 with concrete behavior, proof, exact pins and remaining blockers;
   keep SemStreams substrate and SemEngine qualification separate.
+
+## 7. Explicit upstream completion gate
+
+- [ ] A supported stream-incarnation-aware applied/unresolved-input contract proves the old producer's
+  complete accepted input set, including MaxDeliver/terminal-rejection outcomes and retention gaps.
+  This cannot pass with the current frozen pin; do not close #215 or mark migration fully qualified.

@@ -35,7 +35,11 @@ content references, and query protocols remain unchanged; retained stale facts b
 
 ## Impact
 
-The change adds a SemSource-owned operational journal and producer publication receipts. It touches
+The change adds a SemSource-owned operational journal and producer publication receipts. The frozen
+pin cannot prove that every accepted source input was applied: parked messages disappear from backlog
+counters and no supported complete unresolved-input API exists. Automatic removal therefore repairs
+the current retained set but remains pending with `applied_tail_unproven`; full #215 closure remains
+blocked upstream. Marker success alone is not migration qualification. It touches
 source-manifest desired-state handling, common entity publishing and source factory wiring,
 supersession lifecycle projection, boot wiring, and their tests. The supported operating boundary is
 one SemSource process per effective authority/configuration store; controlled replacement waits for
