@@ -74,9 +74,17 @@ GRAPH #178 needs its known OSH corpus/tail or a measured equivalent load; tiny c
 resolution. RPC #1143 needs its stream-subject collision mechanism, not route reachability. Label
 reduced probes. Use `go list -deps -test` plus production measurement with equal build-tag policy.
 
-Missing evidence blocks the affected claim, not independent implementation. Independent code approval
-is distinct from SETUP 03A baseline acceptance. Keep the change unarchived and PR draft when mandatory
-qualification remains incomplete.
+Missing evidence blocks the affected behavior claim. The 2026-10-01 owner ruling accepts the measured
+SETUP 03A baseline, with independent component and graph/event merge-readiness approval at `705ae66`.
+[The current disposition](../../../docs/testing/setup-03a/merge-readiness.md) supersedes the earlier
+requirement to keep the baseline PR draft while substrate qualification was incomplete. Keep open
+behavior/proof tasks unarchived and preserve failed results; readiness is not full system qualification.
+
+The exact broker-restart relationship/content assertions remain known-at-pin under SemStreams #1442
+and SemEngine #15. No SemStreams repair or reference pin movement is awaited. SemEngine must repair
+and pass these expectations for 04A, using the graph-foundation slice of `test/setup03a` on a separate
+exclusive SemEngine branch with a true no-embedder composition. Lexical/neural slices retain 04B/04C
+qualification; full semembed-backed acceptance remains the mainline cutover gate.
 
 ## Removal across file bootstrap
 
@@ -86,3 +94,8 @@ persists an explicit disabled component envelope as its desired-removal tombston
 query scopes, expected counts, and surviving-repo-sibling checks exclude disabled entries. An explicit
 re-add enables the same deterministic handle; retry can repair a separately failed manifest write.
 This preserves desired state without modifying the framework or treating absence as an override.
+
+The tested `Enabled:false` workaround remains in this baseline. SemEngine #17 owns its framework
+repair. The later applied-input, caller-revision and commit-ambiguity gaps map to SemEngine #18–#20
+contract decisions under 03B; accepting the current safe pending/refusal behavior does not promise
+those APIs or complete #215. This delivery stops at merge readiness, before 04A implementation.

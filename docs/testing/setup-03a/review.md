@@ -1,5 +1,9 @@
 # SETUP 03A review and admission state
 
+Historical comparison review. The [current baseline-only merge-readiness ruling](merge-readiness.md)
+supersedes the merge/admission disposition below, without changing its recorded results or qualifying
+SemEngine behavior.
+
 This migration is delivered in [draft PR #213](https://github.com/C360Studio/semsource/pull/213).
 It stays on the frozen SemStreams revision and does not link SemEngine. Running the comparison matrix
 is separate from passing it, and neither replaces

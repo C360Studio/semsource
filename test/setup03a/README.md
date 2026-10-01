@@ -4,6 +4,24 @@ This is a versioned, black-box migration workload. It calls the compiled binary'
 HTTP code/doc fusion routes; it does not link SemSource or SemStreams implementation packages. The literal expected
 IDs in `fixtures/v1/manifest.json` are frozen beta.161 answers, not a second production ID builder.
 
+## Baseline disposition and SemEngine handoff
+
+The [current 03A merge ruling](../../docs/testing/setup-03a/merge-readiness.md) accepts the measured
+SemStreams baseline. Historical JSON results and failed assertions remain unchanged. In particular,
+`broker_restart_reingested_exact_relationship` and `broker_restart_reingested_exact_content` remain
+known-at-pin failures tracked by SemStreams #1442 / SemEngine #15. Classification does not skip either
+assertion, turn it green, or change a failing process exit.
+
+This directory is the acceptance corpus for later SemEngine qualification. Next consumer work is
+SETUP 04A on a separate branch built wholly on SemEngine after 03B approval. It must add and qualify a
+true no-embedder composition; the existing BM25 structural checks are its comparison baseline, not
+proof that SemSource already supplies a graph-only runtime. Keep the profile crosswalk below explicit.
+The admitted 04A graph-foundation slice must pass both named broker-reingestion assertions above;
+known-at-pin classification does not carry into engine qualification. Lexical retrieval is 04B and
+neural retrieval is 04C, so the 04A gate does not imply running or qualifying the full neural workload.
+Mainline remains on SemStreams until the full semembed-backed 04C workload and promised lower-profile
+regressions pass. This handoff changes no fixture, test behavior, provider input or module pin.
+
 ## Run
 
 Use a separately built binary for each revision and a fresh evidence directory. Docker is required. Neural selection

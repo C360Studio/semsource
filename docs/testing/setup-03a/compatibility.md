@@ -1,5 +1,8 @@
 # SETUP 03A compatibility and evidence contract
 
+Current baseline merge disposition: [owner ruling and readiness](merge-readiness.md).
+The comparison below is preserved evidence; known-at-pin failures remain failed assertions.
+
 This is the migration ledger for [SemSource #212](https://github.com/C360Studio/semsource/issues/212)
 and [SemEngine #7](https://github.com/C360Studio/semengine/issues/7). The migration is delivered in
 [draft PR #213](https://github.com/C360Studio/semsource/pull/213). Executed comparisons and code changes

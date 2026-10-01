@@ -49,7 +49,8 @@ follow the admitted retention/stale/visibility contract.
 
 The migration SHALL map SemSource configs to SemEngine slices, distinguish structural/BM25/provider
 proof, attribute every difference to a pinned contract or reproduced defect, and record production and
-test-inclusive closures. Independent Go review SHALL approve evidence before SETUP 03A completion.
+test-inclusive closures. Independent Go review SHALL approve baseline evidence before accepting SETUP 03A.
+Baseline acceptance SHALL remain distinct from qualification of every intended behavior.
 
 #### Scenario: The tier numbers differ
 
@@ -59,7 +60,38 @@ test-inclusive closures. Independent Go review SHALL approve evidence before SET
 #### Scenario: A mandatory case is unrun
 
 - **WHEN** required workload, capacity, RPC collision, or provider evidence is unavailable
-- **THEN** the result retains a blocker and does not claim full SETUP 03A acceptance
+- **THEN** the result retains the affected evidence gap and does not claim that behavior qualified
+- **AND** a separately approved baseline scope SHALL record the gap and its owner rather than count it as a pass
+
+#### Scenario: A reproduced failure is accepted as known at the pin
+
+- **GIVEN** both comparison points retain the failed expectation and reproduced mechanism
+- **AND** the owner and independent reviewers approve the measured baseline with that limitation
+- **WHEN** preparing the SETUP 03A baseline PR for merge
+- **THEN** `broker_restart_reingested_exact_relationship` and `broker_restart_reingested_exact_content`
+  remain failed and classified known-at-pin under SemStreams #1442 / SemEngine #15
+- **AND** the harness does not skip, weaken or convert those assertions to passing outcomes
+- **AND** baseline merge readiness does not require a SemStreams repair or move the frozen pin
+
+#### Scenario: SemEngine Tier 0 consumes the baseline corpus
+
+- **WHEN** SemSource begins 04A after its separate contract and boundary admission
+- **THEN** the exclusive SemEngine branch SHALL pass the graph-foundation slice of `test/setup03a`,
+  including both named broker-recovery expectations, with a true no-embedder composition
+- **AND** known-at-pin baseline classification SHALL NOT excuse a failed engine qualification
+- **AND** lexical and neural workloads remain independently qualified at 04B and 04C
+
+### Requirement: The disabled-envelope workaround remains retained
+
+The baseline SHALL retain the tested `Enabled:false` desired-component envelope for file-defined
+source removal. SemEngine #17 owns the framework repair for SemStreams #1443; an absent KV key
+SHALL NOT be treated as a qualified substitute for the consumer workaround.
+
+#### Scenario: Baseline readiness is recorded without an upstream fix
+
+- **WHEN** the owner accepts baseline merge readiness and ends the SemStreams continuation
+- **THEN** the disabled-envelope behavior, pin and existing test expectations remain unchanged
+- **AND** later removal of the workaround requires the SemEngine config contract and proving tests
 
 ### Requirement: SemStreams remains the shipped substrate
 

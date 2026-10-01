@@ -1,5 +1,9 @@
 # Independent source-removal implementation review
 
+The scoped review below is the implementation-era record. See the later
+[baseline-only merge-readiness approval](../setup-03a/merge-readiness.md) under the owner ruling.
+That disposition does not complete #215 or change any failed qualification result.
+
 The reviewed consumer slice is approved for inclusion in draft migration PR #213. It does not qualify
 terminal all-input removal, selective freshness, publication withdrawal, unknown-effect recovery,
 SemEngine extraction admission, merge, or mainline cutover.

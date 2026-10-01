@@ -1,5 +1,10 @@
 # Implementation and proof tasks
 
+The owner's 2026-10-01 [baseline merge disposition](../../../docs/testing/setup-03a/merge-readiness.md)
+ends this SemStreams repair work at the recorded safe implementation. The unchecked proof and contract
+items below remain open under #215 and SemEngine #18–#20 decisions; they are not silently completed.
+SemSource next consumes SemEngine Tier 0 at SETUP 04A after its separate admission gates.
+
 Production implementation is committed at `ce241a5c6e07f69e5450bb60885b537e89ea27a9`.
 The [final result ledger](../../../docs/testing/source-removal215/final-results.json) identifies the
 clean binary and later test-only follow-up. Checked tasks cover the stated implementation or proof;
