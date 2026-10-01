@@ -6,8 +6,8 @@ The [approved corrective contract][design] is committed at
 (`3604a9ce8d5aec717253d7a905389f7910efd25d`). Independent architectural review approved this contract.
 Implementation is committed at `5334716b588f6960ed54c8cafdc7033b01088e8e`. Independent publisher, runtime,
 architecture/graph and process-test/CI logic reviews approved their separate scopes. Local process
-evidence is complete, including preserved failed assertions. Hosted CI remains pending; these technical
-reviews are not merge approval.
+evidence is complete, including preserved failed assertions. [Live PR checks][checks] are the authority
+for hosted CI and must be green before ready/merge; these technical reviews are not merge approval.
 
 The earlier architectural approval of the private recovery design is withdrawn. Historical review,
 passing tests and blocked acceptance remain attributable to their original snapshots. This correction
@@ -84,7 +84,7 @@ embed `vcs.revision` or `vcs.modified`. Later documentation changes do not chang
 | Final unchanged BM25 corpus | [61/63](reports/bm25-corpus.json), exit 1; two known broker-restart failures |
 | Final unchanged original removal probe | [9/10](reports/historical-removal.json), exit 1; marker failure retained |
 | Protected historical inputs | [All 29 files](baseline-preservation.json) remain byte-identical |
-| Remote PR CI | Pending; local gates do not imply hosted CI completion |
+| Remote PR CI | [Live checks][checks] govern readiness; [recorded attempts](ci-attempts.json) preserve failures |
 
 The final desired-state run exits 0 in 213.3 seconds. Both cases prove exact retained envelopes,
 restart-only activation, explicit unavailable projection, unchanged target/sibling facts and content,
@@ -143,6 +143,24 @@ HTTP error and exact-envelope assertions. No frozen test or earlier outcome was 
 reports and hashes identify the evidence; full raw logs under `/tmp/semsource-lifecycle-correction/`
 remain temporary session artifacts, not a permanent log store.
 
+## Hosted CI record and live authority
+
+[The first hosted run](https://github.com/C360Studio/semsource/actions/runs/36854140403) failed during
+original-source broker setup on a cold image cache. Docker auto-pull progress and the container ID were
+combined into the frozen harness's container identifier. The [raw report](reports/ci-first-original-setup-failure.json)
+has zero observations and no application start. That malformed identifier also prevented verified
+cleanup of the original CI container; job completion alone is not proof of its cleanup.
+
+The same-run runtime-added case passed 37/37 after the image was cached; unit, integration, lint,
+UI quality, Quickstart and UI development checks passed. The [attempt record](ci-attempts.json) preserves
+this distinction. The [independently reviewed preflight](reviews/ci-preflight.md) explicitly pulls the
+same pinned image digest before the workload. It changes no production code, provider, fixture or
+frozen harness assertion, and is not presented as a successful rerun.
+
+[PR #223 checks][checks] and its delivery summary carry the live hosted result and final disposition.
+Hosted green remains required before ready/merge. This evidence snapshot does not assert that green;
+recording later check results in the PR avoids a docs-only push creating another unobserved CI run.
+
 ## Framework decisions and next work
 
 [SemEngine #18][e18] must first decide the required durable-done contract; a universal accepted-input
@@ -155,6 +173,7 @@ projection/freshness contract. Future 04A remains gated by approved 03B contract
 SHA, on a separate branch wholly using SemEngine. Full semembed-backed 04C still gates mainline cutover.
 
 [pr]: https://github.com/C360Studio/semsource/pull/223
+[checks]: https://github.com/C360Studio/semsource/pull/223/checks
 [design]: ../../../openspec/changes/remove-private-source-recovery/design.md
 [baseline]: ../setup-03a/merge-readiness.md
 [e18]: https://github.com/C360Studio/semengine/issues/18

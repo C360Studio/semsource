@@ -182,6 +182,8 @@ jobs:
         env:
           SETUP03A_NATS_IMAGE: nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66
         run: |
+          # The frozen harness expects docker run output to contain only its ID.
+          docker pull "$SETUP03A_NATS_IMAGE"
           qualification_dir="$RUNNER_TEMP/source-lifecycle-qualification"
           mkdir -p "$qualification_dir"
           go build -o "$qualification_dir/semsource" ./cmd/semsource

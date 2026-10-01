@@ -77,7 +77,8 @@
     "workflow_contracts": {
       "result": "pass",
       "raw_log": "/tmp/semsource-lifecycle-correction/workflow-contract-tests-final.log",
-      "raw_log_sha256": "ea097649747ed426b40ca6fc02ab1a1e288a6ecb39eee2e736974e6e3045adc8"
+      "raw_log_sha256": "ea097649747ed426b40ca6fc02ab1a1e288a6ecb39eee2e736974e6e3045adc8",
+      "latest_preflight_check_log_sha256": "ea097649747ed426b40ca6fc02ab1a1e288a6ecb39eee2e736974e6e3045adc8"
     },
     "agent_contracts": {
       "result": "pass",
@@ -180,7 +181,11 @@
       "checked_exit_limit": "Historical harness is byte-unchanged and has no per-child checked-exit assertion; use separate desired-contract evidence for that proof."
     }
   },
-  "remote_ci": "pending",
+  "remote_ci": {
+    "recorded_attempts": "ci-attempts.json",
+    "live_checks": "https://github.com/C360Studio/semsource/pull/223/checks",
+    "delivery_status_authority": "Live checks and PR description; required green before ready/merge. Recorded first attempt failed on cold-image setup, with reviewed explicit pre-pull correction."
+  },
   "scope_limits": [
     "No full semembed-backed qualification rerun",
     "No positive source-removal projection or selective reactivation qualification",

@@ -1,0 +1,35 @@
+{
+  "attempts": [
+    {
+      "head": "d90f0432253dab36062608583802edb4246e3129",
+      "ci_run": "https://github.com/C360Studio/semsource/actions/runs/36854140403",
+      "status": "failed",
+      "failure_stage": "original subtest broker setup, before application start or semantic observations",
+      "cause": "Frozen harness CombinedOutput merged Docker cold-image pull progress with container ID; entire merged text became container identifier. The same-run runtime-added case passed once the exact image was cached.",
+      "original_observations": 0,
+      "original_report": "reports/ci-first-original-setup-failure.json",
+      "original_report_sha256": "4ee49310e4fb7cdddfe17a9184297b16d0ecdab239a460591a7be54ca01c2371",
+      "runtime_added_passed": 37,
+      "runtime_added_total": 37,
+      "runtime_added_raw_report_sha256": "ac1c3a5d49b7d89be3ab227d3b65c93866173b40947216271e8c565c14b3046e",
+      "cleanup_limit": "Original broker logs/cleanup failed due to malformed identifier; this report does not claim verified cleanup of that CI container. The job has finished.",
+      "fix": "Explicit docker pull of the same frozen digest before the CI workload; no corpus or production changes.",
+      "other_runs": [
+        {
+          "url": "https://github.com/C360Studio/semsource/actions/runs/36854140379",
+          "result": "success"
+        },
+        {
+          "url": "https://github.com/C360Studio/semsource/actions/runs/36854140407",
+          "result": "success"
+        }
+      ]
+    }
+  ],
+  "preflight_fix": {
+    "workflow_sha256": "d200c37e6a27aeb8022349489298918161f0e0846ee9beee9ef79c9f6e32b51a",
+    "independent_review": "reviews/ci-preflight.md",
+    "production_changed": false,
+    "frozen_corpus_changed": false
+  }
+}

@@ -2,7 +2,8 @@
 
 Implementation is committed at `5334716b588f6960ed54c8cafdc7033b01088e8e`; scoped independent production
 and process-test reviews are approved. Final desired-state process cases pass 33/33 and 37/37;
-the unchanged removal probe remains 9/10 with its intentional missing-marker failure. Hosted CI is pending.
+the unchanged removal probe remains 9/10 with its intentional missing-marker failure.
+Live PR #223 checks govern hosted readiness; green remains required before ready/merge.
 Completed checks are recorded in `docs/testing/private-recovery-retirement/README.md`; historical
 positive source-removal expectations remain unchanged and are not waived by this corrective contract.
 
@@ -68,5 +69,8 @@ positive source-removal expectations remain unchanged and are not waived by this
 - [x] Owner: measure all six new production files: 99/114 statements (86.8%), satisfying the ≥80% gate.
   Include independently approved real-NATS readback tests and a separate instrumented original-source
   process rerun (33/33); preserve the primary binary/results and record unit/integration-only 79.8%.
-- [ ] Owner: finish hosted CI and record the final delivery disposition.
-  No positive source-removal/freshness acceptance or merge approval is implied.
+- [x] Owner: publish hosted-check tracking and preserve the cold-image setup failure/cleanup limitation.
+  The independently reviewed same-digest pull preflight does not change production or frozen tests.
+  Live PR #223 checks and its delivery summary own the final result; hosted green remains an external
+  required gate before ready/merge. This completed tracking task does not claim a passing rerun,
+  positive source-removal/freshness acceptance or merge approval.
