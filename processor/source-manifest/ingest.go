@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	semconfig "github.com/c360studio/semstreams/config"
 )
@@ -38,6 +39,7 @@ const (
 // source-manifest. Callers must supply both Store (KV writes) and Spawn
 // (per-source defaults). Namespace is the per-namespace subject suffix.
 type IngestHandlerConfig struct {
+	Lifecycle *sourcelifecycle.Coordinator
 	Namespace string
 	Store     sourcespawn.ConfigStore
 	Spawn     sourcespawn.Options
@@ -138,8 +140,16 @@ func (c *Component) handleAddRequest(ctx context.Context, data []byte, cfg Inges
 // HTTP façade (ADR-0007). Transport-level concerns (auth, path allowlisting)
 // are the caller's responsibility and must run BEFORE this.
 func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHandlerConfig) *AddReply {
-	c.desiredMu.Lock()
-	defer c.desiredMu.Unlock()
+	release, gateErr := c.acquireDesired(ctx, cfg)
+	if gateErr != nil {
+		return &AddReply{Error: mapSpawnError(gateErr), Timestamp: time.Now()}
+	}
+	defer release()
+	if cfg.Lifecycle != nil {
+		if err := cfg.Lifecycle.CheckAdmission(ctx); err != nil {
+			return &AddReply{Error: mapSpawnError(err), Timestamp: time.Now()}
+		}
+	}
 	results, err := sourcespawn.AddWithChecker(ctx, req.Source, cfg.Store, cfg.Checker, cfg.Spawn)
 
 	// AddWithChecker may return partial results alongside an error when a
@@ -179,6 +189,13 @@ func (c *Component) addSource(ctx context.Context, req AddRequest, cfg IngestHan
 	// ADRs 094/100 keep the running component set immutable. Persist the desired
 	// manifest for next boot; do not change live status or promise activation.
 	if len(components) > 0 {
+		if cfg.Lifecycle != nil {
+			for _, added := range components {
+				if lifecycleErr := cfg.Lifecycle.RecordReadd(ctx, added.InstanceName); lifecycleErr != nil {
+					reply.Error = &IngestError{Code: CodeKVWriteFailed, Message: lifecycleErr.Error()}
+				}
+			}
+		}
 		if persistErr := c.persistDesiredManifest(ctx, cfg, &req.Source, ""); persistErr != nil {
 			if err != nil {
 				persistErr = errors.Join(err, persistErr)
@@ -368,8 +385,14 @@ func (c *Component) handleRemoveRequest(ctx context.Context, data []byte, cfg In
 // Entity history is retained. Durable source_removed replay remains a migration
 // merge blocker (docs/testing/setup-03a/compatibility.md).
 func (c *Component) removeSource(ctx context.Context, instanceName, actor string, cfg IngestHandlerConfig) *RemoveReply {
-	c.desiredMu.Lock()
-	defer c.desiredMu.Unlock()
+	release, gateErr := c.acquireDesired(ctx, cfg)
+	if gateErr != nil {
+		return &RemoveReply{InstanceName: instanceName, Error: mapSpawnError(gateErr), Timestamp: time.Now()}
+	}
+	defer release()
+	if cfg.Lifecycle != nil {
+		return c.removeWithLifecycle(ctx, instanceName, cfg)
+	}
 	if err := sourcespawn.Remove(ctx, instanceName, cfg.Store); err != nil {
 		var spawnErr *sourcespawn.Error
 		// A prior disable can commit before the manifest write fails. Only a known

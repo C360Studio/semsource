@@ -162,13 +162,8 @@ func runCmd(args []string) (runErr error) {
 	}
 	defer func() { runErr = errors.Join(runErr, configMgr.Stop(5*time.Second)) }()
 
-	registry := component.NewRegistry()
-	scopeSystems, err := sourceScopeSystems(configMgr.GetConfig().Get().Components)
+	registry, err := prepareComponentRegistry(ctx, semsourceCfg, configMgr, nc)
 	if err != nil {
-		return fmt.Errorf("derive source query scopes: %w", err)
-	}
-	ingestConfig := ingestHandlerConfig(semsourceCfg, configMgr)
-	if err := registerComponentFactories(registry, componentWiring{Ingest: &ingestConfig, ScopeSystems: scopeSystems}); err != nil {
 		return err
 	}
 
@@ -286,6 +281,12 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 // (graph, agentic, etc.) alongside semsource's own factories. semsource runs as
 // a standalone service that owns its full component set.
 type componentWiring struct {
+	ProjectionRegistry interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	}
+	SourceRegistry interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	}
 	Ingest       *sourcemanifest.IngestHandlerConfig
 	ScopeSystems map[string][]string
 }
@@ -323,30 +324,42 @@ func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 func registerSemsourceFactories(registry *component.Registry, wiring ...componentWiring) error {
 	var ingest []sourcemanifest.IngestHandlerConfig
 	var scopes map[string][]string
+	var sources interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	} = registry
+	var projectors interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	} = registry
 	if len(wiring) > 0 {
 		scopes = wiring[0].ScopeSystems
+		if wiring[0].ProjectionRegistry != nil {
+			projectors = wiring[0].ProjectionRegistry
+		}
+		if wiring[0].SourceRegistry != nil {
+			sources = wiring[0].SourceRegistry
+		}
 		if wiring[0].Ingest != nil {
 			ingest = append(ingest, *wiring[0].Ingest)
 		}
 	}
 	for name, fn := range map[string]func() error{
-		"ast-source":     func() error { return astsource.Register(registry) },
-		"git-source":     func() error { return gitsource.Register(registry) },
-		"doc-source":     func() error { return docsource.Register(registry) },
-		"cfgfile-source": func() error { return cfgfilesource.Register(registry) },
-		"url-source":     func() error { return urlsource.Register(registry) },
+		"ast-source":     func() error { return astsource.Register(sources) },
+		"git-source":     func() error { return gitsource.Register(sources) },
+		"doc-source":     func() error { return docsource.Register(sources) },
+		"cfgfile-source": func() error { return cfgfilesource.Register(sources) },
+		"url-source":     func() error { return urlsource.Register(sources) },
 		// No entry in buildPayloadRegistry: object-store artifacts become
 		// ordinary document entities through the doc pipeline, so this source
 		// introduces no payload type of its own.
-		"objectstore-source": func() error { return objectstoresource.Register(registry) },
-		"image-source":       func() error { return imagesource.Register(registry) },
-		"video-source":       func() error { return videosource.Register(registry) },
-		"audio-source":       func() error { return audiosource.Register(registry) },
+		"objectstore-source": func() error { return objectstoresource.Register(sources) },
+		"image-source":       func() error { return imagesource.Register(sources) },
+		"video-source":       func() error { return videosource.Register(sources) },
+		"audio-source":       func() error { return audiosource.Register(sources) },
 		"filestore":          func() error { return filestore.Register(registry) },
 		"source-manifest":    func() error { return sourcemanifest.Register(registry, ingest...) },
 		"code-context":       func() error { return codecontext.Register(registry, scopes) },
 		"mcp-gateway":        func() error { return mcpgateway.Register(registry) },
-		"supersession":       func() error { return supersession.Register(registry) },
+		"supersession":       func() error { return supersession.Register(projectors) },
 	} {
 		if err := fn(); err != nil {
 			return fmt.Errorf("register %s component: %w", name, err)

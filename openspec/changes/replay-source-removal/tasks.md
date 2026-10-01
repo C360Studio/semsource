@@ -7,7 +7,7 @@
 - [x] Reproduce unchanged missing-marker failure: additive pre-fix run passes 9/10, no automatic request.
 - [x] Architect approves this design for implementation; independent implementation approval remains open.
 - [x] Independent Go and graph/event reviewers approve the final contract for implementation only.
-- [ ] Journal developer creates `internal/sourceintent/contract.go` from the agreed design; architect
+- [x] Journal developer creates `internal/sourceintent/contract.go` from the agreed design; architect
   and both developer owners confirm it before parallel edits outside that file.
 
 ## 2. Intent and desired-state protocol
@@ -48,6 +48,19 @@
 
 ## 4. Current publication receipts and reactivation
 
+- [x] Architect records frozen public conditional-reconcile gap in
+  [SemStreams #1445](https://github.com/C360Studio/semstreams/issues/1445); no copied client or raw subject shim.
+- [ ] Return conditional_reconcile_unavailable and issue zero clear mutations when current publication
+  evidence matches a retained source_removed entity. Prove a source write between fingerprint read
+  and the public client's internal reread cannot be hidden by shared lifecycle serialization.
+- [ ] Inventory exact current-epoch sealed batches with ListSeeds; validate each seal, digest and
+  receipt set, and refuse partial/corrupt/foreign records. A successful initial prerequisite from the
+  same epoch is mandatory before considering a separately sealed live target.
+- [ ] Rebind every matching enabled Reactivate history on boot, including Complete records, with a new
+  epoch and Pending initial proof; keep periodic inventory active after completed batches.
+- [ ] Validate optional InitialManifest/InitialReceipts independently for live target requests. Prove
+  failed initial plus successful live B remains pending; do not replace this proof with a boolean.
+
 - [ ] Bind publisher observer to exact handle/generation and NEW per-boot seed epoch before Start;
   test no global mutable registry and that prior-epoch receipts cannot grant freshness. Test root
   rejects missing, duplicate, mismatched or altered factory/config/instance bindings.
@@ -57,14 +70,19 @@
 - [ ] Seal an exact current-ID manifest only after successful enumeration, all expected publications
   and receipts agree; prove failure/cancellation cannot seal a partial seed, explicit empty seed
   completion, in-flight drain batch accounting, and watch/reseed separation.
-- [ ] Compare authoritative source facts and clear only source_removed for proven current IDs inside
-  the lifecycle mutation owner. Prove newer stale reasons are preserved and CAS conflicts retry.
+- [ ] Intended acceptance, blocked by #1445: compare authoritative source facts and clear only
+  source_removed through an admitted mutation fenced to the SAME observed revision. Preserve newer
+  stale reasons; revision conflicts require a new read and recomputation, not a hidden retry.
 - [ ] Prove legacy filesystem/empty-Absent/path-count sweeps cannot clear or replace source_removed,
   while ordinary file_deleted/path_missing/passage_removed behavior remains intact.
-- [ ] Prove same-ID current parents/passages become fresh while removed files/symbols/tail passages
-  remain stale in `TestReactivationCurrentEntityReceipts`; reject path-wide or UpdatedAt-only evidence.
+- [ ] Intended acceptance, blocked by #1445: same-ID current parents/passages become fresh while
+  removed files/symbols/tail passages remain stale in `TestReactivationCurrentEntityReceipts`.
+  Keep positive tests/results visible as failed or blocked, never reinterpret refusal as freshness.
 - [ ] Prove crash after A+B receipts, offline deletion of B, and reseed A-only does not clear B; prove
   partial-removal/re-add and remove/add/remove/add preserve needed selective reactivation.
+- [ ] Intended live-B freshness acceptance remains blocked: specify and prove publication/withdrawal
+  eligibility, including later B recreation and an old B receipt followed by deletion or failed
+  enumeration. A sticky source_removed revision or historical matching receipt is insufficient.
 
 ## 5. Real process acceptance
 
@@ -74,8 +92,9 @@
 - [ ] Kill after durable intent and before projection; restart the retained broker/application state
   and prove retained-marker convergence without an operator resend, while asserting pending
   applied_tail_unproven rather than fabricating terminal completion. Use explicit state barriers, never fixed sleeps.
-- [ ] Prove re-add before first restart supersedes old work with zero old-generation mutation, and
-  removal-complete/re-add/new boot clears only actually current entity IDs.
+- [ ] Prove re-add before first restart supersedes old work with zero old-generation mutation. Keep
+  removal/re-add/new-boot positive clear assertions as intended acceptance, blocked by #1445; append
+  explicit pending/no-clear evidence without changing them into passing freshness assertions.
 - [ ] Prove multi-page exact expected-ID set, deterministic query/mutation failure recovery and
   duplicate/redelivery with channel-controlled integration seams, plus process restart recovery.
 - [ ] Keep original probes/ledgers unchanged; add exact commit, binary SHA, module pin, configuration,
@@ -92,8 +111,29 @@
 - [ ] Update PR #213 / issue #215 with concrete behavior, proof, exact pins and remaining blockers;
   keep SemStreams substrate and SemEngine qualification separate.
 
-## 7. Explicit upstream completion gate
+## 7. Explicit completion gates
 
 - [ ] A supported stream-incarnation-aware applied/unresolved-input contract proves the old producer's
   complete accepted input set, including MaxDeliver/terminal-rejection outcomes and retention gaps.
   This cannot pass with the current frozen pin; do not close #215 or mark migration fully qualified.
+
+- [ ] A supported public contract-bound conditional reconcile accepts the caller's exact revision,
+  preserves classified conflict/unknown-commit outcomes, and performs no hidden reread or retry
+  (SemStreams #1445). Then rerun the positive freshness workload and independent graph review.
+- [ ] Continuing publication/withdrawal eligibility is specified and proven before live batches can
+  grant freshness. Current ListSeeds inventory and pending repair do not satisfy this gate.
+
+## 8. Independent review follow-up: generation and commit uncertainty
+
+- [ ] Replace product mutation RPC dispatch with a synchronous single-bound projector; permanently
+  refuse the old endpoint. Prove delayed old requests cannot mutate after re-add.
+- [ ] Persist an exact binding/entity/attempt fence before every possible graph mutation; preserve
+  public commit outcomes and reject generic internal outcomes as proof of non-commit.
+- [ ] Block source generation changes before config writes while any effect is unresolved, including
+  refresh/re-add and unsafe enabled boot admission. Prove caller-loss and crash/restart boundaries.
+- [ ] Persist terminal evidence only for the exact current attempt after verified or safely rejected
+  outcome. Prove wrong attempt, CAS error and unknown commit retain unresolved work; include a
+  resolution commit-then-error test. Only authoritative journal terminal evidence, never graph
+  readback or elapsed time, can release admission after a lost resolution-write reply.
+- [x] Track upstream terminal outcome resolution and backend commit ambiguity in SemStreams #1446.
+- [ ] Obtain independent implementation approval for the amended synchronous/fence boundary.

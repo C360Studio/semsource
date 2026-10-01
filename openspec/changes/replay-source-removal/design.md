@@ -206,9 +206,11 @@ The permitted production result is narrower and explicit:
    authority arrival is marked while the removed producer remains absent.
 4. Any mutation/page failure remains a stronger immediate blocker with honest partial counts. Once it
    recovers, a successful pass returns to `applied_tail_unproven`, not `complete`.
-5. Selective reactivation may complete on its independent current-epoch sealed manifest, acknowledged
-   publication and authoritative exact-source-fact proof. It does not claim that all historical source
-   publications materialized. Superseding removal generations and retained history safeguards remain.
+5. Selective reactivation additionally requires an admitted mutation conditioned on the exact revision
+   whose source facts were checked. The frozen public client cannot express that condition; matching
+   source_removed entities remain pending with `conditional_reconcile_unavailable` (SemStreams #1445).
+   Current-epoch manifests and receipts remain useful evidence, not permission to clear at this pin.
+   Superseding removal generations and retained history safeguards remain.
 
 `ProjectionResult.Complete` means the explicitly requested retained set was traversed and all requested
 mutations verified; it does not authorize `Record.Phase=Complete` for removal. Qualification must assert
@@ -244,9 +246,9 @@ unless a persisted cursor is proven safe; idempotent mutations make repeated suc
 Retained-pass completion requires exhausted cursors for every scope and zero unresolved mutation
 failures. Terminal removal intent completion additionally needs the unavailable applied-tail proof.
 
-Route durable replay through a typed product lifecycle request with exact selectors, generation, and
-intent identity, or an equivalent injected operation seam. Keep legacy filesystem/absent-path requests
-separate. In those legacy passes, `source_removed` is sticky: filesystem presence, an empty Absent
+Route durable replay through the synchronous injected projector with exact selectors, generation,
+intent identity and effect-fence capability. The old product lifecycle RPC refuses mutations. Keep
+legacy filesystem/absent-path requests separate and reject `source_removed` as a legacy reason. In those legacy passes, `source_removed` is sticky: filesystem presence, an empty Absent
 set, or passage-count logic must not clear or replace it. Only admitted removal/receipt-reactivation
 may change that reason. Preserve existing behavior for file_deleted, path_missing and passage_removed;
 The restriction prevents a later path sweep from bypassing current-entity publication proof.
@@ -254,16 +256,19 @@ Supersession retains sole ownership of lifecycle mutations and its `runMu` seria
 On removal reconcile `entity.lifecycle.stale` to exactly `source_removed`, including when another stale
 reason was present. Preserve source facts, content references, IDs, and all retained entities. Return
 partial counts with an error; logging and continuing cannot become a successful completion response.
-Unknown/ambiguous mutation commit remains pending, then reread/converge on retry.
+Unknown/ambiguous mutation commit retains a durable unresolved effect fence and blocks generation
+changes. It cannot be retried or released from entity readback; #1446 is the recovery dependency.
 
 ## Re-add publication proof and selective freshness
 
 Inject an owner-bound publication observer through factory construction before producer Start. The
 binding contains the exact handle, journal generation, and initial-seed epoch, copied from boot facts.
 Durably advance the eligible seed epoch before producer Start, even when the re-add generation is
-unchanged across restart. Prior-process receipts are never eligible in the new epoch. Extend the common
-`internal/entitypub` seam once; source components forward the observer without a global registry or
-stored context. Components with no pending reactivation incur no receipt-store writes.
+unchanged across restart or its previous phase was Complete. Every matching enabled source with
+Reactivate history starts a new epoch in Pending with no initial seal; completion of a prior batch does
+not erase retained reactivation history. Prior-process receipts are never eligible in the new epoch.
+Extend the common `internal/entitypub` seam once; source components forward the observer without a
+global registry or stored context. Sources with no reactivation history incur no receipt-store writes.
 
 For reactivation, each successfully acknowledged publication records its exact current-entity receipt.
 Freeze the payload evidence before enqueue/publication so later caller mutation cannot rewrite it.
@@ -298,18 +303,70 @@ batch, carried in observer calls and every receipt/manifest storage key; its rec
 complete an earlier failed seed. The initial seed manifest is stable before watcher traffic can amend
 a later producer pass; later live events cannot retrospectively fill a failed seed.
 
-Reactivation repair requires the CURRENT boot epoch's successfully sealed manifest, matching per-ID
-acknowledged receipts, and authoritative graph source-fact matches, then
-clears only an existing marker whose reason is `source_removed`. Perform the exact read/check inside
-supersession's serialized lifecycle owner; retain typed CAS error handling. It must not clear a newer
-file-deleted, path-missing, or passage-removed marker. A concurrent lifecycle change cannot be overwritten
-using a stale read. The current producer cannot grant freshness to entities it did not emit: a removed
+Intended selective freshness requires the CURRENT boot epoch's successfully sealed initial manifest,
+matching per-ID acknowledged receipts, continuing entity eligibility, and authoritative graph
+source-fact matches. It may clear only an existing `source_removed` marker, using an admitted mutation
+conditioned on the SAME exact KV revision whose facts and marker were checked. Supersession's serialized
+lifecycle owner is necessary but does not serialize independent graph-ingest source writes. The frozen
+pin cannot provide the required public mutation capability, so production performs no such clear.
+A newer file-deleted, path-missing, or passage-removed reason must remain unchanged. The current producer
+cannot grant freshness to entities it did not emit: a removed
 file, old symbol, or passage beyond a shortened document remains retained stale. Pair passages with
 exact parent identity (`DocChunkOf`), never a first parent found by shared logical path.
 
 If complete current source publication cannot be established, status remains pending/degraded. Do not
 claim reactivation complete from a raw entity count, filesystem stat, `UpdatedAt`, or same-handle
 admission alone. A source seed with explicit loss or an unresolved receipt error cannot satisfy it.
+
+## Conditional reactivation is an upstream gate
+
+[SemStreams #1445](https://github.com/C360Studio/semstreams/issues/1445) records the frozen-pin gap.
+`projection.ReconcileMutation` has no caller-supplied ExpectedRevision. `MutationClient.Reconcile`
+performs a fresh authoritative read internally and uses that new revision, after SemSource's earlier
+source-fingerprint check. Shared lifecycle serialization and checking a returned receipt after the
+mutation cannot prevent a wrong clear against changed source facts.
+
+The public graph DTO's ExpectedRevision is not an admitted application escape hatch. The operation
+resolver and wire client live in `internal/graphmutation`, whose contract directs applications to narrow
+typed clients. The projection capability spec excludes raw subjects and raw KV. Do not copy that client,
+issue a literal mutation subject, bypass the contract-bound client, or modify the frozen pin locally.
+A supported upstream conditional reconcile capability must accept the caller's nonzero exact revision,
+preserve contract/group validation and typed outcomes, and perform no hidden reread or automatic retry.
+
+At this pin, validated receipt/fingerprint matches may be recorded as observed progress. An entity
+still marked source_removed remains unchanged and pending with `conditional_reconcile_unavailable`.
+Positive freshness scenarios remain intended acceptance, explicitly blocked; proof that the adapter
+refuses to clear is not proof of successful reactivation. Already-fresh observations do not prove that a
+clear occurred. #1444 continues to govern terminal removal independently of this mutation gap.
+
+## Current-epoch batch inventory and continuous repair
+
+`Journal.ListSeeds(ctx, binding)` inventories only immutable terminal seals and their exact entries for
+one current binding/epoch. It delegates each result's integrity to LoadSeed; absent, corrupt, foreign,
+partial or contradictory records cannot become a successful empty inventory. The coordinator validates
+receipt agreement for each selected batch independently. Enumeration order is not publication or
+withdrawal order, and storage completion is not continuing source eligibility.
+
+Every boot rebinds matching enabled Reactivate history, including a previous Complete record, to a new
+epoch and Pending initial proof. Periodic repair also scans Reactivate records after a batch completed;
+new work or failures must become visible rather than disappearing behind a terminal phase. A successful
+initial seed from that SAME epoch is a prerequisite for considering any separately sealed live batch.
+A live batch cannot amend, complete, or substitute for an incomplete/failed initial seed.
+
+The typed reactivation request keeps Manifest/Receipts as the exact target batch. An initial target
+proves its own prerequisite. A non-initial target additionally carries InitialManifest and
+InitialReceipts: the independent successful initial seal and exact acknowledged receipt set from the
+same binding/epoch. The projector validates both sets, including identities, digests and receipts; it
+must not merely drop its Initial check or trust a boolean supplied by the coordinator. This extension
+admits integrity checks and authoritative reads only at the frozen pin, not lifecycle clears.
+
+A-only initial completion followed by B recreation is intended to become repairable from a separately
+sealed eligible B publication. That positive behavior is not qualified here. Older receipts must not
+revive B after a newer deletion, failed current enumeration, or withdrawn publication. In particular,
+a legacy delete can leave a sticky source_removed marker and its revision unchanged. Historical receipt
+matching alone therefore cannot prove continued eligibility. Publication/withdrawal eligibility needs
+its own specified and tested contract before production live-batch freshness is admitted; until then,
+preserve pending state. No claimed latest ordering is inferred from BatchID spelling or KV list order.
 
 ## Retry, lifecycle, and observation
 
@@ -322,7 +379,8 @@ accepted work, then cancels and joins its Start-owned workers; no detached gorou
 Expose pending count, generation, current blocker/error, last progress and retry count in typed status
 and component health. Log failure/recovery transitions, not one warning per entity. Completed means
 all required source scope was traversed and every effect verified, including required applied-tail
-evidence for removal; the frozen production adapter cannot supply that stronger proof. Partial
+evidence for removal and conditional revision/continuing eligibility proof for reactivation. The frozen
+production adapters cannot supply these stronger proofs. Partial
 progress remains partial.
 No automatic TTL, eviction, or physical graph purge is introduced. Receipt/history compaction requires
 an explicit later ownership proof and is not an implicit completion side effect.
@@ -343,6 +401,7 @@ remain narrow interfaces to permit deterministic failure tests. The agreed expor
 | `Receipt` | Binding, BatchID, EntityID, source fingerprint, transport acknowledged |
 | `Record` | Version, Binding, Operation, Phase, retired config/scope/tail identities, status |
 | `ProjectionResult` | Enumerated, Marked, Cleared, retained-pass complete flag and failed details |
+| `ReactivationProjection` | Binding, target Manifest/Receipts, optional InitialManifest/InitialReceipts prerequisite |
 | `TailProof` | `current_retained` or `applied_complete`; zero/unknown values fail closed |
 | `TailEvidence` | Qualified current observations plus explicit Proof; diagnostics never imply proof |
 
@@ -362,6 +421,7 @@ type Journal interface {
     ListReceipts(ctx context.Context, binding Binding, batchID string) ([]Receipt, error)
     SealSeed(ctx context.Context, manifest SeedManifest) error
     LoadSeed(ctx context.Context, binding Binding, batchID string) (SeedManifest, error)
+    ListSeeds(ctx context.Context, binding Binding) ([]SeedManifest, error)
 }
 
 type Projector interface {
@@ -401,11 +461,17 @@ to TailEvidence. `TailProofCurrentRetained` permits the narrow pass described ab
 No current production path may produce that latter value. The coordinator validates proof explicitly
 and cannot promote a removal record merely because the projector's retained-pass Complete is true.
 
+Add `CodeConditionalReconcileUnavailable = "conditional_reconcile_unavailable"` for #1445. Extend
+ReactivationProjection with `InitialManifest *SeedManifest` and `InitialReceipts []Receipt` for a
+non-initial target. These fields carry actual prerequisite evidence; they do not assert withdrawal
+eligibility or authorize the unavailable conditional mutation. Keep failed live validation fail-closed.
+
 The coordinator exports `Acquire(ctx) (release func(), err error)`, `PrepareRemoval`,
 `RepairDesired`, `RecordReadd`, `BindBoot`, `PublisherObserver`, `ReconcileOnce`, and `Status`.
 `BindBoot` runs in `cmd/semsource/run.go` immediately after `ConfigManager.Start` and journal desired
 repair, BEFORE `sourceScopeSystems`, `registerComponentFactories`, or `createServiceManager`; it
-preflights the binding map and advances active reactivation epochs durably. The publisher exports
+preflights the binding map and advances every matching enabled Reactivate history's epoch durably,
+including records whose previous phase was Complete. The publisher exports
 `BindSourceLifecycle` (before Start only) and `BeginSeed(batchID string, initial bool) (SeedBatch, error)`;
 source initial-seed methods use the returned `Send`/`Finish` pair. They explicitly finish unsuccessful
 or empty enumeration as well. Watch/reseed work uses separately named batches after initial closure.
@@ -445,3 +511,34 @@ existing delivery/health accounting. The coordinator owns persisted receipt reco
 
 All implementations must pass the task matrix. If the pinned APIs cannot prove an admitted fence,
 record the reproduced limitation and leave the operation pending rather than weakening the contract.
+
+## Generation authorization and uncertain effects
+
+A caller timeout cannot cancel a queued NATS lifecycle request. The old mutation-capable product RPC
+must permanently refuse requests; it cannot be an alternate path around current journal authorization.
+The composition root binds a synchronous, process-local `sourceintent.Projector` exactly once to the
+supersession owner. The coordinator holds its desired-state gate through the direct invocation;
+projection readiness remains an ordinary retryable condition until the component has started.
+
+Each removal request carries a non-serialized `EffectFence` capability. Before every possible remote
+mutation, `Begin(ctx, entityID)` verifies the current binding and disabled desired envelope, then
+persists an exact binding/entity/attempt fence. Its hooks run under the already-held coordinator gate
+and never reacquire it. A failed or ambiguous journal write authorizes no mutation. `Resolve` stores
+terminal resolution
+only for the same attempt via CAS, based on verified commit or an explicit proven before-effect rejection.
+It retains the exact attempt and terminal evidence instead of deleting the record. A lost journal reply
+does not manufacture remote uncertainty: later authoritative journal inspection may establish that a
+known terminal outcome was durably recorded; graph readback may not resolve an unknown remote effect.
+The coordinator reloads the current journal revision after effect writes before storing progress.
+
+Unknown remote replies, internal errors, malformed outcomes, crashes before terminal proof, or a
+journal without authoritative terminal resolution retain that durable obligation. They conservatively block all source generation changes before desired-config
+writes, including Add/refresh/re-add, and block unsafe enabled boot admission. Existing non-overlapping
+boot sources may continue. Readback, elapsed time, queue counters, a later matching marker, or process
+restart cannot clear an unresolved attempt. This recovery limitation is tracked in
+[SemStreams #1446](https://github.com/C360Studio/semstreams/issues/1446).
+
+The pinned public mutation receipt must be preserved. Its `CommitNotCommitted` classification alone
+is insufficient for generic internal failures: the canonical server can convert a backend KV update
+error into a classified internal rejection. The consumer therefore uses an explicit safe rejection
+allowlist and retains the fence for internal/unclassified/unknown outcomes. No private client is copied.

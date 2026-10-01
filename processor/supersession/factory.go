@@ -44,7 +44,7 @@ func DeclarePorts(raw json.RawMessage, _ string) (component.PortConfig, error) {
 		return component.PortConfig{}, err
 	}
 	if cfg.Ports == nil {
-		return component.PortConfig{}, nil
+		return component.PortConfig{Inputs: sourceProjectionPorts()}, nil
 	}
-	return component.PortConfig{Outputs: cfg.Ports.Outputs}, nil
+	return component.PortConfig{Inputs: sourceProjectionPorts(), Outputs: cfg.Ports.Outputs}, nil
 }

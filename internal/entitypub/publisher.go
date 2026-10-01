@@ -28,6 +28,7 @@ import (
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/degraded"
+	"github.com/c360studio/semsource/internal/sourceintent"
 )
 
 const (
@@ -104,6 +105,19 @@ type Publisher struct {
 	// 34,871 per-entity WARN lines; a flood is one transition, not N lines —
 	// exact counts live on the failed counter and metrics.
 	publishFailing degraded.Condition
+
+	// Receipt ownership is separate from transport delivery accounting.
+	receiptMu      sync.Mutex
+	binding        sourceintent.Binding
+	observer       sourceintent.PublicationObserver
+	tracked        map[*graph.EntityPayload]*seedBatch
+	batches        map[string]*seedBatch
+	initialBegun   bool
+	receiptSealed  bool
+	liveSequence   uint64
+	receiptWork    atomic.Int64
+	seedFailures   atomic.Int64
+	receiptFailing degraded.Condition
 
 	// Lifecycle
 	cancel   context.CancelFunc
@@ -220,7 +234,9 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 func (p *Publisher) Start(ctx context.Context) {
 	drainCtx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
+	p.receiptMu.Lock()
 	p.started = true
+	p.receiptMu.Unlock()
 	go p.drainLoop(drainCtx)
 }
 
@@ -228,6 +244,9 @@ func (p *Publisher) Start(ctx context.Context) {
 // deadline bounds settlement; expiration cancels delivery and returns an error.
 // Start and Stop are owned by the component lifecycle and must not overlap.
 func (p *Publisher) Stop(ctx context.Context) error {
+	p.receiptMu.Lock()
+	p.receiptSealed = true
+	p.receiptMu.Unlock()
 	_ = p.buf.Close()
 	if !p.started {
 		return nil
@@ -235,6 +254,12 @@ func (p *Publisher) Stop(ctx context.Context) error {
 	p.stopOnce.Do(func() { close(p.stop) })
 	select {
 	case <-p.done:
+		if err := p.waitSeeds(ctx); err != nil {
+			return err
+		}
+		if p.ReceiptErrors() > 0 {
+			return fmt.Errorf("entitypub stopped with unresolved source receipt or seed errors")
+		}
 		if lost := p.Lost(); lost > 0 {
 			return fmt.Errorf("entitypub stopped with %d undelivered entities", lost)
 		}
@@ -258,6 +283,10 @@ type timeoutWriter interface {
 // counter increments, a WARN names the entity, and the error is returned so
 // the caller can attribute the loss in its source status.
 func (p *Publisher) Send(payload *graph.EntityPayload) error {
+	return p.sendLive(payload)
+}
+
+func (p *Publisher) enqueue(payload *graph.EntityPayload) error {
 	var err error
 	if tw, ok := p.buf.(timeoutWriter); ok {
 		err = tw.WriteWithTimeout(payload, p.sendTimeout)
@@ -361,20 +390,7 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 	}
 
 	for _, payload := range batch {
-		if err := p.publishOne(ctx, payload); err != nil {
-			// ReadBatch has already transferred every entity to this publisher.
-			// Cancellation is a terminal outcome for each remaining entity too;
-			// returning here silently discarded the rest of the accepted batch.
-			p.failed.Add(1)
-			p.metrics.incFailed()
-			// Edge-triggered: the first failure names itself at the default
-			// level, the flood behind it counts on the failed counter, and
-			// per-entity detail stays at Debug (ADR-0011).
-			p.publishFailing.Enter(p.logger,
-				"entity publishes are failing — see entities_failed_total for the count",
-				"first_entity", payload.ID, "error", err)
-			p.logger.Debug("entity publish failed", "id", payload.ID, "error", err)
-		}
+		p.deliver(ctx, payload)
 	}
 }
 
@@ -457,18 +473,29 @@ func (p *Publisher) flush(ctx context.Context) {
 			return
 		}
 		for _, payload := range batch {
-			if err := p.publishOne(ctx, payload); err != nil {
-				p.failed.Add(1)
-				p.metrics.incFailed()
-				// Shutdown flush keeps one summary-shaped line per entity at
-				// Debug; the edge-triggered condition covers the transition.
-				p.publishFailing.Enter(p.logger,
-					"entity publishes are failing during flush",
-					"first_entity", payload.ID, "error", err)
-				p.logger.Debug("flush: entity publish failed",
-					"id", payload.ID,
-					"error", err)
-			}
+			p.deliver(ctx, payload)
 		}
 	}
+}
+
+func (p *Publisher) deliver(ctx context.Context, payload *graph.EntityPayload) {
+	err := p.publishOne(ctx, payload)
+	if err != nil {
+		p.failed.Add(1)
+		p.metrics.incFailed()
+		p.publishFailing.Enter(p.logger, "entity publishes are failing — see entities_failed_total for the count", "first_entity", payload.ID, "error", err)
+		p.logger.Debug("entity publish failed", "id", payload.ID, "error", err)
+	}
+	p.receiptMu.Lock()
+	batch := p.tracked[payload]
+	delete(p.tracked, payload)
+	p.receiptMu.Unlock()
+	if batch == nil {
+		return
+	}
+	if err == nil {
+		publication := sourceintent.Publication{Binding: p.binding, BatchID: batch.id, Initial: batch.initial, Payload: payload}
+		err = p.retryReceipt(ctx, func(callCtx context.Context) error { return p.observer.Published(callCtx, publication) })
+	}
+	batch.settled(ctx, err)
 }

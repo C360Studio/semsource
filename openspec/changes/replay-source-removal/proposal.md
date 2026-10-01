@@ -18,8 +18,9 @@ neither repairs the substrate nor changes the pinned dependency.
   and during bounded periodic reconciliation, after the old producer is retired.
 - Enumerate exact, independently owned source scope across every opaque-cursor page. Refuse ambiguous
   overlapping ownership and propagate every incomplete enumeration or mutation.
-- Fence old removal work from same-handle re-add. Clear `source_removed` only for exact current entities
-  whose new producer published durable receipts, preserving vanished documents and passage history.
+- Fence old removal work from same-handle re-add and preserve current-epoch publication evidence.
+  Keep selective freshness pending at this pin: the public mutation client cannot fence a clear to
+  the exact source facts checked by SemSource. Preserve vanished documents and passage history.
 - Expose generation, pending/completed state, and actionable failure; validate restart, crash,
   redelivery, multi-page work, recovery, re-add, and sibling isolation with additive evidence.
 
@@ -39,7 +40,12 @@ The change adds a SemSource-owned operational journal and producer publication r
 pin cannot prove that every accepted source input was applied: parked messages disappear from backlog
 counters and no supported complete unresolved-input API exists. Automatic removal therefore repairs
 the current retained set but remains pending with `applied_tail_unproven`; full #215 closure remains
-blocked upstream. Marker success alone is not migration qualification. It touches
+blocked by [SemStreams #1444](https://github.com/C360Studio/semstreams/issues/1444). Selective freshness
+also remains blocked by [SemStreams #1445](https://github.com/C360Studio/semstreams/issues/1445): matching
+current publication evidence does not supply an admitted conditional reconcile capability. Inventory
+and repair may observe separately sealed live batches, but withdrawal eligibility is not qualified and
+no production clear or live-entity freshness is claimed. Marker success alone is not migration
+qualification. The change touches
 source-manifest desired-state handling, common entity publishing and source factory wiring,
 supersession lifecycle projection, boot wiring, and their tests. The supported operating boundary is
 one SemSource process per effective authority/configuration store; controlled replacement waits for

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"io"
 	"log/slog"
 	"os"
@@ -127,6 +128,7 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 
 			videoEntity, keyframeEntities, err := h.ingestFile(ctx, path, root, cfg)
 			if err != nil {
+				seedproof.Report(ctx, err)
 				// Non-fatal: skip unreadable or unsupported files and continue.
 				h.logger.Warn("video handler: skipping file", "path", path, "error", err)
 				return nil
@@ -182,6 +184,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler
 	// Extract video metadata via ffprobe. Non-fatal on failure.
 	pr, probeErr := probe(ctx, path)
 	if probeErr != nil {
+		seedproof.Report(ctx, probeErr)
 		h.logger.Warn("video handler: ffprobe failed, metadata will be partial",
 			"path", path, "error", probeErr)
 		pr = &ProbeResult{}
@@ -213,6 +216,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler
 	if h.store != nil {
 		storageKey := fmt.Sprintf("videos/%s/%s/original", system, instance)
 		if err := handler.StoreFile(ctx, h.store, storageKey, path); err != nil {
+			seedproof.Report(ctx, err)
 			h.logger.Warn("video handler: failed to store video binary",
 				"path", path, "error", err)
 		} else {
@@ -226,6 +230,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler
 	threshold := sceneThreshold(cfg)
 	keyframes, kfErr := h.extractKeyframes(ctx, path, mode, interval, threshold)
 	if kfErr != nil {
+		seedproof.Report(ctx, kfErr)
 		h.logger.Warn("video handler: keyframe extraction failed",
 			"path", path, "error", kfErr)
 	}
@@ -250,6 +255,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string, cfg handler
 		if h.store != nil && len(kf.Data) > 0 {
 			kfKey := fmt.Sprintf("videos/%s/%s/keyframe-%04d", system, instance, kf.Index)
 			if err := h.store.Put(ctx, kfKey, kf.Data); err != nil {
+				seedproof.Report(ctx, err)
 				h.logger.Warn("video handler: failed to store keyframe",
 					"path", path, "frame", kf.Index, "error", err)
 			} else {
@@ -449,6 +455,7 @@ func (h *Handler) extractKeyframes(ctx context.Context, path, mode, interval str
 		idx := parseFrameIndex(name)
 		data, readErr := os.ReadFile(filepath.Join(tmpDir, name))
 		if readErr != nil {
+			seedproof.Report(ctx, readErr)
 			h.logger.Warn("video handler: failed to read keyframe file",
 				"name", name, "error", readErr)
 			continue

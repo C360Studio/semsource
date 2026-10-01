@@ -1,5 +1,7 @@
 // Package sourceintent defines the product-owned source lifecycle contracts shared
 // by desired-state coordination, publication receipts, and graph projection.
+//
+//revive:disable:max-public-structs Explicit shared request, evidence, and result value types keep the lifecycle contract legible.
 package sourceintent
 
 import (
@@ -17,6 +19,9 @@ const Version = 1
 
 // ErrNotFound means the exact requested operational record is absent.
 var ErrNotFound = errors.New("source lifecycle record not found")
+
+// ErrSuperseded ends ineligible observer work without granting newer freshness.
+var ErrSuperseded = errors.New("source publication epoch superseded")
 
 // ErrConflict means a journal revision changed; callers must reread before retrying.
 var ErrConflict = errors.New("source lifecycle revision conflict")
@@ -60,26 +65,30 @@ const (
 // ErrorCode is a machine-readable blocker; callers never parse error messages.
 type ErrorCode string
 
+// Machine-readable lifecycle blocker codes.
 const (
-	CodeStorage             ErrorCode = "storage_error"
-	CodeCorruptRecord       ErrorCode = "corrupt_record"
-	CodeOwnership           ErrorCode = "ownership_mismatch"
-	CodeDesiredWrite        ErrorCode = "desired_write_failed"
-	CodeDesiredAmbiguous    ErrorCode = "desired_state_ambiguous"
-	CodeRetirement          ErrorCode = "retirement_unproven"
-	CodeTailUnavailable     ErrorCode = "tail_unavailable"
-	CodeTailBacklog         ErrorCode = "tail_backlog"
-	CodeTailChanged         ErrorCode = "tail_identity_changed"
-	CodeTailPolicy          ErrorCode = "tail_policy_unsupported"
-	CodeTailDegraded        ErrorCode = "tail_degraded"
-	CodeAmbiguousScope      ErrorCode = "ambiguous_source_scope"
-	CodeUnsupportedScope    ErrorCode = "unsupported_source_scope"
-	CodeEnumeration         ErrorCode = "enumeration_failed"
-	CodeMutation            ErrorCode = "mutation_failed"
-	CodeSeedIncomplete      ErrorCode = "seed_incomplete"
-	CodeReceipt             ErrorCode = "receipt_failed"
-	CodeSourceFactsMismatch ErrorCode = "source_facts_mismatch"
-	CodeCanceled            ErrorCode = "canceled"
+	CodeStorage                         ErrorCode = "storage_error"
+	CodeCorruptRecord                   ErrorCode = "corrupt_record"
+	CodeOwnership                       ErrorCode = "ownership_mismatch"
+	CodeDesiredWrite                    ErrorCode = "desired_write_failed"
+	CodeDesiredAmbiguous                ErrorCode = "desired_state_ambiguous"
+	CodeRetirement                      ErrorCode = "retirement_unproven"
+	CodeTailUnavailable                 ErrorCode = "tail_unavailable"
+	CodeTailBacklog                     ErrorCode = "tail_backlog"
+	CodeTailChanged                     ErrorCode = "tail_identity_changed"
+	CodeTailPolicy                      ErrorCode = "tail_policy_unsupported"
+	CodeTailDegraded                    ErrorCode = "tail_degraded"
+	CodeAppliedTailUnproven             ErrorCode = "applied_tail_unproven"
+	CodeConditionalReconcileUnavailable ErrorCode = "conditional_reconcile_unavailable"
+	CodeAmbiguousScope                  ErrorCode = "ambiguous_source_scope"
+	CodeUnsupportedScope                ErrorCode = "unsupported_source_scope"
+	CodeEnumeration                     ErrorCode = "enumeration_failed"
+	CodeMutation                        ErrorCode = "mutation_failed"
+	CodeEffectUnresolved                ErrorCode = "effect_unresolved"
+	CodeSeedIncomplete                  ErrorCode = "seed_incomplete"
+	CodeReceipt                         ErrorCode = "receipt_failed"
+	CodeSourceFactsMismatch             ErrorCode = "source_facts_mismatch"
+	CodeCanceled                        ErrorCode = "canceled"
 )
 
 // Blocker preserves a typed failure and its human-readable diagnostic.
@@ -135,9 +144,20 @@ type InputEvidence struct {
 	AckPending      int         `json:"ack_pending"`
 }
 
-// TailEvidence is a current authoritative observation, not a cached readiness
-// claim. The prepared record retains the original identities across restarts.
+// TailProof states exactly what a successful tail observation establishes.
+type TailProof string
+
+const (
+	// TailProofCurrentRetained permits marking the currently retained set only.
+	TailProofCurrentRetained TailProof = "current_retained"
+	// TailProofAppliedComplete is reserved for a supported applied-input proof.
+	// The pinned production adapter never emits this value.
+	TailProofAppliedComplete TailProof = "applied_complete"
+)
+
+// TailEvidence binds proof scope to current observations.
 type TailEvidence struct {
+	Proof      TailProof       `json:"proof"`
 	Inputs     []InputEvidence `json:"inputs"`
 	ObservedAt time.Time       `json:"observed_at"`
 	Degraded   bool            `json:"degraded"`
@@ -174,6 +194,7 @@ type Record struct {
 	DesiredCommitted      bool                  `json:"desired_committed"`
 	ReplacementGeneration uint64                `json:"replacement_generation,omitempty"`
 	Seed                  *SeedSeal             `json:"seed,omitempty"`
+	Effect                *EffectAttempt        `json:"effect,omitempty"`
 	Progress              Progress              `json:"progress"`
 	CreatedAt             time.Time             `json:"created_at"`
 	UpdatedAt             time.Time             `json:"updated_at"`
@@ -234,14 +255,46 @@ type ProjectionResult struct {
 type RemovalProjection struct {
 	Binding Binding     `json:"binding"`
 	Scope   SourceScope `json:"scope"`
+	Effects EffectFence `json:"-"`
+}
+
+// EffectAttempt retains exact ownership before a remote mutation can begin.
+// Only a proven terminal outcome for this attempt may release its fence.
+type EffectAttempt struct {
+	ID        string        `json:"id"`
+	Binding   Binding       `json:"binding"`
+	EntityID  string        `json:"entity_id"`
+	StartedAt time.Time     `json:"started_at"`
+	Outcome   EffectOutcome `json:"outcome"`
+}
+
+// EffectOutcome is evidence about one possible remote mutation, not a timeout guess.
+type EffectOutcome string
+
+const (
+	// EffectVerified proves the exact effect committed.
+	EffectVerified EffectOutcome = "verified"
+	// EffectNotCommitted requires an explicit proven before-effect rejection.
+	EffectNotCommitted EffectOutcome = "not_committed"
+	// EffectUnknown retains the fence; reads and elapsed time cannot resolve it.
+	EffectUnknown EffectOutcome = "unknown"
+)
+
+// EffectFence runs under the coordinator's already-held desired gate. These
+// hooks must not reacquire that gate or grant authority after an uncertain write.
+type EffectFence interface {
+	Begin(ctx context.Context, entityID string) (EffectAttempt, error)
+	Resolve(ctx context.Context, attempt EffectAttempt, outcome EffectOutcome) error
 }
 
 // ReactivationProjection grants freshness only to this epoch's sealed current
 // IDs whose acknowledged fingerprints also match authoritative graph facts.
 type ReactivationProjection struct {
-	Binding  Binding      `json:"binding"`
-	Manifest SeedManifest `json:"manifest"`
-	Receipts []Receipt    `json:"receipts"`
+	Binding         Binding       `json:"binding"`
+	Manifest        SeedManifest  `json:"manifest"`
+	Receipts        []Receipt     `json:"receipts"`
+	InitialManifest *SeedManifest `json:"initial_manifest,omitempty"`
+	InitialReceipts []Receipt     `json:"initial_receipts,omitempty"`
 }
 
 // Journal stores retained desired/projection facts and generation-bound receipts.
@@ -254,6 +307,7 @@ type Journal interface {
 	ListReceipts(ctx context.Context, binding Binding, batchID string) ([]Receipt, error)
 	SealSeed(ctx context.Context, manifest SeedManifest) error
 	LoadSeed(ctx context.Context, binding Binding, batchID string) (SeedManifest, error)
+	ListSeeds(ctx context.Context, binding Binding) ([]SeedManifest, error)
 }
 
 // Projector is the sole serialized graph lifecycle mutation owner.

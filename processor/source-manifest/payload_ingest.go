@@ -113,6 +113,8 @@ type RemoveRequest struct {
 
 // RemoveReply is the response to a RemoveRequest.
 type RemoveReply struct {
+	Generation      uint64       `json:"generation,omitempty"`
+	ProjectionPhase string       `json:"projection_phase,omitempty"`
 	DesiredChanged  bool         `json:"desired_changed"`
 	RuntimeChanged  bool         `json:"runtime_changed"`
 	RestartRequired bool         `json:"restart_required"`

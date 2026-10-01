@@ -22,6 +22,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/storage/filestore"
@@ -222,15 +223,26 @@ func (c *Component) markRunning() {
 // failure surfaces through last_error and a WARN, because there is no
 // longer a Start to fail.
 func (c *Component) runSeed(ctx context.Context) error {
-	c.logger.Info("Starting video-source initial ingest",
-		"paths", c.config.Paths,
-		"org", c.config.Org,
-		"watch_enabled", c.config.WatchEnabled,
-		"keyframe_mode", c.config.KeyframeMode,
-		"keyframe_interval", c.config.KeyframeInterval)
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.ingestErrors.Load()
 
-	if err := c.ingestOnce(ctx); err != nil {
-		return fmt.Errorf("initial video ingest failed: %w", err)
+		c.logger.Info("Starting video-source initial ingest",
+			"paths", c.config.Paths,
+			"org", c.config.Org,
+			"watch_enabled", c.config.WatchEnabled,
+			"keyframe_mode", c.config.KeyframeMode,
+			"keyframe_interval", c.config.KeyframeInterval)
+
+		if err := c.ingestOnce(ctx); err != nil {
+			return fmt.Errorf("initial video ingest failed: %w", err)
+		}
+
+		if failed := (c.ingestErrors.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	c.logger.Info("Video-source initial ingest complete",
@@ -364,8 +376,8 @@ func entityStateToPayload(state *handler.EntityState) (*graph.EntityPayload, err
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -416,7 +428,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
-		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),
+		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// Publisher distress: retrying against a refusing transport reports
 		// no drops and no errors while being functionally stalled (#188).
@@ -558,12 +570,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

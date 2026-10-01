@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"strings"
@@ -42,20 +43,22 @@ type Component struct {
 
 	mu           sync.RWMutex
 	running      bool
+	stopping     bool
 	startTime    time.Time
 	publisher    *entitypub.Publisher
 	queryClient  *prefixQuerier
-	mutClient    *projection.MutationClient
+	mutClient    lifecycleMutator
 	triggerSub   *natsclient.Subscription
 	diffSub      *natsclient.Subscription
 	lifecycleSub *natsclient.Subscription
+	sourceSub    *natsclient.Subscription
 	bodyResolver *fusion.BodyResolver
 	cancel       context.CancelFunc
 	lastRun      time.Time
 	lastStats    passStats
 
-	// runMu serializes passes so a periodic tick never overlaps an on-demand run.
-	runMu   sync.Mutex
+	// runGate serializes every lifecycle owner with cancellation-aware admission.
+	runGate sourcelifecycle.Gate
 	workers workerjoin.Group
 }
 
@@ -144,6 +147,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.bodyResolver = resolver
 	c.cancel = cancel
 	c.running = true
+	c.stopping = false
 	c.startTime = time.Now()
 	c.mu.Unlock()
 
@@ -158,10 +162,10 @@ func (c *Component) Start(ctx context.Context) error {
 	return nil
 }
 
-// subscribeHandlers registers the three request/reply subscriptions Start
+// subscribeHandlers registers the four request/reply subscriptions Start
 // needs (the correspondence-pass trigger, the version-diff query, and the
-// staleness lifecycle-run trigger). Each acquired handle remains owned by the
-// component if a later acquisition fails; the manager cancels failed Start and
+// staleness lifecycle-run and source projection triggers). Each acquired handle
+// remains owned by the component if a later acquisition fails; the manager cancels failed Start and
 // calls Stop to drain those handles within its cleanup deadline.
 func (c *Component) subscribeHandlers(ctx context.Context) (sub, diffSub, lifecycleSub *natsclient.Subscription, err error) {
 	subject := c.config.triggerSubject()
@@ -203,6 +207,13 @@ func (c *Component) subscribeHandlers(ctx context.Context) (sub, diffSub, lifecy
 	c.mu.Lock()
 	c.lifecycleSub = lifecycleSub
 	c.mu.Unlock()
+	sourceSub, sourceErr := c.client.SubscribeForRequests(ctx, sourcelifecycle.ProjectionSubject, c.handleSourceProjection)
+	if sourceErr != nil {
+		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", sourcelifecycle.ProjectionSubject, sourceErr)
+	}
+	c.mu.Lock()
+	c.sourceSub = sourceSub
+	c.mu.Unlock()
 	return sub, diffSub, lifecycleSub, nil
 }
 
@@ -225,10 +236,13 @@ func (c *Component) periodic(ctx context.Context, interval time.Duration) {
 // runPass executes one correspondence + supersession pass: enumerate versioned
 // code entities, group and order them, compute lineage edges, and publish only
 // the additive delta. Read-and-append only — never retracts or overwrites — and
-// idempotent via diffNew. Passes are serialized (runMu).
+// idempotent via diffNew. Passes are serialized (runGate).
 func (c *Component) runPass(ctx context.Context) (passStats, error) {
-	c.runMu.Lock()
-	defer c.runMu.Unlock()
+	release, err := c.runGate.Acquire(ctx)
+	if err != nil {
+		return passStats{}, err
+	}
+	defer release()
 
 	c.mu.RLock()
 	q := c.queryClient
@@ -317,11 +331,12 @@ func (c *Component) publishDelta(delta map[string][]message.Triple) int {
 
 // Stop cancels the periodic loop, unsubscribes, and flushes the publisher.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.RLock()
+	c.mu.Lock()
+	c.stopping = true
 	cancel := c.cancel
-	subs := []*natsclient.Subscription{c.diffSub, c.lifecycleSub, c.triggerSub}
+	subs := []*natsclient.Subscription{c.diffSub, c.lifecycleSub, c.sourceSub, c.triggerSub}
 	pub := c.publisher
-	c.mu.RUnlock()
+	c.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
@@ -337,6 +352,13 @@ func (c *Component) Stop(ctx context.Context) error {
 	if err := c.workers.Wait(ctx); err != nil {
 		return fmt.Errorf("join supersession worker: %w", err)
 	}
+	// Direct projectors are synchronous callers, outside subscription/worker
+	// ownership. After sealing admission, this gate joins every accepted call.
+	release, err := c.runGate.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("join supersession projection: %w", err)
+	}
+	defer release()
 	if pub != nil {
 		if err := pub.Stop(ctx); err != nil {
 			return err
@@ -346,6 +368,7 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.cancel = nil
 	c.diffSub = nil
 	c.lifecycleSub = nil
+	c.sourceSub = nil
 	c.triggerSub = nil
 	c.publisher = nil
 	c.queryClient = nil
@@ -367,7 +390,9 @@ func (c *Component) Meta() component.Metadata {
 
 // InputPorts implements component.Discoverable.
 func (c *Component) InputPorts() []component.Port {
-	return []component.Port{}
+	return []component.Port{{Name: "source.lifecycle", Direction: component.DirectionInput,
+		Config: component.NATSRequestPort{Subject: sourcelifecycle.ProjectionSubject}, Required: true,
+		Description: "Generation-bound source lifecycle projection"}}
 }
 
 // OutputPorts implements component.Discoverable.
@@ -420,5 +445,5 @@ func (c *Component) DataFlow() component.FlowMetrics {
 // RequestSubjects returns every NATS request/reply subject this component
 // serves, for the subject-ownership guard. See sourcemanifest.RequestSubjects.
 func RequestSubjects() []string {
-	return []string{versionDiffSubject}
+	return []string{versionDiffSubject, sourcelifecycle.ProjectionSubject}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/graphstatus"
+	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	"github.com/c360studio/semsource/internal/workerjoin"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
@@ -96,7 +97,7 @@ type Component struct {
 	// ingestCfg is nil until RegisterIngestHandlers runs (host wires it after
 	// Start); the HTTP façade handlers read it at request time and 503 while nil.
 	// Guarded by c.mu.
-	desiredMu  sync.Mutex // serializes desired component and next-boot manifest writes
+	desiredMu  sourcelifecycle.Gate // serializes desired component and next-boot manifest writes
 	ingestSubs []*natsclient.Subscription
 	ingestCfg  *IngestHandlerConfig
 
@@ -104,9 +105,11 @@ type Component struct {
 	cancelFuncs []context.CancelFunc
 	workers     workerjoin.Group
 
-	running   bool
-	startTime time.Time
-	mu        sync.RWMutex
+	lifecyclePending int
+	lifecycleError   string
+	running          bool
+	startTime        time.Time
+	mu               sync.RWMutex
 }
 
 // NewComponent creates a new source-manifest component.
@@ -159,6 +162,7 @@ func (c *Component) Start(ctx context.Context) error {
 		if err := c.RegisterIngestHandlers(ctx, *c.ingestCfg); err != nil {
 			return fmt.Errorf("start source management: %w", err)
 		}
+		c.startLifecycleReplay(ctx)
 	}
 	return nil
 }
@@ -642,15 +646,19 @@ func (c *Component) Health() component.HealthStatus {
 	c.mu.RLock()
 	running := c.running
 	startTime := c.startTime
+	pending, lifecycleErr := c.lifecyclePending, c.lifecycleError
 	c.mu.RUnlock()
 
 	status := "stopped"
 	if running {
 		status = "running"
 	}
+	if running && (pending > 0 || lifecycleErr != "") {
+		status = "degraded: source lifecycle pending"
+	}
 
 	return component.HealthStatus{
-		Healthy:   running,
+		Healthy:   running && pending == 0 && lifecycleErr == "",
 		LastCheck: time.Now(),
 		Uptime:    time.Since(startTime),
 		Status:    status,
@@ -677,6 +685,7 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	mux.HandleFunc("POST "+sourcesPath, c.handleAddHTTP)
 	mux.HandleFunc("GET "+sourcesPath+"/{id}", c.handleSourceHTTP)
 	mux.HandleFunc("DELETE "+sourcesPath+"/{id}", c.handleRemoveHTTP)
+	mux.HandleFunc("GET "+sourcesPath+"/{id}/lifecycle", c.handleLifecycleHTTP)
 	c.logger.Info("registered HTTP handlers", "path", sourcesPath)
 
 	statusPath := prefix + "status"

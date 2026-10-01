@@ -30,6 +30,7 @@ import (
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -331,70 +332,81 @@ func (c *Component) Start(ctx context.Context) error {
 // its own goroutine; failures surface through the source's error count and a
 // WARN rather than as a Start error, because there is no longer a Start to fail.
 func (c *Component) runSeed(ctx context.Context) error {
-	// Initialize watchers with retry — paths may not exist yet if a git
-	// clone is still in progress (repo expansion pattern).
-	err := retry.Do(ctx, retry.Persistent(), func() error {
-		initErr := c.initializeWatchers()
-		if initErr != nil {
-			// Bounded by retry.Persistent (~30 attempts), but a source that never
-			// reaches its paths seeds nothing at all — surface it once rather than
-			// leaving the whole wait at Debug, where it was invisible.
-			c.pathsUnavailable.Enter(c.logger,
-				"source paths are not available yet — seeding cannot start", "error", initErr)
-			return initErr
-		}
-		c.pathsUnavailable.Clear(c.logger, "source paths became available")
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("initialize watchers: %w", err)
-	}
-
-	for _, pw := range c.watchers {
-		c.logger.Info("Initializing path watcher",
-			"path", pw.root,
-			"org", pw.config.Org,
-			"project", pw.config.Project,
-			"languages", pw.config.Languages)
-	}
-
-	c.logger.Info("Starting initial code index", "paths", len(c.watchers))
-
 	totalFiles := 0
-	for _, pw := range c.watchers {
-		results, err := c.parseDirectory(ctx, pw)
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.errors.Load() + c.parseFailures.Load()
+
+		// Initialize watchers with retry — paths may not exist yet if a git
+		// clone is still in progress (repo expansion pattern).
+		err := retry.Do(ctx, retry.Persistent(), func() error {
+			initErr := c.initializeWatchers()
+			if initErr != nil {
+				// Bounded by retry.Persistent (~30 attempts), but a source that never
+				// reaches its paths seeds nothing at all — surface it once rather than
+				// leaving the whole wait at Debug, where it was invisible.
+				c.pathsUnavailable.Enter(c.logger,
+					"source paths are not available yet — seeding cannot start", "error", initErr)
+				return initErr
+			}
+			c.pathsUnavailable.Clear(c.logger, "source paths became available")
+			return nil
+		})
 		if err != nil {
-			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
+			return fmt.Errorf("initialize watchers: %w", err)
 		}
 
-		// Resolve cross-file type references now that the whole watch path is
-		// parsed. Languages whose names map deterministically onto paths (Go,
-		// Java, Python) resolve inside the parser; C++ cannot, because nothing
-		// ties `class Foo` to a file without a preprocessor and include paths.
-		// Doing it here — over the complete result set — keeps it deterministic
-		// and independent of walk order.
-		for _, parser := range pw.parsers {
-			if r, ok := parser.(typeRefResolver); ok {
-				r.ResolveTypeRefs(results)
-			}
+		for _, pw := range c.watchers {
+			c.logger.Info("Initializing path watcher",
+				"path", pw.root,
+				"org", pw.config.Org,
+				"project", pw.config.Project,
+				"languages", pw.config.Languages)
 		}
 
-		// Publish repo and folder hierarchy entities before file/symbol entities.
-		// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
-		c.publishHierarchy(ctx, results, pw.scopedSystem)
+		c.logger.Info("Starting initial code index", "paths", len(c.watchers))
 
-		for _, result := range results {
-			if err := c.publishParseResult(ctx, result, pw); err != nil {
-				c.logger.Warn("Failed to publish parse result",
-					"path", result.Path,
-					"error", err)
-				c.incrementErrors()
+		for _, pw := range c.watchers {
+			results, err := c.parseDirectory(ctx, pw)
+			if err != nil {
+				return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
 			}
-			if result.Hash != "" {
-				c.setFileHash(result.Path, result.Hash)
+
+			// Resolve cross-file type references now that the whole watch path is
+			// parsed. Languages whose names map deterministically onto paths (Go,
+			// Java, Python) resolve inside the parser; C++ cannot, because nothing
+			// ties `class Foo` to a file without a preprocessor and include paths.
+			// Doing it here — over the complete result set — keeps it deterministic
+			// and independent of walk order.
+			for _, parser := range pw.parsers {
+				if r, ok := parser.(typeRefResolver); ok {
+					r.ResolveTypeRefs(results)
+				}
 			}
+
+			// Publish repo and folder hierarchy entities before file/symbol entities.
+			// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
+			c.publishHierarchy(ctx, results, pw.scopedSystem)
+
+			for _, result := range results {
+				if err := c.publishParseResult(ctx, result, pw); err != nil {
+					c.logger.Warn("Failed to publish parse result",
+						"path", result.Path,
+						"error", err)
+					c.incrementErrors()
+				}
+				if result.Hash != "" {
+					c.setFileHash(result.Path, result.Hash)
+				}
+			}
+			totalFiles += len(results)
 		}
-		totalFiles += len(results)
+
+		if failed := (c.errors.Load() + c.parseFailures.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	c.logger.Info("Initial index complete",
@@ -702,6 +714,7 @@ func (c *Component) parseDirectory(ctx context.Context, pw *pathWatcher) ([]*sem
 
 		result, err := c.parseFileWithWatcher(ctx, pw, path)
 		if err != nil {
+			seedproof.Report(ctx, err)
 			c.logger.Warn("Failed to parse file",
 				"path", path,
 				"error", err)
@@ -806,12 +819,14 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 		state := entity.EntityState()
 		payload, err := payloadFromASTState(state, nil)
 		if err != nil {
+			seedproof.Report(ctx, err)
 			c.logger.Warn("Invalid hierarchy entity state",
 				"id", state.ID,
 				"error", err)
 			continue
 		}
 		if err := c.publishEntity(ctx, payload); err != nil {
+			seedproof.Report(ctx, err)
 			c.logger.Warn("Failed to publish hierarchy entity",
 				"id", entity.ID, "error", err)
 			continue
@@ -864,8 +879,8 @@ func payloadFromASTState(state *semsourceast.EntityState, ref *message.StorageRe
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -967,7 +982,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).
-		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost(),
+		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts: c.distinct.TypeCounts(),
 		// A publisher retrying against a refusing transport reports no drops, no
 		// failures, and no errors while being functionally stalled. Surfacing the
@@ -1120,12 +1135,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

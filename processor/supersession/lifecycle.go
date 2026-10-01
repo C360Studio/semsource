@@ -55,11 +55,17 @@ func (c *Component) handleLifecycleRun(ctx context.Context, data []byte) ([]byte
 // reality is determined depends on which liveness oracle the request carries —
 // a filesystem root, an explicit absent set, or neither, in which case every
 // in-scope entity is unconditionally marked. See LifecycleRunRequest. Passes are
-// serialized against the correspondence pass via runMu. Read-then-write-only-
+// serialized against the correspondence pass via runGate. Read-then-write-only-
 // the-delta, so re-running converges rather than duplicating markers.
 func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRunRequest) (graph.LifecycleRunResponse, error) {
-	c.runMu.Lock()
-	defer c.runMu.Unlock()
+	if req.Reason == graph.LifecycleReasonSourceRemoved {
+		return graph.LifecycleRunResponse{}, fmt.Errorf("source_removed requires the authorized source lifecycle owner")
+	}
+	release, err := c.runGate.Acquire(ctx)
+	if err != nil {
+		return graph.LifecycleRunResponse{}, err
+	}
+	defer release()
 
 	if req.Org == "" || len(req.Systems) == 0 {
 		return graph.LifecycleRunResponse{}, fmt.Errorf("lifecycle run: org and systems are required")
@@ -80,11 +86,14 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 		return graph.LifecycleRunResponse{}, fmt.Errorf("lifecycle request org %q differs from deployment authority", req.Org)
 	}
 	prefix := c.authority.Org + "." + c.authority.Platform
-	entities, _, err := q.queryPrefixAll(ctx, prefix, c.config.maxEntities())
+	entities, truncated, err := q.queryPrefixAll(ctx, prefix, c.config.maxEntities())
 	if err != nil {
 		return graph.LifecycleRunResponse{}, fmt.Errorf("enumerate entities: %w", err)
 	}
 
+	if truncated {
+		return graph.LifecycleRunResponse{}, fmt.Errorf("lifecycle enumeration truncated at max_entities")
+	}
 	systemSet := make(map[string]struct{}, len(req.Systems))
 	for _, s := range req.Systems {
 		systemSet[s] = struct{}{}
@@ -103,17 +112,18 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	toMark, toClear, pathCount := decideLifecycleActions(inScope, req.Reason, statFn)
 
 	resp := graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
+	var failures error
 
 	for _, tr := range toMark {
 		if err := markStale(ctx, mut, tr); err != nil {
-			c.logger.Warn("lifecycle pass: mark failed", "id", tr.Subject, "error", err)
+			failures = errors.Join(failures, err)
 			continue
 		}
 		resp.Marked++
 	}
 	for _, id := range toClear {
 		if err := clearStale(ctx, mut, id); err != nil {
-			c.logger.Warn("lifecycle pass: clear failed", "id", id, "error", err)
+			failures = errors.Join(failures, err)
 			continue
 		}
 		resp.Cleared++
@@ -122,7 +132,7 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	c.logger.Info("lifecycle pass complete",
 		"org", req.Org, "systems", req.Systems, "reason", req.Reason, "root_path", req.RootPath,
 		"entities", resp.Entities, "paths", resp.Paths, "marked", resp.Marked, "cleared", resp.Cleared)
-	return resp, nil
+	return resp, failures
 }
 
 // livenessOracle turns a request into the function that answers "is the
@@ -183,6 +193,12 @@ func decideLifecycleActions(inScope []gtypes.EntityState, reason string, stat fu
 		return toMark, toClear, 0
 	}
 
+	parentCounts := make(map[string]int)
+	for _, entity := range inScope {
+		if n, ok := tripleInt(entity.Triples, source.DocChunkCount); ok && n >= 0 {
+			parentCounts[entity.ID] = n
+		}
+	}
 	byPath := make(map[string][]gtypes.EntityState)
 	for i := range inScope {
 		p, ok := pathOf(inScope[i].Triples)
@@ -209,8 +225,11 @@ func decideLifecycleActions(inScope []gtypes.EntityState, reason string, stat fu
 		// the path of a file that is very much still there. The parent's
 		// DocChunkCount is the only evidence, so liveness for a passage is
 		// index < count rather than stat().
-		liveCount, haveCount := chunkCountOf(group)
 		for i := range group {
+			if isSourceRemoved(group[i].Triples) {
+				continue
+			}
+			liveCount, haveCount := passageParentCount(group[i], parentCounts)
 			marked := isMarkedStale(group[i].Triples)
 			vanished := haveCount && isVanishedPassage(group[i].Triples, liveCount)
 			switch {
@@ -232,17 +251,34 @@ func decideLifecycleActions(inScope []gtypes.EntityState, reason string, stat fu
 	return toMark, toClear, pathCount
 }
 
-// chunkCountOf finds the parent document in a path group and returns its
-// current passage count. Reports false when no parent carries the predicate —
-// a code entity, or a doc ingested before passages existed — in which case no
-// passage judgement can be made and the group is left alone.
-func chunkCountOf(group []gtypes.EntityState) (int, bool) {
-	for i := range group {
-		if n, ok := tripleInt(group[i].Triples, source.DocChunkCount); ok {
-			return n, true
+// passageParentCount uses the producer's exact typed parent edge. Sharing a path
+// does not grant another source or revision authority over a passage's liveness.
+func passageParentCount(entity gtypes.EntityState, parentCounts map[string]int) (int, bool) {
+	parent := ""
+	for _, tr := range entity.Triples {
+		if tr.Predicate == source.CodeBelongs && tr.Datatype == message.EntityReferenceDatatype {
+			if value, ok := tr.Object.(string); ok {
+				if parent != "" && parent != value {
+					return 0, false
+				}
+				parent = value
+			}
 		}
 	}
-	return 0, false
+	if parent == "" {
+		return 0, false
+	}
+	count, ok := parentCounts[parent]
+	return count, ok
+}
+
+func isSourceRemoved(triples []message.Triple) bool {
+	for _, tr := range triples {
+		if tr.Predicate == source.EntityLifecycleStale && lifecycleReason(tr.Object) == graph.LifecycleReasonSourceRemoved {
+			return true
+		}
+	}
+	return false
 }
 
 // isPassage reports whether triples describe a passage rather than a parent
@@ -336,21 +372,27 @@ func staleTriple(subject, reason string) message.Triple {
 // decideLifecycleActions' dedup guard to avoid duplicating markers; this does
 // not, though the guard still spares round trips. One transport attempt; the
 // framework never retries a mutation for the caller.
-func markStale(ctx context.Context, mut *projection.MutationClient, marker message.Triple) error {
-	_, err := mut.Reconcile(ctx, projection.ReconcileMutation{
+func markStale(ctx context.Context, mut lifecycleMutator, marker message.Triple) error {
+	_, err := reconcileStale(ctx, mut, marker, "")
+	return err
+}
+
+func reconcileStale(ctx context.Context, mut lifecycleMutator, marker message.Triple, requestID string) (projection.MutationReceipt, error) {
+	receipt, err := mut.Reconcile(ctx, projection.ReconcileMutation{
 		Contract: graph.SourceEntityContract().Name,
 		Group:    graph.GroupLifecycle,
 		EntityID: marker.Subject,
 		Desired:  []message.Triple{marker},
 		Metadata: projection.MutationMetadata{
+			RequestID: requestID,
 			Source:    lifecycleEdgeSource,
 			Timestamp: marker.Timestamp,
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("reconcile lifecycle marker on %s: %w", marker.Subject, err)
+		return receipt, fmt.Errorf("reconcile lifecycle marker on %s: %w", marker.Subject, err)
 	}
-	return nil
+	return receipt, nil
 }
 
 // clearStale reconciles one entity's lifecycle predicate group to empty. An
@@ -358,7 +400,7 @@ func markStale(ctx context.Context, mut *projection.MutationClient, marker messa
 // has nothing to clear — and is skipped without error, mirroring the old
 // update lane's silent no-op on absent predicates. Every other failure
 // surfaces distinctly; nothing is blind-retried.
-func clearStale(ctx context.Context, mut *projection.MutationClient, id string) error {
+func clearStale(ctx context.Context, mut lifecycleMutator, id string) error {
 	_, err := mut.Reconcile(ctx, projection.ReconcileMutation{
 		Contract: graph.SourceEntityContract().Name,
 		Group:    graph.GroupLifecycle,
@@ -378,3 +420,5 @@ func clearStale(ctx context.Context, mut *projection.MutationClient, id string) 
 	}
 	return nil
 }
+
+func lifecycleReason(value any) string { reason, _ := value.(string); return reason }

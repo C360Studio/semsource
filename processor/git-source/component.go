@@ -23,6 +23,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
@@ -231,34 +232,44 @@ func (c *Component) runSeed(ctx context.Context) error {
 	if repoDesc == "" {
 		repoDesc = c.config.RepoURL
 	}
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.ingestErrors.Load()
 
-	// Retry initial ingest — the repo filesystem may not be ready yet if
-	// a Docker volume mount is still settling or a clone is in progress.
-	// retry.Do swallows interim errors, so we log each failed attempt at WARN
-	// so operators can see why seeding is taking time instead of staring at a
-	// silent status counter ticking up.
-	var attempt atomic.Int32
-	if err := retry.Do(ctx, retry.Persistent(), func() error {
-		n := attempt.Add(1)
-		if c.config.RepoPath != "" {
-			if err := workspace.IsRepoReady(c.config.RepoPath); err != nil {
-				c.logger.Warn("git-source: repo not ready — retrying",
-					"repo", c.config.RepoPath,
+		// Retry initial ingest — the repo filesystem may not be ready yet if
+		// a Docker volume mount is still settling or a clone is in progress.
+		// retry.Do swallows interim errors, so we log each failed attempt at WARN
+		// so operators can see why seeding is taking time instead of staring at a
+		// silent status counter ticking up.
+		var attempt atomic.Int32
+		if err := retry.Do(ctx, retry.Persistent(), func() error {
+			n := attempt.Add(1)
+			if c.config.RepoPath != "" {
+				if err := workspace.IsRepoReady(c.config.RepoPath); err != nil {
+					c.logger.Warn("git-source: repo not ready — retrying",
+						"repo", c.config.RepoPath,
+						"attempt", n,
+						"error", err)
+					return err
+				}
+			}
+			if err := c.ingestOnce(ctx); err != nil {
+				c.logger.Warn("git-source: initial ingest attempt failed — retrying",
+					"repo", repoDesc,
 					"attempt", n,
 					"error", err)
 				return err
 			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("initial git ingest failed after %d attempts: %w", attempt.Load(), err)
 		}
-		if err := c.ingestOnce(ctx); err != nil {
-			c.logger.Warn("git-source: initial ingest attempt failed — retrying",
-				"repo", repoDesc,
-				"attempt", n,
-				"error", err)
-			return err
+
+		if failed := (c.ingestErrors.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("initial git ingest failed after %d attempts: %w", attempt.Load(), err)
+		return err
 	}
 
 	c.logger.Info("Git-source initial ingest complete",
@@ -395,8 +406,8 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 
 // publishEntity enqueues an EntityPayload for buffered delivery to NATS.
 // Send is non-blocking; the publisher's circular buffer absorbs backpressure.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -488,7 +499,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
-		ErrorCount:     c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost(),
+		ErrorCount:     c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// The no-silent-entity-loss posture applied to inputs: every declared
 		// submodule path and its state, so missing trees are visible on every
@@ -634,12 +645,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

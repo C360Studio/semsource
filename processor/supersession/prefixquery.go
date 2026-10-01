@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	semtypes "github.com/c360studio/semstreams/pkg/types"
 
 	gtypes "github.com/c360studio/semstreams/graph"
 )
@@ -28,7 +29,9 @@ const prefixPageTimeout = 30 * time.Second
 // opaque-cursor contract verbatim: the cursor is never parsed or constructed,
 // only passed back unchanged.
 type prefixQuerier struct {
-	client *natsclient.Client
+	client interface {
+		RequestClassified(context.Context, string, []byte, time.Duration) ([]byte, error)
+	}
 }
 
 // isResponseTooLarge reports whether err carries the responder's
@@ -47,26 +50,48 @@ func isResponseTooLarge(err error) bool {
 func (p prefixQuerier) queryPrefixAll(ctx context.Context, prefix string, maxEntities int) ([]gtypes.EntityState, bool, error) {
 	var out []gtypes.EntityState
 	cursor := ""
+	seen := map[string]bool{"": true}
+	ids := make(map[string]bool)
 	for {
-		req := gtypes.PrefixQueryRequest{Prefix: prefix, Cursor: cursor}
+		req := gtypes.PrefixQueryRequest{Prefix: strings.TrimSuffix(prefix, "."), Cursor: cursor}
 		data, err := json.Marshal(req)
 		if err != nil {
-			return nil, false, fmt.Errorf("encode prefix request: %w", err)
+			return out, false, fmt.Errorf("encode prefix request: %w", err)
 		}
 		raw, err := p.client.RequestClassified(ctx, prefixQuerySubject, data, prefixPageTimeout)
 		if err != nil {
 			if isResponseTooLarge(err) {
-				return nil, false, fmt.Errorf(
+				return out, false, fmt.Errorf(
 					"prefix query %q: page exceeds the server payload ceiling (result-size failure, not availability): %w",
 					prefix, err)
 			}
-			return nil, false, fmt.Errorf("prefix query %q: %w", prefix, err)
+			return out, false, fmt.Errorf("prefix query %q: %w", prefix, err)
+		}
+		var envelope map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			return out, false, fmt.Errorf("decode prefix envelope: %w", err)
+		}
+		if _, ok := envelope["entities"]; !ok {
+			return out, false, fmt.Errorf("prefix response lacks entities field")
 		}
 		var resp gtypes.PrefixQueryResponse
 		if err := json.Unmarshal(raw, &resp); err != nil {
-			return nil, false, fmt.Errorf("decode prefix page: %w", err)
+			return out, false, fmt.Errorf("decode prefix page: %w", err)
 		}
-		out = append(out, resp.Entities...)
+		for _, entity := range resp.Entities {
+			if err := semtypes.ValidateEntityID(entity.ID); err != nil {
+				return out, false, fmt.Errorf("invalid enumerated entity: %w", err)
+			}
+			boundary := strings.TrimSuffix(prefix, ".")
+			if boundary != "" && entity.ID != boundary && !strings.HasPrefix(entity.ID, boundary+".") {
+				return out, false, fmt.Errorf("prefix page returned out-of-scope entity %q", entity.ID)
+			}
+			if ids[entity.ID] {
+				return out, false, fmt.Errorf("prefix enumeration repeated entity %q", entity.ID)
+			}
+			ids[entity.ID] = true
+			out = append(out, entity)
+		}
 
 		if maxEntities > 0 && len(out) >= maxEntities {
 			truncated := len(out) > maxEntities || resp.NextCursor != ""
@@ -75,6 +100,10 @@ func (p prefixQuerier) queryPrefixAll(ctx context.Context, prefix string, maxEnt
 		if resp.NextCursor == "" {
 			return out, false, nil
 		}
+		if seen[resp.NextCursor] {
+			return out, false, fmt.Errorf("prefix query returned a cyclic cursor")
+		}
+		seen[resp.NextCursor] = true
 		cursor = resp.NextCursor
 	}
 }
