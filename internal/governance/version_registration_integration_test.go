@@ -92,7 +92,7 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 		}
 		for name, compCfg := range built {
 			instanceNames = append(instanceNames, name)
-			discovered, err := astsource.NewComponent(compCfg.Config, component.Dependencies{NATSClient: tc.Client})
+			discovered, err := astsource.NewComponent(compCfg.Config, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 			if err != nil {
 				t.Fatalf("ast-source NewComponent from registration config: %v", err)
 			}
@@ -112,7 +112,7 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 
 	// Supersession component serves graph.query.versionDiff and the pass.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}

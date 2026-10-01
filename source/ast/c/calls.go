@@ -306,7 +306,7 @@ func (p *Parser) callTargetID(call *sitter.Node, content []byte, locals map[stri
 	if !ok {
 		return ""
 	}
-	return ast.NewCodeEntity(p.org, "c", p.project, ast.TypeFunction, name, defRel).ID
+	return ast.NewCodeEntity(p.authority, "c", p.project, ast.TypeFunction, name, defRel).ID
 }
 
 // localValueNames collects the names a function's parameters and local

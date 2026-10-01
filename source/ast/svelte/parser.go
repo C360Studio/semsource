@@ -20,16 +20,16 @@ import (
 
 func init() {
 	ast.DefaultRegistry.Register("svelte", []string{".svelte"},
-		func(org, project, repoRoot string) ast.FileParser {
-			return NewParser(org, project, repoRoot)
+		func(authority entityid.Authority, project, repoRoot string) ast.FileParser {
+			return NewParser(authority, project, repoRoot)
 		})
 }
 
 // Parser extracts code entities from Svelte source files using tree-sitter
 type Parser struct {
-	org      string
-	project  string
-	repoRoot string
+	authority entityid.Authority
+	project   string
+	repoRoot  string
 
 	// callResolver drives call-graph extraction (design D3) over a component's
 	// script block. A script block parses as its own tree-sitter tree, rooted
@@ -42,12 +42,12 @@ type Parser struct {
 }
 
 // NewParser creates a new Svelte parser
-func NewParser(org, project, repoRoot string) *Parser {
+func NewParser(authority entityid.Authority, project, repoRoot string) *Parser {
 	return &Parser{
-		org:          org,
+		authority:    authority,
 		project:      project,
 		repoRoot:     repoRoot,
-		callResolver: ts.NewParser(org, project, repoRoot),
+		callResolver: ts.NewParser(authority, project, repoRoot),
 	}
 }
 
@@ -116,7 +116,7 @@ func (p *Parser) populateEntities(ctx context.Context, parseResult *ast.ParseRes
 	}
 
 	// Create file entity with svelte as the domain; the script language is stored in Language field
-	fileEntity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Hash = hash
 	fileEntity.Language = scriptLang
 	fileEntity.Framework = "svelte"
@@ -216,7 +216,7 @@ func (p *Parser) ParseDirectory(ctx context.Context, dirPath string) ([]*ast.Par
 
 // createComponentEntity creates a component entity for a Svelte file
 func (p *Parser) createComponentEntity(name, path, lang string) *ast.CodeEntity {
-	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeComponent, name, path)
+	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeComponent, name, path)
 	entity.Language = lang                   // typescript or javascript (script block language)
 	entity.Framework = "svelte"              // Svelte is the framework
 	entity.Visibility = ast.VisibilityPublic // Svelte components are typically public
@@ -430,7 +430,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFunction, name, filePath)
+	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeFunction, name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -467,7 +467,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeInterface, name, filePath)
+	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeInterface, name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -489,7 +489,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeType, name, filePath)
+	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeType, name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -574,7 +574,7 @@ func (p *Parser) destructuredEntities(patternNode *sitter.Node, source []byte, f
 		if name == "" {
 			continue
 		}
-		entity := ast.NewCodeEntity(p.org, "svelte", p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.authority, "svelte", p.project, entityType, name, filePath)
 		entity.Language = lang
 		entity.ContainedBy = parentID
 		entity.StartLine = int(binding.StartPoint().Row) + 1
@@ -601,7 +601,7 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 	var metadata string
 	switch {
 	case isArrowFunc:
-		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeFunction, name, filePath)
+		entity = ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeFunction, name, filePath)
 		metadata = "Arrow function"
 		entity.Signature = ast.RenderTSArrowSignature(name, valueNode, source)
 		// Resolved call edges from the arrow body (design D3), via the shared ts
@@ -610,9 +610,9 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 			entity.Calls = p.callResolver.ExtractCalls(ts.ArrowParamsNode(valueNode), bodyNode, source, filePath, "svelte", nil, nil)
 		}
 	case kind == "const":
-		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeConst, name, filePath)
+		entity = ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeConst, name, filePath)
 	default:
-		entity = ast.NewCodeEntity(p.org, "svelte", p.project, ast.TypeVar, name, filePath)
+		entity = ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeVar, name, filePath)
 	}
 
 	entity.Language = lang
@@ -687,7 +687,7 @@ func (p *Parser) componentNameToEntityID(componentName, filePath string) string 
 
 	// Create entity ID within current project
 	instance := ast.BuildInstanceID(filePath, componentName, ast.TypeComponent)
-	return entityid.Build(p.org, entityid.PlatformSemsource, "svelte", p.project, "component", instance)
+	return p.authority.Build(entityid.SystemSlug(p.project), "svelte", "component", instance)
 }
 
 // hasModifier checks if a node has a specific modifier

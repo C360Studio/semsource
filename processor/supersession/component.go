@@ -3,8 +3,14 @@ package supersession
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/sourcelifecycle"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +27,10 @@ import (
 
 // Component runs the versioned-source correspondence and supersession pass.
 type Component struct {
-	name   string
-	config Config
-	client *natsclient.Client
+	authority entityid.Authority
+	name      string
+	config    Config
+	client    *natsclient.Client
 	// graphStatus reads ADR-083 readiness envelopes from GRAPH_STATUS, which
 	// replaced the removed graph.index.query.status request/reply.
 	graphStatus *graphstatus.Reader
@@ -36,20 +43,23 @@ type Component struct {
 
 	mu           sync.RWMutex
 	running      bool
+	stopping     bool
 	startTime    time.Time
 	publisher    *entitypub.Publisher
 	queryClient  *prefixQuerier
-	mutClient    *projection.MutationClient
+	mutClient    lifecycleMutator
 	triggerSub   *natsclient.Subscription
 	diffSub      *natsclient.Subscription
 	lifecycleSub *natsclient.Subscription
+	sourceSub    *natsclient.Subscription
 	bodyResolver *fusion.BodyResolver
 	cancel       context.CancelFunc
 	lastRun      time.Time
 	lastStats    passStats
 
-	// runMu serializes passes so a periodic tick never overlaps an on-demand run.
-	runMu sync.Mutex
+	// runGate serializes every lifecycle owner with cancellation-aware admission.
+	runGate sourcelifecycle.Gate
+	workers workerjoin.Group
 }
 
 // NewComponent constructs the supersession component from raw config and deps.
@@ -61,7 +71,19 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+	authority, err := sourceauthority.Resolve(deps.Platform, "")
+	if err != nil {
+		return nil, err
+	}
+	prefix := authority.Org + "." + authority.Platform
+	if config.Prefix != "" && config.Prefix != prefix && !strings.HasPrefix(config.Prefix, prefix+".") {
+		return nil, fmt.Errorf("supersession prefix must stay within deployment authority %s", prefix)
+	}
+	if config.Prefix == "" {
+		config.Prefix = prefix
+	}
 	return &Component{
+		authority:     authority,
 		name:          "supersession",
 		config:        config,
 		client:        deps.NATSClient,
@@ -89,6 +111,9 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("create entity publisher: %w", err)
 	}
 	pub.Start(ctx)
+	c.mu.Lock()
+	c.publisher = pub
+	c.mu.Unlock()
 
 	q := &prefixQuerier{client: c.client}
 	mut, err := projection.NewMutationClient(projection.MutationClientConfig{
@@ -97,17 +122,15 @@ func (c *Component) Start(ctx context.Context) error {
 		Timeout:   lifecycleMutationTimeout,
 	})
 	if err != nil {
-		pub.Stop()
 		return fmt.Errorf("create mutation client: %w", err)
 	}
 
 	resolver, err := c.buildBodyResolver(ctx)
 	if err != nil {
-		pub.Stop()
 		return fmt.Errorf("build body resolver: %w", err)
 	}
 
-	sub, diffSub, lifecycleSub, err := c.subscribeHandlers(ctx, pub)
+	sub, diffSub, lifecycleSub, err := c.subscribeHandlers(ctx)
 	if err != nil {
 		return err
 	}
@@ -124,6 +147,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.bodyResolver = resolver
 	c.cancel = cancel
 	c.running = true
+	c.stopping = false
 	c.startTime = time.Now()
 	c.mu.Unlock()
 
@@ -132,18 +156,18 @@ func (c *Component) Start(ctx context.Context) error {
 	c.logger.Info("supersession listening for lifecycle-run requests", "subject", graph.LifecycleTriggerSubject)
 
 	if d := c.config.intervalDuration(); d > 0 {
-		go c.periodic(runCtx, d)
+		c.workers.Go(func() { c.periodic(runCtx, d) })
 		c.logger.Info("supersession periodic pass enabled", "interval", d.String())
 	}
 	return nil
 }
 
-// subscribeHandlers registers the three request/reply subscriptions Start
+// subscribeHandlers registers the four request/reply subscriptions Start
 // needs (the correspondence-pass trigger, the version-diff query, and the
-// staleness lifecycle-run trigger), rolling back pub/q and any subscription
-// already registered on the first failure. Extracted from Start to keep it
-// under revive's function-length limit.
-func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publisher) (sub, diffSub, lifecycleSub *natsclient.Subscription, err error) {
+// staleness lifecycle-run and source projection triggers). Each acquired handle
+// remains owned by the component if a later acquisition fails; the manager cancels failed Start and
+// calls Stop to drain those handles within its cleanup deadline.
+func (c *Component) subscribeHandlers(ctx context.Context) (sub, diffSub, lifecycleSub *natsclient.Subscription, err error) {
 	subject := c.config.triggerSubject()
 	sub, err = c.client.SubscribeForRequests(ctx, subject, func(reqCtx context.Context, _ []byte) ([]byte, error) {
 		stats, runErr := c.runPass(reqCtx)
@@ -153,31 +177,43 @@ func (c *Component) subscribeHandlers(ctx context.Context, pub *entitypub.Publis
 		return json.Marshal(stats)
 	})
 	if err != nil {
-		pub.Stop()
 		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", subject, err)
 	}
+
+	c.mu.Lock()
+	c.triggerSub = sub
+	c.mu.Unlock()
 
 	diffSub, err = c.client.SubscribeForRequests(ctx, versionDiffSubject,
 		func(reqCtx context.Context, body []byte) ([]byte, error) {
 			return c.serveDiff(reqCtx, body)
 		})
 	if err != nil {
-		pub.Stop()
-		_ = sub.Unsubscribe()
 		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", versionDiffSubject, err)
 	}
+
+	c.mu.Lock()
+	c.diffSub = diffSub
+	c.mu.Unlock()
 
 	lifecycleSub, err = c.client.SubscribeForRequests(ctx, graph.LifecycleTriggerSubject,
 		func(reqCtx context.Context, body []byte) ([]byte, error) {
 			return c.handleLifecycleRun(reqCtx, body)
 		})
 	if err != nil {
-		pub.Stop()
-		_ = sub.Unsubscribe()
-		_ = diffSub.Unsubscribe()
 		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", graph.LifecycleTriggerSubject, err)
 	}
 
+	c.mu.Lock()
+	c.lifecycleSub = lifecycleSub
+	c.mu.Unlock()
+	sourceSub, sourceErr := c.client.SubscribeForRequests(ctx, sourcelifecycle.ProjectionSubject, c.handleSourceProjection)
+	if sourceErr != nil {
+		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", sourcelifecycle.ProjectionSubject, sourceErr)
+	}
+	c.mu.Lock()
+	c.sourceSub = sourceSub
+	c.mu.Unlock()
 	return sub, diffSub, lifecycleSub, nil
 }
 
@@ -200,10 +236,13 @@ func (c *Component) periodic(ctx context.Context, interval time.Duration) {
 // runPass executes one correspondence + supersession pass: enumerate versioned
 // code entities, group and order them, compute lineage edges, and publish only
 // the additive delta. Read-and-append only — never retracts or overwrites — and
-// idempotent via diffNew. Passes are serialized (runMu).
+// idempotent via diffNew. Passes are serialized (runGate).
 func (c *Component) runPass(ctx context.Context) (passStats, error) {
-	c.runMu.Lock()
-	defer c.runMu.Unlock()
+	release, err := c.runGate.Acquire(ctx)
+	if err != nil {
+		return passStats{}, err
+	}
+	defer release()
 
 	c.mu.RLock()
 	q := c.queryClient
@@ -291,42 +330,51 @@ func (c *Component) publishDelta(delta map[string][]message.Triple) int {
 }
 
 // Stop cancels the periodic loop, unsubscribes, and flushes the publisher.
-func (c *Component) Stop(_ context.Context) error {
+func (c *Component) Stop(ctx context.Context) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.running {
-		return nil
+	c.stopping = true
+	cancel := c.cancel
+	subs := []*natsclient.Subscription{c.diffSub, c.lifecycleSub, c.sourceSub, c.triggerSub}
+	pub := c.publisher
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
-	if c.cancel != nil {
-		c.cancel()
-		c.cancel = nil
-	}
-	if c.diffSub != nil {
-		if err := c.diffSub.Unsubscribe(); err != nil {
-			c.logger.Warn("failed to unsubscribe version-diff", "error", err)
+	var result error
+	for _, sub := range subs {
+		if sub != nil {
+			result = errors.Join(result, sub.Drain(ctx))
 		}
-		c.diffSub = nil
 	}
-	if c.lifecycleSub != nil {
-		if err := c.lifecycleSub.Unsubscribe(); err != nil {
-			c.logger.Warn("failed to unsubscribe lifecycle-run", "error", err)
+	if result != nil {
+		return result
+	}
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join supersession worker: %w", err)
+	}
+	// Direct projectors are synchronous callers, outside subscription/worker
+	// ownership. After sealing admission, this gate joins every accepted call.
+	release, err := c.runGate.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("join supersession projection: %w", err)
+	}
+	defer release()
+	if pub != nil {
+		if err := pub.Stop(ctx); err != nil {
+			return err
 		}
-		c.lifecycleSub = nil
 	}
-	if c.triggerSub != nil {
-		if err := c.triggerSub.Unsubscribe(); err != nil {
-			c.logger.Warn("failed to unsubscribe", "error", err)
-		}
-		c.triggerSub = nil
-	}
-	if c.publisher != nil {
-		c.publisher.Stop()
-		c.publisher = nil
-	}
+	c.mu.Lock()
+	c.cancel = nil
+	c.diffSub = nil
+	c.lifecycleSub = nil
+	c.sourceSub = nil
+	c.triggerSub = nil
+	c.publisher = nil
 	c.queryClient = nil
 	c.mutClient = nil
 	c.running = false
-	c.logger.Info("supersession stopped")
+	c.mu.Unlock()
 	return nil
 }
 
@@ -342,7 +390,9 @@ func (c *Component) Meta() component.Metadata {
 
 // InputPorts implements component.Discoverable.
 func (c *Component) InputPorts() []component.Port {
-	return []component.Port{}
+	return []component.Port{{Name: "source.lifecycle", Direction: component.DirectionInput,
+		Config: component.NATSRequestPort{Subject: sourcelifecycle.ProjectionSubject}, Required: true,
+		Description: "Generation-bound source lifecycle projection"}}
 }
 
 // OutputPorts implements component.Discoverable.
@@ -395,5 +445,5 @@ func (c *Component) DataFlow() component.FlowMetrics {
 // RequestSubjects returns every NATS request/reply subject this component
 // serves, for the subject-ownership guard. See sourcemanifest.RequestSubjects.
 func RequestSubjects() []string {
-	return []string{versionDiffSubject}
+	return []string{versionDiffSubject, sourcelifecycle.ProjectionSubject}
 }

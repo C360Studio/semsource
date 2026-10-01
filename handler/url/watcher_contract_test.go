@@ -32,7 +32,7 @@ func TestWatchCreateUsesOnlyTypedState(t *testing.T) {
 	defer srv.Close()
 
 	h := NewWithClient(nil, srv.Client())
-	h.org = "acme"
+	h.authority = testAuthority("acme")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 

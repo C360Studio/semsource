@@ -23,7 +23,7 @@ func parsePyFiles(t *testing.T, files map[string]string) map[string]*ast.CodeEnt
 		}
 	}
 	byName := make(map[string]*ast.CodeEntity)
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	for rel := range files {
 		res, err := p.ParseFile(context.Background(), filepath.Join(root, rel))
 		if err != nil {

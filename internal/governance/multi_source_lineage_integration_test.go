@@ -92,7 +92,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	var runOld, runNew, stableOld, stableNew, appMain *semgraph.EntityState
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		ents := prefixAll(ctx, tc.Client, "acme.semsource.python")
+		ents := prefixAll(ctx, tc.Client, "acme.test-a1b2c3")
 		runOld = pickByNameVersion(ents, "run", "v1.9.0")
 		runNew = pickByNameVersion(ents, "run", "v1.10.0")
 		stableOld = pickByNameVersion(ents, "stable", "v1.9.0")
@@ -138,7 +138,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 
 	// Start supersession and run a pass over the REAL parsed entities.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}

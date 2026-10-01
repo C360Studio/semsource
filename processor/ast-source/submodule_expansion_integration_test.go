@@ -113,7 +113,10 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 			continue
 		}
 		booted++
-		comp, err := NewComponent(cc.Config, component.Dependencies{NATSClient: tc.Client})
+		comp, err := NewComponent(cc.Config, component.Dependencies{
+			NATSClient: tc.Client,
+			Platform:   component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+		})
 		if err != nil {
 			t.Fatalf("NewComponent from spawned config %q: %v", name, err)
 		}

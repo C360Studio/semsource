@@ -31,7 +31,7 @@ func storedHandler(org string) *Handler {
 	if org == "" {
 		return New(WithBodyStore(nopStore{}, "objectstore"))
 	}
-	return NewWithOrg(org, WithBodyStore(nopStore{}, "objectstore"))
+	return NewWithAuthority(testAuthority(org), WithBodyStore(nopStore{}, "objectstore"))
 }
 
 // docTypeCounts tallies the states of a change event by source.DocType. One
@@ -66,7 +66,7 @@ func TestEnrichEventCreateUsesOnlyTypedState(t *testing.T) {
 	event := h.enrichEvent(context.Background(), handler.ChangeEvent{
 		Path:      path,
 		Operation: handler.OperationCreate,
-	}, root, h.org)
+	}, root, h.authority)
 
 	parents, passages := docTypeCounts(event.EntityStates)
 	if parents != 1 {
@@ -97,7 +97,7 @@ func TestEnrichEventWithoutOrgDoesNotFallBackToRawEntity(t *testing.T) {
 	event := h.enrichEvent(context.Background(), handler.ChangeEvent{
 		Path:      path,
 		Operation: handler.OperationModify,
-	}, root, h.org)
+	}, root, h.authority)
 
 	if len(event.EntityStates) != 0 || len(event.Entities) != 0 {
 		t.Fatalf("unscoped event must contain no typed or raw entities: %+v", event)
@@ -109,7 +109,7 @@ func TestEnrichEventDeleteIsPathOnly(t *testing.T) {
 	event := h.enrichEvent(context.Background(), handler.ChangeEvent{
 		Path:      "/removed/readme.md",
 		Operation: handler.OperationDelete,
-	}, "/removed", h.org)
+	}, "/removed", h.authority)
 
 	if event.Path != "/removed/readme.md" || event.Operation != handler.OperationDelete {
 		t.Fatalf("delete signal changed: %+v", event)

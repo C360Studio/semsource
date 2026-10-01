@@ -51,7 +51,7 @@ func TestSanitizeSegment_InvalidShapes(t *testing.T) {
 			t.Errorf("SanitizeSegment(%q) = empty", s)
 			continue
 		}
-		probe := entityid.Build("org", "semsource", "golang", "sys", "function", got)
+		probe := entityid.Build("org", "semsource", "sys", "golang", "function", got)
 		if err := semtypes.ValidateEntityID(probe); err != nil {
 			t.Errorf("SanitizeSegment(%q) = %q, still fails graph-ingest contract: %v", s, got, err)
 		}
@@ -110,7 +110,7 @@ func TestSanitizeSegment_PropertyAgainstSubstrateValidator(t *testing.T) {
 	seen := map[string]string{}
 	for _, s := range corpus {
 		got := entityid.SanitizeSegment(s)
-		probe := entityid.Build("org", "semsource", "golang", "sys", "function", got)
+		probe := entityid.Build("org", "semsource", "sys", "golang", "function", got)
 		if err := semtypes.ValidateEntityID(probe); err != nil {
 			t.Errorf("corpus %q -> %q fails substrate validator: %v", s, got, err)
 		}

@@ -12,9 +12,9 @@ import (
 )
 
 func TestNewParser(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp/repo")
-	if p.org != "acme" {
-		t.Errorf("org = %q, want %q", p.org, "acme")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp/repo")
+	if p.authority.Org != "acme" {
+		t.Errorf("org = %q, want %q", p.authority.Org, "acme")
 	}
 	if p.project != "myproject" {
 		t.Errorf("project = %q, want %q", p.project, "myproject")
@@ -40,7 +40,7 @@ public class Calculator {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -86,8 +86,8 @@ public class Calculator {
 	}
 
 	// Check entity ID format
-	if !strings.HasPrefix(calcClass.ID, "acme.semsource.java.test.class.") {
-		t.Errorf("ID = %q, want prefix 'acme.semsource.java.test.class.'", calcClass.ID)
+	if !strings.HasPrefix(calcClass.ID, "acme.test-platform.test.java.class.") {
+		t.Errorf("ID = %q, want prefix 'acme.test-platform.test.java.class.'", calcClass.ID)
 	}
 }
 
@@ -106,7 +106,7 @@ public interface Runnable {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -147,7 +147,7 @@ public enum Status {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -181,7 +181,7 @@ public record Point(double x, double y) {}
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -223,7 +223,7 @@ public class Dog extends Animal implements Pet {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -278,7 +278,7 @@ public class User {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -320,7 +320,7 @@ public class Counter {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -389,7 +389,7 @@ public class Math {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -450,7 +450,7 @@ public class Person {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -499,7 +499,7 @@ public class Container<T> {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -540,7 +540,7 @@ public class Outer {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -591,7 +591,7 @@ import static java.lang.Math.PI;
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -639,7 +639,7 @@ public class VisibilityTest {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -696,7 +696,7 @@ func TestParseDirectory(t *testing.T) {
 		}
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	results, err := p.ParseDirectory(context.Background(), tmpDir)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)
@@ -728,7 +728,7 @@ func TestParseDirectory_SkipsBuildDirs(t *testing.T) {
 		}
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	results, err := p.ParseDirectory(context.Background(), tmpDir)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)
@@ -741,7 +741,7 @@ func TestParseDirectory_SkipsBuildDirs(t *testing.T) {
 }
 
 func TestParseFile_NonExistent(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 	_, err := p.ParseFile(context.Background(), "/tmp/nonexistent.java")
 	if err == nil {
 		t.Error("expected error for non-existent file")
@@ -749,7 +749,7 @@ func TestParseFile_NonExistent(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_Builtin(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 
 	builtins := []string{"int", "String", "boolean", "Integer", "Double", "Object"}
 	for _, b := range builtins {
@@ -762,7 +762,7 @@ func TestTypeNameToEntityID_Builtin(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_FullyQualified(t *testing.T) {
-	p := NewParser("acme", "test", "/tmp")
+	p := NewParser(testAuthority("acme"), "test", "/tmp")
 
 	result := p.typeRefID("java.util.List", "Test.java")
 	expected := "external:java.util.List"
@@ -778,11 +778,11 @@ func TestTypeNameToEntityID_FullyQualified(t *testing.T) {
 }
 
 func TestTypeNameToEntityID_LocalType(t *testing.T) {
-	p := NewParser("acme", "myproject", "/tmp")
+	p := NewParser(testAuthority("acme"), "myproject", "/tmp")
 
 	result := p.typeRefID("User", "models/User.java")
-	if !strings.HasPrefix(result, "acme.semsource.java.myproject.type.") {
-		t.Errorf("typeRefID(User) = %q, want prefix 'acme.semsource.java.myproject.type.'", result)
+	if !strings.HasPrefix(result, "acme.test-platform.myproject.java.type.") {
+		t.Errorf("typeRefID(User) = %q, want prefix 'acme.test-platform.myproject.java.type.'", result)
 	}
 	if !strings.Contains(result, "User") {
 		t.Errorf("typeRefID(User) = %q, want to contain 'User'", result)
@@ -807,7 +807,7 @@ func TestExtractPackageName(t *testing.T) {
 			t.Fatalf("write file: %v", err)
 		}
 
-		p := NewParser("acme", "test", tmpDir)
+		p := NewParser(testAuthority("acme"), "test", tmpDir)
 		result, err := p.ParseFile(context.Background(), filePath)
 		if err != nil {
 			t.Fatalf("ParseFile: %v", err)
@@ -858,7 +858,7 @@ func TestParseDirectory_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	_, err := p.ParseDirectory(ctx, tmpDir)
 	if err == nil {
 		t.Error("expected error for cancelled context")
@@ -901,7 +901,7 @@ public class JobQueue {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -972,7 +972,7 @@ class Bar {
 		t.Fatalf("write file: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)

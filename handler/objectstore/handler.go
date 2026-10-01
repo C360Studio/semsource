@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"net/url"
 	"strings"
 	"time"
@@ -39,9 +40,9 @@ type Handler struct {
 	store ObjectStore
 	docs  *doc.Handler
 
-	org     string
-	project string
-	version string
+	authority entityid.Authority
+	project   string
+	version   string
 
 	pollInterval time.Duration
 
@@ -75,12 +76,12 @@ func WithPollInterval(d time.Duration) Option {
 }
 
 // New returns a Handler reading objects from store and turning them into
-// documents with docs, under the org namespace.
-func New(store ObjectStore, docs *doc.Handler, org string, opts ...Option) *Handler {
+// documents with docs, under the effective deployment authority.
+func New(store ObjectStore, docs *doc.Handler, authority entityid.Authority, opts ...Option) *Handler {
 	h := &Handler{
 		store:        store,
 		docs:         docs,
-		org:          org,
+		authority:    authority,
 		pollInterval: DefaultPollInterval,
 		tracker:      NewTracker(),
 	}
@@ -177,6 +178,9 @@ func (r *Result) SkipCounts() map[string]int64 {
 // fetches it again — change detection has no other way to learn that entities
 // it produced never arrived.
 func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig) (*Result, error) {
+	if err := h.authority.Validate(); err != nil {
+		return nil, err
+	}
 	bucket, prefix, err := ParseSourceURL(cfg.GetURL())
 	if err != nil {
 		return nil, fmt.Errorf("objectstore handler: %w", err)
@@ -206,6 +210,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 
 		states, err := h.ingestObject(ctx, info.Key, system, now)
 		if err != nil {
+			seedproof.Report(ctx, err)
 			// An unreadable object is one document's problem: skip it and say
 			// so. A body store that cannot be written to is the deployment's
 			// problem, and every document after this one would fail the same
@@ -236,7 +241,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	for _, key := range plan.Removed {
 		result.Removed = append(result.Removed, Removal{
 			Key:      key,
-			EntityID: doc.DocumentEntityID(h.org, system, key),
+			EntityID: doc.DocumentEntityID(h.authority, system, key),
 		})
 	}
 	return result, nil
@@ -253,7 +258,7 @@ func (h *Handler) ingestObject(ctx context.Context, key, system string, now time
 	if err != nil {
 		return nil, fmt.Errorf("objectstore handler: read %q: %w", key, err)
 	}
-	return h.docs.IngestContentEntityStates(ctx, content, key, system, h.org, now)
+	return h.docs.IngestContentEntityStates(ctx, content, key, system, h.authority, now)
 }
 
 // Watch re-lists the prefix on an interval and emits one event per object that

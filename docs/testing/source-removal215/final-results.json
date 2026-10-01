@@ -1,0 +1,1208 @@
+{
+  "status": "Reviewed safe consumer repair; full issue #215 acceptance remains blocked.",
+  "production_build": {
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "/tmp/semsource-removal215-evidence/semsource-final",
+      "./cmd/semsource"
+    ],
+    "started_at": "2026-10-01T01:05:34.271149+00:00",
+    "elapsed_seconds": 3.508037958992645,
+    "exit_code": 0,
+    "source_commit": "ce241a5c6e07f69e5450bb60885b537e89ea27a9",
+    "source_clean": true,
+    "binary_sha256": "09170e24f60af0ead2b209ce58bf9a4c4446316cc77e9c5fbe6f8a2da63b9421",
+    "source_provenance": "Clean checkout commit captured in final-build.json at build time. Binary metadata has no embedded vcs.revision/vcs.modified fields; artifact identity is its recorded SHA-256."
+  },
+  "test_only_followup_commit": "16e37956f04ace663284080252c42841d8599aa0",
+  "test_only_changes": [
+    "fingerprint_test.go uses canonical sourcevocab.DocChunkCount; numeric equality assertions retained.",
+    "staleness_lifecycle_integration_test.go preserves earlier file lifecycle checks and proves retained removal through real journal/tail/coordinator/local projector; in-memory desired-config seam is explicit."
+  ],
+  "semstreams": {
+    "sha": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+    "module": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+    "pin_unchanged": true
+  },
+  "environment": {
+    "go": "go1.26.4",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "cgo_enabled": "1",
+    "nats_image": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+  },
+  "comparison_controls": {
+    "profile": "BM25 / tier0-statistical.json; SemEngine qualification slices 0 and 1",
+    "provider": "No embedding provider started or used in this additive removal workload.",
+    "provider_models_dimensions_preprocessing": "Original two-pin comparison and provider controls remain frozen; no fresh full semembed qualification is claimed for this lifecycle follow-up.",
+    "frozen_setup03a_ledgers_unchanged": true,
+    "sibling_oracle": "Only valid single AST dc.terms.created indexing-time metadata is recorded separately, based on independently reproduced pre-fix plain-restart behavior. All other triples, IDs, lifecycle markers, and exact content remain strict."
+  },
+  "process_run": {
+    "command": [
+      "go",
+      "test",
+      "-tags=qualification,removal",
+      "-count=1",
+      "-v",
+      "-run",
+      "^Test(SourceRemovalLifecycle|RemovalReplay)",
+      "./test/setup03a"
+    ],
+    "env": {
+      "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-final",
+      "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/final-process",
+      "SETUP03A_REMOVAL_ACTIVATION": "restart",
+      "SETUP03A_IDENTITY": "governed",
+      "SETUP03A_PROFILE": "bm25",
+      "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+    },
+    "started_at": "2026-10-01T01:07:02.709268+00:00",
+    "elapsed_seconds": 424.13649754197104,
+    "exit_code": 1,
+    "source_commit": "ce241a5c6e07f69e5450bb60885b537e89ea27a9"
+  },
+  "process_cases": [
+    {
+      "case": "TestRemovalReplayReaddBeforeRestart",
+      "report": "final-process/TestRemovalReplayReaddBeforeRestart/report.json",
+      "report_sha256": "7975784713a2cd076c4c055046662f6fee631ee449e876eae8349c93df1f6c61",
+      "corpus_version": "removal-replay-v1",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "profile": "bm25-removal-replay",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-10-01T01:10:37.084892Z",
+      "passed": 27,
+      "total": 27,
+      "failed": [],
+      "observations": [
+        {
+          "name": "initial_settled",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_target_current",
+          "passed": true
+        },
+        {
+          "name": "sibling_source_facts_captured",
+          "passed": true
+        },
+        {
+          "name": "remove_receipt",
+          "passed": true
+        },
+        {
+          "name": "old_boot_producer_still_admitted",
+          "passed": true
+        },
+        {
+          "name": "durable_pending_before_projection",
+          "passed": true
+        },
+        {
+          "name": "old_boot_targets_not_marked",
+          "passed": true
+        },
+        {
+          "name": "rapid_readd_0_receipt",
+          "passed": true
+        },
+        {
+          "name": "rapid_readd_0_supersedes_old_generation",
+          "passed": true
+        },
+        {
+          "name": "rapid_readd_0_old_boot_unchanged",
+          "passed": true
+        },
+        {
+          "name": "remove_receipt",
+          "passed": true
+        },
+        {
+          "name": "old_boot_producer_still_admitted",
+          "passed": true
+        },
+        {
+          "name": "durable_pending_before_projection",
+          "passed": true
+        },
+        {
+          "name": "old_boot_targets_not_marked",
+          "passed": true
+        },
+        {
+          "name": "rapid_readd_1_receipt",
+          "passed": true
+        },
+        {
+          "name": "rapid_readd_1_supersedes_old_generation",
+          "passed": true
+        },
+        {
+          "name": "rapid_readd_1_old_boot_unchanged",
+          "passed": true
+        },
+        {
+          "name": "superseded_readd_checked_exit",
+          "passed": true
+        },
+        {
+          "name": "readd_same_handle_after_restart",
+          "passed": true
+        },
+        {
+          "name": "readd_current_epoch_exact_manifest_current_epoch_publication_proof",
+          "passed": true
+        },
+        {
+          "name": "readd_current_epoch_exact_manifest_projection_outcome_observed",
+          "passed": true
+        },
+        {
+          "name": "readd_current_epoch_exact_manifest",
+          "passed": true
+        },
+        {
+          "name": "readded_current_entities_fresh",
+          "passed": true
+        },
+        {
+          "name": "rapid_toggle_siblings_unchanged",
+          "passed": true
+        },
+        {
+          "name": "zero_old_removal_mutation_across_superseding_readds",
+          "passed": true
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true
+        }
+      ],
+      "checked_process_exits": [
+        {
+          "name": "superseded_readd_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 82854,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 82898,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "owned_container": "8ae3527a7c75b8b43f47dd6a55bdb9b78bf3f7b61f296739d0acc7dfd9677885",
+      "owned_container_absent": true,
+      "qualification_gates": [
+        {
+          "blocker": "conditional_reconcile_unavailable",
+          "gate": "conditional_source_removed_reactivation",
+          "positive_completion_and_freshness_checks_remain_required": true,
+          "qualified": false,
+          "status": "blocked",
+          "upstream": "https://github.com/C360Studio/semstreams/issues/1445",
+          "observed_phase": "complete",
+          "observed_progress": {
+            "completed_count": 0,
+            "blocker": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "TestRemovalReplayRetirement-original",
+      "report": "final-process/TestRemovalReplayRetirement-original/report.json",
+      "report_sha256": "7d4d5ba39155f854679686f1ccc0d115577aca99de2eac0a6a3c706cf7fa7a6d",
+      "corpus_version": "removal-replay-v1",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "profile": "bm25-removal-replay",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-10-01T01:08:04.820904Z",
+      "passed": 16,
+      "total": 16,
+      "failed": [],
+      "observations": [
+        {
+          "name": "initial_settled",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_target_current",
+          "passed": true
+        },
+        {
+          "name": "sibling_source_facts_captured",
+          "passed": true
+        },
+        {
+          "name": "remove_receipt",
+          "passed": true
+        },
+        {
+          "name": "old_boot_producer_still_admitted",
+          "passed": true
+        },
+        {
+          "name": "durable_pending_before_projection",
+          "passed": true
+        },
+        {
+          "name": "old_boot_targets_not_marked",
+          "passed": true
+        },
+        {
+          "name": "crash_after_durable_intent_observed_exit",
+          "passed": true
+        },
+        {
+          "name": "retired_producer_absent_after_crash",
+          "passed": true
+        },
+        {
+          "name": "retained_markers_converged_but_terminal_completion_unqualified",
+          "passed": true
+        },
+        {
+          "name": "all_retained_target_entities_source_removed",
+          "passed": true
+        },
+        {
+          "name": "legacy_sweep_completed",
+          "passed": true
+        },
+        {
+          "name": "legacy_sweep_preserves_source_removed",
+          "passed": true
+        },
+        {
+          "name": "sibling_graph_and_exact_content_unchanged",
+          "passed": true
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true
+        }
+      ],
+      "checked_process_exits": [
+        {
+          "name": "crash_after_durable_intent_observed_exit",
+          "passed": true,
+          "detail": {
+            "pid": 80007,
+            "forced": true,
+            "observed": true,
+            "exit_code": -1,
+            "signal": "killed"
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 80235,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "owned_container": "48b429ad8dbfced346b1b7c234dcb1387aad3368f42e4d243744a1af0403ced6",
+      "owned_container_absent": true,
+      "qualification_gates": [
+        {
+          "blocker": "applied_tail_unproven",
+          "gate": "automatic_terminal_removal_completion",
+          "qualified": false,
+          "retained_pass_is_not_terminal_completion": true,
+          "status": "blocked",
+          "upstream": "https://github.com/C360Studio/semstreams/issues/1444"
+        }
+      ]
+    },
+    {
+      "case": "TestRemovalReplayRetirement-runtime_added",
+      "report": "final-process/TestRemovalReplayRetirement-runtime_added/report.json",
+      "report_sha256": "c01b357159c13ab985a8eab9972f3c3ab2e64070b6102c55f3bf144f7f6ab86a",
+      "corpus_version": "removal-replay-v1",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "profile": "bm25-removal-replay",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-10-01T01:09:05.787638Z",
+      "passed": 20,
+      "total": 20,
+      "failed": [],
+      "observations": [
+        {
+          "name": "initial_settled",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "runtime_add_receipt",
+          "passed": true
+        },
+        {
+          "name": "runtime_add_deferred",
+          "passed": true
+        },
+        {
+          "name": "runtime_add_checked_exit",
+          "passed": true
+        },
+        {
+          "name": "runtime_add_admitted",
+          "passed": true
+        },
+        {
+          "name": "initial_target_current",
+          "passed": true
+        },
+        {
+          "name": "sibling_source_facts_captured",
+          "passed": true
+        },
+        {
+          "name": "remove_receipt",
+          "passed": true
+        },
+        {
+          "name": "old_boot_producer_still_admitted",
+          "passed": true
+        },
+        {
+          "name": "durable_pending_before_projection",
+          "passed": true
+        },
+        {
+          "name": "old_boot_targets_not_marked",
+          "passed": true
+        },
+        {
+          "name": "crash_after_durable_intent_observed_exit",
+          "passed": true
+        },
+        {
+          "name": "retired_producer_absent_after_crash",
+          "passed": true
+        },
+        {
+          "name": "retained_markers_converged_but_terminal_completion_unqualified",
+          "passed": true
+        },
+        {
+          "name": "all_retained_target_entities_source_removed",
+          "passed": true
+        },
+        {
+          "name": "legacy_sweep_completed",
+          "passed": true
+        },
+        {
+          "name": "legacy_sweep_preserves_source_removed",
+          "passed": true
+        },
+        {
+          "name": "sibling_graph_and_exact_content_unchanged",
+          "passed": true
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true
+        }
+      ],
+      "checked_process_exits": [
+        {
+          "name": "runtime_add_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 80364,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "crash_after_durable_intent_observed_exit",
+          "passed": true,
+          "detail": {
+            "pid": 80529,
+            "forced": true,
+            "observed": true,
+            "exit_code": -1,
+            "signal": "killed"
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 82769,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "owned_container": "7363aa66aa33e841e8b32823020fa6d4687461ecad125e2e80cdfd21cf0b399d",
+      "owned_container_absent": true,
+      "qualification_gates": [
+        {
+          "blocker": "applied_tail_unproven",
+          "gate": "automatic_terminal_removal_completion",
+          "qualified": false,
+          "retained_pass_is_not_terminal_completion": true,
+          "status": "blocked",
+          "upstream": "https://github.com/C360Studio/semstreams/issues/1444"
+        }
+      ]
+    },
+    {
+      "case": "TestRemovalReplaySelectiveReactivation",
+      "report": "final-process/TestRemovalReplaySelectiveReactivation/report.json",
+      "report_sha256": "142cfcae1c119c11ad5054ee6b5b3ed7a8c67a4e483ee1d2ddb4094710630b16",
+      "corpus_version": "removal-replay-v1",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "profile": "bm25-removal-replay",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-10-01T01:11:38.195057Z",
+      "passed": 24,
+      "total": 26,
+      "failed": [
+        {
+          "name": "selective_current_epoch_A_only_manifest",
+          "error": "reactivation has not completed; pending upstream work does not satisfy positive acceptance"
+        },
+        {
+          "name": "current_A_parent_and_passage_fresh",
+          "error": "entity setup03a.semsource-294dbb.setup03a-corpus-v1.web.chunk.a-md-0000 marker=source_removed want \"\"\nentity setup03a.semsource-294dbb.setup03a-corpus-v1.web.doc.a-md marker=source_removed want \"\""
+        }
+      ],
+      "observations": [
+        {
+          "name": "initial_settled",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_target_current",
+          "passed": true
+        },
+        {
+          "name": "sibling_source_facts_captured",
+          "passed": true
+        },
+        {
+          "name": "remove_receipt",
+          "passed": true
+        },
+        {
+          "name": "old_boot_producer_still_admitted",
+          "passed": true
+        },
+        {
+          "name": "durable_pending_before_projection",
+          "passed": true
+        },
+        {
+          "name": "old_boot_targets_not_marked",
+          "passed": true
+        },
+        {
+          "name": "removal_graceful_checked_exit",
+          "passed": true
+        },
+        {
+          "name": "removed_source_absent_before_selective_readd",
+          "passed": true
+        },
+        {
+          "name": "retained_markers_converged_but_terminal_completion_unqualified",
+          "passed": true
+        },
+        {
+          "name": "all_retained_target_entities_source_removed",
+          "passed": true
+        },
+        {
+          "name": "selective_readd_receipt",
+          "passed": true
+        },
+        {
+          "name": "selective_readd_new_generation",
+          "passed": true
+        },
+        {
+          "name": "selective_readd_deferred",
+          "passed": true
+        },
+        {
+          "name": "offline_edit_checked_exit",
+          "passed": true
+        },
+        {
+          "name": "selective_readd_admitted",
+          "passed": true
+        },
+        {
+          "name": "selective_current_epoch_A_only_manifest_current_epoch_publication_proof",
+          "passed": true
+        },
+        {
+          "name": "selective_current_epoch_A_only_manifest_projection_outcome_observed",
+          "passed": true
+        },
+        {
+          "name": "selective_current_epoch_A_only_manifest",
+          "passed": false
+        },
+        {
+          "name": "selective_current_epoch_A_only_manifest_honest_pending_conditional_reconcile",
+          "passed": true
+        },
+        {
+          "name": "selective_current_epoch_A_only_manifest_no_unfenced_current_marker_clear",
+          "passed": true
+        },
+        {
+          "name": "current_A_parent_and_passage_fresh",
+          "passed": false
+        },
+        {
+          "name": "offline_deleted_B_parent_and_passage_retained_stale",
+          "passed": true
+        },
+        {
+          "name": "selective_readd_sibling_graph_and_content_unchanged",
+          "passed": true
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true
+        }
+      ],
+      "checked_process_exits": [
+        {
+          "name": "removal_graceful_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 83556,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "offline_edit_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 83577,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 83591,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "owned_container": "107e28e5f9e9966c6bfd3bec3aa89187df2e40e0be23cb21575cdb71f556e3eb",
+      "owned_container_absent": true,
+      "qualification_gates": [
+        {
+          "blocker": "applied_tail_unproven",
+          "gate": "automatic_terminal_removal_completion",
+          "qualified": false,
+          "retained_pass_is_not_terminal_completion": true,
+          "status": "blocked",
+          "upstream": "https://github.com/C360Studio/semstreams/issues/1444"
+        },
+        {
+          "blocker": "conditional_reconcile_unavailable",
+          "gate": "conditional_source_removed_reactivation",
+          "positive_completion_and_freshness_checks_remain_required": true,
+          "qualified": false,
+          "status": "blocked",
+          "upstream": "https://github.com/C360Studio/semstreams/issues/1445",
+          "observed_phase": "pending",
+          "observed_progress": {
+            "completed_count": 0,
+            "blocker": {
+              "code": "conditional_reconcile_unavailable",
+              "message": "reactivation remains pending"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case": "TestRemovalReplaySiblingRestartControl",
+      "report": "final-process/TestRemovalReplaySiblingRestartControl/report.json",
+      "report_sha256": "a7ea72c8ba6a3e41f4dd83296a64a9b834134305e4e7eae1cf20ab1231232a20",
+      "corpus_version": "removal-replay-v1",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "profile": "bm25-removal-replay",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-10-01T01:07:03.192126Z",
+      "passed": 8,
+      "total": 8,
+      "failed": [],
+      "observations": [
+        {
+          "name": "initial_settled",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "initial_target_current",
+          "passed": true
+        },
+        {
+          "name": "sibling_source_facts_captured",
+          "passed": true
+        },
+        {
+          "name": "plain_restart_checked_exit",
+          "passed": true
+        },
+        {
+          "name": "plain_restart_same_sources_settled",
+          "passed": true
+        },
+        {
+          "name": "plain_restart_sibling_graph_and_exact_content_unchanged",
+          "passed": true
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true
+        }
+      ],
+      "checked_process_exits": [
+        {
+          "name": "plain_restart_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 79810,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 79864,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "owned_container": "123b49785ed8d7f746a101f9673535f9749143468ba2de0e1dd700726753deb7",
+      "owned_container_absent": true,
+      "qualification_gates": []
+    },
+    {
+      "case": "TestSourceRemovalLifecycle",
+      "report": "final-process/report.json",
+      "report_sha256": "ff7b2848854a7c848084b7903009d8a089f7e186510481beef15efd42ba57a46",
+      "corpus_version": "1",
+      "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+      "profile": "bm25-source-removal",
+      "semengine_slices": [
+        0,
+        1
+      ],
+      "started": "2026-10-01T01:13:34.599012Z",
+      "passed": 10,
+      "total": 10,
+      "failed": [],
+      "observations": [
+        {
+          "name": "removal_initial_settled_sources",
+          "passed": true
+        },
+        {
+          "name": "governed_identity_authority",
+          "passed": true
+        },
+        {
+          "name": "removal_initial_document_entities",
+          "passed": true
+        },
+        {
+          "name": "removal_receipt",
+          "passed": true
+        },
+        {
+          "name": "removal_deferred_until_restart",
+          "passed": true
+        },
+        {
+          "name": "removal_activated",
+          "passed": true
+        },
+        {
+          "name": "removed_parent_and_passage_retained_with_source_removed",
+          "passed": true
+        },
+        {
+          "name": "readd_receipt_same_disabled_handle",
+          "passed": true
+        },
+        {
+          "name": "readd_deferred_until_restart",
+          "passed": true
+        },
+        {
+          "name": "readd_activated_after_restart",
+          "passed": true
+        }
+      ],
+      "checked_process_exits": [],
+      "owned_container": "5eea7e859b2604f6951d4ee003da26b91f192d8f187e1f303bd2772e6c1be6b9",
+      "owned_container_absent": true,
+      "qualification_gates": [],
+      "process_exit_limit": "Legacy stop(false) does not assert application wait error; no new graceful-exit claim."
+    }
+  ],
+  "gates": [
+    {
+      "name": "automatic_terminal_all_input_removal",
+      "qualified": false,
+      "issue": "https://github.com/C360Studio/semstreams/issues/1444",
+      "observed": "Current retained set converges after proven producer retirement and current transport settlement. Journal remains pending/applied_tail_unproven; periodic repair remains active."
+    },
+    {
+      "name": "conditional_source_removed_reactivation",
+      "qualified": false,
+      "issue": "https://github.com/C360Studio/semstreams/issues/1445",
+      "observed": "Exact current-epoch A-only proof passes; positive completion and A parent/passage freshness fail. No unfenced marker clear is sent; deleted B remains retained stale. Rapid re-add passes because superseded removal never marked those current entities."
+    },
+    {
+      "name": "unknown_remote_effect_recovery",
+      "qualified": false,
+      "issue": "https://github.com/C360Studio/semstreams/issues/1446",
+      "observed": "Conservative durable attempt fence and refusal before generation/config changes are independently tested. No supported upstream terminal resolution exists. Backend write ambiguity finding is code-contract evidence, not an induced live backend lost-ack failure."
+    },
+    {
+      "name": "continuing_publication_withdrawal_and_end_to_end_numeric_equality",
+      "qualified": false,
+      "observed": "Continuing publication/withdrawal eligibility, stale receipt after deletion, and numeric precision through pinned graph decoder remain unqualified."
+    }
+  ],
+  "checks": {
+    "agents": {
+      "command": [
+        "task",
+        "agents:check"
+      ],
+      "started_at": "2026-10-01T01:03:55.958940+00:00",
+      "elapsed_seconds": 0.5972660420229658,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/agents.log",
+      "test_counts": {},
+      "failed_tests": [],
+      "skipped_tests": []
+    },
+    "e2e-local": {
+      "command": [
+        "go",
+        "test",
+        "-tags=e2e",
+        "-count=1",
+        "-json",
+        "-timeout",
+        "10m",
+        "./test/e2e/",
+        "-run",
+        "TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal"
+      ],
+      "started_at": "2026-10-01T01:08:02.935290+00:00",
+      "elapsed_seconds": 46.056464791006874,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/e2e-local.log",
+      "test_counts": {
+        "pass": 7
+      },
+      "failed_tests": [],
+      "skipped_tests": []
+    },
+    "garage": {
+      "command": [
+        "go",
+        "test",
+        "-tags=garage",
+        "-count=1",
+        "-json",
+        "./storage/s3store/"
+      ],
+      "started_at": "2026-10-01T01:07:59.053681+00:00",
+      "elapsed_seconds": 12.116687708999962,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/garage.log",
+      "test_counts": {
+        "pass": 61
+      },
+      "failed_tests": [],
+      "skipped_tests": []
+    },
+    "integration-corrected": {
+      "command": [
+        "go",
+        "test",
+        "-tags=integration",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "started_at": "2026-10-01T01:12:43.717070+00:00",
+      "elapsed_seconds": 80.87300412502373,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/integration-corrected.log",
+      "test_counts": {
+        "pass": 2826,
+        "skip": 9
+      },
+      "failed_tests": [],
+      "skipped_tests": [
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestBoundsSweep"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMargin"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMarginReproducesLiveOrdering"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestRankProbe"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/c",
+          "TestMeasureCrossTUCollisions"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/svelte",
+          "TestParser_RealPlanCard"
+        ]
+      ]
+    },
+    "integration": {
+      "command": [
+        "go",
+        "test",
+        "-tags=integration",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "started_at": "2026-10-01T01:03:35.739640+00:00",
+      "elapsed_seconds": 93.82476691703778,
+      "exit_code": 1,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/integration.log",
+      "test_counts": {
+        "pass": 2823,
+        "skip": 9,
+        "fail": 2
+      },
+      "failed_tests": [
+        [
+          "github.com/c360studio/semsource/source/vocabulary",
+          "TestBeta148PredicateMigrationContract"
+        ],
+        [
+          "github.com/c360studio/semsource/internal/governance",
+          "TestIntegration_StalenessLifecycle"
+        ]
+      ],
+      "skipped_tests": [
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestBoundsSweep"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMargin"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMarginReproducesLiveOrdering"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestRankProbe"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/c",
+          "TestMeasureCrossTUCollisions"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/svelte",
+          "TestParser_RealPlanCard"
+        ]
+      ]
+    },
+    "lint-corrected": {
+      "command": [
+        "task",
+        "lint"
+      ],
+      "started_at": "2026-10-01T01:12:47.632330+00:00",
+      "elapsed_seconds": 5.593687125016004,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/lint-corrected.log",
+      "test_counts": {},
+      "failed_tests": [],
+      "skipped_tests": []
+    },
+    "lint": {
+      "command": [
+        "task",
+        "lint"
+      ],
+      "started_at": "2026-10-01T01:03:34.699487+00:00",
+      "elapsed_seconds": 8.819394959020428,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/lint.log",
+      "test_counts": {},
+      "failed_tests": [],
+      "skipped_tests": []
+    },
+    "openspec": {
+      "command": [
+        "openspec",
+        "validate",
+        "replay-source-removal",
+        "--strict"
+      ],
+      "started_at": "2026-10-01T01:03:58.121625+00:00",
+      "elapsed_seconds": 0.5999271249747835,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/openspec.log",
+      "test_counts": {},
+      "failed_tests": [],
+      "skipped_tests": []
+    },
+    "unit-race-corrected": {
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "started_at": "2026-10-01T01:09:35.031141+00:00",
+      "elapsed_seconds": 22.869908040971495,
+      "exit_code": 0,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/unit-race-corrected.log",
+      "test_counts": {
+        "pass": 2705,
+        "skip": 9
+      },
+      "failed_tests": [],
+      "skipped_tests": [
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestBoundsSweep"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMargin"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMarginReproducesLiveOrdering"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestRankProbe"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/c",
+          "TestMeasureCrossTUCollisions"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/svelte",
+          "TestParser_RealPlanCard"
+        ]
+      ]
+    },
+    "unit-race": {
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "started_at": "2026-10-01T01:03:39.031407+00:00",
+      "elapsed_seconds": 36.471023291989695,
+      "exit_code": 1,
+      "log": "/tmp/semsource-removal215-evidence/final-checks/unit-race.log",
+      "test_counts": {
+        "pass": 2703,
+        "skip": 9,
+        "fail": 1
+      },
+      "failed_tests": [
+        [
+          "github.com/c360studio/semsource/source/vocabulary",
+          "TestBeta148PredicateMigrationContract"
+        ]
+      ],
+      "skipped_tests": [
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json"
+        ],
+        [
+          "github.com/c360studio/semsource/config",
+          "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestBoundsSweep"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMargin"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestDilutionMarginReproducesLiveOrdering"
+        ],
+        [
+          "github.com/c360studio/semsource/handler/doc",
+          "TestRankProbe"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/c",
+          "TestMeasureCrossTUCollisions"
+        ],
+        [
+          "github.com/c360studio/semsource/source/ast/svelte",
+          "TestParser_RealPlanCard"
+        ]
+      ]
+    }
+  },
+  "review": {
+    "approved_for": "Scoped implementation and test adaptations in draft PR #213 only.",
+    "record": "review.md",
+    "not_approved_for": [
+      "closing #215",
+      "merge",
+      "SemEngine admission",
+      "mainline cutover"
+    ],
+    "independent_governance_race_seconds": 7.917
+  },
+  "dependency_record": "dependency-results.json",
+  "evidence_inventory": "final-evidence-sha256.json",
+  "preserved_prior_results": [
+    "before-results.json",
+    "additive-before-results.json",
+    "implementation-attempts.json"
+  ]
+}

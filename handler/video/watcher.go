@@ -101,7 +101,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 }
 
 // enrichEvent re-processes the changed file and populates ev.Entities.
-// When h.org is set it also populates ev.EntityStates for the normalizer-free
+// When h.authority is set it also populates ev.EntityStates for the normalizer-free
 // processor path. For delete events the file is gone, so both slices remain empty.
 func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string, cfg handler.SourceConfig) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
@@ -119,12 +119,12 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root 
 	videoEntity, keyframeEntities, err := h.ingestFile(ctx, ev.Path, root, cfg)
 	if err == nil {
 		ev.Entities = append([]handler.RawEntity{videoEntity}, keyframeEntities...)
-		if h.org != "" {
+		if h.authority.Org != "" {
 			now := time.Now().UTC()
-			ve := videoEntityFromRaw(h.org, h.storeBucket, videoEntity, now)
+			ve := videoEntityFromRaw(h.authority, h.storeBucket, videoEntity, now)
 			states := []*handler.EntityState{ve.EntityState()}
 			for _, kf := range keyframeEntities {
-				ke := keyframeEntityFromRaw(h.org, ve.ID, h.storeBucket, kf, now)
+				ke := keyframeEntityFromRaw(h.authority, ve.ID, h.storeBucket, kf, now)
 				states = append(states, ke.EntityState())
 			}
 			ev.EntityStates = states

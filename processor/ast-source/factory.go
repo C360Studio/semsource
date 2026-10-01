@@ -1,7 +1,10 @@
 package astsource
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/c360studio/semstreams/component"
 )
@@ -19,6 +22,7 @@ func Register(registry RegistryInterface) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
 		Name:        "ast-source",
 		Factory:     NewComponent,
+		Ports:       DeclarePorts,
 		Schema:      astSourceSchema,
 		Type:        "processor",
 		Protocol:    "ast",
@@ -26,4 +30,25 @@ func Register(registry RegistryInterface) error {
 		Description: "Multi-language AST source for semsource code entity extraction and graph ingestion",
 		Version:     "0.1.0",
 	})
+}
+
+// DeclarePorts reports the constructor's ports without acquiring runtime resources.
+func DeclarePorts(raw json.RawMessage, _ string) (component.PortConfig, error) {
+	cfg := DefaultConfig()
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cfg); err != nil {
+		return component.PortConfig{}, fmt.Errorf("decode config: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return component.PortConfig{}, fmt.Errorf("config must contain one JSON value")
+	}
+	if err := cfg.Validate(); err != nil {
+		return component.PortConfig{}, err
+	}
+	if cfg.Ports == nil {
+		return component.PortConfig{}, nil
+	}
+	return component.PortConfig{Outputs: cfg.Ports.Outputs}, nil
 }

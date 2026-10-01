@@ -89,7 +89,7 @@ func TestIntegration_VersionDiff(t *testing.T) {
 		publishVersionedBody(t, ctx, pub, proj, "v1.9.0", "pkg/gone.go", "Gone", "pkg", "code:gone"),
 		publishVersionedBody(t, ctx, pub, proj, "v1.10.0", "pkg/new.go", "New", "pkg", "code:new"),
 	}
-	pub.Stop()
+	_ = pub.Stop(context.Background())
 
 	qc := tc.Client
 	for _, id := range ids {
@@ -102,7 +102,7 @@ func TestIntegration_VersionDiff(t *testing.T) {
 	// StoreRegistry in deps, so the diff's body resolver falls back to attaching
 	// the CONTENT objectstore — the store we offloaded bodies to above.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdisc, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client})
+	sdisc, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -158,7 +158,7 @@ func publishVersionedBody(t *testing.T, ctx context.Context, pub *entitypub.Publ
 	const org, lang, ctype = "acme", "golang", "function"
 	system := entityid.ScopedSystemSlug(project, version)
 	inst := semsourceast.BuildInstanceID(path, name, semsourceast.TypeFunction)
-	id := entityid.Build(org, entityid.PlatformSemsource, lang, system, ctype, inst)
+	id := entityid.Build(org, "test-a1b2c3", system, lang, ctype, inst)
 	now := time.Now()
 	triples := []message.Triple{
 		{Subject: id, Predicate: semsourceast.CodeType, Object: ctype},

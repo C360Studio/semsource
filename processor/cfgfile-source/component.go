@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -20,6 +23,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
@@ -52,6 +56,7 @@ func (s *sourceCfg) GetCoalesceMs() int          { return s.coalesceMs }
 // handler/cfgfile package and publishes EntityPayload messages with
 // vocabulary-predicate triples directly to NATS JetStream — no normalizer pass.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -98,6 +103,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new cfgfile-source processor component.
@@ -109,9 +115,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
+	}
 
 	// Pass the org into the handler so Watch events also carry EntityStates.
-	h := cfghandler.New(&cfghandler.Config{Org: config.Org, Project: config.Project})
+	h := cfghandler.New(&cfghandler.Config{Authority: authority, Project: config.Project})
 	sc := &sourceCfg{
 		paths:        config.Paths,
 		watchEnabled: config.WatchEnabled,
@@ -127,6 +137,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
+		authority:  authority,
 		name:       "cfgfile-source",
 		config:     config,
 		publisher:  pub,
@@ -198,26 +209,37 @@ func (c *Component) markRunning() {
 // It runs in its own goroutine; a failure surfaces through the source's
 // last_error and a WARN, because there is no longer a Start to fail.
 func (c *Component) runSeed(ctx context.Context) error {
-	// Retry initial ingest — paths may not exist yet if a git clone is still
-	// in progress (repo expansion pattern). We check IsPathReady rather than
-	// just os.Stat because git clone creates the directory before populating it.
-	if err := retry.Do(ctx, retry.Persistent(), func() error {
-		for _, p := range c.config.Paths {
-			if err := workspace.IsPathReady(p); err != nil {
-				// Bounded by retry.Persistent (~30 attempts), but a source that
-				// never reaches its paths seeds nothing at all — surface it once
-				// rather than leaving the whole wait at Debug.
-				c.pathsUnavailable.Enter(c.logger,
-					"source paths are not available yet — seeding cannot start",
-					"path", p, "error", err)
-				return err
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.ingestErrors.Load()
+
+		// Retry initial ingest — paths may not exist yet if a git clone is still
+		// in progress (repo expansion pattern). We check IsPathReady rather than
+		// just os.Stat because git clone creates the directory before populating it.
+		if err := retry.Do(ctx, retry.Persistent(), func() error {
+			for _, p := range c.config.Paths {
+				if err := workspace.IsPathReady(p); err != nil {
+					// Bounded by retry.Persistent (~30 attempts), but a source that
+					// never reaches its paths seeds nothing at all — surface it once
+					// rather than leaving the whole wait at Debug.
+					c.pathsUnavailable.Enter(c.logger,
+						"source paths are not available yet — seeding cannot start",
+						"path", p, "error", err)
+					return err
+				}
 			}
+			return c.ingestOnce(ctx)
+		}); err != nil {
+			return fmt.Errorf("initial cfgfile ingest failed: %w", err)
 		}
-		return c.ingestOnce(ctx)
+		c.pathsUnavailable.Clear(c.logger, "source paths became available")
+
+		if failed := (c.ingestErrors.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
+		}
+		return nil
 	}); err != nil {
-		return fmt.Errorf("initial cfgfile ingest failed: %w", err)
+		return err
 	}
-	c.pathsUnavailable.Clear(c.logger, "source paths became available")
 
 	c.logger.Info("Cfgfile-source initial ingest complete",
 		"paths", c.config.Paths,
@@ -240,7 +262,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 // ingestOnce runs a single ingest pass using IngestEntityStates — the
 // normalizer-free path that builds vocabulary-predicate triples directly.
 func (c *Component) ingestOnce(ctx context.Context) error {
-	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.config.Org)
+	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.authority)
 	if err != nil {
 		c.ingestErrors.Add(1)
 		return fmt.Errorf("cfgfile handler ingest: %w", err)
@@ -294,7 +316,8 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 
 	c.logger.Info("Cfgfile-source watching started", "paths", c.config.Paths)
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-watchCtx.Done():
@@ -306,7 +329,7 @@ func (c *Component) startWatching(ctx context.Context) context.CancelFunc {
 				c.handleChangeEvent(watchCtx, event)
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -345,8 +368,8 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the
 // entity publisher. Non-blocking; the publisher handles NATS delivery.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -397,7 +420,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
-		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),
+		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// Publisher distress: retrying against a refusing transport reports
 		// no drops and no errors while being functionally stalled (#188).
@@ -433,7 +456,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -447,45 +470,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and
-	// the seed itself takes it, so waiting under the lock deadlocks. Draining
-	// first also keeps shutdown safe — stopping the publisher closes its
-	// buffer, and a live seed would publish into a closed one.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.logger.Info("entity publisher stats",
-		"published", c.publisher.Published(),
-		"dropped", c.publisher.Dropped(),
-		"retries", c.publisher.Retries())
-	c.publisher.Stop()
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
+
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
 	c.running = false
-
-	c.logger.Info("Cfgfile-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
-
+	c.mu.Unlock()
 	return nil
 }
 
@@ -545,12 +562,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

@@ -87,7 +87,7 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -110,9 +110,9 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 		derived string
 		role    string
 	}{
-		{"java", "acme.semsource.java.ml", "Animal", "Dog", "extended_by"},
-		{"typescript", "acme.semsource.typescript.ml", "Base", "Derived", "extended_by"},
-		{"golang", "acme.semsource.golang.ml", "Animal", "Dog", "embedded_by"},
+		{"java", "acme.test-a1b2c3.ml.java", "Animal", "Dog", "extended_by"},
+		{"typescript", "acme.test-a1b2c3.ml.typescript", "Base", "Derived", "extended_by"},
+		{"golang", "acme.test-a1b2c3.ml.golang", "Animal", "Dog", "embedded_by"},
 	}
 
 	for _, tcCase := range cases {

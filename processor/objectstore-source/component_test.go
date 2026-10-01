@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/c360studio/semsource/entityid"
 	"io"
 	"log/slog"
 	"os"
@@ -31,7 +32,7 @@ func discardLogger() *slog.Logger {
 // entity publisher only dials when it starts.
 func testDependencies(t *testing.T) component.Dependencies {
 	t.Helper()
-	return component.Dependencies{Logger: discardLogger()}
+	return component.Dependencies{Logger: discardLogger(), Platform: component.PlatformMeta{Org: "acme", Platform: "test"}}
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -441,7 +442,7 @@ func TestIngestOnce_UnreachableBucketSurfacesWithoutRetracting(t *testing.T) {
 		logger:    discardLogger(),
 		publisher: pub,
 		distinct:  entitypub.NewDistinctTracker(),
-		handler:   objectstore.New(store, dochandler.New(), "acme"),
+		handler:   objectstore.New(store, dochandler.New(), entityid.Authority{Org: "acme", Platform: "test"}),
 		system:    "artifacts",
 		sourceCfg: &sourceCfg{url: objectstore.SourceURL("artifacts", "reports/")},
 	}
@@ -488,7 +489,7 @@ func TestIngestOnce_RecoveryClearsTheCondition(t *testing.T) {
 		logger:    discardLogger(),
 		publisher: pub,
 		distinct:  entitypub.NewDistinctTracker(),
-		handler:   objectstore.New(failingStore{err: errors.New("connection refused")}, dochandler.New(), "acme"),
+		handler:   objectstore.New(failingStore{err: errors.New("connection refused")}, dochandler.New(), entityid.Authority{Org: "acme", Platform: "test"}),
 		system:    "artifacts",
 		sourceCfg: &sourceCfg{url: objectstore.SourceURL("artifacts", "reports/")},
 	}
@@ -501,7 +502,7 @@ func TestIngestOnce_RecoveryClearsTheCondition(t *testing.T) {
 
 	// The store comes back, holding nothing under the prefix — a real,
 	// completed answer.
-	c.handler = objectstore.New(emptyStore{}, dochandler.New(), "acme")
+	c.handler = objectstore.New(emptyStore{}, dochandler.New(), entityid.Authority{Org: "acme", Platform: "test"})
 
 	if err := c.ingestOnce(context.Background()); err != nil {
 		t.Fatalf("the recovered pass should succeed, got: %v", err)

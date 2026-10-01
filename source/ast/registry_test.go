@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"testing"
+
+	"github.com/c360studio/semsource/entityid"
 )
 
 // mockParser implements FileParser for testing
@@ -17,8 +19,8 @@ func (m *mockParser) ParseFile(_ context.Context, filePath string) (*ParseResult
 	return &ParseResult{Path: filePath}, nil
 }
 
-func newMockFactory(org, project, repoRoot string) FileParser {
-	return &mockParser{org: org, project: project, repoRoot: repoRoot}
+func newMockFactory(authority entityid.Authority, project, repoRoot string) FileParser {
+	return &mockParser{org: authority.Org, project: project, repoRoot: repoRoot}
 }
 
 func TestParserRegistry_Register(t *testing.T) {
@@ -65,7 +67,7 @@ func TestParserRegistry_CreateParser(t *testing.T) {
 	registry := NewParserRegistry()
 	registry.Register("test", []string{".test"}, newMockFactory)
 
-	parser, err := registry.CreateParser("test", "myorg", "myproject", "/repo")
+	parser, err := registry.CreateParser("test", testAuthority("myorg"), "myproject", "/repo")
 	if err != nil {
 		t.Fatalf("CreateParser failed: %v", err)
 	}
@@ -84,7 +86,7 @@ func TestParserRegistry_CreateParser(t *testing.T) {
 func TestParserRegistry_CreateParser_NotRegistered(t *testing.T) {
 	registry := NewParserRegistry()
 
-	_, err := registry.CreateParser("nonexistent", "org", "proj", "/")
+	_, err := registry.CreateParser("nonexistent", testAuthority("org"), "proj", "/")
 	if err == nil {
 		t.Error("expected error for unregistered parser")
 	}
@@ -94,7 +96,7 @@ func TestParserRegistry_CreateParserForExtension(t *testing.T) {
 	registry := NewParserRegistry()
 	registry.Register("test", []string{".test"}, newMockFactory)
 
-	parser, err := registry.CreateParserForExtension(".test", "org", "proj", "/")
+	parser, err := registry.CreateParserForExtension(".test", testAuthority("org"), "proj", "/")
 	if err != nil {
 		t.Fatalf("CreateParserForExtension failed: %v", err)
 	}
@@ -102,7 +104,7 @@ func TestParserRegistry_CreateParserForExtension(t *testing.T) {
 		t.Error("expected non-nil parser")
 	}
 
-	_, err = registry.CreateParserForExtension(".unknown", "org", "proj", "/")
+	_, err = registry.CreateParserForExtension(".unknown", testAuthority("org"), "proj", "/")
 	if err == nil {
 		t.Error("expected error for unknown extension")
 	}
@@ -112,13 +114,13 @@ func TestParserRegistry_FirstRegistrationWins(t *testing.T) {
 	registry := NewParserRegistry()
 
 	// Register first parser for .ext
-	registry.Register("first", []string{".ext"}, func(org, _, _ string) FileParser {
-		return &mockParser{org: org}
+	registry.Register("first", []string{".ext"}, func(authority entityid.Authority, _, _ string) FileParser {
+		return &mockParser{org: authority.Org}
 	})
 
 	// Try to register second parser for same extension
-	registry.Register("second", []string{".ext"}, func(org, _, _ string) FileParser {
-		return &mockParser{org: org}
+	registry.Register("second", []string{".ext"}, func(authority entityid.Authority, _, _ string) FileParser {
+		return &mockParser{org: authority.Org}
 	})
 
 	// Extension should still map to first parser
@@ -214,7 +216,7 @@ func TestParserRegistry_ConcurrentAccess(t *testing.T) {
 // where headers hold most of the declarations, would simply have gone unparsed.
 func TestGetExtensionsForParserKeepsSharedExtensions(t *testing.T) {
 	r := NewParserRegistry()
-	noop := func(_, _, _ string) FileParser { return nil }
+	noop := func(_ entityid.Authority, _, _ string) FileParser { return nil }
 	r.Register("c", []string{".c", ".h"}, noop)
 	r.Register("cpp", []string{".cpp", ".h"}, noop)
 

@@ -101,7 +101,7 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 }
 
 // enrichEvent re-reads the changed file and populates ev.Entities.
-// When h.org is set it also populates ev.EntityStates for the normalizer-free
+// When h.authority is set it also populates ev.EntityStates for the normalizer-free
 // processor path. For delete events the file is gone, so both slices remain empty.
 func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root string) handler.ChangeEvent {
 	if ev.Operation == handler.OperationDelete {
@@ -119,8 +119,8 @@ func (h *Handler) enrichEvent(ctx context.Context, ev handler.ChangeEvent, root 
 	entity, err := h.ingestFile(ctx, ev.Path, root)
 	if err == nil {
 		ev.Entities = []handler.RawEntity{entity}
-		if h.org != "" {
-			ie := imageEntityFromRaw(h.org, h.storeBucket, entity, time.Now().UTC())
+		if h.authority.Org != "" {
+			ie := imageEntityFromRaw(h.authority, h.storeBucket, entity, time.Now().UTC())
 			ev.EntityStates = []*handler.EntityState{ie.EntityState()}
 		}
 	}

@@ -71,7 +71,7 @@ func TestSourceEntityContract_PatternCoversSemsourceEntities(t *testing.T) {
 	contract := semsourcegraph.SourceEntityContract()
 	for id, want := range map[string]bool{
 		"acme.semsource.golang.workspace.function.cli-add-go-Add": true,
-		"acme.semteams.golang.workspace.function.other":           false,
+		"acme.semteams.workspace.golang.function.other":           true, // Contracts describe shape; local authority gates writes.
 	} {
 		got, err := semtypes.MatchEntityIDPattern(contract.EntityPattern, id)
 		if err != nil {

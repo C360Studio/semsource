@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "issue": "https://github.com/C360Studio/semsource/issues/215",
+  "pull_request": "https://github.com/C360Studio/semsource/pull/213",
+  "disposition": "Pre-fix reproduction: expected failure retained; not an acceptance pass.",
+  "source": {
+    "commit": "fa5c25082b0de7f2d56d7e6281d1e2c348fdee4b",
+    "clean_before_build": true,
+    "clean_after_build": true,
+    "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+    "build_command": [
+      "go",
+      "build",
+      "-o",
+      "/tmp/semsource-removal215-evidence/semsource-before",
+      "./cmd/semsource"
+    ],
+    "build_exit_code": 0
+  },
+  "corpus": {
+    "version": "1",
+    "sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+    "fixture": "test/setup03a/fixtures/v1",
+    "harness": "test/setup03a/removal_test.go",
+    "harness_unchanged": true
+  },
+  "semstreams": {
+    "version": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+    "commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+    "module_sum": "h1:WAlGLMjE/3EnYyeoqounCfYnVyIB3igMlG+FLP1Iq+o=",
+    "go_mod_sum": "h1:C3/wpNLTLCifyqkNx5j8cpxvQiCIqD8/YAOlKtkFv2o="
+  },
+  "go_environment": {
+    "version": "go1.26.4",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "cgo_enabled": "1",
+    "gotoolchain": "auto",
+    "goflags": ""
+  },
+  "profile": {
+    "selected": "bm25-source-removal",
+    "semsource_configuration": "configs/tiers/tier0-statistical.json",
+    "semengine_slices": [
+      0,
+      1
+    ],
+    "embedding_provider_started_or_used": false,
+    "dependency_provider_pins_changed": false
+  },
+  "nats": {
+    "image": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+    "resolved_image_id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+    "owned_container_id": "cd829e2423763264fe9bb28eee6debf1ccc5b78197509340dd8cb08fe2b48f68",
+    "cpu_limit": 1.0,
+    "memory_limit_bytes": 536870912,
+    "docker_baseline_empty": true,
+    "dynamic_loopback_port": true
+  },
+  "run": {
+    "command": [
+      "go",
+      "test",
+      "-tags=qualification,removal",
+      "-count=1",
+      "-v",
+      "-run",
+      "^TestSourceRemovalLifecycle$",
+      "./test/setup03a"
+    ],
+    "environment": {
+      "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-before",
+      "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/before",
+      "SETUP03A_REMOVAL_ACTIVATION": "restart",
+      "SETUP03A_IDENTITY": "governed",
+      "SETUP03A_PROFILE": "bm25",
+      "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+    },
+    "provider_endpoint_set": false,
+    "started_at": "2026-09-30T23:34:52.217855+00:00",
+    "log": "/tmp/semsource-removal215-evidence/before-removal.log",
+    "exit_code": 1,
+    "elapsed_seconds": 52.39466158300638,
+    "finished_at": "2026-09-30T23:35:44.612671+00:00"
+  },
+  "result": {
+    "checks": 10,
+    "passed": 9,
+    "failed": 1,
+    "failed_check": "removed_parent_and_passage_retained_with_source_removed",
+    "retained_entities": [
+      {
+        "id": "setup03a.semsource-f2ec86.setup03a-docs.web.chunk.routing-md-0000",
+        "retained": true,
+        "kv_revision": 10,
+        "stale_marker_present": false,
+        "observed_marker": null,
+        "expected_marker": "source_removed"
+      },
+      {
+        "id": "setup03a.semsource-f2ec86.setup03a-docs.web.doc.routing-md",
+        "retained": true,
+        "kv_revision": 8,
+        "stale_marker_present": false,
+        "observed_marker": null,
+        "expected_marker": "source_removed"
+      }
+    ],
+    "automatic_graph_lifecycle_run_requests": [],
+    "observations": [
+      {
+        "name": "removal_initial_settled_sources",
+        "passed": true
+      },
+      {
+        "name": "governed_identity_authority",
+        "passed": true
+      },
+      {
+        "name": "removal_initial_document_entities",
+        "passed": true
+      },
+      {
+        "name": "removal_receipt",
+        "passed": true
+      },
+      {
+        "name": "removal_deferred_until_restart",
+        "passed": true
+      },
+      {
+        "name": "removal_activated",
+        "passed": true
+      },
+      {
+        "name": "removed_parent_and_passage_retained_with_source_removed",
+        "passed": false,
+        "error": "retained entity setup03a.semsource-f2ec86.setup03a-docs.web.chunk.routing-md-0000 marker=<nil>, want source_removed\nretained entity setup03a.semsource-f2ec86.setup03a-docs.web.doc.routing-md marker=<nil>, want source_removed"
+      },
+      {
+        "name": "readd_receipt_same_disabled_handle",
+        "passed": true
+      },
+      {
+        "name": "readd_deferred_until_restart",
+        "passed": true
+      },
+      {
+        "name": "readd_activated_after_restart",
+        "passed": true
+      }
+    ]
+  },
+  "cleanup": {
+    "checked_at": "2026-09-30T23:36:13.129263+00:00",
+    "owned_container": "cd829e2423763264fe9bb28eee6debf1ccc5b78197509340dd8cb08fe2b48f68",
+    "owned_inspect_exit_code": 1,
+    "owned_inspect_stdout": "\n",
+    "owned_inspect_stderr": "error: no such object: cd829e2423763264fe9bb28eee6debf1ccc5b78197509340dd8cb08fe2b48f68\n",
+    "docker_ps_exit_code": 0,
+    "docker_ps_stdout": "",
+    "docker_ps_stderr": "",
+    "owned_container_absent": true,
+    "all_containers_absent": true,
+    "interpretation_note": "Docker emits lowercase no such object; absence matches case-insensitively and is corroborated by empty successful docker ps -a."
+  },
+  "limitations": [
+    "The existing harness stop(false) consumes but does not assert the application Wait error; this semantic restart result does not newly certify graceful process exit.",
+    "The empty automatic request capture covers graph.lifecycle.run during this probe; it is not a claim that no graph RPCs were issued.",
+    "This pre-fix probe covers one original-JSON document source and same-handle re-add; durable replay, runtime-added removal, paging, duplicates, failure recovery, and sibling protection require new acceptance tests.",
+    "Frozen SETUP 03A ledgers and fixtures remain unchanged. No SemEngine qualification or merge/cutover approval is implied."
+  ],
+  "raw_evidence_directory": "/tmp/semsource-removal215-evidence",
+  "raw_evidence_sha256": {
+    "before/application-1.log": "c1794048f3559cf36ed396f6570855f42424dd60d39261ba3013525bdd18bccc",
+    "before/application-2.log": "f4dd0e888acb1c9f5c62e1afdf3e393ecdb9e105148be5f41617a8e79940956a",
+    "before/application-3.log": "ba5c278f84ac54287b2575e762e21e839898bf0259a9656bd87c19d2f928b0ec",
+    "before/automatic-lifecycle-requests.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "before/nats-inspect.json": "782c327bd9ca75cb4cbf27be72c41260a51d0bfec5864dec1850d3db6b1f1447",
+    "before/nats.log": "49536cd8693982700bf10d5b573abad9de96b02d7f3a226397273fe545163cfb",
+    "before/readd-receipt.json": "b51a1c4581ecc2f04489a2181cf39d7e2082768855144b6e9afddd595961166b",
+    "before/remove-receipt.json": "f20a745b132fd455e21fe23cd03660e7a58cbfddd15193664dd917925d2050bc",
+    "before/report.json": "c91976b5fd4b14a258c5bbddc9e079faeb9916c9e3a8c1a79ed42a1021aaf5e9",
+    "before/semsource.json": "21e6aab7b5c8162cdd9562b4e048bde774e94f7d45ea4c5b5366a495b03810bf",
+    "before/source/alpha/greet.go": "416cf6be17ce114a775337a935f5ccd8427c4a5222952b828fa40774f248eb8b",
+    "before/source/beta/greet.go": "d465451d9d5e893e4bc8700373c7b64be6ecb8f29f00e09d3cd4a14a29cfcdfa",
+    "before/source/docs/routing.md": "495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256",
+    "before/source/go.mod": "90faec3bacfb6f5255b2eb4563883f27144aadfdc67e8d40ef5954497873fa5c",
+    "before/source/manifest.json": "668b08c9e491dd1606b2e5bfda8c2f7a3c26044f4bf0606b516cfe44e85c2c51",
+    "before-build-info.txt": "199bd96283951ef2b7adcb3e9b15a80aa09688d25b1439c180dcced08a4d1f35",
+    "before-build.json": "a00cf9019e4321e3b098a71587ea21f0786b5f96ffcc8b33536f2cad50c03883",
+    "before-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "before-cleanup.json": "14cffea8ca7da802be1225588327dd7a45e16636894b8f2a9c07bee41154b130",
+    "before-environment.json": "c8d9d8158db51adf9f686d3b57b35f92858b71dcc8b633a361b0baf9da497c8e",
+    "before-removal.log": "ca9b7ba1c184e60c1a82549ba7574453b452331d51e6342bcdf8e4ba1009b8e3",
+    "before-run-start.json": "3914c2ae99c9db99e794b99c1fa27afb41fd635bac93c0717d6979b13baa02e0",
+    "before-run.json": "9492bfd950bd625b5ab84d907c2f718c552c5da07b7a65604f1d5f6d7e8d5ef8",
+    "before-summary.json": "c4e6857412bec80ab971bbf36a779e3b01d207a59298ec0f03f8e3ff49de1801",
+    "semsource-before": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198"
+  }
+}

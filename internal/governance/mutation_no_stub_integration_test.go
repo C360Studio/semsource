@@ -53,7 +53,7 @@ func TestIntegration_MutationToMissingEntity_ReturnsNotFoundAndNoStub(t *testing
 		t.Fatalf("NewMutationClient() error = %v", err)
 	}
 
-	const missingID = "acme.semsource.golang.workspace.function.never-born"
+	const missingID = "acme.test-a1b2c3.workspace.golang.function.never-born"
 	// One shared timestamp: the client requires triple and metadata
 	// timestamps to agree (tuple identity).
 	now := time.Now()

@@ -28,17 +28,17 @@ type PageEntity struct {
 // newPageEntity constructs a PageEntity with a deterministic 6-part ID.
 // The instance is derived from the canonical URL — identical to urlInstanceID
 // so that normalizer and direct paths produce the same entity ID.
-func newPageEntity(org, rawURL, contentType, etag, contentHash string, indexedAt time.Time) *PageEntity {
+func newPageEntity(authority entityid.Authority, rawURL, contentType, etag, contentHash string, indexedAt time.Time) *PageEntity {
 	system := domainSlug(rawURL)
 	instance := urlInstanceID(rawURL)
 	return &PageEntity{
-		ID:          entityid.Build(org, entityid.PlatformSemsource, "web", system, "page", instance),
+		ID:          authority.Build(system, "web", "page", instance),
 		RawURL:      rawURL,
 		ContentType: contentType,
 		ETag:        etag,
 		ContentHash: contentHash,
 		System:      system,
-		Org:         org,
+		Org:         authority.Org,
 		IndexedAt:   indexedAt,
 	}
 }
@@ -88,8 +88,11 @@ func (e *PageEntity) EntityState() *handler.EntityState {
 
 // IngestEntityStates fetches the URL and returns a fully-typed entity state that
 // embeds vocabulary-predicate triples directly, bypassing the normalizer entirely.
-// org is the organisation namespace (e.g. "acme") used in the 6-part entity ID.
-func (h *URLHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// authority is the effective deployment authority (e.g. "acme") used in the 6-part entity ID.
+func (h *URLHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -105,17 +108,17 @@ func (h *URLHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceC
 		hash = contentHash(result.Body)
 	}
 
-	pe := newPageEntity(org, rawURL, result.ContentType, result.ETag, hash, now)
+	pe := newPageEntity(authority, rawURL, result.ContentType, result.ETag, hash, now)
 	return []*handler.EntityState{pe.EntityState()}, nil
 }
 
 // buildPageEntityState constructs a PageEntity from a FetchResult and returns
 // its EntityState. Used in Watch to populate event.EntityStates.
-func (h *URLHandler) buildPageEntityState(rawURL string, result *FetchResult, org string, now time.Time) *handler.EntityState {
+func (h *URLHandler) buildPageEntityState(rawURL string, result *FetchResult, authority entityid.Authority, now time.Time) *handler.EntityState {
 	hash := ""
 	if len(result.Body) > 0 {
 		hash = contentHash(result.Body)
 	}
-	pe := newPageEntity(org, rawURL, result.ContentType, result.ETag, hash, now)
+	pe := newPageEntity(authority, rawURL, result.ContentType, result.ETag, hash, now)
 	return pe.EntityState()
 }

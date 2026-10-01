@@ -73,7 +73,7 @@ require (
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -89,8 +89,8 @@ require (
 	if modState.IndexingProfile != semvocab.IndexingProfileControl {
 		t.Errorf("IndexingProfile = %q, want %q", modState.IndexingProfile, semvocab.IndexingProfileControl)
 	}
-	if !strings.HasPrefix(modState.ID, "acme.semsource.config.") {
-		t.Errorf("module entity ID %q does not start with acme.semsource.config.", modState.ID)
+	if !strings.HasPrefix(modState.ID, "acme.test-platform.") || strings.SplitN(modState.ID, ".", 6)[3] != "config" {
+		t.Errorf("module entity ID %q has wrong authority or configuration taxonomy", modState.ID)
 	}
 	if got := tripleObject(modState, source.ConfigModulePath); got != "github.com/example/myapp" {
 		t.Errorf("ConfigModulePath = %q, want %q", got, "github.com/example/myapp")
@@ -172,7 +172,7 @@ EXPOSE 8080
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestIngestEntityStates_PackageJSON(t *testing.T) {
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestIngestEntityStates_PackageJSON(t *testing.T) {
 	if pkgState == nil {
 		t.Fatal("expected a package entity state")
 	}
-	if !strings.HasPrefix(pkgState.ID, "acme.semsource.config.") {
+	if !strings.HasPrefix(pkgState.ID, "acme.test-platform.") || strings.SplitN(pkgState.ID, ".", 6)[3] != "config" {
 		t.Errorf("package entity ID %q wrong prefix", pkgState.ID)
 	}
 	if got := tripleObject(pkgState, source.ConfigPkgName); got != "my-app" {
@@ -257,7 +257,7 @@ EXPOSE 8080
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestIngestEntityStates_PomXml(t *testing.T) {
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestIngestEntityStates_BuildGradle(t *testing.T) {
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -452,7 +452,7 @@ EXPOSE 8080
 
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}
@@ -479,11 +479,11 @@ func TestIngestEntityStates_Deterministic(t *testing.T) {
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
 
-	states1, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states1, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates (first): %v", err)
 	}
-	states2, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states2, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates (second): %v", err)
 	}
@@ -510,8 +510,8 @@ func TestIngestEntityStates_OrgIsolation(t *testing.T) {
 	h := cfgfile.New(nil)
 	cfg := &stubSourceConfig{sourceType: "config", path: dir}
 
-	statesA, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
-	statesB, _ := h.IngestEntityStates(context.Background(), cfg, "beta")
+	statesA, _ := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
+	statesB, _ := h.IngestEntityStates(context.Background(), cfg, testAuthority("beta"))
 
 	if len(statesA) == 0 || len(statesB) == 0 {
 		t.Fatal("expected entity states for both orgs")

@@ -24,7 +24,7 @@ func TestPackageScan_FuncsHarvested(t *testing.T) {
 	write("b.go", "package p\ntype M struct{}\nfunc (M) Beta() {}\n")
 	write("c_test.go", "package p\nfunc TestOnly() {}\n")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	funcs := p.packageFuncs(".")
 	if funcs["Alpha"] != "a.go" {
 		t.Errorf("funcs[Alpha] = %q, want a.go", funcs["Alpha"])
@@ -61,7 +61,7 @@ func TestGoParser_CrossFileSamePackageCall(t *testing.T) {
 	if !slices.Contains(local.Calls, callee.ID) {
 		t.Errorf("same-file call: Local.Calls = %v, want to contain %s", local.Calls, callee.ID)
 	}
-	inert := ast.NewCodeEntity("acme", "golang", "proj", ast.TypeFunction, "Undefined", "caller.go").ID
+	inert := ast.NewCodeEntity(testAuthority("acme"), "golang", "proj", ast.TypeFunction, "Undefined", "caller.go").ID
 	if !slices.Contains(caller.Calls, inert) {
 		t.Errorf("undefined call: Caller.Calls = %v, want inert %s", caller.Calls, inert)
 	}
@@ -85,7 +85,7 @@ func TestGoParser_ModuleMapping(t *testing.T) {
 	mk("sub/go.mod", "module example.com/other // nested\n")
 	mk("pkg/x/x.go", "package x\n")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	if o := p.moduleOrigin("pkg/x"); o.modulePath != "example.com/root" || o.moduleDir != "." {
 		t.Errorf("pkg/x origin = %+v, want root module", o)
 	}
@@ -109,7 +109,7 @@ func TestGoParser_ModuleMapping(t *testing.T) {
 		t.Errorf("after go.mod edit, modulePath = %q, want example.com/renamed-root", o.modulePath)
 	}
 
-	bare := NewParser("acme", "proj", t.TempDir())
+	bare := NewParser(testAuthority("acme"), "proj", t.TempDir())
 	if o := bare.moduleOrigin("."); o.modulePath != "" {
 		t.Errorf("no-go.mod origin = %+v, want empty", o)
 	}
@@ -129,7 +129,7 @@ func TestGoParser_CrossPackageInRepoCall(t *testing.T) {
 	if run == nil {
 		t.Fatalf("missing Run: %v", ents)
 	}
-	want := ast.NewCodeEntity("acme", "golang", "proj", ast.TypeFunction, "Sanitize", "util/util.go").ID
+	want := ast.NewCodeEntity(testAuthority("acme"), "golang", "proj", ast.TypeFunction, "Sanitize", "util/util.go").ID
 	if !slices.Contains(run.Calls, want) {
 		t.Errorf("in-repo qualified call: Calls = %v, want to contain %s", run.Calls, want)
 	}
@@ -155,7 +155,7 @@ func TestGoParser_LocalVarShadowsImportAlias(t *testing.T) {
 	if run == nil {
 		t.Fatalf("missing Run: %v", ents)
 	}
-	resolved := ast.NewCodeEntity("acme", "golang", "proj", ast.TypeFunction, "Get", "client/client.go").ID
+	resolved := ast.NewCodeEntity(testAuthority("acme"), "golang", "proj", ast.TypeFunction, "Get", "client/client.go").ID
 	if slices.Contains(run.Calls, resolved) {
 		t.Errorf("shadowed alias produced a wrong in-repo edge: %v", run.Calls)
 	}

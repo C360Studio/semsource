@@ -23,7 +23,7 @@ func parseAllGo(t *testing.T, project string, files map[string]string) map[strin
 		}
 	}
 	byName := make(map[string]*ast.CodeEntity)
-	p := NewParser("acme", project, root)
+	p := NewParser(testAuthority("acme"), project, root)
 	for rel := range files {
 		if !strings.HasSuffix(rel, ".go") {
 			continue // support files (go.mod) shape resolution but are not parsed
@@ -124,7 +124,7 @@ func TestGoEmbedPrefersProductionOverTestType(t *testing.T) {
 	if !strings.Contains(app.Embeds[0], "server-go-Server") {
 		t.Errorf("embed target %q, want it built against production server.go, not a _test.go file", app.Embeds[0])
 	}
-	if strings.Contains(app.Embeds[0], "test") {
+	if strings.Contains(strings.SplitN(app.Embeds[0], ".", 6)[5], "test") {
 		t.Errorf("embed target %q resolved to a _test.go type", app.Embeds[0])
 	}
 }

@@ -207,7 +207,7 @@ func registerConfigPredicates() {
 
 	vocabulary.Register(ConfigImagePorts,
 		vocabulary.WithDescription("Array of port numbers or port/protocol pairs declared via Dockerfile EXPOSE"),
-		vocabulary.WithDataType("array"),
+		vocabulary.WithDataType("json"),
 		vocabulary.WithIRI(Namespace+"imageExposedPorts"))
 
 	// Relationship predicates

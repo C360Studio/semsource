@@ -81,7 +81,7 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -99,13 +99,13 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	// Expected IDs computed through the SAME production constructors the
 	// parsers use — exact-match assertions, no substring guessing.
 	expected := []string{
-		semsourceast.NewCodeEntity("acme", "svelte", "zl", semsourceast.TypeComponent, "+page", "src/routes/+page.svelte").ID,
-		semsourceast.NewCodeEntity("acme", "svelte", "zl", semsourceast.TypeFile, "", "src/routes/+page.svelte").ID,
-		semsourceast.NewCodeEntity("acme", "typescript", "zl", semsourceast.TypeFunction, "load", "src/routes/[slug]/+page.ts").ID,
-		semsourceast.NewCodeEntity("acme", "typescript", "zl", semsourceast.TypeConst, "clicks$", "src/app.ts").ID,
-		semsourceast.NewCodeEntity("acme", "typescript", "zl", semsourceast.TypeConst, "control", "src/app.ts").ID,
-		semsourceast.NewCodeEntity("acme", "golang", "zl", semsourceast.TypeFunction, "Demo", "_examples/demo.go").ID,
-		semsourceast.NewCodeEntity("acme", "golang", "zl", semsourceast.TypeFunction, "Normal", "main.go").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "zl", semsourceast.TypeComponent, "+page", "src/routes/+page.svelte").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "zl", semsourceast.TypeFile, "", "src/routes/+page.svelte").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl", semsourceast.TypeFunction, "load", "src/routes/[slug]/+page.ts").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl", semsourceast.TypeConst, "clicks$", "src/app.ts").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl", semsourceast.TypeConst, "control", "src/app.ts").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "golang", "zl", semsourceast.TypeFunction, "Demo", "_examples/demo.go").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "golang", "zl", semsourceast.TypeFunction, "Normal", "main.go").ID,
 	}
 
 	deadline := time.Now().Add(30 * time.Second)

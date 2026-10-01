@@ -19,14 +19,14 @@ const DomainCode = "code"
 // ParseResult to set ContainedBy to their immediate parent (folder or repo).
 //
 // Returns nil when results is empty.
-func BuildHierarchy(results []*ParseResult, org, project string) []*CodeEntity {
+func BuildHierarchy(results []*ParseResult, authority entityid.Authority, project string) []*CodeEntity {
 	if len(results) == 0 {
 		return nil
 	}
 
 	now := time.Now()
 	systemSlug := entityid.SystemSlug(project)
-	repoID := buildRepoID(org, systemSlug)
+	repoID := buildRepoID(authority, systemSlug)
 
 	repo := &CodeEntity{
 		ID:        repoID,
@@ -56,7 +56,7 @@ func BuildHierarchy(results []*ParseResult, org, project string) []*CodeEntity {
 	folders := make(map[string]*CodeEntity, len(sortedPaths))
 
 	for _, p := range sortedPaths {
-		folders[p] = newFolderEntity(org, systemSlug, p, now)
+		folders[p] = newFolderEntity(authority, systemSlug, p, now)
 	}
 
 	// Wire containment: folder → parent, folder → children, repo → top-level.
@@ -84,7 +84,7 @@ func BuildHierarchy(results []*ParseResult, org, project string) []*CodeEntity {
 // BuildFolderChain returns folder entities for all ancestor directories of
 // filePath, with the top-level folder's ContainedBy set to the repo entity ID.
 // Does not return a repo entity (assumed already published during initial index).
-func BuildFolderChain(filePath, org, project string) []*CodeEntity {
+func BuildFolderChain(filePath string, authority entityid.Authority, project string) []*CodeEntity {
 	dir := filepath.Dir(filePath)
 	if dir == "." || dir == "" {
 		return nil
@@ -92,7 +92,7 @@ func BuildFolderChain(filePath, org, project string) []*CodeEntity {
 
 	now := time.Now()
 	systemSlug := entityid.SystemSlug(project)
-	repoID := buildRepoID(org, systemSlug)
+	repoID := buildRepoID(authority, systemSlug)
 
 	folderPaths := make(map[string]bool)
 	expandAncestors(dir, folderPaths)
@@ -101,7 +101,7 @@ func BuildFolderChain(filePath, org, project string) []*CodeEntity {
 	folders := make(map[string]*CodeEntity, len(sortedPaths))
 
 	for _, p := range sortedPaths {
-		folders[p] = newFolderEntity(org, systemSlug, p, now)
+		folders[p] = newFolderEntity(authority, systemSlug, p, now)
 	}
 
 	// Wire parent relationships between folders, linking top-level to repo.
@@ -124,16 +124,16 @@ func BuildFolderChain(filePath, org, project string) []*CodeEntity {
 
 // buildRepoID constructs the deterministic entity ID for a repository.
 // systemSlug must already be processed through entityid.SystemSlug().
-func buildRepoID(org, systemSlug string) string {
-	return entityid.Build(org, entityid.PlatformSemsource, DomainCode, systemSlug, string(TypeRepo), SanitizePathSegment(systemSlug))
+func buildRepoID(authority entityid.Authority, systemSlug string) string {
+	return authority.Build(systemSlug, DomainCode, string(TypeRepo), SanitizePathSegment(systemSlug))
 }
 
 // newFolderEntity creates a CodeEntity for a directory path.
 // systemSlug must already be processed through entityid.SystemSlug().
-func newFolderEntity(org, systemSlug, folderPath string, now time.Time) *CodeEntity {
+func newFolderEntity(authority entityid.Authority, systemSlug, folderPath string, now time.Time) *CodeEntity {
 	name := filepath.Base(folderPath)
 	return &CodeEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, DomainCode, systemSlug, string(TypeFolder), SanitizePathSegment(folderPath)),
+		ID:        authority.Build(systemSlug, DomainCode, string(TypeFolder), SanitizePathSegment(folderPath)),
 		Type:      TypeFolder,
 		Name:      name,
 		Path:      folderPath,

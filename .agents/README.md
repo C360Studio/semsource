@@ -46,14 +46,15 @@ the triad would be inventing authority we don't hold.
 
 ## Shared decision skills
 
-Four decision heuristics live in `skills/`, each in one of two modes recorded in
+Five decision heuristics live in `skills/`; every upstream skill has a disposition recorded in
 `upstream.manifest`. The distinction matters, and getting it backwards is how a false fact spreads:
 
 | Skill | Mode | Why |
 | --- | --- | --- |
 | `kv-or-stream` | **vendored** | KV vs Stream is framework truth semstreams owns. Our old fork still claimed KV history was an audit trail long after upstream corrected it — bounded per-bucket history is not a ledger. |
+| `entity-or-bucket` | **vendored** | Framework storage-placement and operational-state ownership rules. |
 | `orchestration-check` | **vendored** | Also framework truth. Our old fork still named "reactive workflows", a model upstream retired in favor of lifecycle-managed entities. |
-| `new-payload` | **forked** | SemSource registers payloads explicitly at bootstrap — `RegisterPayloads(reg)` wired into `buildPayloadRegistry()`. semstreams uses `init()` with blank imports. Vendoring theirs would break our convention. |
+| `new-payload` | **forked** | Both repos now register explicitly (ADR-103); this recipe preserves SemSource package paths and bootstrap while adopting registry floors/contracts and production decoder tests. |
 | `query-pattern` | **forked** | Upstream's copy says there is no canonical graph MCP surface yet, which is true of the framework. We ship one (`processor/mcp-gateway`), so MCP is a real option here. |
 
 **vendored** — our copy must match the pinned upstream byte for byte. Do not edit it; if it is wrong,
@@ -61,6 +62,13 @@ it is wrong upstream, and the fix is a GitHub issue against semstreams.
 
 **forked** — ours by right. The manifest records the upstream digest we last reconciled against, so an
 upstream edit fails the check and forces a conscious re-read rather than silent divergence.
+
+**excluded** — `semstreams-dev`, `semstreams-handoff`, `semstreams-pickup`, and
+`semstreams-preflight` depend on SemStreams' own protocol, roles, landing gates, and Task targets.
+They do not define SemSource's workflow. Each exclusion records the exact digest and fails on upstream
+change, requiring another scope review. An excluded workflow must not also exist as a local skill.
+Generic vendored skills reference framework docs: resolve those references in the pinned module from
+`go list -m -f '{{.Dir}}' github.com/c360studio/semstreams`, not as SemSource-owned policies.
 
 The remaining `.claude/skills/` entries (the `openspec-*` workflow) are Claude-workflow tooling and
 are platform-specific by design — do not mirror them.
@@ -76,7 +84,7 @@ a named reason, when:
 
 1. a **vendored** skill drifts from the pinned upstream;
 2. **upstream changes** a skill we deliberately forked;
-3. upstream ships a shared decision skill we track under neither mode;
+3. upstream ships a shared decision skill we track under no disposition;
 4. an adapter stops naming its canonical file, grows a body, or gains a write tool;
 5. a Claude agent has no frontmatter — which makes it **undiscoverable**, the exact state both of ours
    shipped in before this check existed, while CLAUDE.md advertised them;
@@ -87,5 +95,5 @@ a named reason, when:
 
 Bumping `github.com/c360studio/semstreams` will fail `task agents:check` until the shared skills are
 reconciled — that is the point. For each skill the check names: re-copy the vendored ones, read the
-upstream diff for the forked ones and decide what carries over, then record the new digests and the
+upstream diff for the forked or excluded ones and decide what carries over, then record the new digests and the
 new `upstream_version` in `upstream.manifest`.

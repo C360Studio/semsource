@@ -77,11 +77,11 @@ func (e *Entity) EntityState() *handler.EntityState {
 // audioEntityFromRaw converts a RawEntity produced by ingestFile into a typed
 // Entity using canonical vocabulary predicates. The system slug is taken
 // from RawEntity.System (already set by ingestFile via slugify(root)).
-func audioEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
+func audioEntityFromRaw(authority entityid.Authority, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
 	ae := &Entity{
-		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "audio", r.Instance),
+		ID:          authority.Build(r.System, "media", "audio", r.Instance),
 		System:      r.System,
-		Org:         org,
+		Org:         authority.Org,
 		IndexedAt:   now,
 		StoreBucket: storeBucket,
 	}
@@ -126,9 +126,12 @@ func audioEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.T
 
 // IngestEntityStates walks every path in cfg, reads each supported audio file,
 // and returns fully-typed EntityState values with vocabulary-predicate triples —
-// bypassing the normalizer entirely. The org parameter is the organisation
-// namespace used in the 6-part entity ID.
-func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// bypassing the normalizer entirely. The authority parameter is the effective org/platform
+// pair established at boot and used in the 6-part entity ID.
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	rawEntities, err := h.Ingest(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -137,7 +140,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	now := time.Now().UTC()
 	states := make([]*handler.EntityState, 0, len(rawEntities))
 	for _, r := range rawEntities {
-		ae := audioEntityFromRaw(org, h.storeBucket, r, now)
+		ae := audioEntityFromRaw(authority, h.storeBucket, r, now)
 		states = append(states, ae.EntityState())
 	}
 	return states, nil

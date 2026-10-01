@@ -9,16 +9,16 @@ import (
 )
 
 // AddRequestType is the message type for ingest add requests.
-var AddRequestType = message.Type{Domain: "semsource", Category: "ingest.add.request", Version: "v1"}
+var AddRequestType = message.Type{Domain: "semsource", Category: "ingest-add-request", Version: "v1"}
 
 // AddReplyType is the message type for ingest add replies.
-var AddReplyType = message.Type{Domain: "semsource", Category: "ingest.add.reply", Version: "v1"}
+var AddReplyType = message.Type{Domain: "semsource", Category: "ingest-add-reply", Version: "v1"}
 
 // RemoveRequestType is the message type for ingest remove requests.
-var RemoveRequestType = message.Type{Domain: "semsource", Category: "ingest.remove.request", Version: "v1"}
+var RemoveRequestType = message.Type{Domain: "semsource", Category: "ingest-remove-request", Version: "v1"}
 
 // RemoveReplyType is the message type for ingest remove replies.
-var RemoveReplyType = message.Type{Domain: "semsource", Category: "ingest.remove.reply", Version: "v1"}
+var RemoveReplyType = message.Type{Domain: "semsource", Category: "ingest-remove-reply", Version: "v1"}
 
 // IngestErrorCode is a typed error code returned in ingest reply payloads.
 // Codes flow to remote callers so they can branch on retryability without
@@ -94,11 +94,14 @@ type AddedComponent struct {
 // is non-nil. ReadyWhen describes the condition the caller can poll on
 // StatusSubject to know the source is graph-queryable (see ADR-0003).
 type AddReply struct {
-	Components    []AddedComponent `json:"components,omitempty"`
-	StatusSubject string           `json:"status_subject,omitempty"`
-	ReadyWhen     string           `json:"ready_when,omitempty"`
-	Error         *IngestError     `json:"error,omitempty"`
-	Timestamp     time.Time        `json:"timestamp"`
+	DesiredChanged  bool             `json:"desired_changed"`
+	RuntimeChanged  bool             `json:"runtime_changed"`
+	RestartRequired bool             `json:"restart_required"`
+	Components      []AddedComponent `json:"components,omitempty"`
+	StatusSubject   string           `json:"status_subject,omitempty"`
+	ReadyWhen       string           `json:"ready_when,omitempty"`
+	Error           *IngestError     `json:"error,omitempty"`
+	Timestamp       time.Time        `json:"timestamp"`
 }
 
 // RemoveRequest deregisters a source by instance name. Sent to
@@ -110,10 +113,15 @@ type RemoveRequest struct {
 
 // RemoveReply is the response to a RemoveRequest.
 type RemoveReply struct {
-	InstanceName string       `json:"instance_name"`
-	Removed      bool         `json:"removed"`
-	Error        *IngestError `json:"error,omitempty"`
-	Timestamp    time.Time    `json:"timestamp"`
+	Generation      uint64       `json:"generation,omitempty"`
+	ProjectionPhase string       `json:"projection_phase,omitempty"`
+	DesiredChanged  bool         `json:"desired_changed"`
+	RuntimeChanged  bool         `json:"runtime_changed"`
+	RestartRequired bool         `json:"restart_required"`
+	InstanceName    string       `json:"instance_name"`
+	Removed         bool         `json:"removed"`
+	Error           *IngestError `json:"error,omitempty"`
+	Timestamp       time.Time    `json:"timestamp"`
 }
 
 // Schema implements message.Payload.

@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewCodeEntity(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 
 	if entity.Type != TypeFunction {
 		t.Errorf("Type = %q, want %q", entity.Type, TypeFunction)
@@ -33,14 +33,14 @@ func TestNewCodeEntity(t *testing.T) {
 	}
 
 	// Check entity ID format: {org}.semsource.{language}.{system}.{type}.{instance}
-	expectedPrefix := "acme.semsource.golang.myproject.function."
+	expectedPrefix := "acme.test-platform.myproject.golang.function."
 	if !strings.HasPrefix(entity.ID, expectedPrefix) {
 		t.Errorf("ID = %q, want prefix %q", entity.ID, expectedPrefix)
 	}
 }
 
 func TestNewCodeEntity_PrivateVisibility(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "foo", "pkg/foo.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "foo", "pkg/foo.go")
 
 	if entity.Visibility != VisibilityPrivate {
 		t.Errorf("Visibility = %q, want %q", entity.Visibility, VisibilityPrivate)
@@ -48,7 +48,7 @@ func TestNewCodeEntity_PrivateVisibility(t *testing.T) {
 }
 
 func TestNewCodeEntity_FileType(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeFile, "foo.go", "pkg/foo.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFile, "foo.go", "pkg/foo.go")
 
 	// File entities don't append name to instance ID
 	if !strings.Contains(entity.ID, "pkg-foo-go") {
@@ -115,25 +115,25 @@ func TestCodeEntity_ExportedMarker(t *testing.T) {
 		}
 		return false
 	}
-	pub := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	pub := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 	if !hasExported(pub) {
 		t.Error("exported symbol Foo: missing CodeExported marker")
 	}
-	priv := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "foo", "pkg/foo.go")
+	priv := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "foo", "pkg/foo.go")
 	if hasExported(priv) {
 		t.Error("unexported symbol foo: CodeExported marker must NOT be stamped")
 	}
 }
 
 func TestCodeEntity_Triples(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 	entity.Package = "pkg"
 	entity.Hash = "abc123"
 	entity.StartLine = 10
 	entity.EndLine = 20
 	entity.DocComment = "Foo does something."
 	entity.Signature = "func Foo() error"
-	entity.ContainedBy = "acme.semsource.golang.myproject.file.pkg-foo-go"
+	entity.ContainedBy = "acme.test-platform.myproject.golang.file.pkg-foo-go"
 	entity.Calls = []string{"helper", "fmt.Println"}
 	entity.Returns = []string{"error"}
 
@@ -209,7 +209,7 @@ func TestCodeEntity_SignaturePredicateRegistered(t *testing.T) {
 }
 
 func TestCodeEntity_EntityState(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeStruct, "User", "pkg/user.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeStruct, "User", "pkg/user.go")
 	entity.Package = "pkg"
 	entity.DocComment = "User represents a user."
 
@@ -248,9 +248,9 @@ func assertASTEntityStateID(t *testing.T, state *EntityState) {
 }
 
 func TestCodeEntity_TriplesAreSelfSubject(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
-	entity.Contains = []string{"acme.semsource.golang.myproject.method.Bar"}
-	entity.Calls = []string{"acme.semsource.golang.myproject.function.Helper"}
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	entity.Contains = []string{"acme.test-platform.myproject.golang.method.Bar"}
+	entity.Calls = []string{"acme.test-platform.myproject.golang.function.Helper"}
 	entity.Returns = []string{"error"}
 
 	state := entity.EntityState()
@@ -276,7 +276,7 @@ func TestCodeEntity_IndexingProfile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entity := NewCodeEntity("acme", "golang", "myproject", tt.entityType, tt.name, "pkg/item.go")
+			entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", tt.entityType, tt.name, "pkg/item.go")
 			if got := entity.IndexingProfile(); got != tt.want {
 				t.Errorf("IndexingProfile() = %q, want %q", got, tt.want)
 			}
@@ -287,9 +287,9 @@ func TestCodeEntity_IndexingProfile(t *testing.T) {
 func TestParseResult_AllTriples(t *testing.T) {
 	result := &ParseResult{
 		Entities: []*CodeEntity{
-			NewCodeEntity("acme", "golang", "test", TypeFile, "foo.go", "foo.go"),
-			NewCodeEntity("acme", "golang", "test", TypeFunction, "Foo", "foo.go"),
-			NewCodeEntity("acme", "golang", "test", TypeStruct, "Bar", "foo.go"),
+			NewCodeEntity(testAuthority("acme"), "golang", "test", TypeFile, "foo.go", "foo.go"),
+			NewCodeEntity(testAuthority("acme"), "golang", "test", TypeFunction, "Foo", "foo.go"),
+			NewCodeEntity(testAuthority("acme"), "golang", "test", TypeStruct, "Bar", "foo.go"),
 		},
 	}
 
@@ -307,8 +307,8 @@ func TestParseResult_AllTriples(t *testing.T) {
 func TestParseResult_AllEntityStates(t *testing.T) {
 	result := &ParseResult{
 		Entities: []*CodeEntity{
-			NewCodeEntity("acme", "golang", "test", TypeFile, "foo.go", "foo.go"),
-			NewCodeEntity("acme", "golang", "test", TypeFunction, "Foo", "foo.go"),
+			NewCodeEntity(testAuthority("acme"), "golang", "test", TypeFile, "foo.go", "foo.go"),
+			NewCodeEntity(testAuthority("acme"), "golang", "test", TypeFunction, "Foo", "foo.go"),
 		},
 	}
 
@@ -349,7 +349,7 @@ func TestBuildInstanceID(t *testing.T) {
 func TestNewCodeEntity_VersionBearingProject_ValidID(t *testing.T) {
 	// "semstreams@v1.9.0" mimics a Go module-cache path component — the '@'
 	// and '.' were previously passed raw to Build, yielding an invalid NATS key.
-	entity := NewCodeEntity("acme", "golang", "semstreams@v1.9.0", TypeFunction, "Run", "pkg/run.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "semstreams@v1.9.0", TypeFunction, "Run", "pkg/run.go")
 
 	if err := entityid.ValidateNATSKVKey(entity.ID); err != nil {
 		t.Errorf("entity ID %q failed NATS KV validation: %v", entity.ID, err)
@@ -376,8 +376,8 @@ func TestNewCodeEntity_CrossVersionDistinctness(t *testing.T) {
 		entityid.SystemSlug("v1.10.0"),
 	)
 
-	e1 := NewCodeEntity("acme", "golang", systemV19, TypeFunction, "Run", "pkg/run.go")
-	e2 := NewCodeEntity("acme", "golang", systemV110, TypeFunction, "Run", "pkg/run.go")
+	e1 := NewCodeEntity(testAuthority("acme"), "golang", systemV19, TypeFunction, "Run", "pkg/run.go")
+	e2 := NewCodeEntity(testAuthority("acme"), "golang", systemV110, TypeFunction, "Run", "pkg/run.go")
 
 	if e1.ID == e2.ID {
 		t.Fatalf("v1.9.0 and v1.10.0 entities must have distinct IDs, but both are %q", e1.ID)
@@ -389,13 +389,13 @@ func TestNewCodeEntity_CrossVersionDistinctness(t *testing.T) {
 		t.Fatalf("expected 6-part IDs, got %d and %d parts", len(p1), len(p2))
 	}
 
-	// System segment (index 3) must differ between the two versions.
-	if p1[3] == p2[3] {
-		t.Errorf("system segments are identical (%q) — cross-version scoping did not take effect", p1[3])
+	// System segment (index 2) must differ between the two versions.
+	if p1[2] == p2[2] {
+		t.Errorf("system segments are identical (%q) — cross-version scoping did not take effect", p1[2])
 	}
 
 	// All other segments (org, platform, domain, type, instance) must be identical.
-	for _, idx := range []int{0, 1, 2, 4, 5} {
+	for _, idx := range []int{0, 1, 3, 4, 5} {
 		if p1[idx] != p2[idx] {
 			t.Errorf("segment[%d] differs unexpectedly: %q vs %q", idx, p1[idx], p2[idx])
 		}
@@ -407,8 +407,8 @@ func TestNewCodeEntity_CrossVersionDistinctness(t *testing.T) {
 // byte-identical ID to the pre-change construction. A future refactor that
 // silently churns these IDs will break this test.
 func TestNewCodeEntity_BackwardCompat_CleanProject(t *testing.T) {
-	const wantID = "acme.semsource.golang.myproject.function.pkg-foo-go-Foo"
-	entity := NewCodeEntity("acme", "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
+	const wantID = "acme.test-platform.myproject.golang.function.pkg-foo-go-Foo"
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "myproject", TypeFunction, "Foo", "pkg/foo.go")
 	if entity.ID != wantID {
 		t.Errorf("backward-compat golden ID mismatch:\ngot  %q\nwant %q", entity.ID, wantID)
 	}
@@ -419,7 +419,7 @@ func TestNewCodeEntity_BackwardCompat_CleanProject(t *testing.T) {
 // carries both the source-identity triple (code.artifact.project) and the
 // version triple (code.artifact.version).
 func TestCodeEntity_VersionTriples_Present(t *testing.T) {
-	e := NewCodeEntity("acme", "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
+	e := NewCodeEntity(testAuthority("acme"), "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
 	e.Project = "semstreams"
 	e.Version = "v1.9.0"
 
@@ -441,7 +441,7 @@ func TestCodeEntity_VersionTriples_Present(t *testing.T) {
 // gate on Version suppresses both — and its emitted triples are byte-identical
 // to an entity with no source-scoping set at all.
 func TestCodeEntity_VersionTriples_AbsentWhenVersionless(t *testing.T) {
-	withProject := NewCodeEntity("acme", "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
+	withProject := NewCodeEntity(testAuthority("acme"), "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
 	withProject.Project = "semstreams" // Project set, Version empty → gate must suppress both
 
 	for _, tr := range withProject.Triples() {
@@ -452,7 +452,7 @@ func TestCodeEntity_VersionTriples_AbsentWhenVersionless(t *testing.T) {
 
 	// Golden: with Version empty, setting Project must not perturb the triple set.
 	// Pin IndexedAt so the DcCreated timestamp doesn't spuriously differ.
-	bare := NewCodeEntity("acme", "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
+	bare := NewCodeEntity(testAuthority("acme"), "golang", "semstreams", TypeFunction, "Run", "pkg/run.go")
 	bare.IndexedAt = withProject.IndexedAt
 	if !reflect.DeepEqual(bare.Triples(), withProject.Triples()) {
 		t.Errorf("version-less triples not byte-identical when Project is set:\n bare=%v\n proj=%v",
@@ -463,12 +463,12 @@ func TestCodeEntity_VersionTriples_AbsentWhenVersionless(t *testing.T) {
 func TestEntityState_Fields(t *testing.T) {
 	now := time.Now()
 	state := &EntityState{
-		ID:        "acme.semsource.golang.test.function.foo",
+		ID:        "acme.test-platform.test.golang.function.foo",
 		UpdatedAt: now,
 	}
 
-	if state.ID != "acme.semsource.golang.test.function.foo" {
-		t.Errorf("ID = %q, want %q", state.ID, "acme.semsource.golang.test.function.foo")
+	if state.ID != "acme.test-platform.test.golang.function.foo" {
+		t.Errorf("ID = %q, want %q", state.ID, "acme.test-platform.test.golang.function.foo")
 	}
 	if !state.UpdatedAt.Equal(now) {
 		t.Errorf("UpdatedAt = %v, want %v", state.UpdatedAt, now)
@@ -476,7 +476,7 @@ func TestEntityState_Fields(t *testing.T) {
 }
 
 func TestCodeEntity_MethodWithReceiver(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "test", TypeMethod, "String", "user.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "test", TypeMethod, "String", "user.go")
 	entity.Receiver = "User"
 
 	triples := entity.Triples()
@@ -494,7 +494,7 @@ func TestCodeEntity_MethodWithReceiver(t *testing.T) {
 }
 
 func TestCodeEntity_StructWithEmbeds(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "test", TypeStruct, "Derived", "types.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "test", TypeStruct, "Derived", "types.go")
 	entity.Embeds = []string{"Base", "io.Reader"}
 	entity.References = []string{"string", "int"}
 
@@ -520,10 +520,10 @@ func TestCodeEntity_StructWithEmbeds(t *testing.T) {
 }
 
 func TestCodeEntity_FileWithContains(t *testing.T) {
-	entity := NewCodeEntity("acme", "golang", "test", TypeFile, "main.go", "main.go")
+	entity := NewCodeEntity(testAuthority("acme"), "golang", "test", TypeFile, "main.go", "main.go")
 	entity.Contains = []string{
-		"acme.semsource.golang.test.function.main-go-main",
-		"acme.semsource.golang.test.function.main-go-helper",
+		"acme.test-platform.test.golang.function.main-go-main",
+		"acme.test-platform.test.golang.function.main-go-helper",
 	}
 	entity.Imports = []string{"fmt", "context"}
 

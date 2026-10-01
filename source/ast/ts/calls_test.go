@@ -42,7 +42,7 @@ func parseTree(t *testing.T, files map[string]string) []*ast.CodeEntity {
 func parseRels(t *testing.T, root string, rels []string) []*ast.CodeEntity {
 	t.Helper()
 	var all []*ast.CodeEntity
-	p := NewParser("acme", "test", root)
+	p := NewParser(testAuthority("acme"), "test", root)
 	for _, rel := range rels {
 		res, err := p.ParseFile(context.Background(), filepath.Join(root, rel))
 		if err != nil {
@@ -603,7 +603,7 @@ func TestLocalDefinitionShadowsImport(t *testing.T) {
 	// entityNamed/assertCalls would be ambiguous — build the expected own-file
 	// ID directly instead.
 	run := entityNamed(t, ents, "run")
-	ownHelper := ast.NewCodeEntity("acme", "typescript", "test", ast.TypeFunction, "helper", "lib/app.ts")
+	ownHelper := ast.NewCodeEntity(testAuthority("acme"), "typescript", "test", ast.TypeFunction, "helper", "lib/app.ts")
 	if !hasCall(run.Calls, ownHelper.ID) {
 		t.Fatalf("run calls = %v, want own-file helper %q (not the imported one)", run.Calls, ownHelper.ID)
 	}

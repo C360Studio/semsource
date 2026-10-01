@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/graphstatus"
+	"github.com/c360studio/semsource/internal/sourcelifecycle"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
@@ -94,15 +97,19 @@ type Component struct {
 	// ingestCfg is nil until RegisterIngestHandlers runs (host wires it after
 	// Start); the HTTP façade handlers read it at request time and 503 while nil.
 	// Guarded by c.mu.
+	desiredMu  sourcelifecycle.Gate // serializes desired component and next-boot manifest writes
 	ingestSubs []*natsclient.Subscription
 	ingestCfg  *IngestHandlerConfig
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 
-	running   bool
-	startTime time.Time
-	mu        sync.RWMutex
+	lifecyclePending int
+	lifecycleError   string
+	running          bool
+	startTime        time.Time
+	mu               sync.RWMutex
 }
 
 // NewComponent creates a new source-manifest component.
@@ -151,7 +158,12 @@ func (c *Component) Start(ctx context.Context) error {
 	c.running = true
 	c.startTime = time.Now()
 	c.mu.Unlock()
-
+	if c.ingestCfg != nil {
+		if err := c.RegisterIngestHandlers(ctx, *c.ingestCfg); err != nil {
+			return fmt.Errorf("start source management: %w", err)
+		}
+		c.startLifecycleReplay(ctx)
+	}
 	return nil
 }
 
@@ -368,7 +380,7 @@ func (c *Component) startHeartbeat(ctx context.Context) context.CancelFunc {
 	interval := parseDurationOrDefault(c.config.HeartbeatInterval, 30*time.Second)
 	hbCtx, cancel := context.WithCancel(ctx)
 
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -392,7 +404,7 @@ func (c *Component) startHeartbeat(ctx context.Context) context.CancelFunc {
 				}
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -406,7 +418,7 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 
 	toCtx, cancel := context.WithCancel(ctx)
 
-	go func() {
+	c.workers.Go(func() {
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 
@@ -435,7 +447,7 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 				c.logger.Warn("failed to publish degraded status", "error", err)
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -520,7 +532,7 @@ func (c *Component) buildSummary() *SummaryPayload {
 	return &SummaryPayload{
 		Namespace:      c.config.Namespace,
 		Phase:          status.Phase,
-		EntityIDFormat: "{org}.semsource.{domain}.{system}.{type}.{instance}",
+		EntityIDFormat: "{org}.{platform}.{system}.{domain}.{type}.{instance}",
 		TotalEntities:  status.TotalEntities,
 		Domains:        domains,
 		Predicates:     predicates.Sources,
@@ -555,37 +567,39 @@ func (c *Component) configuredSourceTypes() []string {
 }
 
 // Stop gracefully stops the component.
-func (c *Component) Stop(_ context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.running {
-		return nil
-	}
-
-	for _, cancel := range c.cancelFuncs {
-		cancel()
-	}
-	c.cancelFuncs = nil
-
+func (c *Component) Stop(ctx context.Context) error {
+	c.mu.RLock()
+	cancels := append([]context.CancelFunc(nil), c.cancelFuncs...)
 	subs := []*natsclient.Subscription{c.querySub, c.statusSub, c.statusQuerySub, c.predicatesQuerySub, c.summaryQuerySub}
 	subs = append(subs, c.ingestSubs...)
-	for _, sub := range subs {
-		if sub != nil {
-			if err := sub.Unsubscribe(); err != nil {
-				c.logger.Warn("failed to unsubscribe", "error", err)
-			}
+	c.mu.RUnlock()
+	for _, cancel := range cancels {
+		if cancel != nil {
+			cancel()
 		}
 	}
+	var result error
+	for _, sub := range subs {
+		if sub != nil {
+			result = errors.Join(result, sub.Drain(ctx))
+		}
+	}
+	if result != nil {
+		return result
+	}
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join manifest workers: %w", err)
+	}
+	c.mu.Lock()
 	c.querySub = nil
 	c.statusSub = nil
 	c.statusQuerySub = nil
 	c.predicatesQuerySub = nil
 	c.summaryQuerySub = nil
 	c.ingestSubs = nil
-
+	c.cancelFuncs = nil
 	c.running = false
-	c.logger.Info("source-manifest stopped")
+	c.mu.Unlock()
 	return nil
 }
 
@@ -632,15 +646,19 @@ func (c *Component) Health() component.HealthStatus {
 	c.mu.RLock()
 	running := c.running
 	startTime := c.startTime
+	pending, lifecycleErr := c.lifecyclePending, c.lifecycleError
 	c.mu.RUnlock()
 
 	status := "stopped"
 	if running {
 		status = "running"
 	}
+	if running && (pending > 0 || lifecycleErr != "") {
+		status = "degraded: source lifecycle pending"
+	}
 
 	return component.HealthStatus{
-		Healthy:   running,
+		Healthy:   running && pending == 0 && lifecycleErr == "",
 		LastCheck: time.Now(),
 		Uptime:    time.Since(startTime),
 		Status:    status,
@@ -667,6 +685,7 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	mux.HandleFunc("POST "+sourcesPath, c.handleAddHTTP)
 	mux.HandleFunc("GET "+sourcesPath+"/{id}", c.handleSourceHTTP)
 	mux.HandleFunc("DELETE "+sourcesPath+"/{id}", c.handleRemoveHTTP)
+	mux.HandleFunc("GET "+sourcesPath+"/{id}/lifecycle", c.handleLifecycleHTTP)
 	c.logger.Info("registered HTTP handlers", "path", sourcesPath)
 
 	statusPath := prefix + "status"

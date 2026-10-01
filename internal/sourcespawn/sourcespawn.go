@@ -70,6 +70,9 @@ func CodeOf(err error) ErrorCode {
 // Options carries deployment-wide settings the per-type config builders need.
 // Mirrors the fields of config.Config that flow into source components.
 type Options struct {
+	// Identity lookups must never resolve remote branches.
+	skipRemoteResolution bool
+
 	// Org is the namespace ("c360", "noaa", etc.) used as the entity-ID org
 	// segment and propagated into source components.
 	Org string
@@ -102,9 +105,9 @@ type Result struct {
 	// calls that don't carry the original SourceEntry.
 	FactoryName string
 
-	// Created is true when the KV write replaced no prior config under the
-	// same key. False when an entry under InstanceName already existed (the
-	// write still succeeds — deterministic names make Add idempotent).
+	// Created is true when the desired source is newly enabled, including a
+	// re-add after removal. False when an enabled entry under InstanceName
+	// already existed (deterministic names make Add idempotent).
 	Created bool
 
 	// SourceType echoes the original src.Type for caller context. For repo
@@ -116,12 +119,9 @@ type Result struct {
 // ConfigStore is the minimal subset of *semconfig.Manager that sourcespawn
 // needs. Tests can use a fake by implementing this interface.
 //
-// Add writes component configs with PutComponentToKV so a runtime source add
-// touches only the components it creates or refreshes. beta.145's ConfigManager
-// applies those writes in memory and still notifies ComponentManager subscribers
-// for engine-owned revisions; using the targeted write avoids the older
-// PushToKV workaround that rewrote every component and restarted unchanged
-// instances.
+// Targeted component writes update desired state without changing admitted
+// runtime components. Disabled envelopes retain removal intent across boot;
+// additions and removals take effect on application restart.
 type ConfigStore interface {
 	GetConfig() *semconfig.SafeConfig
 	PutComponentToKV(ctx context.Context, name string, compConfig types.ComponentConfig) error
@@ -129,19 +129,18 @@ type ConfigStore interface {
 }
 
 // ExistsChecker is an optional capability used to detect Result.Created.
-// When nil, Created is always reported true.
+// Without a checker, Created is derived from the desired component snapshot.
 type ExistsChecker interface {
 	HasComponent(name string) bool
 }
 
-// Add validates src and writes the corresponding component config(s) into
-// the ConfigManager KV store. ServiceManager picks up the change reactively
-// and spawns the component(s).
+// Add validates src and writes desired component config(s) into the
+// ConfigManager KV store. Admission occurs at the next application boot.
 //
 // A flat source produces one Result. A "repo" meta-source single-branch
 // expansion produces four Results (git, ast, doc, cfgfile). Multi-branch
 // repos return CodeUnsupportedType — the BranchWatcher path is not yet
-// KV-reactive.
+// supported by the boot-only composition contract.
 //
 // Add is idempotent: deterministic instance names mean re-submitting the
 // same SourceEntry overwrites the existing KV entry. Result.Created
@@ -196,14 +195,12 @@ func AddWithChecker(
 			}
 		}
 
-		// Created reflects whether this is a new instance vs. a refresh. Prefer
-		// the supplied checker (running components); otherwise fall back to the
-		// in-memory config we're about to mutate.
-		created := true
-		if checker != nil {
+		// A disabled desired entry is a new admission even if an optional
+		// checker still sees the old runtime before the next application boot.
+		previous, exists := existing[spec.instanceName]
+		created := !exists || !previous.Enabled
+		if checker != nil && (!exists || previous.Enabled) {
 			created = !checker.HasComponent(spec.instanceName)
-		} else if _, exists := existing[spec.instanceName]; exists {
-			created = false
 		}
 
 		compConfig := types.ComponentConfig{
@@ -283,31 +280,48 @@ func Build(src config.SourceEntry, opts Options) (map[string]types.ComponentConf
 	return out, nil
 }
 
-// Remove deletes the component config from the ConfigManager KV store.
-// ServiceManager tears down the component reactively.
+// InstanceNames returns deterministic component handles without remote branch lookup.
+// It uses the same builders as Add; configuration descriptions are not identities.
+func InstanceNames(src config.SourceEntry, opts Options) (map[string]struct{}, error) {
+	if len(src.Branches) > 0 {
+		return nil, &Error{Code: CodeUnsupportedType, Message: "multi-branch identity requires boot expansion"}
+	}
+	opts.skipRemoteResolution = true
+	built, err := Build(src, opts)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{}, len(built))
+	for name := range built {
+		names[name] = struct{}{}
+	}
+	return names, nil
+}
+
+// Remove persists a disabled component envelope for the next application boot.
+// The pinned manager overlays live KV keys onto file components at startup;
+// deleting the key would resurrect a source still present in the original file.
 func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 	if instanceName == "" {
 		return &Error{Code: CodeValidationFailed, Message: "instance_name is required"}
 	}
-	// Honest removal: an unknown handle is NOT_FOUND, never silent success.
-	// KV deletes are idempotent, so without this check a typo'd handle
-	// returned removed:true and curator workflows (ADR-040) could not verify
-	// a removal happened (audit 2026-07-19, source-removal-integrity).
+	var envelope types.ComponentConfig
+	var exists bool
 	if cfg := store.GetConfig().Get(); cfg != nil {
-		if _, ok := cfg.Components[instanceName]; !ok {
-			return &Error{
-				Code:    CodeNotFound,
-				Message: fmt.Sprintf("no source component named %q is registered", instanceName),
-			}
+		envelope, exists = cfg.Components[instanceName]
+	}
+	// Disabled entries preserve removal intent; they are not registered sources.
+	if !exists || !envelope.Enabled {
+		return &Error{
+			Code:    CodeNotFound,
+			Message: fmt.Sprintf("no enabled source component named %q is registered", instanceName),
 		}
 	}
-	// beta.145's ConfigManager applies targeted deletes in memory and still
-	// notifies ComponentManager subscribers for engine-owned revisions, so the
-	// component tears down without the old full-config PushToKV workaround.
-	if err := store.DeleteComponentFromKV(ctx, instanceName); err != nil {
+	envelope.Enabled = false
+	if err := store.PutComponentToKV(ctx, instanceName, envelope); err != nil {
 		return &Error{
 			Code:    CodeKVWriteFailed,
-			Message: fmt.Sprintf("delete component %q from KV", instanceName),
+			Message: fmt.Sprintf("persist disabled component %q to KV", instanceName),
 			Cause:   err,
 		}
 	}

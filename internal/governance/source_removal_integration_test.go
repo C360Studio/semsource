@@ -31,8 +31,11 @@ type memConfigStore struct {
 
 func newMemConfigStore() *memConfigStore {
 	return &memConfigStore{cfg: semconfig.NewSafeConfig(&semconfig.Config{
-		Platform:   semconfig.PlatformConfig{Org: "acme", ID: "test"},
-		Components: map[string]types.ComponentConfig{},
+		Platform: semconfig.PlatformConfig{Org: "acme", ID: "test"},
+		Components: map[string]types.ComponentConfig{"source-manifest": {
+			Name: "source-manifest", Type: types.ComponentTypeProcessor, Enabled: true,
+			Config: json.RawMessage(`{"namespace":"acme","sources":[],"expected_source_count":0}`),
+		}},
 		// A spawned source declares a graph.ingest output port, which makes
 		// config validation resolve the GRAPH stream and — since semstreams
 		// beta.159 — demand its bounds. Production supplies this from
@@ -78,11 +81,10 @@ func (m *memConfigStore) DeleteComponentFromKV(_ context.Context, name string) e
 	})
 }
 
-// TestIntegration_SourceRemovalRoundTrip drives add → status → remove →
-// status over real NATS and pins the removal-integrity contract: removal is
-// observable (the source leaves status), late reports cannot resurrect a
-// phantom, and unknown handles are NOT_FOUND (the audit observed removed:true
-// for anything and phantom "watching" entries at a 20-minute horizon).
+// TestIntegration_SourceRemovalRoundTrip proves the boot-only desired-state contract
+// over real NATS: add/remove persists the next boot's manifest while the running
+// source remains visible until restart. The process restart is covered by E2E.
+// source_removed lifecycle replay is a separate migration merge blocker.
 func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	tc := natsclient.NewTestClient(t,
@@ -102,7 +104,7 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	disc, err := sourcemanifest.NewComponent(rawCfg, component.Dependencies{NATSClient: tc.Client})
+	disc, err := sourcemanifest.NewComponent(rawCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("NewComponent: %v", err)
 	}
@@ -141,12 +143,15 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 		t.Fatalf("add failed: %+v", addReply)
 	}
 	handle := addReply.Components[0].InstanceName
+	if !addReply.DesiredChanged || addReply.RuntimeChanged || !addReply.RestartRequired {
+		t.Fatalf("add must report desired-only change: %+v", addReply)
+	}
 
 	// 2. Simulate the spawned component's status report; source appears.
 	publishStatusReport(t, ctx, tc, handle)
 	waitForSourceInStatus(t, ctx, tc, handle, true)
 
-	// 3. Remove it; the source leaves status within the bound.
+	// 3. Remove desired registration; the running source remains until restart.
 	removeReq, _ := json.Marshal(sourcemanifest.RemoveRequest{InstanceName: handle})
 	removeRaw, err := tc.Client.Request(ctx, "graph.ingest.remove.acme", removeReq, 5*time.Second)
 	if err != nil {
@@ -159,12 +164,21 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	if !removeReply.Removed || removeReply.Error != nil {
 		t.Fatalf("remove failed: %+v", removeReply)
 	}
-	waitForSourceInStatus(t, ctx, tc, handle, false)
+	if !removeReply.DesiredChanged || removeReply.RuntimeChanged || !removeReply.RestartRequired {
+		t.Fatalf("remove must report desired-only change: %+v", removeReply)
+	}
+	var desired sourcemanifest.Config
+	if err := json.Unmarshal(store.GetConfig().Get().Components["source-manifest"].Config, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if len(desired.Sources) != 0 || desired.ExpectedSourceCount != 0 {
+		t.Fatalf("next-boot manifest retained removed source: %+v", desired)
+	}
+	waitForSourceInStatus(t, ctx, tc, handle, true)
 
-	// 4. A late in-flight report must not resurrect the phantom.
+	// 4. Running producer reports remain valid until restart.
 	publishStatusReport(t, ctx, tc, handle)
-	time.Sleep(300 * time.Millisecond)
-	waitForSourceInStatus(t, ctx, tc, handle, false)
+	waitForSourceInStatus(t, ctx, tc, handle, true)
 
 	// 5. Removing an unknown handle is NOT_FOUND, never removed:true.
 	unknownReq, _ := json.Marshal(sourcemanifest.RemoveRequest{InstanceName: "no-such-source"})

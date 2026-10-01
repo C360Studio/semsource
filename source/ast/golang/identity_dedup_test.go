@@ -33,7 +33,7 @@ func TestParse_SubmoduleIdentityIsCheckoutLocationIndependent(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "pkg", "greeter.go"), []byte(src), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		p := golang.NewParser("acme", scoped, root)
+		p := golang.NewParser(testAuthority("acme"), scoped, root)
 		results, err := p.ParseDirectory(context.Background(), root)
 		if err != nil {
 			t.Fatal(err)

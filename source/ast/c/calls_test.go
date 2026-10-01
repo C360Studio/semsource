@@ -29,7 +29,7 @@ func parseCTree(t *testing.T, files map[string]string) []*ast.CodeEntity {
 		rels = append(rels, rel)
 	}
 	sort.Strings(rels)
-	p := NewParser("acme", "test", root)
+	p := NewParser(testAuthority("acme"), "test", root)
 	var all []*ast.CodeEntity
 	for _, rel := range rels {
 		res, err := p.ParseFile(context.Background(), filepath.Join(root, rel))
@@ -202,7 +202,7 @@ func TestHiddenRootStillIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	p := NewParser("acme", "test", root)
+	p := NewParser(testAuthority("acme"), "test", root)
 	res, err := p.ParseFile(context.Background(), filepath.Join(root, "src/a.c"))
 	if err != nil {
 		t.Fatal(err)

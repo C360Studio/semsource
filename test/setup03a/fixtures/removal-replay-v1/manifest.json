@@ -1,0 +1,9 @@
+{
+  "version": "removal-replay-v1",
+  "base_fixture": "../v1",
+  "target_project": "setup03a-corpus-v1",
+  "target_documents": ["a.md", "b.md"],
+  "sibling_project": "removal-sibling",
+  "sibling_documents": ["sibling.md"],
+  "contract": "Retain exact parent and passage IDs; remove marks source_removed; current-seed reactivation clears only current IDs; preserve same-system AST and independent document sibling source facts and content."
+}

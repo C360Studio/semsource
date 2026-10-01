@@ -3,11 +3,13 @@ package ast
 import (
 	"fmt"
 	"sync"
+
+	"github.com/c360studio/semsource/entityid"
 )
 
 // ParserFactory creates a FileParser for a specific language.
-// The factory receives org, project, and repoRoot to configure entity ID generation.
-type ParserFactory func(org, project, repoRoot string) FileParser
+// The factory receives authority, project, and repoRoot to configure entity ID generation.
+type ParserFactory func(authority entityid.Authority, project, repoRoot string) FileParser
 
 // ParserRegistry maintains a registry of language parsers.
 // Parsers are registered by name with their supported file extensions.
@@ -66,7 +68,10 @@ func (r *ParserRegistry) GetParserName(ext string) (string, bool) {
 
 // CreateParser instantiates a parser by name with the given configuration.
 // Returns an error if the parser name is not registered.
-func (r *ParserRegistry) CreateParser(name, org, project, repoRoot string) (FileParser, error) {
+func (r *ParserRegistry) CreateParser(name string, authority entityid.Authority, project, repoRoot string) (FileParser, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, fmt.Errorf("parser authority: %w", err)
+	}
 	r.mu.RLock()
 	factory, ok := r.parsers[name]
 	r.mu.RUnlock()
@@ -75,17 +80,17 @@ func (r *ParserRegistry) CreateParser(name, org, project, repoRoot string) (File
 		return nil, fmt.Errorf("parser not registered: %s", name)
 	}
 
-	return factory(org, project, repoRoot), nil
+	return factory(authority, project, repoRoot), nil
 }
 
 // CreateParserForExtension creates a parser for the given file extension.
 // Returns an error if no parser is registered for the extension.
-func (r *ParserRegistry) CreateParserForExtension(ext, org, project, repoRoot string) (FileParser, error) {
+func (r *ParserRegistry) CreateParserForExtension(ext string, authority entityid.Authority, project, repoRoot string) (FileParser, error) {
 	name, ok := r.GetParserName(ext)
 	if !ok {
 		return nil, fmt.Errorf("no parser registered for extension: %s", ext)
 	}
-	return r.CreateParser(name, org, project, repoRoot)
+	return r.CreateParser(name, authority, project, repoRoot)
 }
 
 // ListParsers returns all registered parser names.

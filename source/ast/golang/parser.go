@@ -12,21 +12,22 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/source/ast"
 )
 
 func init() {
 	ast.DefaultRegistry.Register("go", []string{".go"},
-		func(org, project, repoRoot string) ast.FileParser {
-			return NewParser(org, project, repoRoot)
+		func(authority entityid.Authority, project, repoRoot string) ast.FileParser {
+			return NewParser(authority, project, repoRoot)
 		})
 }
 
 // Parser extracts code entities from Go source files
 type Parser struct {
-	// org is the organization prefix for entity IDs
-	org string
+	// authority is the effective deployment authority for entity IDs
+	authority entityid.Authority
 
 	// project is the project name for entity IDs
 	project string
@@ -52,11 +53,11 @@ type Parser struct {
 }
 
 // NewParser creates a new Go AST parser
-func NewParser(org, project, repoRoot string) *Parser {
+func NewParser(authority entityid.Authority, project, repoRoot string) *Parser {
 	return &Parser{
-		org:      org,
-		project:  project,
-		repoRoot: repoRoot,
+		authority: authority,
+		project:   project,
+		repoRoot:  repoRoot,
 	}
 }
 
@@ -118,7 +119,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	// Create file entity
-	fileEntity := ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
+	fileEntity := ast.NewCodeEntity(p.authority, "golang", p.project, ast.TypeFile, filepath.Base(filePath), relPath)
 	fileEntity.Package = file.Name.Name
 	fileEntity.Hash = hash
 	fileEntity.Imports = result.Imports
@@ -267,7 +268,7 @@ func (p *Parser) extractFunction(fset *token.FileSet, fn *goast.FuncDecl, filePa
 		}
 	}
 
-	entity := ast.NewScopedCodeEntity(p.org, "golang", p.project, entityType, scope, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, "golang", p.project, entityType, scope, name, filePath)
 	entity.StartLine = fset.Position(fn.Pos()).Line
 	entity.EndLine = fset.Position(fn.End()).Line
 	entity.Signature = renderGoSignature(fset, fn)
@@ -328,7 +329,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 	switch t := ts.Type.(type) {
 	case *goast.StructType:
 		entityType = ast.TypeStruct
-		entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.authority, "golang", p.project, entityType, name, filePath)
 		entity.StartLine = fset.Position(ts.Pos()).Line
 		entity.EndLine = fset.Position(ts.End()).Line
 
@@ -354,7 +355,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 
 	case *goast.InterfaceType:
 		entityType = ast.TypeInterface
-		entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.authority, "golang", p.project, entityType, name, filePath)
 		entity.StartLine = fset.Position(ts.Pos()).Line
 		entity.EndLine = fset.Position(ts.End()).Line
 
@@ -380,7 +381,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 	default:
 		// Type alias or other type definition
 		entityType = ast.TypeType
-		entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name, filePath)
+		entity := ast.NewCodeEntity(p.authority, "golang", p.project, entityType, name, filePath)
 		entity.StartLine = fset.Position(ts.Pos()).Line
 		entity.EndLine = fset.Position(ts.End()).Line
 
@@ -400,7 +401,7 @@ func (p *Parser) extractTypeSpec(fset *token.FileSet, ts *goast.TypeSpec, doc *g
 
 // extractValueSpec extracts a const or var entity
 func (p *Parser) extractValueSpec(fset *token.FileSet, name *goast.Ident, vs *goast.ValueSpec, doc *goast.CommentGroup, entityType ast.CodeEntityType, filePath string) *ast.CodeEntity {
-	entity := ast.NewCodeEntity(p.org, "golang", p.project, entityType, name.Name, filePath)
+	entity := ast.NewCodeEntity(p.authority, "golang", p.project, entityType, name.Name, filePath)
 	entity.StartLine = fset.Position(name.Pos()).Line
 	entity.EndLine = fset.Position(vs.End()).Line
 
@@ -532,7 +533,7 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 			// FuncDecl and stays an external marker.
 			if dirRel, ok := p.inRepoImportDir(importPath, filePath); ok {
 				if def, ok := p.packageFuncs(dirRel)[funcPart]; ok {
-					return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, funcPart, def).ID
+					return ast.NewCodeEntity(p.authority, "golang", p.project, ast.TypeFunction, funcPart, def).ID
 				}
 			}
 			// External function: create reference ID with import path
@@ -554,13 +555,13 @@ func (p *Parser) callNameToEntityID(callName, filePath string) string {
 	// edge byte-matches the definition's own ID (D1) — the same sibling scan type
 	// references use. The same-file case degenerates to the previous behavior.
 	if def, ok := p.packageFuncs(filepath.Dir(filePath))[callName]; ok {
-		return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, callName, def).ID
+		return ast.NewCodeEntity(p.authority, "golang", p.project, ast.TypeFunction, callName, def).ID
 	}
 
 	// Undefined in the package (a dot import, a shadowed name): keep targeting
 	// the caller's own path — inert (dropped) since no such entity exists, never
 	// a wrong edge.
-	return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeFunction, callName, filePath).ID
+	return ast.NewCodeEntity(p.authority, "golang", p.project, ast.TypeFunction, callName, filePath).ID
 }
 
 // isBuiltinFunc returns true if the function is a Go built-in function
@@ -610,9 +611,9 @@ func (p *Parser) typeNameToEntityID(typeName, filePath string) string {
 	// definition's own ID (D1/D4). Unresolved names fall back to the current file
 	// with a generic `type` kind — inert (dropped) if no such entity exists.
 	if lt, ok := p.packageTypes(filePath)[typeName]; ok {
-		return ast.NewCodeEntity(p.org, "golang", p.project, lt.kind, typeName, lt.relPath).ID
+		return ast.NewCodeEntity(p.authority, "golang", p.project, lt.kind, typeName, lt.relPath).ID
 	}
-	return ast.NewCodeEntity(p.org, "golang", p.project, ast.TypeType, typeName, filePath).ID
+	return ast.NewCodeEntity(p.authority, "golang", p.project, ast.TypeType, typeName, filePath).ID
 }
 
 // renderGoSignature formats a Go function or method declaration without its

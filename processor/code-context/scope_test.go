@@ -43,11 +43,12 @@ func newScopeComponent(lensKind, org string) (*Component, *scopeCapturingGraph) 
 		lensKind:    lensKind,
 		subjectRoot: lensKind + ".v1.",
 		org:         org,
-		graph:       g,
-		engine:      fusion.NewEngine(g, resolver),
-		logger:      slog.Default(),
-		running:     true,
-		startTime:   time.Now(),
+		platform:    "test-a1b2c3", sourceSystems: []string{"repo"},
+		graph:     g,
+		engine:    fusion.NewEngine(g, resolver),
+		logger:    slog.Default(),
+		running:   true,
+		startTime: time.Now(),
 	}
 	return c, g
 }
@@ -63,21 +64,21 @@ func TestDefaultScope(t *testing.T) {
 			name:     "docs lens scopes to the web and config domains",
 			lensKind: "docs",
 			org:      "acme",
-			want:     []string{"acme.semsource.web", "acme.semsource.config"},
+			want:     []string{"acme.test-a1b2c3.repo.web", "acme.test-a1b2c3.repo.config"},
 		},
 		{
 			name:     "code lens scopes to the code-language domains",
 			lensKind: "code",
 			org:      "acme",
 			want: []string{
-				"acme.semsource.golang",
-				"acme.semsource.python",
-				"acme.semsource.typescript",
-				"acme.semsource.javascript",
-				"acme.semsource.java",
-				"acme.semsource.svelte",
-				"acme.semsource.c",
-				"acme.semsource.cpp",
+				"acme.test-a1b2c3.repo.golang",
+				"acme.test-a1b2c3.repo.python",
+				"acme.test-a1b2c3.repo.typescript",
+				"acme.test-a1b2c3.repo.javascript",
+				"acme.test-a1b2c3.repo.java",
+				"acme.test-a1b2c3.repo.svelte",
+				"acme.test-a1b2c3.repo.c",
+				"acme.test-a1b2c3.repo.cpp",
 			},
 		},
 		{
@@ -89,7 +90,7 @@ func TestDefaultScope(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Component{lensKind: tt.lensKind, org: tt.org}
+			c := &Component{lensKind: tt.lensKind, org: tt.org, platform: "test-a1b2c3", sourceSystems: []string{"repo"}}
 			if got := c.defaultScope(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("defaultScope() = %v, want %v", got, tt.want)
 			}
@@ -107,7 +108,7 @@ func TestServeDefaultsScopeWhenEmpty(t *testing.T) {
 	// config joined the docs lens so dependency/manifest questions answer
 	// through doc_context (search-ranking-and-reach D4 — the audit proved the
 	// config domain was unreachable through every MCP tool).
-	want := []string{"acme.semsource.web", "acme.semsource.config"}
+	want := []string{"acme.test-a1b2c3.repo.web", "acme.test-a1b2c3.repo.config"}
 	if !reflect.DeepEqual(g.lastScope, want) {
 		t.Errorf("resolved scope = %v, want %v", g.lastScope, want)
 	}

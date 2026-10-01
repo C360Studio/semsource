@@ -14,7 +14,7 @@ func TestParseFile_TypeScript(t *testing.T) {
 	dir := t.TempDir()
 	tsPath := writeTypeScriptFixture(t, dir)
 
-	p := NewParser("test-org", "test-project", dir)
+	p := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := p.ParseFile(context.Background(), tsPath)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -220,7 +220,7 @@ const asyncArrow = async () => {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), jsPath)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -311,7 +311,7 @@ export class ClassComponent extends React.Component {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), jsxPath)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -368,7 +368,7 @@ export class TypedComponent extends React.Component<Props> {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), tsxPath)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -430,7 +430,7 @@ func TestParseDirectory(t *testing.T) {
 		t.Fatalf("Failed to write node_modules file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	results, err := parser.ParseDirectory(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseDirectory failed: %v", err)
@@ -469,7 +469,7 @@ class PrivateClass {}
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -516,7 +516,7 @@ export class AsyncClass {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -574,7 +574,7 @@ export interface Multiple extends Base, Extended {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -624,7 +624,7 @@ func TestEntityTriples(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -729,7 +729,7 @@ func TestPrivateFieldsAndMethods(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -774,7 +774,7 @@ export class SignatureClass {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	parser := NewParser("test-org", "test-project", dir)
+	parser := NewParser(testAuthority("test-org"), "test-project", dir)
 	result, err := parser.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
@@ -854,7 +854,7 @@ func TestParseFile_JSDoc(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	p := NewParser("acme", "test", dir)
+	p := NewParser(testAuthority("acme"), "test", dir)
 	result, err := p.ParseFile(context.Background(), tsPath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -921,7 +921,7 @@ export class Bar {
 		t.Fatalf("write: %v", err)
 	}
 
-	p := NewParser("acme", "test", dir)
+	p := NewParser(testAuthority("acme"), "test", dir)
 	result, err := p.ParseFile(context.Background(), tsPath)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)

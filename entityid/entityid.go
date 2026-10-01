@@ -3,7 +3,7 @@
 //
 // Entity IDs follow the format:
 //
-//	{org}.{platform}.{domain}.{system}.{type}.{instance}
+//	{org}.{platform}.{system}.{domain}.{type}.{instance}
 //
 // All IDs must be valid NATS KV keys.
 package entityid
@@ -19,11 +19,42 @@ import (
 	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
-// PlatformSemsource is the platform segment used in all SemSource entity IDs.
+// PlatformSemsource identifies SemSource in provenance, never deployment authority.
 const PlatformSemsource = "semsource"
 
+// MaxAuthorityPairLen reserves room for the source slug, taxonomy, type,
+// separators, and an eight-byte instance digest. Declared stems additionally
+// reserve the framework's seven-byte minted suffix at configuration load.
+const MaxAuthorityPairLen = semtypes.MaxEntityIDBytes - maxSystemSlugLen - 10 - 12 - 5 - 8
+
+// Authority is the effective deployment identity established at boot. Pass it
+// explicitly from the composition root; builders never mint or rewrite it.
+type Authority struct {
+	Org      string
+	Platform string
+}
+
+// Validate rejects invalid authority shape and pairs that exhaust the leaf budget.
+func (a Authority) Validate() error {
+	if strings.Contains(a.Org, ".") || strings.Contains(a.Platform, ".") {
+		return fmt.Errorf("entity authority must have one org and one platform segment")
+	}
+	if err := semtypes.ValidateEntityIDPrefix(a.Org + "." + a.Platform); err != nil {
+		return fmt.Errorf("entity authority: %w", err)
+	}
+	if len(a.Org)+len(a.Platform) > MaxAuthorityPairLen {
+		return fmt.Errorf("entity authority exceeds %d-byte source identity budget", MaxAuthorityPairLen)
+	}
+	return nil
+}
+
+// Build constructs an entity under this already-established authority.
+func (a Authority) Build(system, domain, entityType, instance string) string {
+	return Build(a.Org, a.Platform, system, domain, entityType, instance)
+}
+
 // Build constructs the canonical 6-part entity ID string.
-// Format: {org}.{platform}.{domain}.{system}.{type}.{instance}
+// Format: {org}.{platform}.{system}.{domain}.{type}.{instance}
 // All parts must be non-empty — callers are responsible for supplying valid values.
 //
 // Build additionally guarantees the one contract no per-segment sanitizer can:
@@ -35,12 +66,12 @@ const PlatformSemsource = "semsource"
 // Overlong IDs have their instance segment truncated with a content-hash
 // suffix, which keeps identity deterministic and keeps near-identical long
 // symbols distinct.
-func Build(org, platform, domain, system, entityType, instance string) string {
-	id := fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, domain, system, entityType, instance)
+func Build(org, platform, system, domain, entityType, instance string) string {
+	id := fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, system, domain, entityType, instance)
 	if len(id) <= semtypes.MaxEntityIDBytes {
 		return id
 	}
-	return fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, domain, system, entityType,
+	return fmt.Sprintf("%s.%s.%s.%s.%s.%s", org, platform, system, domain, entityType,
 		boundInstance(len(id)-len(instance), instance))
 }
 
@@ -79,21 +110,9 @@ func boundInstance(prefixLen int, instance string) string {
 // backstop truncation stays a rare last resort rather than routine.
 const maxSystemSlugLen = 80
 
-// MaxOrgLen bounds the org segment so the five non-instance segments cannot
-// consume the whole entity-ID budget between them. Org is the only one that is
-// neither derived nor capped by this package — it comes straight from operator
-// config — so it is the last way Build's truncation backstop can be reached.
-//
-// The arithmetic, against semtypes.MaxEntityIDBytes (256):
-//
-//	org (≤64) + platform (9) + domain (≤10) + system (≤80) + type (≤12) + 5 dots
-//	  = ≤180, leaving ≥76 bytes for the instance segment.
-//
-// That floor is above maxInstanceLen (60), so every SanitizeInstance-derived
-// ID fits without truncation, and AST instances truncate to a usable prefix
-// rather than collapsing to a bare hash. Enforced at config load by
-// config.ValidateNamespace, which fails startup loudly rather than letting
-// every published entity be rejected at ingest.
+// MaxOrgLen retains the existing organization namespace limit. The effective
+// org/platform pair is additionally bounded by Authority.Validate because the
+// framework now appends a deployment suffix to the configured platform stem.
 const MaxOrgLen = 64
 
 // SystemSlug converts a canonical path, URL, or module string into a
@@ -274,8 +293,8 @@ func CanonicalizeURL(rawURL string) string {
 }
 
 // IsPublicNamespace reports whether org is the reserved public namespace.
-// The public namespace is used for open-source entities that must have
-// deterministic identity across all SemSource instances.
+// It does not bypass deployment authority: public organizations still mint IDs
+// beneath their own effective platform and require an import lane elsewhere.
 func IsPublicNamespace(org string) bool {
 	return org == "public"
 }
@@ -425,5 +444,5 @@ func Parts(id string) (domain, entityType string) {
 	if len(parts) < 6 {
 		return "", ""
 	}
-	return parts[2], parts[4]
+	return parts[3], parts[4]
 }

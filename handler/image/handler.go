@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"image"
 	_ "image/gif"  // register GIF decoder
 	_ "image/jpeg" // register JPEG decoder
@@ -39,9 +40,9 @@ type Handler struct {
 	store       storage.Store // nil = no binary storage (metadata only)
 	storeBucket string        // ObjectStore bucket name for StorageReference
 	logger      *slog.Logger
-	// org is the organisation namespace used when building EntityState values
+	// authority is the effective deployment authority used when building EntityState values
 	// via IngestEntityStates and enrichEvent. Empty disables the typed path.
-	org string
+	authority entityid.Authority
 }
 
 // Option is a functional option for configuring an Handler.
@@ -63,10 +64,10 @@ func WithLogger(l *slog.Logger) Option {
 	return func(h *Handler) { h.logger = l }
 }
 
-// WithOrg sets the organisation namespace used when building typed EntityState
+// WithAuthority sets the effective deployment authority used when building typed EntityState
 // values via IngestEntityStates and Watch enrichment.
-func WithOrg(org string) Option {
-	return func(h *Handler) { h.org = org }
+func WithAuthority(authority entityid.Authority) Option {
+	return func(h *Handler) { h.authority = authority }
 }
 
 // New returns a ready-to-use Handler configured by the provided options.
@@ -137,6 +138,7 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 
 			entity, err := h.ingestFile(ctx, path, root)
 			if err != nil {
+				seedproof.Report(ctx, err)
 				// Non-fatal: skip unreadable or malformed files and continue.
 				return nil
 			}
@@ -194,11 +196,13 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 	if h.store != nil {
 		storageKey := fmt.Sprintf("images/%s/%s/original", slugify(root), instance)
 		if err := h.store.Put(ctx, storageKey, content); err != nil {
+			seedproof.Report(ctx, err)
 			h.logger.Warn("failed to store image binary", "path", path, "error", err)
 		} else {
 			entity.Properties["storage_ref"] = storageKey
 
 			thumbKey, err := h.generateAndStoreThumbnail(ctx, content, path, root, instance)
+			seedproof.Report(ctx, err)
 			if err == nil && thumbKey != "" {
 				entity.Properties["thumbnail_ref"] = thumbKey
 			}

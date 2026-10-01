@@ -69,7 +69,7 @@ func TestConfigPredicateDataTypes(t *testing.T) {
 		// Bool
 		{ConfigDepIndirect, "bool"},
 		// Array
-		{ConfigImagePorts, "array"},
+		{ConfigImagePorts, "json"},
 		// Relationship predicates carry entity_id data type
 		{ConfigRequires, "entity_id"},
 		{ConfigDepends, "entity_id"},

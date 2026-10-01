@@ -2,6 +2,8 @@ package ast
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/fsnotify/fsnotify"
 )
@@ -25,8 +28,8 @@ type WatcherConfig struct {
 	// RepoRoot is the root directory to watch
 	RepoRoot string
 
-	// Org is the organization for entity IDs
-	Org string
+	// Authority is the effective deployment identity for entity IDs.
+	Authority entityid.Authority
 
 	// Project is the project name for entity IDs
 	Project string
@@ -96,6 +99,16 @@ type Watcher struct {
 	// Output channel
 	events chan WatchEvent
 
+	// The event producer owns output closure; Stop cancels and joins it.
+	lifecycleMu sync.Mutex
+	started     bool
+	stopping    bool
+	cancel      context.CancelFunc
+	done        chan struct{}
+	finishOnce  sync.Once
+	closeOnce   sync.Once
+	closeErr    error
+
 	// Metrics
 	droppedEvents atomic.Int64
 }
@@ -122,6 +135,12 @@ func NewWatcherWithParser(config WatcherConfig, parser FileParser) (*Watcher, er
 		debounce = 100 * time.Millisecond
 	}
 
+	if debounce < 0 {
+		_ = fsw.Close()
+		return nil, fmt.Errorf("watcher debounce must be positive")
+	}
+	config.DebounceDelay = debounce
+
 	// Build extension set
 	extensions := make(map[string]bool)
 	if len(config.FileExtensions) == 0 {
@@ -145,8 +164,9 @@ func NewWatcherWithParser(config WatcherConfig, parser FileParser) (*Watcher, er
 	// Default to Go parser if none provided (uses registry)
 	if parser == nil {
 		var err error
-		parser, err = DefaultRegistry.CreateParser("go", config.Org, config.Project, config.RepoRoot)
+		parser, err = DefaultRegistry.CreateParser("go", config.Authority, config.Project, config.RepoRoot)
 		if err != nil {
+			_ = fsw.Close()
 			return nil, err
 		}
 	}
@@ -161,6 +181,7 @@ func NewWatcherWithParser(config WatcherConfig, parser FileParser) (*Watcher, er
 		pending:    make(map[string]fsnotify.Op),
 		hashes:     make(map[string]string),
 		events:     make(chan WatchEvent, eventChannelBuffer),
+		done:       make(chan struct{}),
 	}, nil
 }
 
@@ -171,25 +192,69 @@ func (w *Watcher) Events() <-chan WatchEvent {
 
 // Start begins watching the repository for changes
 func (w *Watcher) Start(ctx context.Context) error {
-	// Add watches recursively
-	if err := w.addWatchesRecursive(w.config.RepoRoot); err != nil {
-		return err
+	w.lifecycleMu.Lock()
+	if w.started || w.stopping {
+		w.lifecycleMu.Unlock()
+		return fmt.Errorf("watcher is one-shot: already started or stopped")
 	}
-
-	// Start the event processing goroutine
-	go w.processEvents(ctx)
-
-	w.logger.Info("File watcher started",
-		"root", w.config.RepoRoot,
-		"debounce", w.config.DebounceDelay)
-
+	w.started = true
+	runCtx, cancel := context.WithCancel(ctx)
+	w.cancel = cancel
+	w.lifecycleMu.Unlock()
+	// Stop can cancel traversal without waiting for filesystem I/O under a lock.
+	if err := w.addWatchesRecursive(runCtx, w.config.RepoRoot); err != nil {
+		cancel()
+		closeErr := w.closeNative()
+		w.finish()
+		return errors.Join(err, closeErr)
+	}
+	go func() {
+		defer w.finish()
+		defer w.closeNative()
+		defer cancel()
+		w.processEvents(runCtx)
+	}()
+	w.logger.Info("File watcher started", "root", w.config.RepoRoot, "debounce", w.config.DebounceDelay)
 	return nil
 }
 
-// Stop stops the watcher
-func (w *Watcher) Stop() error {
-	close(w.events)
-	return w.watcher.Close()
+// Stop cancels the exact event producer and joins it before output closure.
+// A deadline leaves ownership intact so the caller can retry the join.
+func (w *Watcher) Stop(ctx context.Context) error {
+	w.lifecycleMu.Lock()
+	w.stopping = true
+	cancel, started := w.cancel, w.started
+	w.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	closeErr := w.closeNative()
+	if !started {
+		w.finish()
+	}
+	select {
+	case <-w.done:
+		return closeErr
+	default:
+	}
+	select {
+	case <-w.done:
+		return closeErr
+	case <-ctx.Done():
+		return errors.Join(closeErr, fmt.Errorf("join file watcher: %w", ctx.Err()))
+	}
+}
+
+func (w *Watcher) closeNative() error {
+	w.closeOnce.Do(func() { w.closeErr = w.watcher.Close() })
+	return w.closeErr
+}
+
+func (w *Watcher) finish() {
+	w.finishOnce.Do(func() {
+		close(w.events)
+		close(w.done)
+	})
 }
 
 // SetHash records the hash for a file (used during initial indexing)
@@ -208,8 +273,11 @@ func (w *Watcher) GetHash(path string) (string, bool) {
 }
 
 // addWatchesRecursive adds watches to all directories
-func (w *Watcher) addWatchesRecursive(root string) error {
+func (w *Watcher) addWatchesRecursive(ctx context.Context, root string) error {
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil {
 			return err
 		}

@@ -64,7 +64,7 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	runNew := publishVersioned(t, ctx, pub, "semstreams", "v1.10.0", "pkg/run.go", "Run", "run", "code:run-new")
 	stableOld := publishVersioned(t, ctx, pub, "semstreams", "v1.9.0", "pkg/stable.go", "Stable", "stable", "code:stable-same")
 	stableNew := publishVersioned(t, ctx, pub, "semstreams", "v1.10.0", "pkg/stable.go", "Stable", "stable", "code:stable-same")
-	pub.Stop() // flush buffered publishes
+	_ = pub.Stop(context.Background()) // flush buffered publishes
 
 	qc := tc.Client
 
@@ -77,7 +77,7 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 
 	// Start the supersession component and trigger a pass over NATS.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -134,7 +134,7 @@ func publishVersioned(t *testing.T, ctx context.Context, pub *entitypub.Publishe
 	const org, lang, ctype = "acme", "golang", "function"
 	system := entityid.ScopedSystemSlug(project, version)
 	inst := semsourceast.BuildInstanceID(path, name, semsourceast.TypeFunction)
-	id := entityid.Build(org, entityid.PlatformSemsource, lang, system, ctype, inst)
+	id := entityid.Build(org, "test-a1b2c3", system, lang, ctype, inst)
 	now := time.Now()
 	triples := []message.Triple{
 		{Subject: id, Predicate: semsourceast.CodeType, Object: ctype},

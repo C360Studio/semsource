@@ -23,7 +23,7 @@ func TestParentIsMarkedNavigationalAndPassagesAreNot(t *testing.T) {
 	}
 
 	h, _ := docsHandler(t)
-	states, err := h.IngestEntityStates(context.Background(), sourceConfig{typ: "docs", path: root}, "acme")
+	states, err := h.IngestEntityStates(context.Background(), sourceConfig{typ: "docs", path: root}, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates: %v", err)
 	}

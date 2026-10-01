@@ -16,7 +16,7 @@ func parseSvelte(t *testing.T, src string) []*ast.CodeEntity {
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NewParser("test-org", "test-project", dir).ParseFile(context.Background(), path)
+	result, err := NewParser(testAuthority("test-org"), "test-project", dir).ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}

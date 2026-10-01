@@ -140,6 +140,9 @@ type Config struct {
 	// Namespace is the org identifier used in entity ID construction (e.g., "acme").
 	Namespace string `json:"namespace"`
 
+	// PlatformID is the declared deployment stem. The framework persists its effective unique authority at first boot.
+	PlatformID string `json:"platform_id,omitempty"`
+
 	// Sources lists all ingestion sources.
 	Sources []SourceEntry `json:"sources"`
 
@@ -209,6 +212,9 @@ type Config struct {
 
 // applyDefaults fills in omitted fields with their documented defaults.
 func (c *Config) applyDefaults() {
+	if c.PlatformID == "" {
+		c.PlatformID = "semsource"
+	}
 	if c.WorkspaceDir == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			c.WorkspaceDir = filepath.Join(home, ".semsource", "repos")
@@ -249,6 +255,13 @@ func (c *Config) Validate() error {
 	}
 	if err := validateNamespaceSegment(c.Namespace); err != nil {
 		return err
+	}
+	stem := c.PlatformStem()
+	if err := (entityid.Authority{Org: c.Namespace, Platform: stem}).Validate(); err != nil {
+		return fmt.Errorf("config: platform_id: %w", err)
+	}
+	if len(c.Namespace)+len(stem)+7 > entityid.MaxAuthorityPairLen {
+		return fmt.Errorf("config: namespace and platform_id must leave seven bytes for the persisted authority suffix (maximum combined length %d)", entityid.MaxAuthorityPairLen-7)
 	}
 	if len(c.Sources) == 0 {
 		return fmt.Errorf("config: sources must contain at least one source")
@@ -534,4 +547,12 @@ func validateCapabilityRoles(reg *model.Registry) error {
 	// defect this function exists for is the opposite: silent, deferred, and
 	// invisible until an unexercised path is called.
 	return nil
+}
+
+// PlatformStem returns the declaration used to locate the persisted deployment identity.
+func (c *Config) PlatformStem() string {
+	if c.PlatformID != "" {
+		return c.PlatformID
+	}
+	return "semsource"
 }

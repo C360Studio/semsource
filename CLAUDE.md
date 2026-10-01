@@ -111,24 +111,33 @@ All handlers implement the `SourceHandler` interface (`Ingest`, `Watch`, `Suppor
 ### Entity Identity (6-Part ID)
 
 ```
-{org}.{platform}.{domain}.{system}.{type}.{instance}
+{org}.{platform}.{system}.{domain}.{type}.{instance}
 ```
 
-Example: `acme.semsource.golang.github.com-acme-gcs.function.NewController`
+Example: `acme.catalog-a1b2c3.github-com-acme-gcs.golang.function.NewController`
 
-- `public.*` namespace: deterministic IDs for open-source entities, merge unconditionally across instances
-- `{org}.*` namespace: sovereign to the owning org
+- `org.platform` is the deployment authority supplied by the composition root.
+- `system` identifies the source; `domain.type` identifies its taxonomy.
+- `platform_id` is a configured stem (default `semsource`), not the effective authority.
+  SemStreams mints and retains the effective identity in the namespaced config bucket.
+- Foreign subjects require a separately admitted import lane and are read-only mirrors.
+  An open-source repository does not authorize a handler to replace local authority.
 
 IDs must be purely intrinsic (no timestamps, instance IDs, or insertion-order). All IDs must be valid NATS KV keys.
 
 ### ID Construction by Entity Type
 
-| Entity Type | Construction                                                                     |
-| ----------- | -------------------------------------------------------------------------------- |
-| Code symbol | `org + semsource + language + canonical_module_path + symbol_type + symbol_name` |
-| Git commit  | `org + semsource + git + repo_slug + commit + short_sha`                         |
-| URL / doc   | `org + semsource + web + domain_slug + doc + sha256(canonical_url)[:6]`          |
-| Config file | `org + semsource + config + repo_slug + file_type + sha256(content)[:6]`         |
+| Entity type | Identity inputs after retained org/platform |
+| --- | --- |
+| Code symbol | Source/project/version slug, language, symbol type, scoped symbol instance |
+| Git commit | Repository slug, git taxonomy, commit type, shortened commit SHA |
+| URL / document | Source slug, web taxonomy, page/doc/chunk type, canonical URL or logical-path instance |
+| Config entity | Source slug, config taxonomy, artifact/dependency type, type-specific stable key |
+
+ADRs 102/104 require a one-time clean storage break from beta.161. Provision fresh owned graph storage
+and re-ingest sources; do not alias or rewrite existing IDs. Application and broker restarts within
+one supported deployment retain authority. The exact migration pin, profile crosswalk, recorded
+failures, and acceptance limits are in [SETUP 03A](docs/testing/setup-03a/compatibility.md).
 
 ### Event Types
 
@@ -321,7 +330,7 @@ upstream edit fails the check instead of diverging silently.
 
 - `/kv-or-stream` — **vendored** — KV Watch vs JetStream Stream for a communication path
 - `/orchestration-check` — **vendored** — rule vs workflow vs component boundary
-- `/new-payload` — **forked** — we register explicitly at bootstrap; upstream uses `init()`
+- `/new-payload` — **forked** — product bootstrap binds payload type, authority floor, and projection contract explicitly
 - `/query-pattern` — **forked** — we ship an MCP gateway; the framework does not
 
 The `openspec-*` entries under `.claude/skills/` are Claude-workflow tooling and stay

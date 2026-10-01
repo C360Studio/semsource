@@ -38,8 +38,8 @@ func TestEntityIDSystem(t *testing.T) {
 		id   string
 		want string
 	}{
-		{"acme.semsource.golang.github-com-acme-repo.file.main-go", "github-com-acme-repo"},
-		{"acme.semsource.web.docs-root.doc.readme-md", "docs-root"},
+		{"acme.semsource.github-com-acme-repo.golang.file.main-go", "github-com-acme-repo"},
+		{"acme.semsource.docs-root.web.doc.readme-md", "docs-root"},
 		{"malformed", ""},
 		{"", ""},
 	}
@@ -80,8 +80,8 @@ func TestPathOf(t *testing.T) {
 
 func TestDecideLifecycleActions_RemoveSource_MarksEveryUnmarkedEntity(t *testing.T) {
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", false),
-		docEntity("acme.semsource.web.sys.doc.b-md", "b.md", false),
+		codeEntityAt("acme.semsource.sys.golang.file.a-go", "a.go", false),
+		docEntity("acme.semsource.sys.web.doc.b-md", "b.md", false),
 	}
 	toMark, toClear, paths := decideLifecycleActions(entities, source.LifecycleReasonSourceRemoved, nil)
 
@@ -103,7 +103,7 @@ func TestDecideLifecycleActions_RemoveSource_MarksEveryUnmarkedEntity(t *testing
 
 func TestDecideLifecycleActions_RemoveSource_SkipsAlreadyMarked(t *testing.T) {
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", true), // already marked
+		codeEntityAt("acme.semsource.sys.golang.file.a-go", "a.go", true), // already marked
 	}
 	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonSourceRemoved, nil)
 	if len(toMark) != 0 {
@@ -118,7 +118,7 @@ func TestDecideLifecycleActions_RemoveSource_SkipsAlreadyMarked(t *testing.T) {
 
 func TestDecideLifecycleActions_MissingPath_MarksUnmarkedEntity(t *testing.T) {
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", false),
+		codeEntityAt("acme.semsource.sys.golang.file.a-go", "a.go", false),
 	}
 	stat := func(_ string) bool { return false } // every path missing
 	toMark, toClear, paths := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
@@ -136,7 +136,7 @@ func TestDecideLifecycleActions_MissingPath_MarksUnmarkedEntity(t *testing.T) {
 
 func TestDecideLifecycleActions_MissingPath_AlreadyMarkedIsNoOp(t *testing.T) {
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", true), // already marked
+		codeEntityAt("acme.semsource.sys.golang.file.a-go", "a.go", true), // already marked
 	}
 	stat := func(_ string) bool { return false }
 	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonPathMissing, stat)
@@ -147,7 +147,7 @@ func TestDecideLifecycleActions_MissingPath_AlreadyMarkedIsNoOp(t *testing.T) {
 
 func TestDecideLifecycleActions_PresentPath_ClearsMarkedEntity(t *testing.T) {
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", true), // was marked, file is back
+		codeEntityAt("acme.semsource.sys.golang.file.a-go", "a.go", true), // was marked, file is back
 	}
 	stat := func(_ string) bool { return true } // every path present
 	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
@@ -155,14 +155,14 @@ func TestDecideLifecycleActions_PresentPath_ClearsMarkedEntity(t *testing.T) {
 	if len(toMark) != 0 {
 		t.Errorf("toMark = %v, want empty", toMark)
 	}
-	if len(toClear) != 1 || toClear[0] != "acme.semsource.golang.sys.file.a-go" {
+	if len(toClear) != 1 || toClear[0] != "acme.semsource.sys.golang.file.a-go" {
 		t.Fatalf("toClear = %v, want the single reappeared entity", toClear)
 	}
 }
 
 func TestDecideLifecycleActions_PresentPath_UnmarkedIsNoOp(t *testing.T) {
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.file.a-go", "a.go", false),
+		codeEntityAt("acme.semsource.sys.golang.file.a-go", "a.go", false),
 	}
 	stat := func(_ string) bool { return true }
 	toMark, toClear, _ := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
@@ -173,7 +173,7 @@ func TestDecideLifecycleActions_PresentPath_UnmarkedIsNoOp(t *testing.T) {
 
 func TestDecideLifecycleActions_NoPathPredicate_Skipped(t *testing.T) {
 	entities := []gtypes.EntityState{
-		{ID: "acme.semsource.golang.sys.package.pkg", Triples: nil}, // no path predicate at all
+		{ID: "acme.semsource.sys.golang.package.pkg", Triples: nil}, // no path predicate at all
 	}
 	stat := func(_ string) bool { t.Fatalf("stat should never be called for a pathless entity"); return false }
 	toMark, toClear, paths := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)
@@ -185,8 +185,8 @@ func TestDecideLifecycleActions_NoPathPredicate_Skipped(t *testing.T) {
 func TestDecideLifecycleActions_GroupsMultipleEntitiesUnderOnePath(t *testing.T) {
 	// Two symbols from the same deleted file both get marked from one stat.
 	entities := []gtypes.EntityState{
-		codeEntityAt("acme.semsource.golang.sys.function.a-go-Foo", "a.go", false),
-		codeEntityAt("acme.semsource.golang.sys.function.a-go-Bar", "a.go", false),
+		codeEntityAt("acme.semsource.sys.golang.function.a-go-Foo", "a.go", false),
+		codeEntityAt("acme.semsource.sys.golang.function.a-go-Bar", "a.go", false),
 	}
 	stat := func(_ string) bool { return false }
 	toMark, _, paths := decideLifecycleActions(entities, source.LifecycleReasonFileDeleted, stat)

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -20,6 +23,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
@@ -53,6 +57,7 @@ func (s *sourceCfg) GetSceneThreshold() float64  { return 0 }
 // which handles local path resolution, remote cloning, commit log walking,
 // and change detection via polling.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -96,6 +101,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new git-source processor component.
@@ -106,6 +112,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
 	}
 
 	pollInterval, err := time.ParseDuration(config.PollInterval)
@@ -119,7 +129,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		MaxCommits:     config.MaxCommits,
 		WorkspaceDir:   config.WorkspaceDir,
 		Token:          config.GitToken,
-		Org:            config.Org,
+		Authority:      authority,
 		BranchSlug:     config.BranchSlug,
 		SkipSubmodules: config.Submodules != nil && !*config.Submodules,
 		Logger:         deps.GetLogger(),
@@ -142,6 +152,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
+		authority:  authority,
 		name:       "git-source",
 		config:     config,
 		publisher:  pub,
@@ -221,34 +232,44 @@ func (c *Component) runSeed(ctx context.Context) error {
 	if repoDesc == "" {
 		repoDesc = c.config.RepoURL
 	}
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.ingestErrors.Load()
 
-	// Retry initial ingest — the repo filesystem may not be ready yet if
-	// a Docker volume mount is still settling or a clone is in progress.
-	// retry.Do swallows interim errors, so we log each failed attempt at WARN
-	// so operators can see why seeding is taking time instead of staring at a
-	// silent status counter ticking up.
-	var attempt atomic.Int32
-	if err := retry.Do(ctx, retry.Persistent(), func() error {
-		n := attempt.Add(1)
-		if c.config.RepoPath != "" {
-			if err := workspace.IsRepoReady(c.config.RepoPath); err != nil {
-				c.logger.Warn("git-source: repo not ready — retrying",
-					"repo", c.config.RepoPath,
+		// Retry initial ingest — the repo filesystem may not be ready yet if
+		// a Docker volume mount is still settling or a clone is in progress.
+		// retry.Do swallows interim errors, so we log each failed attempt at WARN
+		// so operators can see why seeding is taking time instead of staring at a
+		// silent status counter ticking up.
+		var attempt atomic.Int32
+		if err := retry.Do(ctx, retry.Persistent(), func() error {
+			n := attempt.Add(1)
+			if c.config.RepoPath != "" {
+				if err := workspace.IsRepoReady(c.config.RepoPath); err != nil {
+					c.logger.Warn("git-source: repo not ready — retrying",
+						"repo", c.config.RepoPath,
+						"attempt", n,
+						"error", err)
+					return err
+				}
+			}
+			if err := c.ingestOnce(ctx); err != nil {
+				c.logger.Warn("git-source: initial ingest attempt failed — retrying",
+					"repo", repoDesc,
 					"attempt", n,
 					"error", err)
 				return err
 			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("initial git ingest failed after %d attempts: %w", attempt.Load(), err)
 		}
-		if err := c.ingestOnce(ctx); err != nil {
-			c.logger.Warn("git-source: initial ingest attempt failed — retrying",
-				"repo", repoDesc,
-				"attempt", n,
-				"error", err)
-			return err
+
+		if failed := (c.ingestErrors.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("initial git ingest failed after %d attempts: %w", attempt.Load(), err)
+		return err
 	}
 
 	c.logger.Info("Git-source initial ingest complete",
@@ -273,7 +294,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 // typed EntityState values with vocabulary-predicate triples, then publishes
 // each as an EntityPayload to NATS — no normalizer pass required.
 func (c *Component) ingestOnce(ctx context.Context) error {
-	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.config.Org)
+	states, err := c.handler.IngestEntityStates(ctx, c.sourceCfg, c.authority)
 	if err != nil {
 		c.ingestErrors.Add(1)
 		return fmt.Errorf("git handler ingest: %w", err)
@@ -331,7 +352,8 @@ func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
 	c.logger.Info("Git-source polling started",
 		"interval", pollInterval)
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-pollCtx.Done():
@@ -343,7 +365,7 @@ func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
 				c.handleChangeEvent(pollCtx, event)
 			}
 		}
-	}()
+	})
 
 	return cancel
 }
@@ -384,8 +406,8 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 
 // publishEntity enqueues an EntityPayload for buffered delivery to NATS.
 // Send is non-blocking; the publisher's circular buffer absorbs backpressure.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -477,7 +499,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
-		ErrorCount:     c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost(),
+		ErrorCount:     c.ingestErrors.Load() + c.handler.WatchErrorCount() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// The no-silent-entity-loss posture applied to inputs: every declared
 		// submodule path and its state, so missing trees are visible on every
@@ -517,7 +539,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -531,45 +553,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and
-	// the seed itself takes it, so waiting under the lock deadlocks. Draining
-	// first also keeps shutdown safe — stopping the publisher closes its
-	// buffer, and a live seed would publish into a closed one.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.publisher.Stop()
-	c.logger.Info("entity publisher stats",
-		"published", c.publisher.Published(),
-		"dropped", c.publisher.Dropped(),
-		"retries", c.publisher.Retries())
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
+
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
 	c.running = false
-
-	c.logger.Info("Git-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
-
+	c.mu.Unlock()
 	return nil
 }
 
@@ -629,12 +645,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

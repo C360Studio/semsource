@@ -368,7 +368,7 @@ func TestURLHandler_IngestEntityStates_ReturnsState(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestURLHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -401,8 +401,8 @@ func TestURLHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	if parts[0] != "acme" {
 		t.Errorf("ID org segment = %q, want %q", parts[0], "acme")
 	}
-	if parts[2] != "web" {
-		t.Errorf("ID domain segment = %q, want %q", parts[2], "web")
+	if parts[3] != "web" {
+		t.Errorf("ID domain segment = %q, want %q", parts[3], "web")
 	}
 	if parts[4] != "page" {
 		t.Errorf("ID type segment = %q, want %q", parts[4], "page")
@@ -420,7 +420,7 @@ func TestURLHandler_IngestEntityStates_TriplesUseVocabularyPredicates(t *testing
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestURLHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -478,8 +478,8 @@ func TestURLHandler_IngestEntityStates_DeterministicID(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	states1, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
-	states2, _ := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states1, _ := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
+	states2, _ := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 
 	if len(states1) == 0 || len(states2) == 0 {
 		t.Skip("no states returned")
@@ -499,7 +499,7 @@ func TestURLHandler_IngestEntityStates_NoETagTripleWhenAbsent(t *testing.T) {
 	h := urlhandler.NewWithClient(nil, srv.Client())
 	cfg := &stubSourceConfig{sourceType: "url", url: srv.URL}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -526,7 +526,7 @@ func TestURLHandler_IngestEntityStates_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled — deterministic, no timeout race
 
-	_, err := h.IngestEntityStates(ctx, cfg, "acme")
+	_, err := h.IngestEntityStates(ctx, cfg, testAuthority("acme"))
 	if err == nil {
 		t.Error("expected error on cancelled context")
 	}

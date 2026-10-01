@@ -111,6 +111,7 @@ func (f docFixture) build() []gtypes.EntityState {
 			{Subject: id, Predicate: source.DocFilePath, Object: f.path},
 			{Subject: id, Predicate: source.DocType, Object: "passage"},
 			{Subject: id, Predicate: source.DocChunkIndex, Object: num(i)},
+			{Subject: id, Predicate: source.CodeBelongs, Object: f.parentID(), Datatype: message.EntityReferenceDatatype},
 		}
 		if marked[i] {
 			tr = append(tr, staleMarkerTriple(id))

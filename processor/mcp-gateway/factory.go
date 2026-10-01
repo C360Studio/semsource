@@ -1,6 +1,7 @@
 package mcpgateway
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -23,6 +24,7 @@ func Register(registry RegistryInterface) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
 		Name:        "mcp-gateway",
 		Factory:     NewComponent,
+		Ports:       DeclarePorts,
 		Schema:      mcpGatewaySchema,
 		Type:        "processor",
 		Protocol:    "mcp",
@@ -30,4 +32,16 @@ func Register(registry RegistryInterface) error {
 		Description: "MCP gateway exposing source-registration tools over Streamable HTTP",
 		Version:     "0.1.0",
 	})
+}
+
+// DeclarePorts reports the constructor's ports without acquiring runtime resources.
+func DeclarePorts(raw json.RawMessage, _ string) (component.PortConfig, error) {
+	cfg := DefaultConfig()
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return component.PortConfig{}, fmt.Errorf("decode config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return component.PortConfig{}, err
+	}
+	return component.PortConfig{}, nil
 }

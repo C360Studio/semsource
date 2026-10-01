@@ -712,7 +712,7 @@ func TestImageHandler_IngestEntityStates_ReturnsEntityStates(t *testing.T) {
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -728,7 +728,7 @@ func TestImageHandler_IngestEntityStates_IDContainsOrg(t *testing.T) {
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -748,7 +748,7 @@ func TestImageHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestImageHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testin
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -806,7 +806,7 @@ func TestImageHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -825,7 +825,7 @@ func TestImageHandler_IngestEntityStates_MediaTypeTripleIsImage(t *testing.T) {
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -850,7 +850,7 @@ func TestImageHandler_IngestEntityStates_EmptyDirReturnsEmpty(t *testing.T) {
 	h := imagehandler.New()
 	cfg := sourceConfig{typ: "image", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}

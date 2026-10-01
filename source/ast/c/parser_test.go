@@ -27,7 +27,7 @@ func parse(t *testing.T, name, content string) (*ast.ParseResult, string) {
 	t.Helper()
 	root := t.TempDir()
 	path := writeFile(t, root, name, content)
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	res, err := p.ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -139,7 +139,7 @@ func TestSameNamedStaticFunctionsInDifferentFilesDoNotCollide(t *testing.T) {
 	a := writeFile(t, root, "radio.c", "static int helper(int x) { return x; }")
 	b := writeFile(t, root, "gps.c", "static int helper(int x) { return x * 2; }")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	resA, err := p.ParseFile(context.Background(), a)
 	if err != nil {
 		t.Fatalf("parse a: %v", err)
@@ -163,7 +163,7 @@ func TestSameNamedStaticFunctionsInDifferentFilesDoNotCollide(t *testing.T) {
 func TestIdentityIsStableAcrossReparses(t *testing.T) {
 	root := t.TempDir()
 	path := writeFile(t, root, "mesh.c", sample)
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 
 	first, err := p.ParseFile(context.Background(), path)
 	if err != nil {
@@ -194,7 +194,7 @@ func TestEntityIDShape(t *testing.T) {
 		t.Fatal("mesh_send missing")
 	}
 	// {org}.{platform}.{domain}.{system}.{type}.{instance}
-	const wantPrefix = "acme.semsource.c.proj.function."
+	const wantPrefix = "acme.test-platform.proj.c.function."
 	if got := entity.ID; len(got) <= len(wantPrefix) || got[:len(wantPrefix)] != wantPrefix {
 		t.Errorf("entity ID %q does not start with %q", got, wantPrefix)
 	}

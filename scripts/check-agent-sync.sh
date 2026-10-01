@@ -46,7 +46,7 @@ if [ -z "$upstream" ] || [ ! -d "$upstream/.agents/skills" ]; then
 fi
 ok "semstreams $pinned resolved"
 
-# ── Shared decision skills: vendored must match, forked must be re-read on change ──
+# ── Shared decision skills: vendored must match, forked/excluded must be re-read on change ──
 while IFS="$(printf '\t')" read -r name mode sha; do
 	case "$name" in \#*|'') continue ;; esac
 	[ "$name" = upstream_version ] && continue
@@ -54,12 +54,25 @@ while IFS="$(printf '\t')" read -r name mode sha; do
 	ours=".agents/skills/$name/SKILL.md"
 	theirs="$upstream/.agents/skills/$name/SKILL.md"
 
-	[ -f "$ours" ] || { fail "$name: $ours is missing"; continue; }
 	[ -f "$theirs" ] || { fail "$name: upstream no longer ships this skill — decide whether we still want it"; continue; }
 
 	current=$(shasum -a 256 < "$theirs" | cut -d' ' -f1)
 
+	if [ "$mode" != excluded ] && [ ! -f "$ours" ]; then
+		fail "$name: $ours is missing"
+		continue
+	fi
+
 	case "$mode" in
+	excluded)
+		if [ -f "$ours" ]; then
+			fail "$name: excluded upstream workflow has a local canonical copy"
+		elif [ "$current" != "$sha" ]; then
+			fail "$name: excluded upstream workflow changed; re-read its scope before renewing the exclusion"
+		else
+			ok "$name: reviewed exclusion, upstream unchanged"
+		fi
+		;;
 	vendored)
 		if cmp -s "$ours" "$theirs"; then
 			ok "$name: vendored, matches upstream"
@@ -80,7 +93,7 @@ while IFS="$(printf '\t')" read -r name mode sha; do
       actual   $current"
 		fi
 		;;
-	*) fail "$name: unknown mode '$mode' in $manifest (expected vendored or forked)" ;;
+	*) fail "$name: unknown mode '$mode' in $manifest (expected vendored, forked, or excluded)" ;;
 	esac
 done < "$manifest"
 
@@ -89,7 +102,7 @@ for theirs in "$upstream"/.agents/skills/*/SKILL.md; do
 	name=$(basename "$(dirname "$theirs")")
 	if ! awk -F'\t' -v n="$name" '$1 == n { found = 1 } END { exit !found }' "$manifest"; then
 		fail "$name: semstreams $pinned ships this shared decision skill and we do not track it.
-      Vendor it, or record a deliberate fork, in $manifest."
+      Vendor it, record a deliberate fork, or document a reviewed exclusion in $manifest."
 	fi
 done
 

@@ -98,7 +98,7 @@ func (s langConfig) GetProject() string          { return "proj" }
 // TestIngestRejectsUnsupportedLanguage checks the failure is loud at the entry
 // point rather than surfacing later as mislabelled entities.
 func TestIngestRejectsUnsupportedLanguage(t *testing.T) {
-	h := New(nil)
+	h := New(nil, testAuthority("acme"))
 	if _, err := h.Ingest(context.Background(), langConfig{lang: "rust", path: t.TempDir()}); err == nil {
 		t.Fatal("Ingest accepted an unsupported language")
 	} else if !strings.Contains(err.Error(), "rust") {
@@ -109,7 +109,7 @@ func TestIngestRejectsUnsupportedLanguage(t *testing.T) {
 // TestWatchRejectsUnsupportedLanguage covers the same for the watch path, which
 // resolves extensions separately and so could have failed differently.
 func TestWatchRejectsUnsupportedLanguage(t *testing.T) {
-	h := New(nil)
+	h := New(nil, testAuthority("acme"))
 	if _, err := h.Watch(context.Background(), langConfig{lang: "rust", path: t.TempDir()}); err == nil {
 		t.Fatal("Watch accepted an unsupported language")
 	} else if !strings.Contains(err.Error(), "rust") {

@@ -3,6 +3,7 @@ package binaryproof
 import (
 	"context"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestBuildSyntheticFixtureStoresByReference(t *testing.T) {
 	fixturePath := writeFixture(t, syntheticFixtureBytes)
 	store := newStreamingStore()
 
-	result, err := BuildSyntheticFixture(ctx, "acme", fixturePath, store, DefaultStorageInstance, fixedTime())
+	result, err := BuildSyntheticFixture(ctx, entityid.Authority{Org: "acme", Platform: "test-a1b2c3"}, fixturePath, store, DefaultStorageInstance, fixedTime())
 	if err != nil {
 		t.Fatalf("BuildSyntheticFixture() error = %v", err)
 	}
@@ -68,7 +69,7 @@ func TestBuildSyntheticFixtureFallsBackForByteOnlyStore(t *testing.T) {
 	fixturePath := writeFixture(t, syntheticFixtureBytes)
 	store := newByteOnlyStore()
 
-	result, err := BuildSyntheticFixture(ctx, "acme", fixturePath, store, "byte-only", fixedTime())
+	result, err := BuildSyntheticFixture(ctx, entityid.Authority{Org: "acme", Platform: "test-a1b2c3"}, fixturePath, store, "byte-only", fixedTime())
 	if err != nil {
 		t.Fatalf("BuildSyntheticFixture() error = %v", err)
 	}

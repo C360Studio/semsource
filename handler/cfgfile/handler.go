@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -35,10 +36,10 @@ type Config struct {
 	// WatchConfig is forwarded to the underlying FSWatcher.
 	Watch fswatcher.WatchConfig
 
-	// Org is the organisation namespace used when building typed EntityState
+	// Authority is the effective deployment authority used when building typed EntityState
 	// values via IngestEntityStates and Watch. Required for the normalizer-free
 	// processor path.
-	Org string
+	Authority entityid.Authority
 
 	// Project, when non-empty, overrides the path-derived entity-ID system
 	// slug. Submodule expansion depends on this: the same canonical project
@@ -121,6 +122,7 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 
 			content, readErr := os.ReadFile(path)
 			if readErr != nil {
+				seedproof.Report(ctx, readErr)
 				h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
 				return nil
 			}
@@ -129,6 +131,7 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 			entities = append(entities, parsed...)
 			return nil
 		})
+		seedproof.Report(ctx, err)
 		if err != nil && err != context.Canceled {
 			return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
 		}
@@ -139,9 +142,12 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 
 // IngestEntityStates walks all configured paths, parses recognised config
 // files, and returns fully-typed entity states that embed vocabulary-predicate
-// triples directly — bypassing the normalizer entirely. The org parameter is
-// the organisation namespace (e.g. "acme") used in the 6-part entity ID.
-func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// triples directly — bypassing the normalizer entirely. The authority parameter is
+// the effective deployment authority (e.g. "acme") used in the 6-part entity ID.
+func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	paths := resolvePaths(cfg)
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("cfgfile: at least one path is required")
@@ -179,14 +185,19 @@ func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.Sour
 
 			content, readErr := os.ReadFile(path)
 			if readErr != nil {
+				seedproof.Report(ctx, readErr)
 				h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
 				return nil
 			}
 
-			parsed := h.parseFileEntityStates(base, path, content, root, org, now)
+			if seedproof.Active(ctx) {
+				seedproof.Report(ctx, configParseError(base, content))
+			}
+			parsed := h.parseFileEntityStates(base, path, content, root, authority, now)
 			states = append(states, parsed...)
 			return nil
 		})
+		seedproof.Report(ctx, err)
 		if err != nil && err != context.Canceled {
 			return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
 		}
@@ -298,8 +309,8 @@ func (h *ConfigHandler) fanOut(ctx context.Context, root string, in <-chan handl
 				Timestamp: now,
 				Entities:  entities,
 			}
-			if h.cfg.Org != "" {
-				enriched.EntityStates = h.parseFileEntityStates(base, ev.Path, content, root, h.cfg.Org, now.UTC())
+			if h.cfg.Authority.Org != "" {
+				enriched.EntityStates = h.parseFileEntityStates(base, ev.Path, content, root, h.cfg.Authority, now.UTC())
 			}
 			select {
 			case out <- enriched:

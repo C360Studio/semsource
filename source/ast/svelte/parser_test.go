@@ -60,7 +60,7 @@ func TestParser_ParseFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse the file
-	parser := NewParser("testorg", "testproject", tmpDir)
+	parser := NewParser(testAuthority("testorg"), "testproject", tmpDir)
 	result, err := parser.ParseFile(context.Background(), testFile)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -114,7 +114,7 @@ func TestParser_ParseFileSimple(t *testing.T) {
 	err := os.WriteFile(testFile, []byte(svelteContent), 0o644)
 	require.NoError(t, err)
 
-	parser := NewParser("org", "proj", tmpDir)
+	parser := NewParser(testAuthority("org"), "proj", tmpDir)
 	result, err := parser.ParseFile(context.Background(), testFile)
 	require.NoError(t, err)
 
@@ -158,7 +158,7 @@ func TestParser_ParseDirectory(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	parser := NewParser("org", "proj", tmpDir)
+	parser := NewParser(testAuthority("org"), "proj", tmpDir)
 	results, err := parser.ParseDirectory(context.Background(), tmpDir)
 	require.NoError(t, err)
 
@@ -188,7 +188,7 @@ func TestParser_SkipsNodeModules(t *testing.T) {
 	err = os.WriteFile(filepath.Join(tmpDir, "App.svelte"), []byte("<h1>App</h1>"), 0o644)
 	require.NoError(t, err)
 
-	parser := NewParser("org", "proj", tmpDir)
+	parser := NewParser(testAuthority("org"), "proj", tmpDir)
 	results, err := parser.ParseDirectory(context.Background(), tmpDir)
 	require.NoError(t, err)
 
@@ -406,7 +406,7 @@ func TestParser_Integration_RealComponent(t *testing.T) {
 	err := os.WriteFile(testFile, []byte(svelteContent), 0o644)
 	require.NoError(t, err)
 
-	parser := NewParser("testorg", "ui", tmpDir)
+	parser := NewParser(testAuthority("testorg"), "ui", tmpDir)
 	result, err := parser.ParseFile(context.Background(), testFile)
 	require.NoError(t, err)
 
@@ -485,7 +485,7 @@ func TestParser_JSDoc(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	p := NewParser("acme", "test", tmpDir)
+	p := NewParser(testAuthority("acme"), "test", tmpDir)
 	result, err := p.ParseFile(context.Background(), path)
 	require.NoError(t, err)
 

@@ -9,9 +9,9 @@ import "testing"
 func TestDistinctTracker_ReindexDoesNotInflate(t *testing.T) {
 	tr := NewDistinctTracker()
 	ids := []string{
-		"c360.semsource.code.workspace.repo.workspace",
-		"c360.semsource.code.workspace.folder.entityid",
-		"c360.semsource.golang.workspace.function.entityid-entityid-go-Build",
+		"c360.semsource.workspace.code.repo.workspace",
+		"c360.semsource.workspace.code.folder.entityid",
+		"c360.semsource.workspace.golang.function.entityid-entityid-go-Build",
 	}
 
 	for round := range 4 {

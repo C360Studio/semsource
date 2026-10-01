@@ -75,7 +75,7 @@ func (c *Component) handleAddHTTP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, reply)
 }
 
-// handleRemoveHTTP serves DELETE /sources/{id}. Removal stops ingestion but does
+// handleRemoveHTTP serves DELETE /sources/{id}. Removal takes effect at restart and does
 // not retract entities (ADR-0007 sequencing guardrail).
 func (c *Component) handleRemoveHTTP(w http.ResponseWriter, r *http.Request) {
 	cfg, ok := c.authorizedIngest(w, r)

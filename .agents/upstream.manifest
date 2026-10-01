@@ -1,13 +1,12 @@
-# Canonical shared decision skills and their relationship to semstreams.
-# Checked by scripts/check-agent-sync.sh; see .agents/README.md.
-#
-# vendored — semstreams owns this truth; our copy must match upstream byte for byte.
-# forked   — we own it deliberately; the digest records the upstream revision we last
-#            reconciled against, so an upstream edit forces a conscious re-read.
-#
-# Fields are tab-separated: name, mode, upstream sha256.
-upstream_version	v1.0.0-beta.161
+# Reviewed skill relationship to the exact SemStreams pin.
+# Fields: name, mode, upstream sha256. Exclusions and their reasons are in README.md.
+upstream_version	v1.0.0-beta.162.0.20260930150212-8b99efe9c66a
+entity-or-bucket	vendored	a62fcfa5d1198843c8da60c117ecdc488331b5f723ec4a427eeed008a4a75edb
 kv-or-stream	vendored	c2223363e9291e6e18a4716b06444751596d3bad7ab307a8600b93ba9d1645db
+new-payload	forked	65aae2731433210cb716fbf2a2fc007c39adaf9d2b58b7d82326268af04a484c
 orchestration-check	vendored	54cd290a2c5d711293754c3bcfaa273c40a3f47836b44a1d90dd460df20253c2
-new-payload	forked	92d6e849bba362b5e88c88ab7bcb5ce0ebe52cfbbe8f51df0353f8d346d2e150
 query-pattern	forked	7bd65580080d1ebcc0d88ffb5d1ca7c4f9e66f0fadb89a1e214e24f530ac2f87
+semstreams-dev	excluded	9a9f32ca40bfb8e91db8927d74132652f2d82d9d7d1caf71a3c3866a7202e2c9
+semstreams-handoff	excluded	dabddd78408ee1dfcb3398e8a728e1a94bece975fbc0092b2d1fd5bbc154f54c
+semstreams-pickup	excluded	165fe0cc0fa4ccd0c3478fb72935ffbbe7cdbad1277e72e63e6276d29137ddf5
+semstreams-preflight	excluded	e91f4f8cb6c8a2ad7028a5dc3ee9dfccbd07dfcebceeeb5a02965f713e86e701

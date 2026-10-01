@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"io"
 	"log/slog"
 	"os"
@@ -42,9 +43,9 @@ type Handler struct {
 	store       storage.Store // nil = no binary storage (metadata only)
 	storeBucket string        // ObjectStore bucket name for StorageReference
 	logger      *slog.Logger
-	// org is the organisation namespace used when building EntityState values
+	// authority is the effective deployment authority used when building EntityState values
 	// via IngestEntityStates and enrichEvent. Empty disables the typed path.
-	org string
+	authority entityid.Authority
 }
 
 // Option is a functional option for configuring an Handler.
@@ -66,10 +67,10 @@ func WithLogger(l *slog.Logger) Option {
 	return func(h *Handler) { h.logger = l }
 }
 
-// WithOrg sets the organisation namespace used when building typed EntityState
+// WithAuthority sets the effective deployment authority used when building typed EntityState
 // values via IngestEntityStates and Watch enrichment.
-func WithOrg(org string) Option {
-	return func(h *Handler) { h.org = org }
+func WithAuthority(authority entityid.Authority) Option {
+	return func(h *Handler) { h.authority = authority }
 }
 
 // New returns a ready-to-use Handler configured by the provided options.
@@ -128,6 +129,7 @@ func (h *Handler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([]handl
 
 			audioEntity, err := h.ingestFile(ctx, path, root)
 			if err != nil {
+				seedproof.Report(ctx, err)
 				// Non-fatal: skip unreadable or unsupported files and continue.
 				h.logger.Warn("audio handler: skipping file", "path", path, "error", err)
 				return nil
@@ -182,6 +184,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 	// Extract audio metadata via ffprobe. Non-fatal on failure.
 	pr, probeErr := probe(ctx, path)
 	if probeErr != nil {
+		seedproof.Report(ctx, probeErr)
 		h.logger.Warn("audio handler: ffprobe failed, metadata will be partial",
 			"path", path, "error", probeErr)
 		pr = &ProbeResult{}
@@ -213,6 +216,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 	if h.store != nil {
 		storageKey := fmt.Sprintf("audio/%s/%s/original", system, instance)
 		if err := handler.StoreFile(ctx, h.store, storageKey, path); err != nil {
+			seedproof.Report(ctx, err)
 			h.logger.Warn("audio handler: failed to store audio binary",
 				"path", path, "error", err)
 		} else {

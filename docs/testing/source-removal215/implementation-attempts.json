@@ -1,0 +1,349 @@
+{
+  "status": "intermediate implementation attempts; not release or migration acceptance",
+  "semstreams_sha": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+  "semstreams_module": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+  "profile": "bm25",
+  "providers_started": false,
+  "nats_image": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+  "first_build": {
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "/tmp/semsource-removal215-evidence/semsource-after-first",
+      "./cmd/semsource"
+    ],
+    "started_at": "2026-10-01T00:31:34.211283+00:00",
+    "elapsed_seconds": 5.1409109169617295,
+    "exit_code": 0,
+    "git_head": "d50163f52847f7e23d67c9698b18695a48dd5572",
+    "git_status": " M cmd/semsource/run.go\n M docs/upstream/semstreams-asks.md\n M handler/audio/handler.go\n M handler/cfgfile/handler.go\n M handler/doc/entities.go\n M handler/image/handler.go\n M handler/objectstore/handler.go\n M handler/video/handler.go\n M internal/entitypub/publisher.go\n M internal/sourceintent/contract.go\n M openspec/changes/replay-source-removal/design.md\n M openspec/changes/replay-source-removal/proposal.md\n M openspec/changes/replay-source-removal/specs/source-removal-replay/spec.md\n M openspec/changes/replay-source-removal/tasks.md\n M processor/ast-source/bodystore.go\n M processor/ast-source/component.go\n M processor/audio-source/component.go\n M processor/cfgfile-source/component.go\n M processor/doc-source/component.go\n M processor/git-source/component.go\n M processor/image-source/component.go\n M processor/objectstore-source/component.go\n M processor/source-manifest/component.go\n M processor/source-manifest/ingest.go\n M processor/source-manifest/payload_ingest.go\n M processor/supersession/component.go\n M processor/supersession/config.go\n M processor/supersession/factory.go\n M processor/supersession/lifecycle.go\n M processor/supersession/lifecycle_passage_test.go\n M processor/supersession/prefixquery.go\n M processor/url-source/component.go\n M processor/video-source/component.go\n?? cmd/semsource/source_bindings.go\n?? cmd/semsource/source_bindings_test.go\n?? cmd/semsource/source_lifecycle_runtime.go\n?? docs/testing/source-removal215/additive-before-results.json\n?? docs/testing/source-removal215/replay-qualification.md\n?? handler/cfgfile/seed_proof.go\n?? handler/doc/seed_proof_test.go\n?? internal/entitypub/receipt.go\n?? internal/entitypub/receipt_test.go\n?? internal/seedproof/\n?? internal/sourceintent/fingerprint.go\n?? internal/sourceintent/fingerprint_test.go\n?? internal/sourcelifecycle/\n?? processor/ast-source/seed_proof_test.go\n?? processor/ast-source/source_lifecycle.go\n?? processor/audio-source/source_lifecycle.go\n?? processor/cfgfile-source/source_lifecycle.go\n?? processor/doc-source/source_lifecycle.go\n?? processor/git-source/source_lifecycle.go\n?? processor/image-source/source_lifecycle.go\n?? processor/objectstore-source/source_lifecycle.go\n?? processor/source-manifest/source_lifecycle.go\n?? processor/supersession/source_projection.go\n?? processor/supersession/source_projection_integration_test.go\n?? processor/supersession/source_replay_test.go\n?? processor/url-source/source_lifecycle.go\n?? processor/video-source/source_lifecycle.go\n?? test/setup03a/fixtures/removal-replay-v1/\n?? test/setup03a/removal_replay_helpers_test.go\n?? test/setup03a/removal_replay_test.go\n",
+    "source_manifest_sha256": "d53448fb1e43e7bdf2783d20ab74770113af42d8e2813ddc87018a267316bec7",
+    "binary_sha256": "c53aa9bbae44bc6a8b5af7691365dc4d75dc045ef74f8287bb1e59dcd3262804"
+  },
+  "first_runs": {
+    "original": {
+      "command": [
+        "go",
+        "test",
+        "-tags=qualification,removal",
+        "-count=1",
+        "-v",
+        "-run",
+        "^TestSourceRemovalLifecycle$",
+        "./test/setup03a"
+      ],
+      "env": {
+        "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-after-first",
+        "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/after-first-original",
+        "SETUP03A_REMOVAL_ACTIVATION": "restart",
+        "SETUP03A_IDENTITY": "governed",
+        "SETUP03A_PROFILE": "bm25",
+        "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+      },
+      "started_at": "2026-10-01T00:35:41.256762+00:00",
+      "elapsed_seconds": 33.43720604199916,
+      "exit_code": 0
+    },
+    "additive": {
+      "command": [
+        "go",
+        "test",
+        "-tags=qualification,removal",
+        "-count=1",
+        "-v",
+        "-run",
+        "^TestRemovalReplay",
+        "./test/setup03a"
+      ],
+      "env": {
+        "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-after-first",
+        "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/after-first-additive",
+        "SETUP03A_IDENTITY": "governed",
+        "SETUP03A_PROFILE": "bm25",
+        "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+      },
+      "started_at": "2026-10-01T00:36:50.065681+00:00",
+      "elapsed_seconds": 429.705979249964,
+      "exit_code": 1
+    }
+  },
+  "first_cases": [
+    {
+      "name": "TestRemovalReplayReaddBeforeRestart",
+      "binary_sha256": "c53aa9bbae44bc6a8b5af7691365dc4d75dc045ef74f8287bb1e59dcd3262804",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "passed": 23,
+      "total": 24,
+      "container_absent": true,
+      "container_id": "edc3470889df65e04a1b6bed9005f51f0691fdbf5eea49df4f8e631e917f3eaf",
+      "report_sha256": "da5005c5ce4b6697561d647d68bf7de580fa81860647b8bb68871f59ec514e1b",
+      "process_exits": [
+        {
+          "name": "superseded_readd_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 23679,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 24006,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "failures": [
+        {
+          "name": "rapid_toggle_siblings_unchanged",
+          "error": "sibling source facts changed: setup03a.semsource-2f6b5d.setup03a-corpus-v1.code.folder.alpha"
+        }
+      ]
+    },
+    {
+      "name": "TestRemovalReplayRetirement-original",
+      "binary_sha256": "c53aa9bbae44bc6a8b5af7691365dc4d75dc045ef74f8287bb1e59dcd3262804",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "passed": 11,
+      "total": 12,
+      "container_absent": true,
+      "container_id": "b25e2b26fb0dc858b121afe99aad08c88a6cbb1c4c4a7aa1723e79633ba6673b",
+      "report_sha256": "833087168c3e70db6a7ae48ec569a24e50c43634a1104302014d60de75c7559f",
+      "process_exits": [
+        {
+          "name": "crash_after_durable_intent_observed_exit",
+          "passed": true,
+          "detail": {
+            "pid": 21819,
+            "forced": true,
+            "observed": true,
+            "exit_code": -1,
+            "signal": "killed"
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 22485,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "failures": [
+        {
+          "name": "retained_markers_converged_but_terminal_completion_unqualified",
+          "error": "retained projection has not recorded the complete expected set"
+        }
+      ]
+    },
+    {
+      "name": "TestRemovalReplayRetirement-runtime_added",
+      "binary_sha256": "c53aa9bbae44bc6a8b5af7691365dc4d75dc045ef74f8287bb1e59dcd3262804",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "passed": 15,
+      "total": 16,
+      "container_absent": true,
+      "container_id": "6cadd717455b0d6cf7fd78f3df80986343b7fbd9e9d568feff7de0fdb46a1857",
+      "report_sha256": "ae77d210394d7b5ec14c65d4cc397fb025a32b09818b9b5920af38fca7234f1a",
+      "process_exits": [
+        {
+          "name": "runtime_add_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 23182,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "crash_after_durable_intent_observed_exit",
+          "passed": true,
+          "detail": {
+            "pid": 23279,
+            "forced": true,
+            "observed": true,
+            "exit_code": -1,
+            "signal": "killed"
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 23394,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "failures": [
+        {
+          "name": "retained_markers_converged_but_terminal_completion_unqualified",
+          "error": "retained projection has not recorded the complete expected set"
+        }
+      ]
+    },
+    {
+      "name": "TestRemovalReplaySelectiveReactivation",
+      "binary_sha256": "c53aa9bbae44bc6a8b5af7691365dc4d75dc045ef74f8287bb1e59dcd3262804",
+      "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+      "passed": 11,
+      "total": 12,
+      "container_absent": true,
+      "container_id": "34a05242ab44fb67faaf35e5e3220d19489d66ce71e9be04f37e18905bdb460f",
+      "report_sha256": "59c2a7deb622e05e34a3893353a283eba94e9b1765a1a117a645097a700d47b3",
+      "process_exits": [
+        {
+          "name": "removal_graceful_checked_exit",
+          "passed": true,
+          "detail": {
+            "pid": 24230,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        },
+        {
+          "name": "cleanup_checked_process_exit",
+          "passed": true,
+          "detail": {
+            "pid": 24553,
+            "forced": false,
+            "observed": true,
+            "exit_code": 0
+          }
+        }
+      ],
+      "failures": [
+        {
+          "name": "retained_markers_converged_but_terminal_completion_unqualified",
+          "error": "retained projection has not recorded the complete expected set"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "First binary was an uncommitted implementation snapshot; its executable and file hash manifest are retained, not a final reviewed commit.",
+    "The original ten-check probe does not prove selective freshness or terminal all-input completion.",
+    "Independent review subsequently found queued lifecycle RPC authority and other defects; this first binary is not approved."
+  ],
+  "first_original_result": {
+    "passed": 10,
+    "total": 10,
+    "exit_code": 0,
+    "prior_preserved_result": "9/10, exit 1"
+  },
+  "sibling_before_control": {
+    "run": {
+      "command": [
+        "go",
+        "test",
+        "-tags=qualification,removal",
+        "-count=1",
+        "-v",
+        "-run",
+        "^TestRemovalReplaySiblingRestartControl$",
+        "./test/setup03a"
+      ],
+      "environment": {
+        "GOCACHE": "/tmp/semsource-ci214-gocache",
+        "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-before",
+        "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/sibling-before-control",
+        "SETUP03A_IDENTITY": "governed",
+        "SETUP03A_PROFILE": "bm25",
+        "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+      },
+      "started_at": "2026-10-01T00:45:36.326878+00:00",
+      "exit_code": 1,
+      "elapsed_seconds": 81.76529437501449,
+      "finished_at": "2026-10-01T00:46:58.092234+00:00"
+    },
+    "passed": 7,
+    "total": 8,
+    "strict_diff": {
+      "entity_id": "setup03a.semsource-401e98.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+      "before_only": [
+        {
+          "object": "2026-09-30T19:45:37-05:00",
+          "predicate": "dc.terms.created"
+        }
+      ],
+      "after_only": [
+        {
+          "object": "2026-09-30T19:46:07-05:00",
+          "predicate": "dc.terms.created"
+        }
+      ]
+    },
+    "attribution": "source/ast/entities.go emits dc.terms.created from per-ingest IndexedAt; independent reviewer approved AST-only normalization with explicit metadata recording"
+  },
+  "raw_evidence_directory": "/tmp/semsource-removal215-evidence",
+  "sibling_oracle_corrected_attempts": [
+    {
+      "command": [
+        "go",
+        "test",
+        "-tags=qualification,removal",
+        "-count=1",
+        "-v",
+        "-run",
+        "^TestRemovalReplaySiblingRestartControl$",
+        "./test/setup03a"
+      ],
+      "env": {
+        "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-before",
+        "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/sibling-before-corrected",
+        "SETUP03A_IDENTITY": "governed",
+        "SETUP03A_PROFILE": "bm25",
+        "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+      },
+      "started_at": "2026-10-01T00:54:03.762138+00:00",
+      "elapsed_seconds": 1.4228606660035439,
+      "exit_code": 1
+    },
+    {
+      "command": [
+        "go",
+        "test",
+        "-tags=qualification,removal",
+        "-count=1",
+        "-v",
+        "-run",
+        "^TestRemovalReplaySiblingRestartControl$",
+        "./test/setup03a"
+      ],
+      "env": {
+        "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-before",
+        "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/sibling-before-corrected2",
+        "SETUP03A_IDENTITY": "governed",
+        "SETUP03A_PROFILE": "bm25",
+        "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+      },
+      "started_at": "2026-10-01T00:55:49.142010+00:00",
+      "elapsed_seconds": 61.60669195797527,
+      "exit_code": 0,
+      "prior_attempt": "sibling-before-corrected-run.json",
+      "retry_reason": "prior application failed binding its allocated HTTP port before source startup; evidence retained"
+    }
+  ],
+  "sibling_oracle_corrected_result": {
+    "passed": 8,
+    "total": 8,
+    "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+    "metadata_files": [
+      "/tmp/semsource-removal215-evidence/sibling-before-corrected2/TestRemovalReplaySiblingRestartControl/plain_restart_sibling_graph_and_exact_content_unchanged-ast-reseed-metadata.json"
+    ]
+  }
+}

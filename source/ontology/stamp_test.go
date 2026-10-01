@@ -9,7 +9,7 @@ import (
 )
 
 func TestStampClassAppendsClass(t *testing.T) {
-	id := "acme.semsource.golang.sys.function.foo" // domain=golang, type=function
+	id := "acme.semsource.sys.golang.function.foo" // domain=golang, type=function
 	in := []message.Triple{{Subject: id, Predicate: "code.artifact.path", Object: "a.go"}}
 	out := StampClass(id, in, time.Unix(0, 0))
 
@@ -29,7 +29,7 @@ func TestStampClassAppendsClass(t *testing.T) {
 }
 
 func TestStampClassRespectsOverride(t *testing.T) {
-	id := "acme.semsource.golang.sys.function.foo"
+	id := "acme.semsource.sys.golang.function.foo"
 	in := []message.Triple{{Subject: id, Predicate: ClassPredicate, Object: "urn:custom"}}
 	out := StampClass(id, in, time.Unix(0, 0))
 	if len(out) != 1 || out[0].Object != "urn:custom" {
@@ -38,7 +38,7 @@ func TestStampClassRespectsOverride(t *testing.T) {
 }
 
 func TestStampClassNoMappingIsNoop(t *testing.T) {
-	id := "acme.semsource.golang.sys.mystery.foo" // unknown type
+	id := "acme.semsource.sys.golang.mystery.foo" // unknown type
 	in := []message.Triple{{Subject: id, Predicate: "x.y.z", Object: "v"}}
 	out := StampClass(id, in, time.Unix(0, 0))
 	if len(out) != 1 {

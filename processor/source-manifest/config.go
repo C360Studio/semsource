@@ -32,19 +32,29 @@ type Config struct {
 }
 
 // ManifestSource is the external-facing representation of a configured source.
-// It contains only the fields useful for downstream consumers to understand
-// what data SemSource is ingesting.
+// It retains source identity inputs so persisted desired configuration can
+// match exact component handles after a restart or partial-write retry.
 type ManifestSource struct {
-	Type          string   `json:"type"`
-	Path          string   `json:"path,omitempty"`
-	Paths         []string `json:"paths,omitempty"`
-	URL           string   `json:"url,omitempty"`
-	URLs          []string `json:"urls,omitempty"`
-	Language      string   `json:"language,omitempty"`
-	Branch        string   `json:"branch,omitempty"`
-	Watch         bool     `json:"watch"`
-	PollInterval  string   `json:"poll_interval,omitempty"`
-	IndexInterval string   `json:"index_interval,omitempty"`
+	Type           string   `json:"type"`
+	Path           string   `json:"path,omitempty"`
+	Paths          []string `json:"paths,omitempty"`
+	URL            string   `json:"url,omitempty"`
+	URLs           []string `json:"urls,omitempty"`
+	Language       string   `json:"language,omitempty"`
+	Languages      []string `json:"languages,omitempty"`
+	Project        string   `json:"project,omitempty"`
+	Version        string   `json:"version,omitempty"`
+	BranchSlug     string   `json:"branch_slug,omitempty"`
+	InstanceSuffix string   `json:"instance_suffix,omitempty"`
+	Bucket         string   `json:"bucket,omitempty"`
+	Prefix         string   `json:"prefix,omitempty"`
+	Endpoint       string   `json:"endpoint,omitempty"`
+	Region         string   `json:"region,omitempty"`
+	PathStyle      bool     `json:"path_style,omitempty"`
+	Branch         string   `json:"branch,omitempty"`
+	Watch          bool     `json:"watch"`
+	PollInterval   string   `json:"poll_interval,omitempty"`
+	IndexInterval  string   `json:"index_interval,omitempty"`
 }
 
 // Validate checks the configuration for errors.

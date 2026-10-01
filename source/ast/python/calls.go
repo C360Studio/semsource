@@ -315,7 +315,7 @@ func (p *Parser) callTargetID(fn *sitter.Node, content []byte, filePath string, 
 		// would BE the self parameter, so there is no separate shadow to guard.
 		if objText == "self" || objText == "cls" {
 			if len(scope) > 0 && classMethods[method] {
-				return ast.NewScopedCodeEntity(p.org, "python", p.project, ast.TypeMethod, scope, method, filePath).ID
+				return ast.NewScopedCodeEntity(p.authority, "python", p.project, ast.TypeMethod, scope, method, filePath).ID
 			}
 			return ""
 		}
@@ -336,7 +336,7 @@ func (p *Parser) callNameToEntityID(name, filePath string) string {
 	}
 	// A locally-defined function shadows an import of the same name.
 	if p.localFuncs[name] {
-		return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeFunction, name, filePath).ID
+		return ast.NewCodeEntity(p.authority, "python", p.project, ast.TypeFunction, name, filePath).ID
 	}
 	return p.resolveImportedCallee(name, filePath)
 }
@@ -358,7 +358,7 @@ func (p *Parser) resolveImportedCallee(key, filePath string) string {
 		return "external:" + key
 	}
 	if p.moduleFuncs(defRel)[origin] {
-		return ast.NewCodeEntity(p.org, "python", p.project, ast.TypeFunction, origin, defRel).ID
+		return ast.NewCodeEntity(p.authority, "python", p.project, ast.TypeFunction, origin, defRel).ID
 	}
 	return "" // resolved module, but origin is not a top-level function → inert
 }

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -20,6 +23,7 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/storage/filestore"
@@ -59,6 +63,7 @@ func (s *sourceCfg) GetSceneThreshold() float64  { return 0 }
 // handler/objectstore; this component owns the lifecycle, publication, status,
 // and retraction around them.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -118,6 +123,7 @@ type Component struct {
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 }
 
 // NewComponent creates a new objectstore-source processor component.
@@ -128,6 +134,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	authority, err := sourceauthority.Resolve(deps.Platform, config.Org)
+	if err != nil {
+		return nil, err
 	}
 
 	// Credentials are read here, from the environment, and nowhere else.
@@ -153,12 +163,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		docOpts = append(docOpts, dochandler.WithBodyStore(bodies, config.InstanceName))
 	}
 
-	h := objectstore.New(store, dochandler.New(docOpts...), config.Org,
+	h := objectstore.New(store, dochandler.New(docOpts...), authority,
 		objectstore.WithProject(config.Project),
 		objectstore.WithVersion(config.Version),
 		objectstore.WithPollInterval(config.PollInterval()))
 
 	c := &Component{
+		authority:  authority,
 		name:       "objectstore-source",
 		config:     config,
 		publisher:  pub,
@@ -224,13 +235,24 @@ func (c *Component) markRunning() {
 // failure surfaces through last_error and a WARN, because there is no longer a
 // Start to fail.
 func (c *Component) runSeed(ctx context.Context) error {
-	c.logger.Info("Starting objectstore-source initial ingest",
-		"bucket", c.config.Bucket,
-		"prefix", c.config.Prefix,
-		"org", c.config.Org)
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.ingestErrors.Load()
 
-	if err := c.ingestOnce(ctx); err != nil {
-		return fmt.Errorf("initial object-store ingest failed: %w", err)
+		c.logger.Info("Starting objectstore-source initial ingest",
+			"bucket", c.config.Bucket,
+			"prefix", c.config.Prefix,
+			"org", c.config.Org)
+
+		if err := c.ingestOnce(ctx); err != nil {
+			return fmt.Errorf("initial object-store ingest failed: %w", err)
+		}
+
+		if failed := (c.ingestErrors.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	c.logger.Info("Objectstore-source initial ingest complete",
@@ -368,7 +390,7 @@ func (c *Component) retract(ctx context.Context, removed []objectstore.Removal) 
 		c.handler.Forget(removal.Key)
 	}
 
-	go func() {
+	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
 		defer cancel()
 		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
@@ -380,7 +402,7 @@ func (c *Component) retract(ctx context.Context, removed []objectstore.Removal) 
 			return
 		}
 		c.lifecycleFailing.Clear(c.logger, "staleness lifecycle trigger recovered")
-	}()
+	})
 }
 
 // startPolling starts the watch goroutine and returns its cancel func, or nil
@@ -405,7 +427,8 @@ func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
 		"prefix", c.config.Prefix,
 		"poll_interval", c.config.PollInterval())
 
-	go func() {
+	c.workers.JoinOnStop(func(joinCtx context.Context) error { return workerjoin.Channel(joinCtx, changeCh) })
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-pollCtx.Done():
@@ -417,7 +440,7 @@ func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
 				c.handleChangeEvent(pollCtx, event)
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
@@ -446,8 +469,8 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // recordSkips replaces the skip counts with this pass's.
@@ -513,7 +536,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
-		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),
+		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// The count an operator needs to tell "there is no such document"
 		// apart from "that document was never parsed".
@@ -548,7 +571,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // always has fresh data. Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -562,40 +585,39 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Drain the seed BEFORE taking the lock: the mutex is not reentrant and
-	// the seed itself takes it, so waiting under the lock deadlocks. Draining
-	// first also keeps shutdown safe — stopping the publisher closes its
-	// buffer.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.publisher.Stop()
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
-	c.running = false
 
-	c.logger.Info("Objectstore-source stopped",
-		"entities_published", c.entitiesPublished.Load(),
-		"ingest_errors", c.ingestErrors.Load())
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.running = false
+	c.mu.Unlock()
 	return nil
 }
 
@@ -654,12 +676,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

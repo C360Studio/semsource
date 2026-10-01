@@ -84,12 +84,12 @@ func (e *Entity) EntityState() *handler.EntityState {
 // imageEntityFromRaw converts a RawEntity produced by ingestFile into a typed
 // Entity using canonical vocabulary predicates. The system slug is derived
 // from the root path that produced the entity (stored in RawEntity.System).
-func imageEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
+func imageEntityFromRaw(authority entityid.Authority, storeBucket string, r handler.RawEntity, now time.Time) *Entity {
 	ie := &Entity{
 		// RawEntity.System already holds slugify(root) set by ingestFile.
-		ID:          entityid.Build(org, entityid.PlatformSemsource, "media", r.System, "image", r.Instance),
+		ID:          authority.Build(r.System, "media", "image", r.Instance),
 		System:      r.System,
-		Org:         org,
+		Org:         authority.Org,
 		IndexedAt:   now,
 		StoreBucket: storeBucket,
 	}
@@ -125,9 +125,12 @@ func imageEntityFromRaw(org, storeBucket string, r handler.RawEntity, now time.T
 
 // IngestEntityStates walks every path in cfg, reads each supported image file,
 // and returns fully-typed EntityState values with vocabulary-predicate triples —
-// bypassing the normalizer entirely. The org parameter is the organisation
-// namespace used in the 6-part entity ID.
-func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, org string) ([]*handler.EntityState, error) {
+// bypassing the normalizer entirely. The authority parameter is the effective org/platform
+// pair established at boot and used in the 6-part entity ID.
+func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConfig, authority entityid.Authority) ([]*handler.EntityState, error) {
+	if err := authority.Validate(); err != nil {
+		return nil, err
+	}
 	rawEntities, err := h.Ingest(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -136,7 +139,7 @@ func (h *Handler) IngestEntityStates(ctx context.Context, cfg handler.SourceConf
 	now := time.Now().UTC()
 	states := make([]*handler.EntityState, 0, len(rawEntities))
 	for _, r := range rawEntities {
-		ie := imageEntityFromRaw(org, h.storeBucket, r, now)
+		ie := imageEntityFromRaw(authority, h.storeBucket, r, now)
 		states = append(states, ie.EntityState())
 	}
 	return states, nil

@@ -17,7 +17,7 @@ const (
 	// source entity projection.
 	OwnerID = "semsource.source-service"
 
-	sourceEntityPattern = "*.semsource.*.*.*.*"
+	sourceEntityPattern = "*.*.*.*.*.*"
 
 	// GroupSource is the reconcile-mode predicate group covering everything
 	// SemSource emits through semsource.entity.v1.
@@ -68,7 +68,7 @@ func OwnedPredicates() []string {
 func SourceEntityContract() projection.Contract {
 	return projection.Contract{
 		Name:          EntityType.Key(),
-		MessageType:   EntityType.Key(),
+		MessageType:   EntityType,
 		EntityPattern: sourceEntityPattern,
 		Groups: []projection.PredicateGroup{
 			{

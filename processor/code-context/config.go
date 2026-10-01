@@ -7,6 +7,8 @@ import "fmt"
 // lens (a "code" instance and a "docs" instance); the rest of the behaviour is
 // identical, driven by the shared fusion engine.
 type Config struct {
+	// SourceSystems is the complete boot source set used to constrain NL retrieval before ranking.
+	SourceSystems []string `json:"source_systems,omitempty" schema:"type:array,description:Boot source system slugs for scoped retrieval,category:internal"`
 	// Lens is the domain this instance serves: "code" or "docs".
 	Lens string `json:"lens" schema:"type:string,description:Lens to serve (code|docs),category:basic,required:true"`
 }

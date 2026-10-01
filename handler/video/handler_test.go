@@ -192,12 +192,12 @@ func TestVideoHandler_FormatTimestamp(t *testing.T) {
 func TestKeyframeEntityState_IndexingProfileTrace(t *testing.T) {
 	now := time.Now().UTC()
 	keyframe := &videohandler.KeyframeEntity{
-		ID:         "acme.semsource.media.videos.keyframe.demo-1s",
+		ID:         "acme.test-platform.videos.media.keyframe.demo-1s",
 		Timestamp:  "1s",
 		FrameIndex: 1,
 		Width:      160,
 		Height:     120,
-		VideoID:    "acme.semsource.media.videos.video.demo",
+		VideoID:    "acme.test-platform.videos.media.video.demo",
 		IndexedAt:  now,
 	}
 
@@ -751,7 +751,7 @@ func TestVideoHandler_IngestEntityStates_EmptyDirReturnsEmpty(t *testing.T) {
 	h := videohandler.New()
 	cfg := sourceConfig{typ: "video", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -784,7 +784,7 @@ func TestVideoHandler_IngestEntityStates_WithFFmpeg(t *testing.T) {
 		keyframeInterval: "1s",
 	}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -862,7 +862,7 @@ func TestVideoHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 		keyframeInterval: "1s",
 	}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}

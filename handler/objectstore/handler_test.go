@@ -163,7 +163,7 @@ func (s sourceCfg) GetSceneThreshold() float64  { return 0 }
 func newHandler(t *testing.T, store objectstore.ObjectStore, opts ...objectstore.Option) *objectstore.Handler {
 	t.Helper()
 	docs := doc.New(doc.WithBodyStore(bodyStore(t), "test-bodies"))
-	return objectstore.New(store, docs, testOrg, opts...)
+	return objectstore.New(store, docs, testAuthority(testOrg), opts...)
 }
 
 func cfgFor(bucket, prefix string) sourceCfg {
@@ -433,7 +433,7 @@ func TestIngest_MissingBodyStoreAbortsThePass(t *testing.T) {
 		"reports/q4.md": "# Q4\n\nbody\n",
 	})
 	// A doc handler with no body store configured.
-	h := objectstore.New(store, doc.New(), testOrg)
+	h := objectstore.New(store, doc.New(), testAuthority(testOrg))
 
 	result, err := h.IngestEntityStates(t.Context(), cfgFor("artifacts", "reports/"))
 	if !errors.Is(err, doc.ErrBodyStoreRequired) {

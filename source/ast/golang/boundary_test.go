@@ -29,7 +29,7 @@ func TestParseDirectory_SkipsGitBoundaries(t *testing.T) {
 	write("submod/.git", "gitdir: ../.git/modules/submod\n")
 	write("submod/sub.go", "package sub\n\nfunc Hidden() {}\n")
 
-	p := golang.NewParser("acme", "parent", root)
+	p := golang.NewParser(testAuthority("acme"), "parent", root)
 	results, err := p.ParseDirectory(context.Background(), root)
 	if err != nil {
 		t.Fatalf("ParseDirectory: %v", err)

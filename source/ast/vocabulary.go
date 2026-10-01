@@ -250,17 +250,17 @@ func registerCapabilityPredicates() {
 
 	vocabulary.Register(CodeCapabilityTools,
 		vocabulary.WithDescription("Tools this code provides or uses"),
-		vocabulary.WithDataType("array"),
+		vocabulary.WithDataType("json"),
 		vocabulary.WithIRI(AgenticNamespace+"tools"))
 
 	vocabulary.Register(CodeCapabilityInputs,
 		vocabulary.WithDescription("Expected input types for the capability"),
-		vocabulary.WithDataType("array"),
+		vocabulary.WithDataType("json"),
 		vocabulary.WithIRI(AgenticNamespace+"inputs"))
 
 	vocabulary.Register(CodeCapabilityOutputs,
 		vocabulary.WithDescription("Expected output types from the capability"),
-		vocabulary.WithDataType("array"),
+		vocabulary.WithDataType("json"),
 		vocabulary.WithIRI(AgenticNamespace+"outputs"))
 }
 

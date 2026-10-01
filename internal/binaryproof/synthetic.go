@@ -42,14 +42,14 @@ type SyntheticResult struct {
 // metadata. It does not parse or validate any binary protocol.
 func BuildSyntheticFixture(
 	ctx context.Context,
-	org string,
+	authority entityid.Authority,
 	fixturePath string,
 	store storage.Store,
 	storageInstance string,
 	now time.Time,
 ) (*SyntheticResult, error) {
-	if org == "" {
-		return nil, fmt.Errorf("org is required")
+	if err := authority.Validate(); err != nil {
+		return nil, fmt.Errorf("synthetic fixture authority: %w", err)
 	}
 	if storageInstance == "" {
 		storageInstance = DefaultStorageInstance
@@ -65,7 +65,7 @@ func BuildSyntheticFixture(
 
 	system := "synthetic-binary"
 	instance := hash[:12]
-	entityID := entityid.Build(org, entityid.PlatformSemsource, "media", system, "blob", instance)
+	entityID := authority.Build(system, "media", "blob", instance)
 	storageKey := fmt.Sprintf("binary-proof/%s/%s/original.bin", system, instance)
 	if err := handler.StoreFile(ctx, store, storageKey, fixturePath); err != nil {
 		return nil, err

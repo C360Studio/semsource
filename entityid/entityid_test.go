@@ -21,18 +21,18 @@ func TestParts(t *testing.T) {
 		wantDomain string
 		wantType   string
 	}{
-		{"acme.semsource.golang.myrepo.function.main-go-Foo", "golang", "function"},
-		{"acme.semsource.git.myrepo.commit.abc123", "git", "commit"},
-		{"acme.semsource.web.docs.doc.sha256", "web", "doc"},
-		{"acme.semsource.config.myrepo.dependency.lodash", "config", "dependency"},
-		{"acme.semsource.code.myrepo.folder.src-pkg", "code", "folder"},
+		{"acme.semsource.myrepo.golang.function.main-go-Foo", "golang", "function"},
+		{"acme.semsource.myrepo.git.commit.abc123", "git", "commit"},
+		{"acme.semsource.docs.web.doc.sha256", "web", "doc"},
+		{"acme.semsource.myrepo.config.dependency.lodash", "config", "dependency"},
+		{"acme.semsource.myrepo.code.folder.src-pkg", "code", "folder"},
 		// Instance segment with dots — SplitN(6) captures everything after 5th dot.
-		{"acme.semsource.java.repo.class.com.example.Foo", "java", "class"},
+		{"acme.semsource.repo.java.class.com.example.Foo", "java", "class"},
 		// Too few parts.
 		{"acme.semsource.golang", "", ""},
 		{"", "", ""},
 		// Exactly 6 parts.
-		{"a.b.c.d.e.f", "c", "e"},
+		{"a.b.c.d.e.f", "d", "e"},
 	}
 	for _, tt := range tests {
 		domain, eType := entityid.Parts(tt.id)
@@ -62,7 +62,7 @@ func TestBuild(t *testing.T) {
 			system:     "github.com-acme-gcs",
 			entityType: "function",
 			instance:   "NewController",
-			want:       "acme.semsource.golang.github.com-acme-gcs.function.NewController",
+			want:       "acme.semsource.github.com-acme-gcs.golang.function.NewController",
 		},
 		{
 			name:       "git commit",
@@ -72,7 +72,7 @@ func TestBuild(t *testing.T) {
 			system:     "github.com-acme-gcs",
 			entityType: "commit",
 			instance:   "a3f9b2",
-			want:       "acme.semsource.git.github.com-acme-gcs.commit.a3f9b2",
+			want:       "acme.semsource.github.com-acme-gcs.git.commit.a3f9b2",
 		},
 		{
 			name:       "public namespace",
@@ -82,7 +82,7 @@ func TestBuild(t *testing.T) {
 			system:     "github.com-gin-gonic-gin",
 			entityType: "function",
 			instance:   "New",
-			want:       "public.semsource.golang.github.com-gin-gonic-gin.function.New",
+			want:       "public.semsource.github.com-gin-gonic-gin.golang.function.New",
 		},
 		{
 			name:       "public web doc",
@@ -92,13 +92,13 @@ func TestBuild(t *testing.T) {
 			system:     "pkg.go.dev",
 			entityType: "doc",
 			instance:   "c821de",
-			want:       "public.semsource.web.pkg.go.dev.doc.c821de",
+			want:       "public.semsource.pkg.go.dev.web.doc.c821de",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := entityid.Build(tt.org, tt.platform, tt.domain, tt.system, tt.entityType, tt.instance)
+			got := entityid.Build(tt.org, tt.platform, tt.system, tt.domain, tt.entityType, tt.instance)
 			if got != tt.want {
 				t.Errorf("Build() = %q, want %q", got, tt.want)
 			}
@@ -231,15 +231,15 @@ func TestValidateNATSKVKey(t *testing.T) {
 		key     string
 		wantErr bool
 	}{
-		{"valid 6-part", "acme.semsource.golang.github.com-acme-gcs.function.NewController", false},
-		{"valid public", "public.semsource.web.pkg.go.dev.doc.c821de", false},
+		{"valid 6-part", "acme.semsource.github.com-acme-gcs.golang.function.NewController", false},
+		{"valid public", "public.semsource.pkg.go.dev.web.doc.c821de", false},
 		{"empty", "", true},
-		{"space", "acme.semsource.golang.repo.function.New Controller", true},
+		{"space", "acme.semsource.repo.golang.function.New Controller", true},
 		{"wildcard", "acme.semsource.golang.*.function.New", true},
-		{"gt", "acme.semsource.golang.repo.function.>", true},
+		{"gt", "acme.semsource.repo.golang.function.>", true},
 		{"slash", "acme/semsource.golang.repo.function.New", true},
-		{"hyphens ok", "acme.semsource.git.github.com-acme-gcs.commit.a3f9b2", false},
-		{"underscores ok", "acme.semsource.golang.my_repo.function.my_func", false},
+		{"hyphens ok", "acme.semsource.github.com-acme-gcs.git.commit.a3f9b2", false},
+		{"underscores ok", "acme.semsource.my_repo.golang.function.my_func", false},
 	}
 
 	for _, tt := range tests {
@@ -341,8 +341,8 @@ func TestBuild_BoundsTotalIDLength(t *testing.T) {
 	instance := "ui-node_modules--eslint-eslintrc-lib-config-array-" +
 		strings.Repeat("configArrayFactory--------------", 8) + "finalizeCache"
 
-	id := entityid.Build("c360", entityid.PlatformSemsource, "javascript",
-		"workspace", "const", instance)
+	id := entityid.Build("c360", entityid.PlatformSemsource, "workspace",
+		"javascript", "const", instance)
 
 	if err := semtypes.ValidateEntityID(id); err != nil {
 		t.Errorf("Build produced an ID the graph will reject (%d bytes): %v", len(id), err)
@@ -355,8 +355,8 @@ func TestBuild_BoundsTotalIDLength(t *testing.T) {
 func TestBuild_LengthBoundIsDeterministicAndUnique(t *testing.T) {
 	prefix := strings.Repeat("deeplyNestedScope-", 20)
 	build := func(instance string) string {
-		return entityid.Build("c360", entityid.PlatformSemsource, "javascript",
-			"workspace", "const", instance)
+		return entityid.Build("c360", entityid.PlatformSemsource, "workspace",
+			"javascript", "const", instance)
 	}
 
 	a, b := build(prefix+"handlerAlpha"), build(prefix+"handlerBeta")
@@ -379,24 +379,24 @@ func TestBuild_LengthBoundIsDeterministicAndUnique(t *testing.T) {
 // would re-key existing graph entities and orphan their triples.
 func TestBuild_UnderBudgetIDsAreUnchanged(t *testing.T) {
 	instance := strings.Repeat("a", 200)
-	id := entityid.Build("acme", entityid.PlatformSemsource, "golang",
-		"github.com-acme-gcs", "function", instance)
+	id := entityid.Build("acme", entityid.PlatformSemsource, "github.com-acme-gcs",
+		"golang", "function", instance)
 
-	if want := "acme.semsource.golang.github.com-acme-gcs.function." + instance; id != want {
+	if want := "acme.semsource.github.com-acme-gcs.golang.function." + instance; id != want {
 		t.Errorf("an ID that fits the budget was rewritten:\n got %q\nwant %q", id, want)
 	}
 }
 
 func TestBuild_AllTypesProduceValidNATSKeys(t *testing.T) {
 	ids := []string{
-		entityid.Build("acme", entityid.PlatformSemsource, "golang",
-			entityid.SystemSlug("github.com/acme/gcs"), "function", "NewController"),
-		entityid.Build("acme", entityid.PlatformSemsource, "git",
-			entityid.SystemSlug("github.com/acme/gcs"), "commit", "a3f9b2"),
-		entityid.Build("acme", entityid.PlatformSemsource, "web",
-			"docs.acme.io", "doc", "ab12cd"),
-		entityid.Build("acme", entityid.PlatformSemsource, "config",
-			entityid.SystemSlug("github.com/acme/gcs"), "dockerfile", "ab12cd"),
+		entityid.Build("acme", entityid.PlatformSemsource, entityid.SystemSlug("github.com/acme/gcs"),
+			"golang", "function", "NewController"),
+		entityid.Build("acme", entityid.PlatformSemsource, entityid.SystemSlug("github.com/acme/gcs"),
+			"git", "commit", "a3f9b2"),
+		entityid.Build("acme", entityid.PlatformSemsource, "docs.acme.io",
+			"web", "doc", "ab12cd"),
+		entityid.Build("acme", entityid.PlatformSemsource, entityid.SystemSlug("github.com/acme/gcs"),
+			"config", "dockerfile", "ab12cd"),
 	}
 
 	for _, id := range ids {
@@ -463,8 +463,8 @@ func TestBranchScopedSlug_BoundsAssembledID(t *testing.T) {
 	repo := entityid.SystemSlug("github.com/c360studio/semsource-integration-scenarios-repo")
 	branch := workspace.BranchSlug("scenario/" + strings.Repeat("auth-flow-regression-", 10))
 
-	id := entityid.Build("c360", entityid.PlatformSemsource, "golang",
-		entityid.BranchScopedSlug(repo, branch), "function", "DoThing")
+	id := entityid.Build("c360", entityid.PlatformSemsource, entityid.BranchScopedSlug(repo, branch),
+		"golang", "function", "DoThing")
 
 	if err := semtypes.ValidateEntityID(id); err != nil {
 		t.Errorf("branch-scoped ID would never land (%d bytes): %v", len(id), err)
@@ -484,7 +484,7 @@ func TestWorstCaseSegmentsLeaveInstanceBudget(t *testing.T) {
 	const longestDomain = "javascript"                      // 10
 	const longestType = "dependency"                        // 10
 
-	id := entityid.Build(org, entityid.PlatformSemsource, longestDomain, system, longestType, "i")
+	id := entityid.Build(org, entityid.PlatformSemsource, system, longestDomain, longestType, "i")
 	prefixLen := len(id) - 1 // everything but the 1-byte instance
 
 	budget := semtypes.MaxEntityIDBytes - prefixLen
@@ -500,8 +500,8 @@ func TestOrgFromID(t *testing.T) {
 		id   string
 		want string
 	}{
-		{"acme.semsource.golang.repo.function.New", "acme"},
-		{"public.semsource.web.pkg.go.dev.doc.c821de", "public"},
+		{"acme.semsource.repo.golang.function.New", "acme"},
+		{"public.semsource.pkg.go.dev.web.doc.c821de", "public"},
 		{"", ""},
 		{"noperiods", ""},
 	}

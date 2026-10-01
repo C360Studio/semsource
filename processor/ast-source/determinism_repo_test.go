@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/c360studio/semsource/entityid"
 	"io"
 	"os"
 	"os/exec"
@@ -211,7 +212,7 @@ func runCfgfilePass(ctx context.Context, t *testing.T, root string) []detEntity 
 	t.Helper()
 	h := cfgfile.New(nil)
 	cfg := detSourceConfig{typ: handler.SourceTypeConfig, path: root}
-	states, err := h.IngestEntityStates(ctx, cfg, repoDetOrg)
+	states, err := h.IngestEntityStates(ctx, cfg, entityid.Authority{Org: repoDetOrg, Platform: "test"})
 	if err != nil {
 		t.Fatalf("cfgfile IngestEntityStates: %v", err)
 	}
@@ -232,7 +233,7 @@ func runDocPass(ctx context.Context, t *testing.T, root string) []detEntity {
 	t.Helper()
 	h := dochandler.New(dochandler.WithBodyStore(newDetMemStore(), "objectstore"))
 	cfg := detSourceConfig{typ: "docs", path: root}
-	states, err := h.IngestEntityStates(ctx, cfg, repoDetOrg)
+	states, err := h.IngestEntityStates(ctx, cfg, entityid.Authority{Org: repoDetOrg, Platform: "test"})
 	if err != nil {
 		t.Fatalf("doc IngestEntityStates: %v", err)
 	}

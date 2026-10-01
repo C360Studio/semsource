@@ -44,7 +44,7 @@ func TestIngest_ProbesSubmoduleInventory(t *testing.T) {
 		"160000,0123456789abcdef0123456789abcdef01234567,sub")
 	run("commit", "-m", "declare uninitialized submodule")
 
-	h := githandler.New(githandler.Config{Org: "acme"})
+	h := githandler.New(githandler.Config{Authority: testAuthority("acme")})
 	if h.SubmoduleInventory() != nil {
 		t.Fatal("inventory non-nil before first ingest")
 	}

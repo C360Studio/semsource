@@ -5,6 +5,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"github.com/c360studio/semsource/entityid"
 	"os"
 	"path/filepath"
 	"testing"
@@ -83,6 +84,7 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	}
 
 	discovered, err := graphingest.CreateGraphIngest(configJSON, component.Dependencies{
+		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      tc.Client,
 		PayloadRegistry: reg,
 		MetricsRegistry: metricsRegistry,
@@ -111,35 +113,35 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	}{
 		{
 			name:      "doc",
-			entityID:  "acme.semsource.web.docs.doc.abc123",
+			entityID:  "acme.test-a1b2c3.docs.web.doc.abc123",
 			profile:   semsourcegraph.IndexingProfileContent,
 			predicate: source.DocContent,
 			object:    "hello graph",
 		},
 		{
 			name:      "url",
-			entityID:  "acme.semsource.web.example-com.page.url123",
+			entityID:  "acme.test-a1b2c3.example-com.web.page.url123",
 			profile:   semsourcegraph.IndexingProfileContent,
 			predicate: source.WebURL,
 			object:    "https://example.com/spec",
 		},
 		{
 			name:      "git",
-			entityID:  "acme.semsource.git.repo.commit.abcdef0",
+			entityID:  "acme.test-a1b2c3.repo.git.commit.abcdef0",
 			profile:   semsourcegraph.IndexingProfileContent,
 			predicate: source.GitCommitSubject,
 			object:    "feat: add governed graph",
 		},
 		{
 			name:      "config",
-			entityID:  "acme.semsource.config.repo.gomod.app",
+			entityID:  "acme.test-a1b2c3.repo.config.gomod.app",
 			profile:   semsourcegraph.IndexingProfileControl,
 			predicate: source.ConfigModulePath,
 			object:    "github.com/acme/app",
 		},
 		{
 			name:      "media",
-			entityID:  "acme.semsource.media.assets.image.img123",
+			entityID:  "acme.test-a1b2c3.assets.media.image.img123",
 			profile:   semsourcegraph.IndexingProfileControl,
 			predicate: source.MediaStorageRef,
 			object:    "media/assets/img123",
@@ -152,10 +154,10 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 		},
 		{
 			name:      "trace",
-			entityID:  "acme.semsource.media.assets.keyframe.kf001",
+			entityID:  "acme.test-a1b2c3.assets.media.keyframe.kf001",
 			profile:   semsourcegraph.IndexingProfileTrace,
 			predicate: source.MediaKeyframeOf,
-			object:    "acme.semsource.media.assets.video.vid001",
+			object:    "acme.test-a1b2c3.assets.media.video.vid001",
 		},
 	}
 
@@ -217,7 +219,7 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 
 	result, err := binaryproof.BuildSyntheticFixture(
 		ctx,
-		"acme",
+		entityid.Authority{Org: "acme", Platform: "test-a1b2c3"},
 		fixturePath,
 		store,
 		binaryproof.DefaultStorageInstance,
@@ -304,19 +306,19 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 		object    any
 	}{
 		{
-			id:        "acme.semsource.web.docs.doc.aaa111",
+			id:        "acme.test-a1b2c3.docs.web.doc.aaa111",
 			profile:   semsourcegraph.IndexingProfileContent,
 			predicate: source.DocContent,
 			object:    "first governed graph document",
 		},
 		{
-			id:        "acme.semsource.web.docs.doc.bbb222",
+			id:        "acme.test-a1b2c3.docs.web.doc.bbb222",
 			profile:   semsourcegraph.IndexingProfileContent,
 			predicate: source.DocContent,
 			object:    "second governed graph document",
 		},
 		{
-			id:        "acme.semsource.config.repo.gomod.app",
+			id:        "acme.test-a1b2c3.repo.config.gomod.app",
 			profile:   semsourcegraph.IndexingProfileControl,
 			predicate: source.ConfigModulePath,
 			object:    "github.com/acme/app",
@@ -338,7 +340,7 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 	// entities born, stored, and readable — is asserted above and below.
 
 	firstPage := requestPrefixPage(t, ctx, tc.Client, semgraph.PrefixQueryRequest{
-		Prefix: "acme.semsource.web.docs",
+		Prefix: "acme.test-a1b2c3.docs.web",
 		Limit:  1,
 	})
 	if len(firstPage.Entities) != 1 {
@@ -349,7 +351,7 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 	}
 
 	secondPage := requestPrefixPage(t, ctx, tc.Client, semgraph.PrefixQueryRequest{
-		Prefix: "acme.semsource.web.docs",
+		Prefix: "acme.test-a1b2c3.docs.web",
 		Limit:  1,
 		Cursor: firstPage.NextCursor,
 	})
@@ -367,8 +369,8 @@ func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T
 	if summary.TotalEntities < len(entities) {
 		t.Fatalf("summary total_entities = %d, want at least %d", summary.TotalEntities, len(entities))
 	}
-	if !hasEntityTypeSummary(summary, "web.docs.doc") {
-		t.Fatalf("summary missing web.docs.doc type bucket: %#v", summary.EntityTypes)
+	if !hasEntityTypeSummary(summary, "docs.web.doc") {
+		t.Fatalf("summary missing docs.web.doc type bucket: %#v", summary.EntityTypes)
 	}
 	if !hasPredicateSummary(summary, source.DocContent, 2) {
 		t.Fatalf("summary missing %q predicate count >= 2: %#v", source.DocContent, summary.Predicates)
@@ -462,6 +464,7 @@ func startGraphIngest(
 	}
 
 	discovered, err := graphingest.CreateGraphIngest(configJSON, component.Dependencies{
+		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      client,
 		PayloadRegistry: reg,
 		MetricsRegistry: metricsRegistry,
@@ -507,6 +510,7 @@ func startGraphIndex(
 	}
 
 	discovered, err := graphindex.CreateGraphIndex(configJSON, component.Dependencies{
+		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      client,
 		MetricsRegistry: metricsRegistry,
 	})
@@ -561,6 +565,7 @@ func startGraphQuery(
 	}
 
 	discovered, err := graphquery.CreateGraphQuery(configJSON, component.Dependencies{
+		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      client,
 		MetricsRegistry: metricsRegistry,
 	})

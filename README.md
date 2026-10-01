@@ -71,11 +71,15 @@ SemSource ingests heterogeneous sources and maintains a continuously updated gov
      [Sem*]                [MCP]      [Your App]
 ```
 
-Every entity gets a deterministic 6-part ID (`org.platform.domain.system.type.instance`), semantic
+Every entity gets a deterministic 6-part ID (`org.platform.system.domain.type.instance`), semantic
 triples, provenance, and an indexing profile (`content`, `control`, `signal`, or `trace`). Query
 consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. The raw WebSocket
 export is available for stream-oriented consumers such as federation, fan-out,
 or live UI updates; it is not the primary governed query contract.
+
+The configured `platform_id` is a stem (default `semsource`); the framework mints and retains the
+effective deployment authority. Upgrading from beta.161 requires fresh graph storage and re-ingestion.
+See the [SETUP 03A migration contract](docs/testing/setup-03a/compatibility.md) for exact pins and evidence.
 
 ## Source Types
 
@@ -414,6 +418,7 @@ Optional top-level fields:
 
 | Field                     | Default              | Description                                                                                                                                                                                         |
 | ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `platform_id` | `semsource` | Stem for the retained deployment authority; use a fresh broker/account store for beta.161 migration. |
 | `http_port`               | `8080`               | ServiceManager HTTP API port                                                                                                                                                                        |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
 | `graph.gateway_bind`      | `"0.0.0.0:8082"`     | GraphQL gateway host:port subject used by SemStreams registration; in ServiceManager mode the live HTTP route is `/graph-gateway/graphql` on `:8080` and the `ui` profile exposes it as `/graphql`  |

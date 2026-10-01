@@ -265,7 +265,7 @@ func registerMediaPredicates() {
 
 	vocabulary.Register(MediaVisionLabels,
 		vocabulary.WithDescription("ML-detected labels/tags as a JSON array of strings"),
-		vocabulary.WithDataType("array"),
+		vocabulary.WithDataType("json"),
 		vocabulary.WithIRI(Namespace+"visionLabels"))
 
 	vocabulary.Register(MediaVisionDescription,

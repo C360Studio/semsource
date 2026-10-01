@@ -93,7 +93,7 @@ func TestIntegration_ObjectStoreCorpusReachesTheGraph(t *testing.T) {
 	// Identity is built from the bucket and the object key and nothing local,
 	// so the expected ID is computable here rather than discovered.
 	system := entitySystem(t, bucket)
-	q3ID := dochandler.DocumentEntityID(testOrgNamespace, system, "reports/q3-review.md")
+	q3ID := dochandler.DocumentEntityID(fixtureAuthority(), system, "reports/q3-review.md")
 
 	stored := waitForEntityState(t, ctx, tc.Client, q3ID, 60*time.Second)
 	if stored == nil {
@@ -106,7 +106,7 @@ func TestIntegration_ObjectStoreCorpusReachesTheGraph(t *testing.T) {
 	// One query, answered from the ingested corpus. graph.query.prefix is the
 	// governed read contract a consumer would use.
 	page := requestPrefixPage(t, ctx, tc.Client, semgraph.PrefixQueryRequest{
-		Prefix: testOrgNamespace + ".semsource.web." + system,
+		Prefix: testOrgNamespace + ".test-a1b2c3." + system + ".web",
 		Limit:  50,
 	})
 	if len(page.Entities) == 0 {
@@ -211,7 +211,7 @@ func startObjectStoreSource(
 	}
 
 	discovered, err := objectstoresource.NewComponent(configJSON, component.Dependencies{
-		NATSClient:      client,
+		Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}, NATSClient: client,
 		MetricsRegistry: metricsRegistry,
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func startObjectStoreSource(
 func entitySystem(t *testing.T, bucket string) string {
 	t.Helper()
 
-	probe := objectstore.New(nil, nil, testOrgNamespace)
+	probe := objectstore.New(nil, nil, fixtureAuthority())
 	system := probe.System(bucket)
 	if system == "" {
 		t.Fatalf("bucket %q produced no system slug", bucket)

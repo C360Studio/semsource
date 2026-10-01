@@ -24,7 +24,7 @@ func parse(t *testing.T, name, content string) *ast.ParseResult {
 	t.Helper()
 	root := t.TempDir()
 	path := writeFile(t, root, name, content)
-	res, err := NewParser("acme", "proj", root).ParseFile(context.Background(), path)
+	res, err := NewParser(testAuthority("acme"), "proj", root).ParseFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestEntityIDShapeAndDomain(t *testing.T) {
 	if entity == nil {
 		t.Fatal("freeFn missing")
 	}
-	const wantPrefix = "acme.semsource.cpp.proj.function."
+	const wantPrefix = "acme.test-platform.proj.cpp.function."
 	if got := entity.ID; len(got) <= len(wantPrefix) || got[:len(wantPrefix)] != wantPrefix {
 		t.Errorf("entity ID %q does not start with %q", got, wantPrefix)
 	}
@@ -221,7 +221,7 @@ func TestEntityIDShapeAndDomain(t *testing.T) {
 func TestIdentityIsStableAcrossReparses(t *testing.T) {
 	root := t.TempDir()
 	path := writeFile(t, root, "radio.cpp", sample)
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 
 	first, err := p.ParseFile(context.Background(), path)
 	if err != nil {
@@ -251,7 +251,7 @@ func TestHeaderDeclarationAndDefinitionStayDistinct(t *testing.T) {
 	header := writeFile(t, root, "radio.h", "class Radio { public: int send(int a); };")
 	source := writeFile(t, root, "radio.cpp", "int Radio::send(int a) { return a; }")
 
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	hRes, err := p.ParseFile(context.Background(), header)
 	if err != nil {
 		t.Fatalf("parse header: %v", err)
@@ -318,7 +318,7 @@ func parseAll(t *testing.T, files map[string]string) []*ast.ParseResult {
 		names = append(names, name)
 	}
 	sort.Strings(names) // deterministic order for the test itself
-	p := NewParser("acme", "proj", root)
+	p := NewParser(testAuthority("acme"), "proj", root)
 	var out []*ast.ParseResult
 	for _, name := range names {
 		path := writeFile(t, root, name, files[name])

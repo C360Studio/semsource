@@ -1,6 +1,7 @@
 package entitypub
 
 import (
+	"github.com/c360studio/semsource/entityid"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestValidatePassImpliesPublishGatePass(t *testing.T) {
 			t.Fatalf("precondition: ValidateNamespace(%q) = %v", ns, err)
 		}
 		for _, s := range shapes {
-			entity := ast.NewCodeEntity(ns, s.language, "myrepo", s.entityType, s.name, s.path)
+			entity := ast.NewCodeEntity(entityid.Authority{Org: ns, Platform: "test"}, s.language, "myrepo", s.entityType, s.name, s.path)
 			payload := &graph.EntityPayload{
 				ID:                  entity.ID,
 				UpdatedAt:           time.Now(),

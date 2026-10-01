@@ -43,7 +43,7 @@ func parseTree(t *testing.T, files map[string]string) []*ast.CodeEntity {
 func parseRels(t *testing.T, root string, rels []string) []*ast.CodeEntity {
 	t.Helper()
 	var all []*ast.CodeEntity
-	p := NewParser("acme", "test", root)
+	p := NewParser(testAuthority("acme"), "test", root)
 	for _, rel := range rels {
 		res, err := p.ParseFile(context.Background(), filepath.Join(root, rel))
 		if err != nil {
@@ -560,7 +560,7 @@ func TestEditedCalleeIsObservedOnReparse(t *testing.T) {
 			"  private B b;\n" +
 			"  public void go() { b.run(); }\n}\n",
 	})
-	p := NewParser("acme", "test", root)
+	p := NewParser(testAuthority("acme"), "test", root)
 
 	first, err := p.ParseFile(context.Background(), filepath.Join(root, "a/A.java"))
 	if err != nil {

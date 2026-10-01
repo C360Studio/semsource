@@ -16,7 +16,7 @@ import (
 // It provides methods to convert to graph triples for storage.
 type CodeEntity struct {
 	// ID is the 6-part entity identifier
-	// Format: {org}.semsource.{language}.{system}.{type}.{instance}
+	// Format: {org}.{platform}.{system}.{language}.{type}.{instance}
 	ID string
 
 	// Type classifies the code entity
@@ -103,8 +103,8 @@ type CapabilityInfo struct {
 // NewCodeEntity creates a new code entity with the given parameters.
 // The language and project parameters are used to construct the 6-part entity ID.
 // language should be the domain name (e.g. "golang", "typescript", "java", "python", "svelte").
-func NewCodeEntity(org, language, project string, entityType CodeEntityType, name, path string) *CodeEntity {
-	return NewScopedCodeEntity(org, language, project, entityType, nil, name, path)
+func NewCodeEntity(authority entityid.Authority, language, project string, entityType CodeEntityType, name, path string) *CodeEntity {
+	return NewScopedCodeEntity(authority, language, project, entityType, nil, name, path)
 }
 
 // NewScopedCodeEntity is like NewCodeEntity but inserts enclosing-scope
@@ -120,12 +120,12 @@ func NewCodeEntity(org, language, project string, entityType CodeEntityType, nam
 // pre-computed by the ast-source component), so no double-transform harm occurs,
 // and it eliminates the raw-passthrough bug for callers that supply a canonical
 // module path or module-cache path (e.g. "semstreams@v1.9.0") directly.
-func NewScopedCodeEntity(org, language, project string, entityType CodeEntityType, scope []string, name, path string) *CodeEntity {
+func NewScopedCodeEntity(authority entityid.Authority, language, project string, entityType CodeEntityType, scope []string, name, path string) *CodeEntity {
 	instance := BuildScopedInstanceID(path, scope, name, entityType)
 	systemSlug := entityid.SystemSlug(project)
 
 	return &CodeEntity{
-		ID:         entityid.Build(org, entityid.PlatformSemsource, language, systemSlug, string(entityType), instance),
+		ID:         authority.Build(systemSlug, language, string(entityType), instance),
 		Type:       entityType,
 		Name:       name,
 		Path:       path,

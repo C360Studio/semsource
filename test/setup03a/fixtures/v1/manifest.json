@@ -1,0 +1,18 @@
+{
+  "corpus_version": "1",
+  "project": "setup03a",
+  "source_revision": "corpus-v1",
+  "namespace": "setup03a",
+  "expected_entities": {
+    "run": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Run",
+    "greet_alpha": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Greet",
+    "greet_beta": "setup03a.semsource.golang.setup03a-corpus-v1.function.beta-greet-go-Greet",
+    "farewell": "setup03a.semsource.golang.setup03a-corpus-v1.function.alpha-greet-go-Farewell"
+  },
+  "initial_edge": ["run", "code.relationship.calls", "greet_alpha"],
+  "edited_edge": ["run", "code.relationship.calls", "farewell"],
+  "initial_run_body": "func Run() string { return Greet() }",
+  "edited_run_body": "func Run() string { return Farewell() }",
+  "deleted_contract": "Entity remains addressable with entity.lifecycle.stale; stale history is not physical purge",
+  "broker_contract": "Acknowledged memory GRAPH transport may be lost; authoritative KV and content must persist; source re-ingestion must recover pending work"
+}

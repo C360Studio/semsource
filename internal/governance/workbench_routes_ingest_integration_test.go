@@ -59,7 +59,7 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 
 	astCfg, err := json.Marshal(map[string]any{
 		"watch_paths": []map[string]any{
-			{"path": routesDir, "org": "c360", "project": "workbench", "languages": []string{"svelte"}},
+			{"path": routesDir, "org": "acme", "project": "workbench", "languages": []string{"svelte"}},
 		},
 		"watch_enabled":  false,
 		"index_interval": "",
@@ -67,7 +67,7 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -83,8 +83,8 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	qc := tc.Client
 
 	expected := []string{
-		semsourceast.NewCodeEntity("c360", "svelte", "workbench", semsourceast.TypeComponent, "+page", "+page.svelte").ID,
-		semsourceast.NewCodeEntity("c360", "svelte", "workbench", semsourceast.TypeComponent, "+layout", "+layout.svelte").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "workbench", semsourceast.TypeComponent, "+page", "+page.svelte").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "workbench", semsourceast.TypeComponent, "+layout", "+layout.svelte").ID,
 	}
 
 	deadline := time.Now().Add(30 * time.Second)

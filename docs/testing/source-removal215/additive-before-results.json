@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "issue": "https://github.com/C360Studio/semsource/issues/215",
+  "disposition": "Expected pre-fix TDD failure; post-fix real-process execution pending.",
+  "binary_sha256": "7847df902bef611c777df4a19366dac896a9e86cc80cd475623d40d679c0a198",
+  "corpus_version": "removal-replay-v1",
+  "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+  "run": {
+    "command": [
+      "go",
+      "test",
+      "-tags=qualification,removal",
+      "-count=1",
+      "-v",
+      "-run",
+      "^TestRemovalReplayRetirement$/^original$",
+      "./test/setup03a"
+    ],
+    "environment": {
+      "SETUP03A_BINARY": "/tmp/semsource-removal215-evidence/semsource-before",
+      "SETUP03A_OUT": "/tmp/semsource-removal215-evidence/additive-before",
+      "SETUP03A_IDENTITY": "governed",
+      "SETUP03A_PROFILE": "bm25",
+      "SETUP03A_NATS_IMAGE": "nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+    },
+    "started_at": "2026-10-01T00:11:26.053981+00:00",
+    "exit_code": 1,
+    "elapsed_seconds": 40.588029958016705,
+    "finished_at": "2026-10-01T00:12:06.642169+00:00"
+  },
+  "observations": [
+    {
+      "name": "initial_settled",
+      "passed": true
+    },
+    {
+      "name": "governed_identity_authority",
+      "passed": true
+    },
+    {
+      "name": "initial_target_current",
+      "passed": true
+    },
+    {
+      "name": "sibling_source_facts_captured",
+      "passed": true
+    },
+    {
+      "name": "remove_receipt",
+      "passed": true
+    },
+    {
+      "name": "old_boot_producer_still_admitted",
+      "passed": true
+    },
+    {
+      "name": "durable_pending_before_projection",
+      "passed": false,
+      "error": "nats: bucket not found"
+    },
+    {
+      "name": "cleanup_checked_process_exit",
+      "passed": true
+    }
+  ],
+  "checked_process_exit": {
+    "pid": 70022,
+    "forced": false,
+    "observed": true,
+    "exit_code": 0
+  },
+  "cleanup": {
+    "checked_at": "2026-10-01T00:13:20.071497+00:00",
+    "owned_container_id": "3e3628ccb16ed94976eeecd1dacf317a2e2f84f5dfc89bd48bc720d5c0c56451",
+    "inspect_exit_code": 1,
+    "inspect_stderr": "error: no such object: 3e3628ccb16ed94976eeecd1dacf317a2e2f84f5dfc89bd48bc720d5c0c56451\n",
+    "owned_container_absent": true
+  },
+  "terminal_completion_gate": {
+    "name": "automatic_terminal_removal_completion",
+    "qualified": false,
+    "blocker": "applied_tail_unproven",
+    "upstream": "https://github.com/C360Studio/semstreams/issues/1444"
+  },
+  "raw_evidence_sha256": {
+    "additive-before-run.json": "932c64d00034eaaf45871d2bd93ee55a933e018d1f25e535f82be5875dbaefa1",
+    "additive-before.log": "372afd98d4e4b0105747254fc8ef39d13bf8f1ae5857d35dbda72c58b71a620d",
+    "additive-before/TestRemovalReplayRetirement-original/report.json": "1d8765c20f0723e6acb9f90907350c0ee101ae0bf7c2002bd87830f43c0a4803",
+    "additive-before-cleanup.json": "5fa686ff5b91d003f93b22bf20929d7d289edb8e50a80f5a31541d4d216fb7e9",
+    "additive-before/TestRemovalReplayRetirement-original/nats-inspect.json": "86c8e001b7c8c8b1a03a7744615466efbb72063bc4927953a4fc69b319bfe9de",
+    "additive-before/TestRemovalReplayRetirement-original/application-1.log": "67a0d5b41fcf52e6b85e6417d5e2ea387178eed3323cccbbc3a4277696b1ea30",
+    "additive-before/TestRemovalReplayRetirement-original/nats.log": "53dc149ce9e7a37de193e974191f26cf480fd6a0c06589303427997853c83735"
+  }
+}

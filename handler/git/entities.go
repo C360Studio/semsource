@@ -85,6 +85,7 @@ type CommitEntity struct {
 	Subject   string
 	System    string
 	Org       string
+	Platform  string
 	IndexedAt time.Time
 
 	// Relationship data used to build relationship triples.
@@ -93,16 +94,17 @@ type CommitEntity struct {
 }
 
 // newCommitEntity constructs a CommitEntity and builds its deterministic ID.
-func newCommitEntity(org, fullSHA, authorFull, subject, system string, indexedAt time.Time) *CommitEntity {
+func newCommitEntity(authority entityid.Authority, fullSHA, authorFull, subject, system string, indexedAt time.Time) *CommitEntity {
 	sha := shortSHA(fullSHA)
 	return &CommitEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "git", system, "commit", sha),
+		ID:        authority.Build(system, "git", "commit", sha),
 		SHA:       fullSHA,
 		ShortSHA:  sha,
 		Author:    authorFull,
 		Subject:   subject,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
+		Platform:  authority.Platform,
 		IndexedAt: indexedAt,
 	}
 }
@@ -131,7 +133,7 @@ func (e *CommitEntity) Triples() []message.Triple {
 	}
 	// Authored-by relationship triple: Object is the author entity ID.
 	if e.AuthorEmail != "" {
-		authorID := entityid.Build(e.Org, entityid.PlatformSemsource, "git", e.System, "author", entityid.SanitizeInstance(e.AuthorEmail))
+		authorID := entityid.Build(e.Org, e.Platform, e.System, "git", "author", entityid.SanitizeInstance(e.AuthorEmail))
 		triples = append(triples, message.Triple{
 			Subject:    e.ID,
 			Predicate:  source.GitCommitAuthoredBy,
@@ -166,13 +168,13 @@ type AuthorEntity struct {
 }
 
 // newAuthorEntity constructs an AuthorEntity with a deterministic ID.
-func newAuthorEntity(org, name, email, system string, indexedAt time.Time) *AuthorEntity {
+func newAuthorEntity(authority entityid.Authority, name, email, system string, indexedAt time.Time) *AuthorEntity {
 	return &AuthorEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "git", system, "author", entityid.SanitizeInstance(email)),
+		ID:        authority.Build(system, "git", "author", entityid.SanitizeInstance(email)),
 		Name:      name,
 		Email:     email,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -208,13 +210,13 @@ type BranchEntity struct {
 }
 
 // newBranchEntity constructs a BranchEntity with a deterministic ID.
-func newBranchEntity(org, branchName, headSHA, system string, indexedAt time.Time) *BranchEntity {
+func newBranchEntity(authority entityid.Authority, branchName, headSHA, system string, indexedAt time.Time) *BranchEntity {
 	return &BranchEntity{
-		ID:         entityid.Build(org, entityid.PlatformSemsource, "git", system, "branch", entityid.SanitizeInstance(branchName)),
+		ID:         authority.Build(system, "git", "branch", entityid.SanitizeInstance(branchName)),
 		BranchName: branchName,
 		HeadSHA:    shortSHA(headSHA),
 		System:     system,
-		Org:        org,
+		Org:        authority.Org,
 		IndexedAt:  indexedAt,
 	}
 }

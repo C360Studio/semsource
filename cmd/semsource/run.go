@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -94,7 +95,7 @@ func parseRunFlags(args []string) (*runFlags, error) {
 //  4. Create component registry, register all factories
 //  5. Create ServiceManager, configure, start
 //  6. Block on SIGINT/SIGTERM, then shut down cleanly
-func runCmd(args []string) error {
+func runCmd(args []string) (runErr error) {
 	flags, err := parseRunFlags(args)
 	if err != nil {
 		return err
@@ -140,21 +141,15 @@ func runCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer nc.Close(context.Background())
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		runErr = errors.Join(runErr, nc.Close(closeCtx))
+	}()
 
 	// Fail-fast projection-intent validation; the contract itself is consumed
 	// where mutations are sent (supersession's typed client), not here.
 	if _, err := semgovernance.BootstrapStandalone(logger); err != nil {
-		return err
-	}
-
-	registry := component.NewRegistry()
-	if err := registerComponentFactories(registry); err != nil {
-		return err
-	}
-
-	payloadReg, err := buildPayloadRegistry()
-	if err != nil {
 		return err
 	}
 
@@ -165,11 +160,20 @@ func runCmd(args []string) error {
 	if err := configMgr.Start(ctx); err != nil {
 		return fmt.Errorf("start config manager: %w", err)
 	}
-	defer configMgr.Stop(5 * time.Second)
+	defer func() { runErr = errors.Join(runErr, configMgr.Stop(5*time.Second)) }()
 
-	manager, err := createServiceManager(semsourceCfg, ssCfg, nc, registry, payloadReg, configMgr, logger)
+	registry, err := prepareComponentRegistry(ctx, semsourceCfg, configMgr, nc)
 	if err != nil {
-		configMgr.Stop(5 * time.Second)
+		return err
+	}
+
+	payloadReg, err := buildPayloadRegistry()
+	if err != nil {
+		return err
+	}
+
+	manager, err := createServiceManager(nc, registry, payloadReg, configMgr, logger)
+	if err != nil {
 		return err
 	}
 
@@ -188,22 +192,29 @@ func serveUntilSignal(
 	expandResult *config.ExpandResult,
 	logger *slog.Logger,
 ) error {
-	if err := manager.StartAll(signalCtx); err != nil {
+	runtimeCtx, cancelRuntime := context.WithCancel(context.WithoutCancel(signalCtx))
+	defer cancelRuntime()
+	if err := manager.StartAll(runtimeCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
 
-	if err := registerIngestHandlers(signalCtx, manager, configMgr, cfg, logger); err != nil {
-		logger.Warn("failed to register ingest handlers", "error", err)
+	// Pinned ADR094/100 have boot-only component admission. Runtime discovery
+	// cannot safely keep desired manifest counts and producer admission aligned.
+	if len(expandResult.Watchers) > 0 {
+		logger.Warn("dynamic branch discovery unavailable on this migration pin; use pre-expanded boot sources", "watchers", len(expandResult.Watchers), "capability", "blocked")
 	}
-
-	startBranchWatchers(signalCtx, expandResult.Watchers, cfg, configMgr, logger)
-	startSubmoduleWatchers(signalCtx, cfg, configMgr, logger)
+	for _, src := range cfg.Sources {
+		if (src.Type == "repo" || src.Type == "git") && (src.Submodules == nil || *src.Submodules) {
+			logger.Warn("dynamic submodule discovery unavailable on this migration pin; pre-expand local pinned submodules before boot", "source", src.Path+src.URL, "capability", "blocked")
+		}
+	}
+	_ = configMgr
 
 	logger.Info("semsource running — waiting for shutdown signal")
 	<-signalCtx.Done()
 	logger.Info("shutdown signal received")
 
-	// The run context is already cancelled; shutdown needs its own bounded
+	// The signal is cancelled; the runtime stays live while shutdown uses bounded
 	// authority (semstreams caller-owned lifecycle contract). Background is
 	// allowed only here, at the process composition root.
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), 30*time.Second)
@@ -269,11 +280,22 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 // registerComponentFactories registers the semstreams built-in factories
 // (graph, agentic, etc.) alongside semsource's own factories. semsource runs as
 // a standalone service that owns its full component set.
-func registerComponentFactories(registry *component.Registry) error {
+type componentWiring struct {
+	ProjectionRegistry interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	}
+	SourceRegistry interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	}
+	Ingest       *sourcemanifest.IngestHandlerConfig
+	ScopeSystems map[string][]string
+}
+
+func registerComponentFactories(registry *component.Registry, wiring ...componentWiring) error {
 	if err := componentregistry.Register(registry); err != nil {
 		return fmt.Errorf("register semstreams components: %w", err)
 	}
-	if err := registerSemsourceFactories(registry); err != nil {
+	if err := registerSemsourceFactories(registry, wiring...); err != nil {
 		return err
 	}
 	slog.Info("component factories registered", "count", len(registry.ListFactories()))
@@ -299,25 +321,45 @@ func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 }
 
 // registerSemsourceFactories registers all semsource-specific component factories.
-func registerSemsourceFactories(registry *component.Registry) error {
+func registerSemsourceFactories(registry *component.Registry, wiring ...componentWiring) error {
+	var ingest []sourcemanifest.IngestHandlerConfig
+	var scopes map[string][]string
+	var sources interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	} = registry
+	var projectors interface {
+		RegisterWithConfig(component.RegistrationConfig) error
+	} = registry
+	if len(wiring) > 0 {
+		scopes = wiring[0].ScopeSystems
+		if wiring[0].ProjectionRegistry != nil {
+			projectors = wiring[0].ProjectionRegistry
+		}
+		if wiring[0].SourceRegistry != nil {
+			sources = wiring[0].SourceRegistry
+		}
+		if wiring[0].Ingest != nil {
+			ingest = append(ingest, *wiring[0].Ingest)
+		}
+	}
 	for name, fn := range map[string]func() error{
-		"ast-source":     func() error { return astsource.Register(registry) },
-		"git-source":     func() error { return gitsource.Register(registry) },
-		"doc-source":     func() error { return docsource.Register(registry) },
-		"cfgfile-source": func() error { return cfgfilesource.Register(registry) },
-		"url-source":     func() error { return urlsource.Register(registry) },
+		"ast-source":     func() error { return astsource.Register(sources) },
+		"git-source":     func() error { return gitsource.Register(sources) },
+		"doc-source":     func() error { return docsource.Register(sources) },
+		"cfgfile-source": func() error { return cfgfilesource.Register(sources) },
+		"url-source":     func() error { return urlsource.Register(sources) },
 		// No entry in buildPayloadRegistry: object-store artifacts become
 		// ordinary document entities through the doc pipeline, so this source
 		// introduces no payload type of its own.
-		"objectstore-source": func() error { return objectstoresource.Register(registry) },
-		"image-source":       func() error { return imagesource.Register(registry) },
-		"video-source":       func() error { return videosource.Register(registry) },
-		"audio-source":       func() error { return audiosource.Register(registry) },
+		"objectstore-source": func() error { return objectstoresource.Register(sources) },
+		"image-source":       func() error { return imagesource.Register(sources) },
+		"video-source":       func() error { return videosource.Register(sources) },
+		"audio-source":       func() error { return audiosource.Register(sources) },
 		"filestore":          func() error { return filestore.Register(registry) },
-		"source-manifest":    func() error { return sourcemanifest.Register(registry) },
-		"code-context":       func() error { return codecontext.Register(registry) },
+		"source-manifest":    func() error { return sourcemanifest.Register(registry, ingest...) },
+		"code-context":       func() error { return codecontext.Register(registry, scopes) },
 		"mcp-gateway":        func() error { return mcpgateway.Register(registry) },
-		"supersession":       func() error { return supersession.Register(registry) },
+		"supersession":       func() error { return supersession.Register(projectors) },
 	} {
 		if err := fn(); err != nil {
 			return fmt.Errorf("register %s component: %w", name, err)
@@ -328,8 +370,6 @@ func registerSemsourceFactories(registry *component.Registry) error {
 
 // createServiceManager builds the ServiceManager with all configured services.
 func createServiceManager(
-	cfg *config.Config,
-	ssCfg *semconfig.Config,
 	nc *natsclient.Client,
 	registry *component.Registry,
 	payloadReg *payloadregistry.Registry,
@@ -337,10 +377,8 @@ func createServiceManager(
 	logger *slog.Logger,
 ) (*service.Manager, error) {
 	metricsRegistry := metric.NewMetricsRegistry()
-	platform := types.PlatformMeta{
-		Org:      cfg.Namespace,
-		Platform: "semsource",
-	}
+	effective := configMgr.GetConfig().Get()
+	platform := types.PlatformMeta{Org: effective.Platform.Org, Platform: effective.Platform.ID}
 
 	serviceRegistry := service.NewServiceRegistry()
 	if err := service.RegisterAll(serviceRegistry); err != nil {
@@ -362,7 +400,7 @@ func createServiceManager(
 	// itself on beta.160 — the composition has ONE writer. A second
 	// CreateService pass here would be a duplicate composition writer and
 	// fails with DuplicateServiceError.
-	if err := manager.ConfigureFromServices(ssCfg.Services, deps); err != nil {
+	if err := manager.ConfigureFromServices(effective.Services, deps); err != nil {
 		return nil, fmt.Errorf("configure service manager: %w", err)
 	}
 
@@ -540,10 +578,10 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		// configuration already selected from KV (beta.160 rule). Bump this on
 		// EVERY change to the generated composition — 2.0.0 is the beta.160
 		// foundation cutover (typed ports, defaults-deferral, no ownership).
-		Version: "2.0.0",
+		Version: "3.0.0",
 		Platform: semconfig.PlatformConfig{
 			Org:         org,
-			ID:          "semsource",
+			ID:          cfg.PlatformStem(),
 			Environment: "dev",
 		},
 		NATS: semconfig.NATSConfig{
@@ -651,18 +689,7 @@ func mcpGatewayComponentConfig(cfg *config.Config) (types.ComponentConfig, error
 func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (types.ComponentConfig, error) {
 	manifestSources := make([]sourcemanifest.ManifestSource, 0, len(cfg.Sources))
 	for _, src := range cfg.Sources {
-		manifestSources = append(manifestSources, sourcemanifest.ManifestSource{
-			Type:          src.Type,
-			Path:          src.Path,
-			Paths:         src.Paths,
-			URL:           src.URL,
-			URLs:          src.URLs,
-			Language:      src.Language,
-			Branch:        src.Branch,
-			Watch:         src.Watch,
-			PollInterval:  src.PollInterval,
-			IndexInterval: src.IndexInterval,
-		})
+		manifestSources = append(manifestSources, sourcemanifest.ManifestSourceFromEntry(src))
 	}
 	raw, err := json.Marshal(map[string]any{
 		"ports": map[string]any{
@@ -1093,12 +1120,7 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 		},
 		"component-manager": types.ServiceConfig{
 			Enabled: true,
-			// watch_config:true wires the ComponentManager to the
-			// ConfigManager's KV watcher. Without it, runtime writes via
-			// graph.ingest.add (sourcespawn.Add → PutComponentToKV) and the
-			// branch watcher land in KV but never trigger component spawn —
-			// only the boot-time snapshot is loaded.
-			Config: json.RawMessage(`{"watch_config":true}`),
+			Config:  json.RawMessage(`{}`),
 		},
 		"metrics": types.ServiceConfig{
 			Enabled: true,
@@ -1108,88 +1130,15 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 			Enabled: true,
 			Config:  json.RawMessage(`{}`),
 		},
-		"flow-builder": types.ServiceConfig{
-			Enabled: true,
-			Config:  json.RawMessage(`{}`),
-		},
 	}, nil
 }
 
-// registerIngestHandlers locates the running source-manifest component and
-// wires graph.ingest.add.{namespace} and graph.ingest.remove.{namespace}
-// onto it. The component owns the subscription lifecycle — Stop tears
-// these down alongside its existing query subs.
-func registerIngestHandlers(
-	ctx context.Context,
-	manager *service.Manager,
-	configMgr *semconfig.Manager,
-	cfg *config.Config,
-	logger *slog.Logger,
-) error {
-	cmService, ok := manager.GetService("component-manager")
-	if !ok {
-		return fmt.Errorf("component-manager service not running")
-	}
-	cm, ok := cmService.(*service.ComponentManager)
-	if !ok {
-		return fmt.Errorf("component-manager has unexpected type %T", cmService)
-	}
-
-	ingestCfg := sourcemanifest.IngestHandlerConfig{
-		Namespace: cfg.Namespace,
-		Store:     configMgr,
-		Spawn: sourcespawn.Options{
-			Org:           cfg.Namespace,
-			WorkspaceDir:  cfg.WorkspaceDir,
-			GitToken:      cfg.GitToken,
-			MediaStoreDir: cfg.MediaStoreDir,
-		},
-		// HTTP façade guards (ADR-0007): optional bearer token (permissive when
-		// unset) and the filesystem-root allowlist for path-based HTTP adds.
-		APIToken:     os.Getenv("SEMSOURCE_API_TOKEN"),
-		AllowedRoots: cfg.SourceRoots,
-	}
-
-	// source-manifest's Start (which flips its running flag) can lag StartAll's
-	// return, so poll until it is both managed AND started before wiring the
-	// curator ingest handlers. A one-shot registration loses that race —
-	// RegisterIngestHandlers returns "component not started" and the
-	// graph.ingest.add/remove subjects would then never get handlers (runtime
-	// source-add silently no-ops). Bounded so a genuinely-absent component
-	// surfaces an error instead of blocking forever.
-	const (
-		readyDeadline = 10 * time.Second
-		pollInterval  = 100 * time.Millisecond
-	)
-	deadline := time.Now().Add(readyDeadline)
-	lastErr := fmt.Errorf("source-manifest not yet managed")
-	for {
-		if mc, ok := cm.GetManagedComponents()["source-manifest"]; ok {
-			smComponent, ok := mc.Component.(*sourcemanifest.Component)
-			if !ok {
-				return fmt.Errorf("source-manifest has unexpected type %T", mc.Component)
-			}
-			err := smComponent.RegisterIngestHandlers(ctx, ingestCfg)
-			if err == nil {
-				logger.Debug("source-manifest ingest handlers registered")
-				return nil
-			}
-			// "component not started" is the start-race — retry (it returns
-			// before any subscription, so retrying can't double-register). Any
-			// other error is terminal.
-			if !strings.Contains(err.Error(), "component not started") {
-				return err
-			}
-			lastErr = err
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("source-manifest ingest handlers not registered within %s: %w", readyDeadline, lastErr)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(pollInterval):
-		}
+// ingestHandlerConfig supplies product-owned source management at factory construction.
+func ingestHandlerConfig(cfg *config.Config, store *semconfig.Manager) sourcemanifest.IngestHandlerConfig {
+	return sourcemanifest.IngestHandlerConfig{
+		Namespace: cfg.Namespace, Store: store,
+		Spawn:    sourcespawn.Options{Org: cfg.Namespace, WorkspaceDir: cfg.WorkspaceDir, GitToken: cfg.GitToken, MediaStoreDir: cfg.MediaStoreDir},
+		APIToken: os.Getenv("SEMSOURCE_API_TOKEN"), AllowedRoots: cfg.SourceRoots,
 	}
 }
 

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semsource/internal/sourceauthority"
+	"github.com/c360studio/semsource/internal/workerjoin"
 	"io"
 	"log/slog"
 	"os"
@@ -28,6 +30,7 @@ import (
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/gitboundary"
 	"github.com/c360studio/semsource/internal/seedloss"
+	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -64,6 +67,7 @@ type pathWatcher struct {
 
 // Component implements the ast-source processor.
 type Component struct {
+	authority entityid.Authority
 	name      string
 	config    Config
 	publisher *entitypub.Publisher
@@ -144,6 +148,7 @@ type Component struct {
 
 	// Cancel functions for background goroutines
 	cancelFuncs []context.CancelFunc
+	workers     workerjoin.Group
 
 	// Content hashes for change detection during periodic reindex
 	fileHashes   map[string]string // path → content hash
@@ -170,6 +175,15 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
+	authority, err := sourceauthority.Resolve(deps.Platform, "")
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range config.WatchPaths {
+		if _, err := sourceauthority.Resolve(deps.Platform, path.Org); err != nil {
+			return nil, err
+		}
+	}
 
 	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
 		// Publish-boundary telemetry, keyed by instance so one stalled source
@@ -180,6 +194,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	c := &Component{
+		authority:   authority,
 		name:        "ast-source",
 		config:      config,
 		publisher:   pub,
@@ -248,7 +263,7 @@ func (c *Component) initializeWatchers() error {
 		for _, lang := range languages {
 			// Pass scopedSystem as the project so all entity IDs produced by the
 			// parser use the consistent, version-scoped system segment.
-			parser, err := semsourceast.DefaultRegistry.CreateParser(lang, rp.Config.Org, scopedSystem, rp.AbsPath)
+			parser, err := semsourceast.DefaultRegistry.CreateParser(lang, c.authority, scopedSystem, rp.AbsPath)
 			if err != nil {
 				return fmt.Errorf("create parser for %s: %w", lang, err)
 			}
@@ -317,70 +332,81 @@ func (c *Component) Start(ctx context.Context) error {
 // its own goroutine; failures surface through the source's error count and a
 // WARN rather than as a Start error, because there is no longer a Start to fail.
 func (c *Component) runSeed(ctx context.Context) error {
-	// Initialize watchers with retry — paths may not exist yet if a git
-	// clone is still in progress (repo expansion pattern).
-	err := retry.Do(ctx, retry.Persistent(), func() error {
-		initErr := c.initializeWatchers()
-		if initErr != nil {
-			// Bounded by retry.Persistent (~30 attempts), but a source that never
-			// reaches its paths seeds nothing at all — surface it once rather than
-			// leaving the whole wait at Debug, where it was invisible.
-			c.pathsUnavailable.Enter(c.logger,
-				"source paths are not available yet — seeding cannot start", "error", initErr)
-			return initErr
-		}
-		c.pathsUnavailable.Clear(c.logger, "source paths became available")
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("initialize watchers: %w", err)
-	}
-
-	for _, pw := range c.watchers {
-		c.logger.Info("Initializing path watcher",
-			"path", pw.root,
-			"org", pw.config.Org,
-			"project", pw.config.Project,
-			"languages", pw.config.Languages)
-	}
-
-	c.logger.Info("Starting initial code index", "paths", len(c.watchers))
-
 	totalFiles := 0
-	for _, pw := range c.watchers {
-		results, err := c.parseDirectory(ctx, pw)
+	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
+		before := c.errors.Load() + c.parseFailures.Load()
+
+		// Initialize watchers with retry — paths may not exist yet if a git
+		// clone is still in progress (repo expansion pattern).
+		err := retry.Do(ctx, retry.Persistent(), func() error {
+			initErr := c.initializeWatchers()
+			if initErr != nil {
+				// Bounded by retry.Persistent (~30 attempts), but a source that never
+				// reaches its paths seeds nothing at all — surface it once rather than
+				// leaving the whole wait at Debug, where it was invisible.
+				c.pathsUnavailable.Enter(c.logger,
+					"source paths are not available yet — seeding cannot start", "error", initErr)
+				return initErr
+			}
+			c.pathsUnavailable.Clear(c.logger, "source paths became available")
+			return nil
+		})
 		if err != nil {
-			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
+			return fmt.Errorf("initialize watchers: %w", err)
 		}
 
-		// Resolve cross-file type references now that the whole watch path is
-		// parsed. Languages whose names map deterministically onto paths (Go,
-		// Java, Python) resolve inside the parser; C++ cannot, because nothing
-		// ties `class Foo` to a file without a preprocessor and include paths.
-		// Doing it here — over the complete result set — keeps it deterministic
-		// and independent of walk order.
-		for _, parser := range pw.parsers {
-			if r, ok := parser.(typeRefResolver); ok {
-				r.ResolveTypeRefs(results)
-			}
+		for _, pw := range c.watchers {
+			c.logger.Info("Initializing path watcher",
+				"path", pw.root,
+				"org", pw.config.Org,
+				"project", pw.config.Project,
+				"languages", pw.config.Languages)
 		}
 
-		// Publish repo and folder hierarchy entities before file/symbol entities.
-		// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
-		c.publishHierarchy(ctx, results, pw.config.Org, pw.scopedSystem)
+		c.logger.Info("Starting initial code index", "paths", len(c.watchers))
 
-		for _, result := range results {
-			if err := c.publishParseResult(ctx, result, pw); err != nil {
-				c.logger.Warn("Failed to publish parse result",
-					"path", result.Path,
-					"error", err)
-				c.incrementErrors()
+		for _, pw := range c.watchers {
+			results, err := c.parseDirectory(ctx, pw)
+			if err != nil {
+				return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
 			}
-			if result.Hash != "" {
-				c.setFileHash(result.Path, result.Hash)
+
+			// Resolve cross-file type references now that the whole watch path is
+			// parsed. Languages whose names map deterministically onto paths (Go,
+			// Java, Python) resolve inside the parser; C++ cannot, because nothing
+			// ties `class Foo` to a file without a preprocessor and include paths.
+			// Doing it here — over the complete result set — keeps it deterministic
+			// and independent of walk order.
+			for _, parser := range pw.parsers {
+				if r, ok := parser.(typeRefResolver); ok {
+					r.ResolveTypeRefs(results)
+				}
 			}
+
+			// Publish repo and folder hierarchy entities before file/symbol entities.
+			// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
+			c.publishHierarchy(ctx, results, pw.scopedSystem)
+
+			for _, result := range results {
+				if err := c.publishParseResult(ctx, result, pw); err != nil {
+					c.logger.Warn("Failed to publish parse result",
+						"path", result.Path,
+						"error", err)
+					c.incrementErrors()
+				}
+				if result.Hash != "" {
+					c.setFileHash(result.Path, result.Hash)
+				}
+			}
+			totalFiles += len(results)
 		}
-		totalFiles += len(results)
+
+		if failed := (c.errors.Load() + c.parseFailures.Load()) - before; failed > 0 {
+			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	c.logger.Info("Initial index complete",
@@ -447,7 +473,7 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 
 	watcherConfig := semsourceast.WatcherConfig{
 		RepoRoot:       pw.root,
-		Org:            pw.config.Org,
+		Authority:      c.authority,
 		Project:        pw.config.Project,
 		DebounceDelay:  debounceDelay,
 		Logger:         c.logger,
@@ -467,7 +493,7 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 
 	watchCtx, cancel := context.WithCancel(ctx)
 
-	go func() {
+	c.workers.Go(func() {
 		for {
 			select {
 			case <-watchCtx.Done():
@@ -479,7 +505,7 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 				c.handleWatchEvent(watchCtx, pw, event)
 			}
 		}
-	}()
+	})
 
 	c.logger.Info("File watcher started",
 		"path", pw.root,
@@ -506,7 +532,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 		if event.Result != nil {
 			// Publish folder chain for new/modified files so containment
 			// edges exist even for directories created between full reindexes.
-			c.publishFolderChain(ctx, event.Path, pw.config.Org, pw.scopedSystem)
+			c.publishFolderChain(ctx, event.Path, pw.scopedSystem)
 
 			if err := c.publishParseResult(ctx, event.Result, pw); err != nil {
 				c.logger.Warn("Failed to publish parse result",
@@ -541,7 +567,7 @@ func (c *Component) startPeriodicIndex(ctx context.Context) context.CancelFunc {
 
 	indexCtx, cancel := context.WithCancel(ctx)
 
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -553,7 +579,7 @@ func (c *Component) startPeriodicIndex(ctx context.Context) context.CancelFunc {
 				c.performFullIndex(indexCtx)
 			}
 		}
-	}()
+	})
 
 	c.logger.Info("Periodic index started", "interval", interval)
 	return cancel
@@ -577,7 +603,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 		}
 
 		// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
-		c.publishHierarchy(ctx, results, pw.config.Org, pw.scopedSystem)
+		c.publishHierarchy(ctx, results, pw.scopedSystem)
 
 		for _, result := range results {
 			totalFiles++
@@ -644,7 +670,7 @@ func lifecycleRunRequestFor(pw *pathWatcher, reason string) graph.LifecycleRunRe
 // one, and the two call sites have different preconditions.
 func (c *Component) triggerLifecycleRun(ctx context.Context, pw *pathWatcher, reason string) {
 	req := lifecycleRunRequestFor(pw, reason)
-	go func() {
+	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
 		defer cancel()
 		if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, req); err != nil {
@@ -656,7 +682,7 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, pw *pathWatcher, re
 		} else {
 			c.lifecycleFailing.Clear(c.logger, "staleness lifecycle trigger recovered")
 		}
-	}()
+	})
 }
 
 // parseDirectory parses all source files in a directory using the path's configured parsers.
@@ -688,6 +714,7 @@ func (c *Component) parseDirectory(ctx context.Context, pw *pathWatcher) ([]*sem
 
 		result, err := c.parseFileWithWatcher(ctx, pw, path)
 		if err != nil {
+			seedproof.Report(ctx, err)
 			c.logger.Warn("Failed to parse file",
 				"path", path,
 				"error", err)
@@ -786,18 +813,20 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 }
 
 // publishHierarchy builds and publishes repo and folder entities for a batch of parse results.
-func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceast.ParseResult, org, project string) {
-	entities := semsourceast.BuildHierarchy(results, org, project)
+func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceast.ParseResult, project string) {
+	entities := semsourceast.BuildHierarchy(results, c.authority, project)
 	for _, entity := range entities {
 		state := entity.EntityState()
 		payload, err := payloadFromASTState(state, nil)
 		if err != nil {
+			seedproof.Report(ctx, err)
 			c.logger.Warn("Invalid hierarchy entity state",
 				"id", state.ID,
 				"error", err)
 			continue
 		}
 		if err := c.publishEntity(ctx, payload); err != nil {
+			seedproof.Report(ctx, err)
 			c.logger.Warn("Failed to publish hierarchy entity",
 				"id", entity.ID, "error", err)
 			continue
@@ -809,8 +838,8 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 
 // publishFolderChain publishes folder entities for a single file's ancestor directories.
 // Used during watch events to ensure containment edges exist for newly created directories.
-func (c *Component) publishFolderChain(ctx context.Context, filePath, org, project string) {
-	entities := semsourceast.BuildFolderChain(filePath, org, project)
+func (c *Component) publishFolderChain(ctx context.Context, filePath, project string) {
+	entities := semsourceast.BuildFolderChain(filePath, c.authority, project)
 	for _, entity := range entities {
 		state := entity.EntityState()
 		payload, err := payloadFromASTState(state, nil)
@@ -850,8 +879,8 @@ func payloadFromASTState(state *semsourceast.EntityState, ref *message.StorageRe
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.
-func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.SendContext(ctx, payload)
 }
 
 // updateLastActivity safely updates the last activity timestamp.
@@ -953,7 +982,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).
-		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost(),
+		ErrorCount: c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
 		TypeCounts: c.distinct.TypeCounts(),
 		// A publisher retrying against a refusing transport reports no drops, no
 		// failures, and no errors while being functionally stalled. Surfacing the
@@ -991,7 +1020,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
 	rCtx, cancel := context.WithCancel(ctx)
-	go func() {
+	c.workers.Go(func() {
 		ticker := time.NewTicker(statusReportInterval)
 		defer ticker.Stop()
 		for {
@@ -1007,60 +1036,45 @@ func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc 
 				c.publishStatusReport(rCtx, c.currentPhase())
 			}
 		}
-	}()
+	})
 	return cancel
 }
 
 // Stop gracefully stops the component; ctx bounds the seed join and cleanup.
 func (c *Component) Stop(ctx context.Context) error {
-	c.mu.Lock()
+	c.mu.RLock()
 	running := c.running
-	c.mu.Unlock()
-
+	c.mu.RUnlock()
 	if !running {
 		return nil
 	}
-
-	// Cancel the seed and WAIT for it BEFORE taking the lock, for two reasons:
-	// this mutex is not reentrant and stopSeed takes it, and — the subtler one —
-	// the seed's own tail locks c.mu to register its cancel funcs, so waiting on
-	// the seed while holding the lock would deadlock against it.
-	//
-	// Draining first is also what makes shutdown safe: publisher.Stop() closes
-	// the buffer, so a seed still running would publish into a closed publisher.
 	c.seed.Stop(ctx, c.logger)
-
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("join seed: %w", err)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.logger.Info("entity publisher stats",
-		"published", c.publisher.Published(),
-		"dropped", c.publisher.Dropped(),
-		"retries", c.publisher.Retries())
-	c.publisher.Stop()
-
-	for _, cancel := range c.cancelFuncs {
+	cancels := c.cancelFuncs
+	c.cancelFuncs = nil
+	c.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
-	c.cancelFuncs = nil
-
 	for _, pw := range c.watchers {
 		if pw.watcher != nil {
-			if err := pw.watcher.Stop(); err != nil {
-				c.logger.Warn("Error stopping watcher",
-					"path", pw.root,
-					"error", err)
+			if err := pw.watcher.Stop(ctx); err != nil {
+				return fmt.Errorf("stop file watcher: %w", err)
 			}
 		}
 	}
-
+	if err := c.workers.Wait(ctx); err != nil {
+		return fmt.Errorf("join source workers: %w", err)
+	}
+	if err := c.publisher.Stop(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
 	c.running = false
-	c.logger.Info("AST source stopped",
-		"paths", len(c.watchers),
-		"entities_indexed", c.entitiesIndexed.Load(),
-		"parse_failures", c.parseFailures.Load(),
-		"errors", c.errors.Load())
-
+	c.mu.Unlock()
 	return nil
 }
 
@@ -1121,12 +1135,15 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
+		if c.publisher.ReceiptErrors() > 0 {
+			status = "receipt_pending"
+		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running,
+		Healthy:    running && c.publisher.ReceiptErrors() == 0,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost()),
+		ErrorCount: int(c.errors.Load() + c.parseFailures.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

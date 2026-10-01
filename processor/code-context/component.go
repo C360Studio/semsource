@@ -28,7 +28,6 @@ import (
 	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/storage/storeregistry"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
@@ -70,9 +69,11 @@ var verbs = []string{"context", "callers", "callees", "impact", "file", "search"
 // over the graph and a lens kind ("code" or "docs"); a fresh lens is built per
 // request (the code lens is worktree-scoped for source hydration).
 type Component struct {
-	name        string
-	lensKind    string // "code" | "docs"
-	subjectRoot string // NATS subject root, e.g. "code.v1."
+	platform      string
+	sourceSystems []string
+	name          string
+	lensKind      string // "code" | "docs"
+	subjectRoot   string // NATS subject root, e.g. "code.v1."
 	// org is the deployment's single global org (= the required top-level
 	// namespace), sourced from platform identity. It forms the first segment of
 	// the per-lens default retrieval scope; empty means no default scope (ask
@@ -139,6 +140,8 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		lensKind:      config.Lens,
 		subjectRoot:   config.Lens + ".v1.",
 		org:           deps.Platform.Org,
+		platform:      deps.Platform.Platform,
+		sourceSystems: append([]string(nil), config.SourceSystems...),
 		graph:         graph,
 		client:        deps.NATSClient,
 		storeRegistry: deps.StoreRegistry,
@@ -288,6 +291,9 @@ func (c *Component) fuse(ctx context.Context, verb string, req fusion.Request) (
 	// caller-provided scope; default only when none was set.
 	if len(req.Scope) == 0 {
 		req.Scope = c.defaultScope()
+		if c.org != "" && c.platform != "" && len(req.Scope) == 0 {
+			return fusion.Response{}, fmt.Errorf("no boot sources configured for %s retrieval", c.lensKind)
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
@@ -374,23 +380,20 @@ func (c *Component) lensFor() fusion.Lens {
 	return code.New()
 }
 
-// defaultScope returns the per-lens NL retrieval scope: the entity-ID prefixes
-// {org}.{platform}.{domain} for each domain this lens covers. It returns nil
-// when the org is unknown (standalone/test contexts with no platform identity),
-// which leaves NL resolution unfiltered — the pre-ask-#16 behavior — rather than
-// emitting a malformed prefix. The platform segment is entityid.PlatformSemsource
-// (the literal every entity ID is built with), not deps.Platform.Platform.
+// defaultScope enumerates source×taxonomy prefixes before semantic ranking.
 func (c *Component) defaultScope() []string {
-	if c.org == "" {
+	if c.org == "" || c.platform == "" {
 		return nil
 	}
 	domains := codeScopeDomains
 	if c.lensKind == "docs" {
 		domains = docScopeDomains
 	}
-	scope := make([]string, len(domains))
-	for i, domain := range domains {
-		scope[i] = c.org + "." + entityid.PlatformSemsource + "." + domain
+	scope := make([]string, 0, len(c.sourceSystems)*len(domains))
+	for _, system := range c.sourceSystems {
+		for _, domain := range domains {
+			scope = append(scope, c.org+"."+c.platform+"."+system+"."+domain)
+		}
 	}
 	return scope
 }
@@ -529,19 +532,23 @@ func (c *Component) requireRunning(w http.ResponseWriter) bool {
 // Stop unsubscribes the NATS handlers. The subscription slice is cleaned up
 // unconditionally so a partial Start failure does not leak, and it is safe to
 // call more than once.
-func (c *Component) Stop(_ context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, sub := range c.subs {
+func (c *Component) Stop(ctx context.Context) error {
+	c.mu.RLock()
+	subs := append([]*natsclient.Subscription(nil), c.subs...)
+	c.mu.RUnlock()
+	var result error
+	for _, sub := range subs {
 		if sub != nil {
-			_ = sub.Unsubscribe()
+			result = errors.Join(result, sub.Drain(ctx))
 		}
 	}
-	c.subs = nil
-	if c.running {
-		c.running = false
-		c.logger.Info("code-context stopped")
+	if result != nil {
+		return result
 	}
+	c.mu.Lock()
+	c.subs = nil
+	c.running = false
+	c.mu.Unlock()
 	return nil
 }
 

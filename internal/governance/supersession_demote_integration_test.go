@@ -62,7 +62,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	pub.Start(ctx)
 	runOld := publishVersioned(t, ctx, pub, "semstreams", "v1.9.0", "pkg/run.go", "Run", "run", "code:run-old")
 	runNew := publishVersioned(t, ctx, pub, "semstreams", "v1.10.0", "pkg/run.go", "Run", "run", "code:run-new")
-	pub.Stop()
+	_ = pub.Stop(context.Background())
 
 	qc := tc.Client
 	for _, id := range []string{runOld, runNew} {
@@ -73,7 +73,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 
 	// Run the supersession pass so runOld carries superseded_by (the demote input).
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	// graph.query.prefix matches on dot-delimited segment boundaries, and the two
 	// versions differ in their `system` segment (semstreams-v1-9-0 vs -v1-10-0),
 	// so the deepest shared segment-boundary prefix is org.platform.domain.
-	const prefix = "acme.semsource.golang"
+	const prefix = "acme.test-a1b2c3"
 
 	newRank, oldRank := -1, -1
 	var last fusion.Response

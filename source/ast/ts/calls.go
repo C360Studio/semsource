@@ -586,7 +586,7 @@ func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath
 			if len(scope) == 0 || !classMethods[method] || thisIsRebound(fn, bodyRoot) {
 				return ""
 			}
-			return ast.NewScopedCodeEntity(p.org, lang, p.project, ast.TypeMethod, scope, method, filePath).ID
+			return ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeMethod, scope, method, filePath).ID
 		case "identifier":
 			ns := nodeText(obj, source)
 			if locals[ns] {
@@ -611,7 +611,7 @@ func (p *Parser) callNameToEntityID(name, filePath, lang string) string {
 		return ""
 	}
 	if p.localFuncs[name] {
-		return ast.NewCodeEntity(p.org, lang, p.project, ast.TypeFunction, name, filePath).ID
+		return ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeFunction, name, filePath).ID
 	}
 	if spec, ok := p.defaultImports[name]; ok {
 		return p.defaultCalleeID(spec, filePath)
@@ -622,7 +622,7 @@ func (p *Parser) callNameToEntityID(name, filePath, lang string) string {
 		// captured as origin), but the entity ID must use the definition's own
 		// REAL name ("helper") — see moduleCallInfo's doc comment.
 		if internalName, confirmed := p.moduleInfo(rel).funcs[origin]; confirmed {
-			return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, internalName, rel).ID
+			return ast.NewCodeEntity(p.authority, p.detectLanguage(rel), p.project, ast.TypeFunction, internalName, rel).ID
 		}
 		return "" // resolved module, but origin isn't an EXPORTED top-level function → inert
 	}
@@ -671,7 +671,7 @@ func (p *Parser) namespaceCalleeID(ns, method, filePath string) string {
 	// callNameToEntityID's named-import path: an aliased export-list entry
 	// exports under a public name that isn't the definition's own.
 	if internalName, confirmed := p.moduleInfo(rel).funcs[method]; confirmed {
-		return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, internalName, rel).ID
+		return ast.NewCodeEntity(p.authority, p.detectLanguage(rel), p.project, ast.TypeFunction, internalName, rel).ID
 	}
 	return "" // resolved module, but method isn't an EXPORTED top-level function → inert
 }
@@ -695,7 +695,7 @@ func (p *Parser) defaultCalleeID(spec, filePath string) string {
 	if !info.hasDefault || !info.allDefs[info.defaultName] {
 		return "" // no default export, or it isn't a real in-tree function → inert
 	}
-	return ast.NewCodeEntity(p.org, p.detectLanguage(rel), p.project, ast.TypeFunction, info.defaultName, rel).ID
+	return ast.NewCodeEntity(p.authority, p.detectLanguage(rel), p.project, ast.TypeFunction, info.defaultName, rel).ID
 }
 
 // PrepareCallResolution refreshes the per-file import/function-binding state

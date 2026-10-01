@@ -1,77 +1,44 @@
 ---
 name: query-pattern
-description: Choose the right query access pattern (GraphQL, MCP, NATS Direct) for a use case. Use when designing query APIs, adding new access points, or choosing between gateway types.
+description: Choose a declared SemSource MCP/HTTP operation or a typed graph query contract for a caller.
 argument-hint: [access scenario or caller description]
 ---
 
-> **Deliberately diverges from upstream.** semstreams' copy says there is no canonical
-> graph MCP surface yet, which is true of the framework. SemSource ships one
-> (`processor/mcp-gateway`, capability `mcp-gateway-contract`), so MCP is a real option
-> here. Do not replace this with upstream's copy; see `.agents/README.md`.
+# SemSource query access patterns
 
-# Query Access Pattern Selection
+This deliberate fork describes SemSource's shipped adapters. The framework has no canonical graph
+MCP front door; SemSource owns `processor/mcp-gateway` and its bounded tool contracts. Do not infer a
+capability from protocol choice, a registry import, or an advertised operation name.
 
-## What is the access scenario?
+## Select an implemented operation
 
-$ARGUMENTS
+| Caller | Surface | Contract source |
+| --- | --- | --- |
+| Agent | SemSource MCP tools | `processor/mcp-gateway` and `openspec/specs/mcp-gateway-contract` |
+| Local HTTP consumer | SemSource code/doc context, source/status routes | Owning processor and its tests |
+| Internal graph consumer | Named typed adapter or declared `graph.query.*` operation | Exact pinned operation request/response and readiness contract |
+| UI | Configured graph HTTP gateway | Its implemented operation tests; do not assume a conformant GraphQL executor |
+| Operator diagnosing state | Explicitly declared bucket or broker inspection | Owner's diagnostic contract; not a new application fallback |
 
-## Three Access Patterns
+For every caller, identify the operation's owner, source of answers, scope, result limit, hydration
+behavior, freshness/readiness requirements, and error/partial-result contract. Use existing typed
+adapters when the pin supplies them. SemSource's existing declared NATS operations remain supported
+consumer contracts; raw KV reads must not silently replace a failed public query.
 
-| Pattern | Best For | Key Property |
-|---------|----------|-------------|
-| **GraphQL** | External apps, web frontends, data exploration | Schema-validated, field selection, introspection |
-| **MCP** | AI agents, LLMs, automated reasoning | Bounded capabilities, full audit trail, structured tools |
-| **NATS Direct** | Internal services, low-latency paths | No gateway overhead, lowest latency |
+## Correctness before interface choice
 
-## Quick Decision
+- Exact entity state, materialized indexes, and neural/lexical search have different freshness signals.
+  A source being ready does not establish that its indexes are ready. Check the signal the operation owns.
+- Unavailable providers, transport errors, partial hydration, or `Deferred` are not absence findings.
+- Apply source/taxonomy scope before result limits. Under ADR-102, taxonomy is segment four; a wildcard
+  is not a literal prefix. Use complete admitted scopes, not broad search followed by post-limit filtering.
+- Code/doc fusion and `graph.query.searchGraph` are distinct paths; qualify both when a consumer needs both.
+- MCP does not automatically wrap GraphQL, provide durable audit, or admit generation. SemSource's
+  semembed profile provides neural retrieval; optional generation has a separate qualification contract.
 
-```
-Who is calling?
+## Verify against the pinned implementation
 
-  External app / web frontend  --> GraphQL
-  AI agent / LLM               --> MCP
-  Internal service              --> NATS Direct
-  Multiple caller types         --> Combine patterns (see below)
-```
-
-## Decision Matrix
-
-| Factor | GraphQL | MCP | NATS Direct |
-|--------|---------|-----|-------------|
-| Latency | Higher (HTTP) | Higher (HTTP) | Lowest (direct) |
-| Schema control | Strong (SDL) | Strong (tool schemas) | Per-component |
-| Auditability | Good (query logs) | Excellent (tool call audit) | Manual |
-| Field selection | Yes (client picks fields) | Yes (tool parameters) | No (full response) |
-| External access | Yes | Yes | No (internal only) |
-| Discovery | Schema introspection | Tool list enumeration | Capability queries |
-| NL query support | Yes (query classification) | Yes (query classification) | No |
-
-## Common Combinations
-
-| System Type | Recommended Pattern |
-|------------|---------------------|
-| Web app backend | GraphQL (user-facing) + NATS Direct (background jobs) |
-| AI-powered system | MCP (agent access) + GraphQL (dashboard/monitoring) |
-| Microservice mesh | NATS Direct (service-to-service) + GraphQL (external API) |
-| Full platform | All three: NATS internal, GraphQL external, MCP for agents |
-
-## Key Points
-
-- All three patterns read from the same underlying knowledge graph
-- Consistency is eventually consistent regardless of access pattern
-- GraphQL and MCP both include natural language query classification
-- MCP wraps GraphQL capabilities with bounded tool definitions and structured audit
-- GraphRAG (community search) and PathRAG (structural traversal) are available through GraphQL and MCP, not NATS Direct currently
-
-## GraphRAG vs PathRAG
-
-When choosing query strategy (applicable to GraphQL and MCP):
-
-| Pattern | Use When | Returns |
-|---------|----------|---------|
-| **GraphRAG** | Discovery, Q&A, "what do we know about X?" | Community-scoped results with summaries |
-| **PathRAG** | Impact analysis, dependencies, "what's affected by X?" | Bounded traversal from known entity |
-
-Read `docs/concepts/11-query-access.md` for full documentation.
-Read `docs/concepts/09-graphrag-pattern.md` for GraphRAG details.
-Read `docs/concepts/10-pathrag-pattern.md` for PathRAG details.
+Read the matching capability spec and producer/consumer tests. For framework operations, inspect the
+module directory reported by `go list -m -f '{{.Dir}}' github.com/c360studio/semstreams`; ADR aspirations
+may exceed behavior shipped at that pin. The SETUP 03A crosswalk is in
+`docs/testing/setup-03a/compatibility.md` and its evidence must not be generalized to untested operations.

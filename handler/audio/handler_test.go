@@ -502,7 +502,7 @@ func TestAudioHandler_IngestEntityStates_ReturnsEntityStates(t *testing.T) {
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestAudioHandler_IngestEntityStates_IDContainsOrg(t *testing.T) {
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -538,7 +538,7 @@ func TestAudioHandler_IngestEntityStates_IDHasSixParts(t *testing.T) {
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -559,7 +559,7 @@ func TestAudioHandler_IngestEntityStates_TriplesContainVocabPredicates(t *testin
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -600,7 +600,7 @@ func TestAudioHandler_IngestEntityStates_TriplesAreSelfSubject(t *testing.T) {
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -619,7 +619,7 @@ func TestAudioHandler_IngestEntityStates_MediaTypeTripleIsAudio(t *testing.T) {
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}
@@ -644,7 +644,7 @@ func TestAudioHandler_IngestEntityStates_EmptyDirReturnsEmpty(t *testing.T) {
 	h := audiohandler.New()
 	cfg := sourceConfig{typ: "audio", path: dir}
 
-	states, err := h.IngestEntityStates(context.Background(), cfg, "acme")
+	states, err := h.IngestEntityStates(context.Background(), cfg, testAuthority("acme"))
 	if err != nil {
 		t.Fatalf("IngestEntityStates() error: %v", err)
 	}

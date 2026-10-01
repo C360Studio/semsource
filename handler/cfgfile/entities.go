@@ -42,15 +42,15 @@ type goModuleEntity struct {
 	DepIDs []string
 }
 
-func newGoModuleEntity(org, modulePath, goVersion, filePath, system string, indexedAt time.Time) *goModuleEntity {
+func newGoModuleEntity(authority entityid.Authority, modulePath, goVersion, filePath, system string, indexedAt time.Time) *goModuleEntity {
 	instance := slugify(modulePath)
 	return &goModuleEntity{
-		ID:         entityid.Build(org, entityid.PlatformSemsource, "config", system, "gomod", instance),
+		ID:         authority.Build(system, "config", "gomod", instance),
 		ModulePath: modulePath,
 		GoVersion:  goVersion,
 		FilePath:   filePath,
 		System:     system,
-		Org:        org,
+		Org:        authority.Org,
 		IndexedAt:  indexedAt,
 	}
 }
@@ -94,15 +94,15 @@ type goDependencyEntity struct {
 	IndexedAt time.Time
 }
 
-func newGoDependencyEntity(org, depPath, version string, indirect bool, system string, indexedAt time.Time) *goDependencyEntity {
+func newGoDependencyEntity(authority entityid.Authority, depPath, version string, indirect bool, system string, indexedAt time.Time) *goDependencyEntity {
 	instance := contentHashShort(depPath + "@" + version)
 	return &goDependencyEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "config", system, "dependency", instance),
+		ID:        authority.Build(system, "config", "dependency", instance),
 		Name:      depPath,
 		Version:   version,
 		Indirect:  indirect,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -142,18 +142,18 @@ type npmPackageEntity struct {
 	DepIDs []string
 }
 
-func newNPMPackageEntity(org, name, version, filePath, system string, indexedAt time.Time) *npmPackageEntity {
+func newNPMPackageEntity(authority entityid.Authority, name, version, filePath, system string, indexedAt time.Time) *npmPackageEntity {
 	instance := slugify(name)
 	if instance == "" {
 		instance = contentHashShort(filePath)
 	}
 	return &npmPackageEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "config", system, "package", instance),
+		ID:        authority.Build(system, "config", "package", instance),
 		Name:      name,
 		Version:   version,
 		FilePath:  filePath,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -196,19 +196,19 @@ type npmDependencyEntity struct {
 	IndexedAt time.Time
 }
 
-func newNPMDependencyEntity(org, name, version string, dev bool, system string, indexedAt time.Time) *npmDependencyEntity {
+func newNPMDependencyEntity(authority entityid.Authority, name, version string, dev bool, system string, indexedAt time.Time) *npmDependencyEntity {
 	instance := contentHashShort(name + "@" + version)
 	kind := "npm-prod"
 	if dev {
 		kind = "npm-dev"
 	}
 	return &npmDependencyEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "config", system, "dependency", instance),
+		ID:        authority.Build(system, "config", "dependency", instance),
 		Name:      name,
 		Version:   version,
 		Kind:      kind,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -240,15 +240,15 @@ type dockerImageEntity struct {
 	IndexedAt    time.Time
 }
 
-func newDockerImageEntity(org, image string, exposedPorts []string, filePath, system string, indexedAt time.Time) *dockerImageEntity {
+func newDockerImageEntity(authority entityid.Authority, image string, exposedPorts []string, filePath, system string, indexedAt time.Time) *dockerImageEntity {
 	instance := slugify(image)
 	return &dockerImageEntity{
-		ID:           entityid.Build(org, entityid.PlatformSemsource, "config", system, "image", instance),
+		ID:           authority.Build(system, "config", "image", instance),
 		Image:        image,
 		ExposedPorts: exposedPorts,
 		FilePath:     filePath,
 		System:       system,
-		Org:          org,
+		Org:          authority.Org,
 		IndexedAt:    indexedAt,
 	}
 }
@@ -296,20 +296,20 @@ type mavenProjectEntity struct {
 	ModuleIDs []string
 }
 
-func newMavenProjectEntity(org, groupID, artifactID, version, packaging, filePath, system string, indexedAt time.Time) *mavenProjectEntity {
+func newMavenProjectEntity(authority entityid.Authority, groupID, artifactID, version, packaging, filePath, system string, indexedAt time.Time) *mavenProjectEntity {
 	instance := slugify(groupID + ":" + artifactID)
 	if instance == "" {
 		instance = contentHashShort(filePath)
 	}
 	return &mavenProjectEntity{
-		ID:         entityid.Build(org, entityid.PlatformSemsource, "config", system, "project", instance),
+		ID:         authority.Build(system, "config", "project", instance),
 		GroupID:    groupID,
 		ArtifactID: artifactID,
 		Version:    version,
 		Packaging:  packaging,
 		FilePath:   filePath,
 		System:     system,
-		Org:        org,
+		Org:        authority.Org,
 		IndexedAt:  indexedAt,
 	}
 }
@@ -364,15 +364,15 @@ type mavenDependencyEntity struct {
 	IndexedAt time.Time
 }
 
-func newMavenDependencyEntity(org, groupID, artifactID, version, scope, system string, indexedAt time.Time) *mavenDependencyEntity {
+func newMavenDependencyEntity(authority entityid.Authority, groupID, artifactID, version, scope, system string, indexedAt time.Time) *mavenDependencyEntity {
 	instance := contentHashShort(groupID + ":" + artifactID + "@" + version)
 	return &mavenDependencyEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "config", system, "dependency", instance),
+		ID:        authority.Build(system, "config", "dependency", instance),
 		Name:      groupID + ":" + artifactID,
 		Version:   version,
 		Scope:     scope,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -416,17 +416,17 @@ type pomModuleEntity struct {
 	IndexedAt time.Time
 }
 
-func newPOMModuleEntity(org, name, filePath, system string, indexedAt time.Time) *pomModuleEntity {
+func newPOMModuleEntity(authority entityid.Authority, name, filePath, system string, indexedAt time.Time) *pomModuleEntity {
 	instance := slugify(name)
 	if instance == "" {
 		instance = contentHashShort(name)
 	}
 	return &pomModuleEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "config", system, "gomod", instance),
+		ID:        authority.Build(system, "config", "gomod", instance),
 		Name:      name,
 		FilePath:  filePath,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -460,17 +460,17 @@ type gradleProjectEntity struct {
 	DepIDs []string
 }
 
-func newGradleProjectEntity(org, name, filePath, system string, indexedAt time.Time) *gradleProjectEntity {
+func newGradleProjectEntity(authority entityid.Authority, name, filePath, system string, indexedAt time.Time) *gradleProjectEntity {
 	instance := slugify(name)
 	if instance == "" {
 		instance = contentHashShort(filePath)
 	}
 	return &gradleProjectEntity{
-		ID:        entityid.Build(org, entityid.PlatformSemsource, "config", system, "project", instance),
+		ID:        authority.Build(system, "config", "project", instance),
 		Name:      name,
 		FilePath:  filePath,
 		System:    system,
-		Org:       org,
+		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
@@ -513,15 +513,15 @@ type gradleDependencyEntity struct {
 	IndexedAt     time.Time
 }
 
-func newGradleDependencyEntity(org, group, name, version, configuration, system string, indexedAt time.Time) *gradleDependencyEntity {
+func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, system string, indexedAt time.Time) *gradleDependencyEntity {
 	instance := contentHashShort(group + ":" + name + "@" + version)
 	return &gradleDependencyEntity{
-		ID:            entityid.Build(org, entityid.PlatformSemsource, "config", system, "dependency", instance),
+		ID:            authority.Build(system, "config", "dependency", instance),
 		Name:          group + ":" + name,
 		Version:       version,
 		Configuration: configuration,
 		System:        system,
-		Org:           org,
+		Org:           authority.Org,
 		IndexedAt:     indexedAt,
 	}
 }
@@ -558,35 +558,35 @@ func (e *gradleDependencyEntity) entityState() *handler.EntityState {
 // instead of []handler.RawEntity.
 // --------------------------------------------------------------------------
 
-func (h *ConfigHandler) parseFileEntityStates(base, path string, content []byte, root, org string, now time.Time) []*handler.EntityState {
+func (h *ConfigHandler) parseFileEntityStates(base, path string, content []byte, root string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	system := h.system(root)
 	switch base {
 	case "go.mod":
-		return h.goModEntityStates(content, path, system, org, now)
+		return h.goModEntityStates(content, path, system, authority, now)
 	case "package.json":
-		return h.npmPackageEntityStates(content, path, system, org, now)
+		return h.npmPackageEntityStates(content, path, system, authority, now)
 	case "Dockerfile":
-		return h.dockerEntityStates(content, path, system, org, now)
+		return h.dockerEntityStates(content, path, system, authority, now)
 	case "pom.xml":
-		return h.mavenEntityStates(content, path, system, org, now)
+		return h.mavenEntityStates(content, path, system, authority, now)
 	case "build.gradle":
-		return h.gradleEntityStates(content, path, system, org, now)
+		return h.gradleEntityStates(content, path, system, authority, now)
 	}
 	return nil
 }
 
-func (h *ConfigHandler) goModEntityStates(content []byte, path, system, org string, now time.Time) []*handler.EntityState {
+func (h *ConfigHandler) goModEntityStates(content []byte, path, system string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	result, err := ParseGoMod(content)
 	if err != nil {
 		h.logger.Warn("cfgfile: parse go.mod failed", "path", path, "error", err)
 		return nil
 	}
 
-	mod := newGoModuleEntity(org, result.Module, result.GoVersion, path, system, now)
+	mod := newGoModuleEntity(authority, result.Module, result.GoVersion, path, system, now)
 
 	var depStates []*handler.EntityState
 	for _, dep := range result.Deps {
-		d := newGoDependencyEntity(org, dep.Path, dep.Version, dep.Indirect, system, now)
+		d := newGoDependencyEntity(authority, dep.Path, dep.Version, dep.Indirect, system, now)
 		mod.DepIDs = append(mod.DepIDs, d.ID)
 		depStates = append(depStates, d.entityState())
 	}
@@ -595,18 +595,18 @@ func (h *ConfigHandler) goModEntityStates(content []byte, path, system, org stri
 	return append([]*handler.EntityState{mod.entityState()}, depStates...)
 }
 
-func (h *ConfigHandler) npmPackageEntityStates(content []byte, path, system, org string, now time.Time) []*handler.EntityState {
+func (h *ConfigHandler) npmPackageEntityStates(content []byte, path, system string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	result, err := ParsePackageJSON(content)
 	if err != nil {
 		h.logger.Warn("cfgfile: parse package.json failed", "path", path, "error", err)
 		return nil
 	}
 
-	pkg := newNPMPackageEntity(org, result.Name, result.Version, path, system, now)
+	pkg := newNPMPackageEntity(authority, result.Name, result.Version, path, system, now)
 
 	var depStates []*handler.EntityState
 	for _, dep := range result.Deps {
-		d := newNPMDependencyEntity(org, dep.Name, dep.Version, dep.Dev, system, now)
+		d := newNPMDependencyEntity(authority, dep.Name, dep.Version, dep.Dev, system, now)
 		pkg.DepIDs = append(pkg.DepIDs, d.ID)
 		depStates = append(depStates, d.entityState())
 	}
@@ -614,7 +614,7 @@ func (h *ConfigHandler) npmPackageEntityStates(content []byte, path, system, org
 	return append([]*handler.EntityState{pkg.entityState()}, depStates...)
 }
 
-func (h *ConfigHandler) dockerEntityStates(content []byte, path, system, org string, now time.Time) []*handler.EntityState {
+func (h *ConfigHandler) dockerEntityStates(content []byte, path, system string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	result, err := ParseDockerfile(content)
 	if err != nil {
 		h.logger.Warn("cfgfile: parse Dockerfile failed", "path", path, "error", err)
@@ -623,29 +623,29 @@ func (h *ConfigHandler) dockerEntityStates(content []byte, path, system, org str
 
 	var states []*handler.EntityState
 	for _, img := range result.BaseImages {
-		e := newDockerImageEntity(org, img, result.ExposedPorts, path, system, now)
+		e := newDockerImageEntity(authority, img, result.ExposedPorts, path, system, now)
 		states = append(states, e.entityState())
 	}
 	return states
 }
 
-func (h *ConfigHandler) mavenEntityStates(content []byte, path, system, org string, now time.Time) []*handler.EntityState {
+func (h *ConfigHandler) mavenEntityStates(content []byte, path, system string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	result, err := ParsePOM(content)
 	if err != nil {
 		h.logger.Warn("cfgfile: parse pom.xml failed", "path", path, "error", err)
 		return nil
 	}
 
-	proj := newMavenProjectEntity(org, result.GroupID, result.ArtifactID, result.Version, result.Packaging, path, system, now)
+	proj := newMavenProjectEntity(authority, result.GroupID, result.ArtifactID, result.Version, result.Packaging, path, system, now)
 
 	var childStates []*handler.EntityState
 	for _, dep := range result.Deps {
-		d := newMavenDependencyEntity(org, dep.GroupID, dep.ArtifactID, dep.Version, dep.Scope, system, now)
+		d := newMavenDependencyEntity(authority, dep.GroupID, dep.ArtifactID, dep.Version, dep.Scope, system, now)
 		proj.DepIDs = append(proj.DepIDs, d.ID)
 		childStates = append(childStates, d.entityState())
 	}
 	for _, mod := range result.Modules {
-		m := newPOMModuleEntity(org, mod, path, system, now)
+		m := newPOMModuleEntity(authority, mod, path, system, now)
 		proj.ModuleIDs = append(proj.ModuleIDs, m.ID)
 		childStates = append(childStates, m.entityState())
 	}
@@ -653,7 +653,7 @@ func (h *ConfigHandler) mavenEntityStates(content []byte, path, system, org stri
 	return append([]*handler.EntityState{proj.entityState()}, childStates...)
 }
 
-func (h *ConfigHandler) gradleEntityStates(content []byte, path, system, org string, now time.Time) []*handler.EntityState {
+func (h *ConfigHandler) gradleEntityStates(content []byte, path, system string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	result, err := ParseGradle(content)
 	if err != nil {
 		h.logger.Warn("cfgfile: parse build.gradle failed", "path", path, "error", err)
@@ -661,11 +661,11 @@ func (h *ConfigHandler) gradleEntityStates(content []byte, path, system, org str
 	}
 
 	dirName := filepath.Base(filepath.Dir(path))
-	proj := newGradleProjectEntity(org, dirName, path, system, now)
+	proj := newGradleProjectEntity(authority, dirName, path, system, now)
 
 	var depStates []*handler.EntityState
 	for _, dep := range result.Deps {
-		d := newGradleDependencyEntity(org, dep.Group, dep.Name, dep.Version, dep.Configuration, system, now)
+		d := newGradleDependencyEntity(authority, dep.Group, dep.Name, dep.Version, dep.Configuration, system, now)
 		proj.DepIDs = append(proj.DepIDs, d.ID)
 		depStates = append(depStates, d.entityState())
 	}

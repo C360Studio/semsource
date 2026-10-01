@@ -61,7 +61,7 @@ func TestSourceEntityContract_Valid(t *testing.T) {
 	if contract.Name != "semsource.entity.v1" {
 		t.Errorf("Name = %q, want semsource.entity.v1", contract.Name)
 	}
-	if contract.MessageType != "semsource.entity.v1" {
+	if contract.MessageType.Key() != "semsource.entity.v1" {
 		t.Errorf("MessageType = %q, want semsource.entity.v1", contract.MessageType)
 	}
 	if contract.EntityPattern != sourceEntityPattern {

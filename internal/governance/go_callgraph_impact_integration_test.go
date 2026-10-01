@@ -91,7 +91,7 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 		}
 	}
 
-	parser := golang.NewParser("acme", "app", root)
+	parser := golang.NewParser(fixtureAuthority(), "app", root)
 	var entities []*ast.CodeEntity
 	byName := map[string]*ast.CodeEntity{}
 	for rel := range files {

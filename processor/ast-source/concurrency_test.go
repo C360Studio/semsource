@@ -2,6 +2,7 @@ package astsource
 
 import (
 	"context"
+	"github.com/c360studio/semsource/entityid"
 	"os"
 	"path/filepath"
 	"sync"
@@ -36,7 +37,7 @@ func TestParseFileWithWatcher_ConcurrentSafe(t *testing.T) {
 	writePy("pkg/base.py", "class BaseA:\n    pass\n")
 	writePy("pkg/other.py", "class BaseB:\n    pass\n")
 
-	parser, err := semsourceast.DefaultRegistry.CreateParser("python", "acme", "proj", root)
+	parser, err := semsourceast.DefaultRegistry.CreateParser("python", entityid.Authority{Org: "acme", Platform: "test"}, "proj", root)
 	if err != nil {
 		t.Fatalf("create parser: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestParseFileWithWatcher_ConcurrentSafe_MultiLang(t *testing.T) {
 				write(rel, src)
 			}
 
-			parser, err := semsourceast.DefaultRegistry.CreateParser(tc.lang, "acme", "proj", root)
+			parser, err := semsourceast.DefaultRegistry.CreateParser(tc.lang, entityid.Authority{Org: "acme", Platform: "test"}, "proj", root)
 			if err != nil {
 				t.Fatalf("create parser: %v", err)
 			}

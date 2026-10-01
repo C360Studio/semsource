@@ -51,7 +51,7 @@ func init() {
 
 	vocabulary.Register(ConventionAppliesTo,
 		vocabulary.WithDescription("File patterns this convention applies to (glob)"),
-		vocabulary.WithDataType("array"),
+		vocabulary.WithDataType("json"),
 		vocabulary.WithIRI(ConventionNamespace+"appliesTo"))
 
 	vocabulary.Register(ConventionSourceTask,
