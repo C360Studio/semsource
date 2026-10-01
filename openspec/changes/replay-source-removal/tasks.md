@@ -1,139 +1,183 @@
 # Implementation and proof tasks
 
+Production implementation is committed at `ce241a5c6e07f69e5450bb60885b537e89ea27a9`.
+The [final result ledger](../../../docs/testing/source-removal215/final-results.json) identifies the
+clean binary and later test-only follow-up. Checked tasks cover the stated implementation or proof;
+they do not close the open acceptance gates. The combined process run exits 1 with two #1445 failures.
+
 ## 1. Contract and baseline
 
 - [x] Inspect issue #215, current code, pinned ADR-094/095/102/104 and storage/query/mutation APIs.
 - [x] Apply `kv-or-stream` and `orchestration-check`; record operational ownership and repair obligations.
-- [x] Reproduce unchanged missing-marker failure: additive pre-fix run passes 9/10, no automatic request.
-- [x] Architect approves this design for implementation; independent implementation approval remains open.
-- [x] Independent Go and graph/event reviewers approve the final contract for implementation only.
-- [x] Journal developer creates `internal/sourceintent/contract.go` from the agreed design; architect
-  and both developer owners confirm it before parallel edits outside that file.
+- [x] Preserve the unchanged pre-fix missing-marker probe: 9/10, exit 1, no automatic lifecycle request.
+  Preserve the separate additive pre-fix run: 7/8, exit 1, missing lifecycle journal.
+- [x] Obtain architect and independent Go/graph contract approval before implementation.
+- [x] Create `internal/sourceintent/contract.go` and confirm the interface with both developer owners
+  before parallel implementation; approve the later retained-pass and effect-fence amendments.
 
 ## 2. Intent and desired-state protocol
 
-- [ ] Add no-eviction product journal, typed schema/key validation, CAS generations, exact read status.
-  Prove `TestRemovalJournalRetentionAndCAS`, corrupt/foreign-generation rejection, and startup
-  refusal of memory storage, wrong replica policy or positive global MaxMsgs despite successful Ensure.
-- [ ] Write failing removal write-order/crash tests, then implement intent-before-disable-before-ack.
-  Prove `TestRemovalIntentBeforeDesiredAck` and every prepared/config/manifest/pending crash boundary.
-- [ ] Repair partial desired writes without disabling a new enabled config or converting unknown handles
-  to successful removal. Prove `TestRemovalPartialWritesRepair` and `TestRemovalUnknownHandle`.
-- [ ] Serialize Add/Remove/replay; prove enabled-config-first re-add partial failures, generation CAS,
-  and stale completion rejection in `TestRemovalReaddGenerationFence` under race detection.
-- [ ] Prove cancellation-aware gate acquisition and coordinator→supersession lock order; receipt
-  writes must continue through producer drain after the replay worker stops.
+- [x] Implement the no-eviction journal, typed binding/key validation and CAS generations. Prove policy
+  validation, stale completion and foreign/corrupt rejection in `TestRemovalJournalRetentionAndCAS`,
+  `TestJournalRejectsCorruptBindingAndVersions` and `TestJournalRejectsGenerationRollback`.
+- [x] Prove real-NATS reopen, replica mismatch and memory-storage refusal in
+  `TestIntegrationJournalRetentionAndReceipts` and `TestIntegrationJournalRefusesMemoryBucket`.
+- [ ] Add the explicit real-NATS startup refusal case for positive global MaxMsgs after successful
+  Ensure; the existing policy-validator unit case does not independently exercise that startup path.
+- [x] Implement intent-before-disable-before-ack. Prove prepare, disable, ambiguous committed disable,
+  manifest and pending-promotion failures in `TestRemovalIntentBeforeDesiredAck` and
+  `TestRemovalCrashBoundaries`.
+- [x] Repair committed partial desired writes without disabling an enabled prepared source or accepting
+  unknown handles: `TestRemovalPartialWritesRepair` and `TestCoordinatorUnknownAndPreparedRetry`.
+- [x] Report committed disable despite stale memory after a write error:
+  `TestDisableReceiptReadsCommittedEnvelopeAfterMemoryFailure` and
+  `TestLifecycleRemovalReceiptReportsDurablePartialCommit`.
+- [x] Serialize desired changes and replay; reject stale generation completion and repair a committed
+  changed reactivation config before next-boot binding: `TestRemovalRetirementAndReaddFence` and
+  `TestBootRepairsCommittedReactivationRefreshAfterJournalFailure`, under race detection.
+- [x] Prove cancellation-aware admission, synchronous lock ownership and bounded direct-call joining:
+  `TestGateHonorsCancellation`, `TestRemovalProjectionCancellation`,
+  `TestDirectProjectionStopJoinsCanceledCall` and `TestDirectProjectionCannotEnterAfterStopBegins`.
+- [ ] Add a combined owner-shutdown test that stops the replay worker while a producer receipt remains
+  in flight; standalone publisher drain and direct projection Stop tests cover the separate owners.
 
 ## 3. Retirement, scope, and projection
 
-- [x] Record upstream applied/unresolved-input proof gap in SemStreams #1444. Do not decode private
-  GRAPH_INGEST_APPLIED_SEQ values or treat bounded advisory history as a parked-work census.
-- [ ] Add explicit TailProof and applied_tail_unproven status. Prove zero current backlog admits only
-  current retained projection and never terminal removal completion, including an empty retained set.
-
-- [ ] Add immutable boot admission and current graph-consumer settlement gates. Prove old boot stays
-  pending, missing/failed/backlogged consumer stays pending, changed stream generation fails closed,
-  and cached readiness is insufficient in `TestRemovalRetirementAndTailBarrier`. Capture stream
-  and consumer identity BEFORE removal acknowledgment and test reset between boots; reject observed
-  AckNone/AckAll, wrong filter/delivery policy, and recreated consumer despite zero backlog.
-- [ ] Derive exact producer scope and prove repo child isolation, Project overrides, authority isolation,
-  and same-taxonomy overlap refusal in `TestRemovalExactSourceScope`.
-- [ ] Write failing multi-page/truncation/mutation error tests before fixes. Prove full opaque cursor
-  traversal, cyclic cursor rejection, partial error propagation and retry in `TestRemovalReplayPages`.
-- [ ] Converge exact source_removed markers on parents/passages, preserving retained history and source
-  facts; prove duplicates and lost mutation replies converge in `TestRemovalReplayIdempotent`.
-- [ ] Implement startup plus periodic failed-work repair, honest status and bounded Stop/join.
-  Prove recovery without a new request and cancellation retaining pending work under `-race`. A
-  successful frozen-pin retained pass stays pending applied_tail_unproven and repeats after late arrivals.
+- [x] Record SemStreams #1444. Do not decode private applied-sequence values or treat bounded advisory
+  events as a parked-work census.
+- [x] Implement explicit TailProof and pending/applied_tail_unproven. Prove repeat retained passes never
+  claim terminal completion in `TestCurrentRetainedPassRemainsPending` and
+  `TestIntegrationTailIsCurrentRetainedOnly`; prove empty-set projection in
+  `TestRemovalReplayEmptyRetainedSet`.
+- [x] Capture input identity before acknowledgement; gate replay on boot retirement, current tail and
+  desired scope. Prove admitted input derivation, changed consumer identity, backlog, sibling overlap,
+  changed desired config and degraded graph status with `TestGraphInputsAdmittedConsumerIdentity`,
+  `TestRemovalBarrierDefersUnsafeProjection`, `TestRemovalRetirementAndReaddFence` and the real tail test.
+- [ ] Complete explicit broker fault cases for stream recreation, AckNone/AckAll, wrong filter/delivery
+  policy and recreated consumer with zero backlog. Implemented fail-closed checks are not a substitute
+  for each originally planned fault proof; terminal accepted-input proof remains blocked by #1444.
+- [x] Derive exact producer selectors; prove Project/version, repo child, authority and taxonomy
+  isolation plus overlap refusal in `TestRemovalExactSourceScope`, `TestScopeFamiliesAndMalformedIdentity`
+  and `TestRemovalReplayScopeAndArtifactIsolation`.
+- [x] Traverse opaque pages fully and reject cycles, malformed/truncated results or query errors before
+  mutation: `TestRemovalReplayPages`, `TestRemovalReplayTraversesBeyondLegacyCap`,
+  `TestRemovalReplayRejectsMalformedPages` and `TestLegacyLifecycleTruncationFailsBeforeMutation`.
+- [x] Converge known retained entities idempotently and retry classified non-commit failures in
+  `TestRemovalReplayIdempotentAndPartialMutation`. Preserve source facts and exact expected markers in
+  both final process retirement cases. Unknown mutation replies remain fenced under section 8.
+- [x] Preserve verified completed counts on repeated retained passes and avoid overstating partial work:
+  `TestRepeatedRetainedPassPreservesVerifiedEntityCount` and
+  `TestIncompleteRetainedPassCountsOnlyConfirmedMutations`.
+- [x] Run startup and periodic repair with honest status and bounded ownership. Prove error redrive and
+  cancellation in `TestRemovalReplayProofAndErrorRedrive`, `TestCoordinatorCancellationAndUnavailableStatus`
+  and `TestRemovalProjectionCancellation`; final process retirement recovers without an operator resend.
+- [ ] Add an explicit retained-pass late-arrival process case; repeated coordinator passes are proven,
+  but the final process workload does not inject a new retained entity after its first marker pass.
 
 ## 4. Current publication receipts and reactivation
 
-- [x] Architect records frozen public conditional-reconcile gap in
-  [SemStreams #1445](https://github.com/C360Studio/semstreams/issues/1445); no copied client or raw subject shim.
-- [ ] Return conditional_reconcile_unavailable and issue zero clear mutations when current publication
-  evidence matches a retained source_removed entity. Prove a source write between fingerprint read
-  and the public client's internal reread cannot be hidden by shared lifecycle serialization.
-- [ ] Inventory exact current-epoch sealed batches with ListSeeds; validate each seal, digest and
-  receipt set, and refuse partial/corrupt/foreign records. A successful initial prerequisite from the
-  same epoch is mandatory before considering a separately sealed live target.
-- [ ] Rebind every matching enabled Reactivate history on boot, including Complete records, with a new
-  epoch and Pending initial proof; keep periodic inventory active after completed batches.
-- [ ] Validate optional InitialManifest/InitialReceipts independently for live target requests. Prove
-  failed initial plus successful live B remains pending; do not replace this proof with a boolean.
-
-- [ ] Bind publisher observer to exact handle/generation and NEW per-boot seed epoch before Start;
-  test no global mutable registry and that prior-epoch receipts cannot grant freshness. Test root
-  rejects missing, duplicate, mismatched or altered factory/config/instance bindings.
-- [ ] Persist receipts only after PubAck; receipt failures remain retryable, visible and drain-owned.
-  Prove `TestPublisherReceiptAfterAck`, receipt-only retry after PubAck (no republish), immutable
-  evidence, failure recovery, shutdown deadline, and crash/reseed repair.
-- [ ] Seal an exact current-ID manifest only after successful enumeration, all expected publications
-  and receipts agree; prove failure/cancellation cannot seal a partial seed, explicit empty seed
-  completion, in-flight drain batch accounting, and watch/reseed separation.
-- [ ] Intended acceptance, blocked by #1445: compare authoritative source facts and clear only
-  source_removed through an admitted mutation fenced to the SAME observed revision. Preserve newer
-  stale reasons; revision conflicts require a new read and recomputation, not a hidden retry.
-- [ ] Prove legacy filesystem/empty-Absent/path-count sweeps cannot clear or replace source_removed,
-  while ordinary file_deleted/path_missing/passage_removed behavior remains intact.
-- [ ] Intended acceptance, blocked by #1445: same-ID current parents/passages become fresh while
-  removed files/symbols/tail passages remain stale in `TestReactivationCurrentEntityReceipts`.
-  Keep positive tests/results visible as failed or blocked, never reinterpret refusal as freshness.
-- [ ] Prove crash after A+B receipts, offline deletion of B, and reseed A-only does not clear B; prove
-  partial-removal/re-add and remove/add/remove/add preserve needed selective reactivation.
-- [ ] Intended live-B freshness acceptance remains blocked: specify and prove publication/withdrawal
-  eligibility, including later B recreation and an old B receipt followed by deletion or failed
-  enumeration. A sticky source_removed revision or historical matching receipt is insufficient.
+- [x] Record frozen public conditional-reconcile gap in SemStreams #1445; use no raw-subject shim.
+- [x] Return conditional_reconcile_unavailable with zero clear writes for matching source_removed facts:
+  `TestReactivationCurrentEntityReceipts`. Preserve the positive process freshness assertions as failures.
+- [x] Inventory current-epoch sealed batches with ListSeeds and validate exact receipts/digests:
+  `TestListSeedsOnlySealedCurrentEpoch`, `TestReceiptAndSeedImmutableAgreement`,
+  `TestReceiptListRejectsForgedBinding` and `TestReactivationRejectsUnsealedOrIncompleteEvidence`.
+- [x] Renew every enabled Reactivate history on boot, including Complete, and keep periodic inventory
+  after completed batches: `TestCompletedHistoryRenewsEveryBoot` and
+  `TestLiveInventorySurvivesLostWakeAndReopensFailure`.
+- [x] Validate live target and same-epoch initial prerequisite independently; failed initial cannot be
+  repaired by live success: `TestReactivationLiveBatchRequiresSameEpochInitialProof` and
+  `TestLiveInventoryDoesNotRepairFailedInitial`.
+- [x] Bind exact source generation and new epoch before admission, with no mutable global registry:
+  `TestSourceFactoryBindings`, `TestPublisherBindRequiresPreAdmission` and
+  `TestReactivationReceiptEpochAndManifest` reject mismatched configuration and stale proof.
+- [x] Persist immutable receipts only after PubAck; retry receipt storage without republishing and retain
+  drain ownership: `TestPublisherReceiptAfterAck` and `TestPublisherReceiptShutdownDeadline`.
+  `TestPublisherSupersededBindingDrainsWithoutGrantingFreshness` proves obsolete proof does not wedge Stop.
+- [x] Seal only successful exact seed enumeration/publication/receipt sets, including empty seeds:
+  `TestPublisherSeedBoundaries`, `TestPublisherSeedRejectedSendCannotSeal`,
+  `TestPublisherRejectsInvalidBatchEvidence` and `TestPublisherWatchBatchCannotCompleteFailedSeed`.
+- [x] Keep source_removed sticky across filesystem, empty-Absent and passage oracles while preserving
+  ordinary file lifecycle behavior: `TestSourceRemovedStickyAcrossLegacyOracles`,
+  `TestPassageUsesExactParent` and the independently reviewed `TestIntegration_StalenessLifecycle`.
+- [ ] Intended acceptance, blocked by #1445: clear only source_removed at the SAME authoritative revision
+  used for the source-fact comparison. Preserve newer stale reasons and recompute after conflicts;
+  a hidden reread/retry is not an admitted conditional mutation.
+- [ ] Intended acceptance, blocked by #1445: make current same-ID parents/passages fresh while removed
+  symbols/files/tail passages remain stale. Final selective process result is 24/26; completion and
+  A freshness remain failed, while A-only publication proof and retained-stale B pass.
+- [x] Prove checked-stop/offline-delete/reseed A-only evidence and two remove/add cycles in the final
+  selective and rapid-re-add process cases. The rapid case observes zero transient old-removal markers.
+- [ ] Prove the separate crash after A+B receipts but before receipt persistence/projection, offline B
+  deletion, and partial-removal/re-add selective recovery; checked-stop evidence is not that crash proof.
+- [ ] Specify and prove continuing publication/withdrawal eligibility, including later B recreation and
+  an old B receipt followed by deletion or failed enumeration. Historical receipts and sticky revisions
+  are insufficient; current ListSeeds inventory does not qualify live-B freshness.
 
 ## 5. Real process acceptance
 
-- [ ] Add an additive private-broker process suite for original-file and runtime-added sources:
-  receipt and durable intent, old producer still live, checked process exit, producer absent on new
-  boot, exact retained parent/passage markers, sibling entity/content unchanged.
-- [ ] Kill after durable intent and before projection; restart the retained broker/application state
-  and prove retained-marker convergence without an operator resend, while asserting pending
-  applied_tail_unproven rather than fabricating terminal completion. Use explicit state barriers, never fixed sleeps.
-- [ ] Prove re-add before first restart supersedes old work with zero old-generation mutation. Keep
-  removal/re-add/new-boot positive clear assertions as intended acceptance, blocked by #1445; append
-  explicit pending/no-clear evidence without changing them into passing freshness assertions.
-- [ ] Prove multi-page exact expected-ID set, deterministic query/mutation failure recovery and
-  duplicate/redelivery with channel-controlled integration seams, plus process restart recovery.
-- [ ] Keep original probes/ledgers unchanged; add exact commit, binary SHA, module pin, configuration,
-  workload hash, checked process exits and named limitations to new result artifacts.
+- [x] Add a private-broker suite for original/runtime sources with durable intent, admitted old producer,
+  observed process exit, new-boot retirement, exact retained markers and unchanged siblings/content.
+  Final `TestRemovalReplayRetirement` passes 16/16 original and 20/20 runtime-added observations.
+- [x] Kill after durable intent, restart against retained broker state, and repair without resend using
+  explicit state barriers. Assert pending/applied_tail_unproven rather than terminal completion.
+- [x] Prove re-add before first restart supersedes old work without transient old-generation mutation:
+  `TestRemovalReplayReaddBeforeRestart` passes 27/27 with an authoritative KV transition watcher.
+- [x] Preserve and qualify the AST-only dc.terms.created comparison rule with a pre-fix plain restart
+  control and negative oracle tests. Keep strict original failure and all non-AST/fact/content checks;
+  the final `TestRemovalReplaySiblingRestartControl` passes 8/8.
+- [x] Execute the unchanged original probe against the reviewed binary: 10/10. Preserve its pre-fix 9/10
+  failure and its legacy Stop limitation; it does not independently assert graceful application exit.
+- [x] Record the complete six-case final run, exact commit/binary/module/config/workload identities,
+  checked additive exits, all six exact broker cleanup results and raw temporary-evidence limitations.
+- [ ] Pass the intended selective freshness process case. Keep its two final failed assertions visible;
+  passing pending/no-clear observations must not substitute for positive acceptance.
 
 ## 6. Review and delivery
 
-- [ ] Independent Go reviewer approves amended retained-pass/pending-tail boundary plus context,
-  serialization, error and stop ownership.
-- [ ] Independent graph/event reviewer approves amended retained-pass/pending-tail boundary, exact
-  scope, retention, replay and re-add freshness.
-- [ ] Pass gofmt, pinned revive/vet, unit/race, complete required integration and process suites,
-  `task agents:check`, and strict OpenSpec validation; record legitimate blockers without skipped gates.
-- [ ] Update PR #213 / issue #215 with concrete behavior, proof, exact pins and remaining blockers;
-  keep SemStreams substrate and SemEngine qualification separate.
+- [x] Obtain independent Go and graph/event approval of production contracts, retained-pass/pending-tail
+  boundary, scope, context, serialization, receipt, effect and Stop ownership. Record review scope and
+  critical coverage in `docs/testing/source-removal215/review.md`.
+- [x] Independently review the test-only governance adaptation using real NATS, journal, tail and local
+  projector; focused integration race run passes. Its desired-config seam does not claim process proof.
+- [x] Pass gofmt, pinned revive/vet, unit/race (2,705 passed, 9 skips), full integration (2,826 passed,
+  9 skips), local e2e (7), Garage (61), agent sync and strict OpenSpec. Preserve initial gate failures and
+  named skips. Later test-only commit `16e3795` does not alter the production process binary.
+- [x] Remeasure consumer and extraction dependencies, including tests, using an evidence-local modfile;
+  record `dependency-results.json` without changing the frozen module pin.
+- [x] Prepare versioned final results, independent review, exact pins and remaining holds for PR #213 /
+  issue #215. Live publication and CI status are tracked there. Keep SemStreams substrate work and future
+  SemEngine/semembed qualification separate; do not archive.
 
 ## 7. Explicit completion gates
 
-- [ ] A supported stream-incarnation-aware applied/unresolved-input contract proves the old producer's
-  complete accepted input set, including MaxDeliver/terminal-rejection outcomes and retention gaps.
-  This cannot pass with the current frozen pin; do not close #215 or mark migration fully qualified.
+- [ ] Obtain a supported stream-incarnation-aware applied/unresolved-input contract proving the entire
+  accepted input set, including MaxDeliver, terminal rejection and retention gaps (#1444).
+- [ ] Obtain a public caller-revision-fenced conditional reconcile with classified conflict/unknown
+  outcomes and no hidden reread/retry (#1445); rerun positive freshness and independent graph review.
+- [ ] Qualify continuing publication/withdrawal eligibility before live batches can grant freshness.
+- [ ] Qualify unknown remote mutation outcome resolution (#1446). Durable refusal is safety evidence,
+  not automatic recovery of an uncertain remote commit.
+- [ ] Complete full semantic/semembed and eventual separate-branch SemEngine qualification before any
+  mainline cutover. This BM25 follow-up and local numeric fingerprint tests do not satisfy those gates.
 
-- [ ] A supported public contract-bound conditional reconcile accepts the caller's exact revision,
-  preserves classified conflict/unknown-commit outcomes, and performs no hidden reread or retry
-  (SemStreams #1445). Then rerun the positive freshness workload and independent graph review.
-- [ ] Continuing publication/withdrawal eligibility is specified and proven before live batches can
-  grant freshness. Current ListSeeds inventory and pending repair do not satisfy this gate.
+## 8. Generation and commit uncertainty review follow-up
 
-## 8. Independent review follow-up: generation and commit uncertainty
-
-- [ ] Replace product mutation RPC dispatch with a synchronous single-bound projector; permanently
-  refuse the old endpoint. Prove delayed old requests cannot mutate after re-add.
-- [ ] Persist an exact binding/entity/attempt fence before every possible graph mutation; preserve
-  public commit outcomes and reject generic internal outcomes as proof of non-commit.
-- [ ] Block source generation changes before config writes while any effect is unresolved, including
-  refresh/re-add and unsafe enabled boot admission. Prove caller-loss and crash/restart boundaries.
-- [ ] Persist terminal evidence only for the exact current attempt after verified or safely rejected
-  outcome. Prove wrong attempt, CAS error and unknown commit retain unresolved work; include a
-  resolution commit-then-error test. Only authoritative journal terminal evidence, never graph
-  readback or elapsed time, can release admission after a lost resolution-write reply.
-- [x] Track upstream terminal outcome resolution and backend commit ambiguity in SemStreams #1446.
-- [ ] Obtain independent implementation approval for the amended synchronous/fence boundary.
+- [x] Replace mutation RPC dispatch with a synchronous single-bound projector and refuse old RPC and
+  legacy source_removed bypasses: `TestLocalProjectorRequiresOneSynchronousBinding`,
+  `TestProjectionFactoryBindsSingleLocalOwner`, `TestSourceProjectionRPCRefusesAllEffects`,
+  `TestLegacyLifecycleCannotRequestSourceRemoved` and real-NATS refusal/queued-cancellation tests.
+- [x] Persist exact binding/entity/attempt fences before graph effects; classify only explicit safe
+  terminal outcomes: `TestRemovalEffectFenceRequiredBeforeMutation`,
+  `TestRemovalEffectFenceClassifiesCommitEvidence` and `TestRemovalEffectFenceAuthorizesExactAttempt`.
+- [x] Block generation changes before config writes while an effect is unresolved; allow only safe
+  existing nonoverlap boots: `TestDirectReplayRetainsUnknownEffectBeforeAdmission`,
+  `TestUnresolvedEffectRefusesAddBeforeAnyConfigWrite` and
+  `TestEffectBootAdmitsOnlyNonoverlappingExistingSources`.
+- [x] Preserve exact terminal evidence through lost journal acknowledgements and reject stale/wrong
+  attempts: `TestEffectTerminalEvidenceSurvivesProgressAndLostReply`,
+  `TestEffectBeginAmbiguityAndExactResolution`, `TestEffectCannotAuthorizeStaleGenerationOrChangedDesired`
+  and `TestJournalRejectsCorruptOrDiscardedEffect`. Graph readback never resolves unknown outcomes:
+  `TestRemovalReadbackCannotResolveLostReplyFence`.
+- [x] Track upstream outcome/commit ambiguity in SemStreams #1446 and obtain independent implementation
+  approval for the amended synchronous/fence boundary. Recovery remains an open section 7 gate.

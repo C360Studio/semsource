@@ -10,7 +10,10 @@ The reviewer who implemented publisher/producer changes independently reviewed t
 coordinator, source-manifest integration, composition-root wiring, shared contracts and supersession.
 The supersession implementer independently reviewed the publisher, fingerprint, seed-proof, source
 factory and nine producer/handler changes. Neither reviewer approved their own implementation.
-Both used the repository's Go component and graph/event reviewer contracts.
+Both used the repository's Go component and graph/event reviewer contracts. The exact production
+build reviewed and exercised by the final process suite is clean commit
+`ce241a5c6e07f69e5450bb60885b537e89ea27a9`, SHA-256
+`09170e24f60af0ead2b209ce58bf9a4c4446316cc77e9c5fbe6f8a2da63b9421`.
 
 Final independent commands all pass:
 
@@ -44,6 +47,35 @@ Channel-controlled and crash-boundary regressions cover these findings. Terminal
 survives a resolution commit followed by a lost acknowledgement; graph readback cannot resolve an
 unknown remote effect. Stop seals admission and joins direct calls before releasing client ownership.
 
+## Test-only follow-up and final gates
+
+Commit `16e3795` changes tests only. The fingerprint fixture avoids a retired literal that triggered
+the repository's predicate migration audit. The governance integration test preserves file-delete,
+recreation and retained-history assertions while replacing the now-forbidden active-producer
+`source_removed` RPC with the actual journal/tail/coordinator/local-projector path. It explicitly
+checks legacy refusal, enabled-boot retirement blocking, checked producer Stop, retained markers,
+`applied_tail_unproven`, verified effect evidence and sticky markers under the later legacy sweep.
+
+The governance case uses a stateful in-memory desired-config seam with real NATS and production
+lifecycle owners; it does not claim ConfigManager durability or process restart. The process suite
+proves those separate boundaries. Independent review approved this exact adaptation and reran
+`TestIntegration_StalenessLifecycle` with integration tags and `-race`: PASS, 7.917 seconds, recorded in
+`reviewer-governance-staleness.log`. The reviewed production executable was not rebuilt for these tests.
+
+| Final gate | Outcome |
+| --- | --- |
+| Full unit/race | 2,705 passed; 9 named skips |
+| Full integration | 2,826 passed; 9 named skips |
+| Local e2e lane | 7 passed |
+| Garage lane | 61 passed |
+| gofmt, pinned revive/vet, agent sync, strict OpenSpec | Passed |
+| Combined original/additive process qualification | Exit 1; selective reactivation fails 2 of 26 checks |
+
+[Final results](final-results.json) retain commands, counts, skip names, initial failed gates and
+corrected runs. [Process qualification](replay-qualification.md) records all six final case outcomes;
+[dependency results](dependency-results.json) include the remeasured test closure. Green engineering
+gates and implementation review do not close the failed positive process acceptance.
+
 ## Explicit review boundaries
 
 - #1444: current retained markers may converge, but removal remains pending/applied_tail_unproven.
@@ -61,5 +93,20 @@ unknown remote effect. Stop seals admission and joins direct calls before releas
 
 Independent evidence is retained under `/tmp/semsource-removal215-evidence/`, particularly
 `reviewer-primary-fence-race.log`, `reviewer-supersession-fence-race.log`, producer review regressions,
-and the versioned [intermediate attempt ledger](implementation-attempts.json). Full-suite and final
-process outcomes are recorded separately; this review does not turn a blocked positive assertion green.
+and the versioned [intermediate attempt ledger](implementation-attempts.json). Raw files are temporary
+session evidence, not a durable artifact store. The versioned final ledgers
+record their hashes and outcomes. All six owned final brokers were confirmed absent. The original
+legacy probe does not assert its application wait error; only additive checked-stop cases provide
+that exit evidence. This review does not turn a blocked positive assertion green.
+
+## Final delivery evidence review
+
+A separate implementation reviewer audited the final compact records against the raw session artifacts:
+all 158 evidence hashes, binary identity, six process reports, twelve observed exits (ten graceful,
+two deliberate SIGKILL), six removed broker IDs, corrected and original Go test outcomes, and all nine
+dependency package/root/line sets match. The captured build record supplies commit/clean provenance;
+the binary does not embed VCS revision fields. The test-only `16e3795` changes no production source.
+
+This independent approval covers the delivery records for draft PR #213. Both selective reactivation
+failures and all unresolved qualification gates remain visible. It does not approve issue closure,
+merge, SemEngine admission or mainline cutover. Live publication and CI status are tracked on the PR.

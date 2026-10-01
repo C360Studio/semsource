@@ -1,13 +1,65 @@
 # Source removal replay: issue #215
 
 [Issue #215](https://github.com/C360Studio/semsource/issues/215) extends
-[draft migration PR #213](https://github.com/C360Studio/semsource/pull/213). Before implementation,
-the unchanged removal probe reproduced the missing `source_removed` markers: **9 of 10 checks pass;
-the process exits 1**. This records the defect, not an acceptance pass. No retry was used to obtain green.
+[draft migration PR #213](https://github.com/C360Studio/semsource/pull/213). The final reviewed implementation
+repairs retained `source_removed` markers after producer retirement.
+**Issue #215 remains open:** terminal input completion and selective freshness are not qualified.
+The final combined process command exits **1**, retaining two selective-reactivation failures.
+
+## Final delivery evidence
+
+[The final result ledger](final-results.json) records the clean production build, six process reports,
+commands, quality gates and cleanup. [Qualification details](replay-qualification.md) separate passing
+retirement/re-add checks from blocked freshness. [Independent review](review.md) covers implementation
+and the later test-only governance adaptation.
+
+| Final production input | Recorded value |
+| --- | --- |
+| SemSource commit | `ce241a5c6e07f69e5450bb60885b537e89ea27a9` |
+| Binary SHA-256 | `09170e24f60af0ead2b209ce58bf9a4c4446316cc77e9c5fbe6f8a2da63b9421` |
+| Build checkout | Clean |
+| Combined process run | Exit 1; 424.136 seconds |
+| Profile | BM25; no embedding provider started |
+
+Commit attribution comes from the captured clean-build record `final-build.json`. The executable has
+no embedded `vcs.revision` or `vcs.modified` fields; its SHA-256 identifies the artifact independently.
+
+The original probe passes 10/10; the restart control 8/8; original-source retirement 16/16;
+runtime-added retirement 20/20; and rapid re-add 27/27. Selective reactivation passes 24/26:
+current-epoch A-only publication proof is present, but completion and fresh A parent/passage assertions
+fail with `conditional_reconcile_unavailable`. Both failed assertions remain in the report.
+
+After test-only corrections in `16e3795`, full integration passes 2,826 tests with 9 skips, and unit/race
+passes 2,705 with 9 skips. Lint, seven local e2e cases, 61 Garage cases, agent sync and strict OpenSpec
+validation pass. The ledgers retain the initial failed runs and exact skip names. These later test
+changes do not alter the production binary identified above.
+
+[Dependency results](dependency-results.json) remeasure consumer and extraction closures, including
+upstream tests, without changing the module pin. Consumer production and tagged tests each reach 100
+SemStreams package directories / 214,818 non-test lines; the proposed port grows from 65 / 126,926 in
+production to 114 / 232,126 when tests for every reached package are included. These are measured
+closures, not proof of a completed extraction.
+
+Three upstream boundaries remain explicit:
+
+- [#1444](https://github.com/C360Studio/semstreams/issues/1444): a converged retained marker pass remains
+  `pending` / `applied_tail_unproven`; zero broker backlog cannot prove every accepted input was applied.
+- [#1445](https://github.com/C360Studio/semstreams/issues/1445): matching publication evidence cannot
+  safely clear a retained marker through the pinned public API; selective freshness remains red.
+- [#1446](https://github.com/C360Studio/semstreams/issues/1446): uncertain effects retain durable fences
+  and block unsafe generation changes; recovery of an unknown remote commit remains unavailable.
+
+This BM25 follow-up does not rerun full semantic/semembed qualification, prove continuing publication
+withdrawal eligibility or numeric equality through the graph decoder, or authorize SemEngine cutover.
+
+## Preserved pre-fix reproduction
+
+Before implementation, the unchanged removal probe reproduced missing `source_removed` markers:
+**9 of 10 checks passed; exit 1**. This remains defect evidence, not an acceptance pass.
 
 [The compact pre-fix record](before-results.json) contains exact commands, observations, artifact hashes,
 and cleanup evidence. The frozen [SETUP 03A pins](../setup-03a/pins.json), comparison ledgers, and versioned
-fixtures remain unchanged. Later #215 acceptance evidence must be recorded separately.
+fixtures remain unchanged. Final #215 evidence is additive and separately identified above.
 
 ## Exact pre-fix inputs
 
@@ -65,7 +117,7 @@ re-adds the same disabled handle, verifies runtime deferral, and confirms admiss
 Those receipt and activation checks pass; they do not prove graph-marker clearing, since no removal
 marker was present in this pre-fix run.
 
-## Ownership and evidence limits
+## Pre-fix ownership and evidence limits
 
 Docker inventory was empty before the run. The probe owned one uniquely identified NATS container,
 with dynamic loopback ports, one CPU, and 512 MiB memory. It preserved application/broker logs and
@@ -82,3 +134,17 @@ request capture, build/environment metadata, run outcome, cleanup, and the evide
 They are supporting session artifacts; the compact record versions their identities and outcomes.
 No durable-replay, paging, duplicate-delivery, fault-recovery, sibling-isolation, or SemEngine admission
 claim is established by this pre-fix reproduction.
+
+## Final evidence ownership
+
+All six final process brokers were inspected by exact container ID and confirmed absent. Additive
+process cases assert observed graceful exits and intentional SIGKILL outcomes; the unchanged original
+probe still consumes its application wait error without asserting it. Its 10/10 result does not
+certify graceful shutdown.
+
+The versioned JSON ledgers retain compact outcomes and artifact hashes. Raw logs, reports, broker
+inspection and process observations are session artifacts under `/tmp/semsource-removal215-evidence`;
+that temporary directory is not a durable artifact store. Preserved before and intermediate failures,
+including the original strict sibling timestamp comparison and an HTTP bind failure, remain linked in
+[the intermediate attempt ledger](implementation-attempts.json). No failed positive assertion was
+changed into a passing refusal check.
