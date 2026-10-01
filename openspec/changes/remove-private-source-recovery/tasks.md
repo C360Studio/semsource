@@ -1,59 +1,72 @@
 # Corrective implementation tasks
 
-Architect inventory and independent component/graph contract reviews are complete.
-Implementation and validation remain pending.
-Named tests below are planned behavioral gates, not executed evidence or invented existing results.
+Implementation is committed at `5334716b588f6960ed54c8cafdc7033b01088e8e`; scoped independent production
+and process-test reviews are approved. Final desired-state process cases pass 33/33 and 37/37;
+the unchanged removal probe remains 9/10 with its intentional missing-marker failure. Hosted CI is pending.
+Completed checks are recorded in `docs/testing/private-recovery-retirement/README.md`; historical
+positive source-removal expectations remain unchanged and are not waived by this corrective contract.
 
 ## 1. Contract
 
 - [x] Inspect actual ingress, pin settlement/storage APIs and private recovery authority; record this design.
 - [x] Obtain independent component and graph/event contract sign-off before Go changes.
-- [ ] Owner commits the approved proposal/design/specs/tasks and claims the corrective PR before code.
+- [x] Owner commits the approved proposal/design/specs/tasks and claims the corrective PR before code.
 
 ## 2. Additive proof before removal
 
-- [ ] A: `TestLegacyLifecycleCompatibility` proves missing/empty admitted; nonempty, unreadable and timeout
-  refused without writes or private-record decoding; original writer must be stopped.
-- [ ] A: `TestIntegrationLegacyLifecycleCompatibility` proves real-NATS retained-message cases, including
+- [x] A: `TestLegacyLifecycleCompatibility` proves missing/empty admitted and nonempty/unreadable refused;
+  cancellation is honored before admission. Review confirms bounded I/O, no writes/private-record decoding,
+  and the prerequisite that the original writer is stopped.
+- [x] A: `TestIntegrationLegacyLifecycleCompatibility` proves real-NATS retained-message cases, including
   terminal-looking/foreign/tombstone/corrupt data and exact unchanged storage on refusal.
-- [ ] A: `TestDesiredRemovalIndependentOfGraph` proves disabled config/manifest receipt with graph degraded.
-- [ ] A: `TestDesiredPartialCommitReceipt` proves commit-before-memory error and manifest-failure retry,
+- [x] A: `TestDesiredRemovalIndependentOfGraph` proves disabled config/manifest receipt with graph degraded.
+- [x] A: `TestDesiredPartialCommitReceipt` proves commit-before-memory error and manifest-failure retry,
   retaining committed flags/error and repeated-remove NOT_FOUND, including an expanded repo child.
-- [ ] B: retain/run `TestStopSettlesAcceptedBatch` and source owner Stop/cancellation regressions as red/green
-  proof around receipt removal; add `TestPublisherIndependentOfRecoveryStorage` if an extra seam is needed.
+- [x] B: retain/run `TestStopSettlesAcceptedBatch` and source Stop/cancellation regressions through receipt removal.
+  Failing-first queued-payload ownership/rejection tests pass; no extra recovery-storage seam is needed.
 
 ## 3. Remove unsupported authority and narrow responses
 
-- [ ] A: delete journal/coordinator/tail/effect/projection replay and root binding/decorator setup; install
+- [x] A: delete journal/coordinator/tail/effect/projection replay and root binding/decorator setup; install
   only the bounded existing-only guard before provisioning. `TestRootRefusesBeforeProvisioning` proves order.
-- [ ] A: local unexported request/run gates preserve cancellation before admission;
+- [x] A: local unexported request/run gates preserve cancellation before admission;
   `TestCanceledAdmissionMakesNoWrites` proves no stale desired write or graph mutation.
-- [ ] A: remove generation/projection-phase replies; add constant unavailable projection status to successful
+- [x] A: remove generation/projection-phase replies; add constant unavailable projection status to successful
   or partial desired-change responses; align MCP descriptions and returned semantics.
-  `TestSourceProjectionUnavailable` proves HTTP/NATS/MCP contract and no graph writes.
-- [ ] A: keep lifecycle status HTTP 410 and both source-removal RPC refusal paths stateless; remove periodic
+  HTTP/refusal tests plus MCP description and partial-receipt tests prove the separate transport contracts.
+- [x] A: keep lifecycle status HTTP 410 and both source-removal RPC refusal paths stateless; remove periodic
   lifecycle status/repair workers and misleading health/progress claims. Prove auth and refusal payloads.
-- [ ] A: retain the ConfigManager desired read seam and request-driven manifest repair without a journal.
+- [x] A: retain the ConfigManager desired read seam and request-driven manifest repair without a journal.
   Preserve `TestIntegrationRemovedFileSourceStaysDisabledAfterConfigRestart` and desired identity/retry cases.
-- [ ] B: remove publisher receipts, seed seals, lifecycle observers, bindings and seed-proof-only handler
+- [x] B: remove publisher receipts, seed seals, lifecycle observers, bindings and seed-proof-only handler
   plumbing. Preserve PubAck/loss semantics, immutable queued payloads and checked source shutdown under race.
-- [ ] A after B handoff: delete `sourceintent` and unused private-only tests; prove no production imports,
+- [x] A after B handoff: delete `sourceintent` and unused private-only tests; prove no production imports,
   record types, bucket writes or alternate recovery loop survive. Keep the single read-only legacy guard.
-- [ ] A: preserve `TestSourceRemovedStickyAcrossLegacyOracles`, exact-parent passage behavior, truncation
+- [x] A: preserve `TestSourceRemovedStickyAcrossLegacyOracles`, exact-parent passage behavior, truncation
   refusal, native drain and ordinary deletion/recreation cases; adapt governance tests to explicit unavailable
   source-removal projection without deleting ordinary positive assertions.
 
 ## 4. Changed-contract qualification and review
 
-- [ ] Owner: add a separate process report for fresh boot, original/runtime source desired removal and re-add,
+- [x] Owner: add a separate process report for fresh boot, original/runtime source desired removal and re-add,
   checked exits, persistent tombstones, unchanged content/siblings and explicit unavailable projection.
-- [ ] Owner: run the unchanged versioned corpus with exact pin/config/provider inputs; preserve original
-  expected answers and classify changed-contract/known-at-pin failures explicitly, never turn them into passes.
-- [ ] Owner: verify historical fixtures/results remain byte-identical; new contract evidence has separate names.
-- [ ] Component reviewer: approve no substitute authority, truthful config errors, guard and owned lifecycle.
-- [ ] Graph/event reviewer: approve retained staleness/identity/content and unavailable mutation semantics.
-- [ ] Owner: run unit/race, applicable real-NATS integration/e2e/Garage, lint, agents and OpenSpec gates;
+  Final binary: original 33/33 and runtime-added 37/37, command exit 0.
+- [x] Owner: run the unchanged versioned BM25 corpus with exact pin/config and no providers: 61/63, exit 1.
+  Both broker-restart failures remain known-at-pin assertions; no neural/semembed requalification is claimed.
+- [x] Owner: run the unchanged original source-removal probe: 9/10, exit 1, sole missing-marker failure.
+  The changed-contract limitation remains failed; the positive expectation is not waived or rewritten.
+- [x] Owner: verify historical fixtures/results remain byte-identical; new contract evidence has separate names.
+- [x] Component reviewer: approve no substitute authority, truthful config errors, guard and owned lifecycle.
+- [x] Graph/event reviewer: approve retained staleness/identity/content and unavailable mutation semantics.
+- [x] Owner: run unit/race, applicable real-NATS integration/e2e/Garage, lint, agents and OpenSpec gates;
   update explicit CI package lists for surviving suites and run workflow contract tests if edited.
-- [ ] Technical writer: document compatibility refusal/fresh-store boundary, retired public fields,
+- [x] Technical writer: document compatibility refusal/fresh-store boundary, retired public fields,
   unavailable projection, #215 deferral and separate #18/#19/#20 decisions without rewriting old evidence.
-- [ ] Owner: record final source/binary identities, changed contracts, gate results and independent sign-off.
+- [x] Owner: record committed source and clean-build binary identities; retain independent scoped sign-off.
+- [x] Owner: record final desired-state, unchanged BM25 and original removal-probe results separately,
+  retaining earlier negative/intermediate failures and exact source/binary attribution.
+- [x] Owner: measure all six new production files: 99/114 statements (86.8%), satisfying the ≥80% gate.
+  Include independently approved real-NATS readback tests and a separate instrumented original-source
+  process rerun (33/33); preserve the primary binary/results and record unit/integration-only 79.8%.
+- [ ] Owner: finish hosted CI and record the final delivery disposition.
+  No positive source-removal/freshness acceptance or merge approval is implied.

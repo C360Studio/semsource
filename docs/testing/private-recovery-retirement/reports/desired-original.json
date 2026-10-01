@@ -1,0 +1,1086 @@
+{
+  "corpus_version": "removal-replay-v1",
+  "profile": "bm25-desired-lifecycle-correction",
+  "semengine_slices": [
+    0,
+    1
+  ],
+  "started": "2026-10-01T10:54:37.149575Z",
+  "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+  "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+  "configuration": {
+    "graph": {
+      "coalesce_ms": 200,
+      "embedder_type": "bm25",
+      "gateway_bind": "127.0.0.1:57782",
+      "index_workers": 4
+    },
+    "http_port": 57779,
+    "metrics": {
+      "port": 57780
+    },
+    "namespace": "setup03a",
+    "source_roots": [
+      "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source"
+    ],
+    "sources": [
+      {
+        "languages": [
+          "go"
+        ],
+        "path": "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source",
+        "project": "setup03a",
+        "type": "ast",
+        "version": "corpus-v1",
+        "watch": true
+      },
+      {
+        "paths": [
+          "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/sibling"
+        ],
+        "project": "removal-sibling",
+        "type": "docs",
+        "watch": true
+      },
+      {
+        "paths": [
+          "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/target"
+        ],
+        "project": "setup03a-corpus-v1",
+        "type": "docs",
+        "watch": true
+      }
+    ],
+    "websocket_bind": "127.0.0.1:57781"
+  },
+  "nats_container": "d6aaff77b44a1ef28c14eae4b8486ecf0526cd99abec262fdaa4ab5c6714862e",
+  "observations": [
+    {
+      "name": "initial_settled",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 4,
+            "offered_total": 4,
+            "delivered_total": 4,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 2,
+              "web.doc": 2
+            }
+          },
+          {
+            "instance_name": "doc-source-removal-sibling",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 15,
+        "timestamp": "2026-10-01T05:55:07.451768-05:00"
+      }
+    },
+    {
+      "name": "governed_identity_authority",
+      "passed": true,
+      "detail": {
+        "expected_entities": {
+          "farewell": "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "greet_alpha": "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "greet_beta": "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "run": "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+        },
+        "platform": "semsource-bbc69b",
+        "wire": {
+          "data": {
+            "matches": [
+              {
+                "entity_id": "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                "matched_name": "Run",
+                "predicate": "dc.terms.title",
+                "exact_case": true
+              }
+            ]
+          },
+          "timestamp": "2026-10-01T05:55:07.574449-05:00"
+        }
+      }
+    },
+    {
+      "name": "initial_target_current",
+      "passed": true,
+      "detail": {
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.a-md-0000": {
+          "entity": {
+            "id": "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.a-md-0000",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "passage"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "a.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Amber harbour"
+              },
+              {
+                "predicate": "source.doc.chunk-index",
+                "object": 0
+              },
+              {
+                "predicate": "code.structure.belongs",
+                "object": "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md"
+              },
+              {
+                "predicate": "source.doc.section",
+                "object": "Amber harbour"
+              },
+              {
+                "predicate": "source.doc.body-store",
+                "object": "objectstore"
+              },
+              {
+                "predicate": "source.doc.body-key",
+                "object": "doc:14847d40511eb68f75221e74d26d7b4785624c05d05c9e2eb9a729c5c06b04e9"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 12
+        },
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.b-md-0000": {
+          "entity": {
+            "id": "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.b-md-0000",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "passage"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "b.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Bronze orchard"
+              },
+              {
+                "predicate": "source.doc.chunk-index",
+                "object": 0
+              },
+              {
+                "predicate": "code.structure.belongs",
+                "object": "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md"
+              },
+              {
+                "predicate": "source.doc.section",
+                "object": "Bronze orchard"
+              },
+              {
+                "predicate": "source.doc.body-store",
+                "object": "objectstore"
+              },
+              {
+                "predicate": "source.doc.body-key",
+                "object": "doc:3c0b9af57e8f7fce62082b61c2b1053f819d2ed79f3f6a0d9d3fbe9b16eff945"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 5
+        },
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md": {
+          "entity": {
+            "id": "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "document"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "a.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "source.doc.file-hash",
+                "object": "14847d40511eb68f75221e74d26d7b4785624c05d05c9e2eb9a729c5c06b04e9"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Amber harbour"
+              },
+              {
+                "predicate": "source.doc.chunk-count",
+                "object": 1
+              },
+              {
+                "predicate": "entity.role.navigational",
+                "object": "document"
+              },
+              {
+                "predicate": "entity.ontology.class",
+                "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Document"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 1
+        },
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md": {
+          "entity": {
+            "id": "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "document"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "b.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "source.doc.file-hash",
+                "object": "3c0b9af57e8f7fce62082b61c2b1053f819d2ed79f3f6a0d9d3fbe9b16eff945"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Bronze orchard"
+              },
+              {
+                "predicate": "source.doc.chunk-count",
+                "object": 1
+              },
+              {
+                "predicate": "entity.role.navigational",
+                "object": "document"
+              },
+              {
+                "predicate": "entity.ontology.class",
+                "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Document"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 6
+        }
+      }
+    },
+    {
+      "name": "sibling_source_facts_captured",
+      "passed": true,
+      "detail": {
+        "content_keys": {
+          "code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a": "func Greet() string { return \"alternate cobalt lantern\" }",
+          "code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f": "func Greet() string { return \"cobalt lantern\" }",
+          "code:a40a82bbe5615dea547597dd67447f4ba4443199f2f310a16b3637e61c31f779": "func Run() string { return Greet() }",
+          "code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2": "func Farewell() string { return \"amber beacon\" }",
+          "doc:14847d40511eb68f75221e74d26d7b4785624c05d05c9e2eb9a729c5c06b04e9": "# Amber harbour\n\nThe amber harbour stores the current removal replay answer.\n",
+          "doc:3c0b9af57e8f7fce62082b61c2b1053f819d2ed79f3f6a0d9d3fbe9b16eff945": "# Bronze orchard\n\nThe bronze orchard is retained history after offline deletion.\n",
+          "doc:d57b36f85b1b0f2ab909dddb0c39dba53b5595740d46a10e74b0cb18906d4423": "# Silver compass\n\nThe silver compass belongs to an independent live source.\n"
+        },
+        "ids": {
+          "setup03a.semsource-bbc69b.removal-sibling.web.chunk.sibling-md-0000": "{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.removal-sibling.web.doc.sibling-md\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Silver compass\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"source.doc.body-key\",\"object\":\"doc:d57b36f85b1b0f2ab909dddb0c39dba53b5595740d46a10e74b0cb18906d4423\"}\n{\"predicate\":\"source.doc.body-store\",\"object\":\"objectstore\"}\n{\"predicate\":\"source.doc.chunk-index\",\"object\":0}\n{\"predicate\":\"source.doc.file-path\",\"object\":\"sibling.md\"}\n{\"predicate\":\"source.doc.mime-type\",\"object\":\"text/markdown\"}\n{\"predicate\":\"source.doc.section\",\"object\":\"Silver compass\"}\n{\"predicate\":\"source.doc.type\",\"object\":\"passage\"}",
+          "setup03a.semsource-bbc69b.removal-sibling.web.doc.sibling-md": "{\"predicate\":\"dc.terms.title\",\"object\":\"Silver compass\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Document\"}\n{\"predicate\":\"entity.role.navigational\",\"object\":\"document\"}\n{\"predicate\":\"source.doc.chunk-count\",\"object\":1}\n{\"predicate\":\"source.doc.file-hash\",\"object\":\"d57b36f85b1b0f2ab909dddb0c39dba53b5595740d46a10e74b0cb18906d4423\"}\n{\"predicate\":\"source.doc.file-path\",\"object\":\"sibling.md\"}\n{\"predicate\":\"source.doc.mime-type\",\"object\":\"text/markdown\"}\n{\"predicate\":\"source.doc.type\",\"object\":\"document\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.alpha": "{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"alpha\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"folder\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"\"}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.code.repo.setup03a-corpus-v1\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"alpha\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"control\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/InformationBearingArtifact\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.beta": "{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"beta\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"folder\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"\"}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.code.repo.setup03a-corpus-v1\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.beta-greet-go\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"beta\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"control\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/InformationBearingArtifact\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.repo.setup03a-corpus-v1": "{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"repo\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.alpha\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.beta\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"setup03a-corpus-v1\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"control\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Artifact\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go": "{\"predicate\":\"code.artifact.hash\",\"object\":\"416cf6be17ce114a\"}\n{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.package\",\"object\":\"alpha\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"alpha/greet.go\"}\n{\"predicate\":\"code.artifact.project\",\"object\":\"setup03a\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"file\"}\n{\"predicate\":\"code.artifact.version\",\"object\":\"corpus-v1\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"private\"}\n{\"predicate\":\"code.metric.end-line\",\"object\":10}\n{\"predicate\":\"code.metric.lines\",\"object\":10}\n{\"predicate\":\"code.metric.start-line\",\"object\":1}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.alpha\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Run\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"greet.go\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"control\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/InformationBearingArtifact\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.beta-greet-go": "{\"predicate\":\"code.artifact.hash\",\"object\":\"d465451d9d5e893e\"}\n{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.package\",\"object\":\"beta\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"beta/greet.go\"}\n{\"predicate\":\"code.artifact.project\",\"object\":\"setup03a\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"file\"}\n{\"predicate\":\"code.artifact.version\",\"object\":\"corpus-v1\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"private\"}\n{\"predicate\":\"code.metric.end-line\",\"object\":4}\n{\"predicate\":\"code.metric.lines\",\"object\":4}\n{\"predicate\":\"code.metric.start-line\",\"object\":1}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.beta\"}\n{\"predicate\":\"code.structure.contains\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.beta-greet-go-Greet\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"greet.go\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"control\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/InformationBearingArtifact\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell": "{\"predicate\":\"code.artifact.exported\",\"object\":\"true\"}\n{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"alpha/greet.go\"}\n{\"predicate\":\"code.artifact.project\",\"object\":\"setup03a\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"function\"}\n{\"predicate\":\"code.artifact.version\",\"object\":\"corpus-v1\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"public\"}\n{\"predicate\":\"code.body.key\",\"object\":\"code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2\"}\n{\"predicate\":\"code.body.store\",\"object\":\"objectstore\"}\n{\"predicate\":\"code.doc.comment\",\"object\":\"Farewell returns the amber beacon route.\\n\"}\n{\"predicate\":\"code.doc.signature\",\"object\":\"func Farewell() string\"}\n{\"predicate\":\"code.metric.end-line\",\"object\":10}\n{\"predicate\":\"code.metric.lines\",\"object\":1}\n{\"predicate\":\"code.metric.start-line\",\"object\":10}\n{\"predicate\":\"code.relationship.returns\",\"object\":\"builtin:string\"}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Farewell\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet": "{\"predicate\":\"code.artifact.exported\",\"object\":\"true\"}\n{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"alpha/greet.go\"}\n{\"predicate\":\"code.artifact.project\",\"object\":\"setup03a\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"function\"}\n{\"predicate\":\"code.artifact.version\",\"object\":\"corpus-v1\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"public\"}\n{\"predicate\":\"code.body.key\",\"object\":\"code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f\"}\n{\"predicate\":\"code.body.store\",\"object\":\"objectstore\"}\n{\"predicate\":\"code.doc.comment\",\"object\":\"Greet explains the cobalt lantern routing protocol.\\n\"}\n{\"predicate\":\"code.doc.signature\",\"object\":\"func Greet() string\"}\n{\"predicate\":\"code.metric.end-line\",\"object\":4}\n{\"predicate\":\"code.metric.lines\",\"object\":1}\n{\"predicate\":\"code.metric.start-line\",\"object\":4}\n{\"predicate\":\"code.relationship.returns\",\"object\":\"builtin:string\"}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Greet\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Run": "{\"predicate\":\"code.artifact.exported\",\"object\":\"true\"}\n{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"alpha/greet.go\"}\n{\"predicate\":\"code.artifact.project\",\"object\":\"setup03a\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"function\"}\n{\"predicate\":\"code.artifact.version\",\"object\":\"corpus-v1\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"public\"}\n{\"predicate\":\"code.body.key\",\"object\":\"code:a40a82bbe5615dea547597dd67447f4ba4443199f2f310a16b3637e61c31f779\"}\n{\"predicate\":\"code.body.store\",\"object\":\"objectstore\"}\n{\"predicate\":\"code.doc.comment\",\"object\":\"Run uses Greet to select the cobalt lantern route.\\n\"}\n{\"predicate\":\"code.doc.signature\",\"object\":\"func Run() string\"}\n{\"predicate\":\"code.metric.end-line\",\"object\":7}\n{\"predicate\":\"code.metric.lines\",\"object\":1}\n{\"predicate\":\"code.metric.start-line\",\"object\":7}\n{\"predicate\":\"code.relationship.calls\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet\"}\n{\"predicate\":\"code.relationship.returns\",\"object\":\"builtin:string\"}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Run\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.beta-greet-go-Greet": "{\"predicate\":\"code.artifact.exported\",\"object\":\"true\"}\n{\"predicate\":\"code.artifact.language\",\"object\":\"golang\"}\n{\"predicate\":\"code.artifact.path\",\"object\":\"beta/greet.go\"}\n{\"predicate\":\"code.artifact.project\",\"object\":\"setup03a\"}\n{\"predicate\":\"code.artifact.type\",\"object\":\"function\"}\n{\"predicate\":\"code.artifact.version\",\"object\":\"corpus-v1\"}\n{\"predicate\":\"code.artifact.visibility\",\"object\":\"public\"}\n{\"predicate\":\"code.body.key\",\"object\":\"code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a\"}\n{\"predicate\":\"code.body.store\",\"object\":\"objectstore\"}\n{\"predicate\":\"code.doc.comment\",\"object\":\"Greet selects the alternate cobalt lantern routing protocol.\\n\"}\n{\"predicate\":\"code.doc.signature\",\"object\":\"func Greet() string\"}\n{\"predicate\":\"code.metric.end-line\",\"object\":4}\n{\"predicate\":\"code.metric.lines\",\"object\":1}\n{\"predicate\":\"code.metric.start-line\",\"object\":4}\n{\"predicate\":\"code.relationship.returns\",\"object\":\"builtin:string\"}\n{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.beta-greet-go\"}\n{\"predicate\":\"dc.terms.created\",\"object\":\"2026-10-01T05:54:37-05:00\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Greet\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.a-md-0000": "{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Amber harbour\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"source.doc.body-key\",\"object\":\"doc:14847d40511eb68f75221e74d26d7b4785624c05d05c9e2eb9a729c5c06b04e9\"}\n{\"predicate\":\"source.doc.body-store\",\"object\":\"objectstore\"}\n{\"predicate\":\"source.doc.chunk-index\",\"object\":0}\n{\"predicate\":\"source.doc.file-path\",\"object\":\"a.md\"}\n{\"predicate\":\"source.doc.mime-type\",\"object\":\"text/markdown\"}\n{\"predicate\":\"source.doc.section\",\"object\":\"Amber harbour\"}\n{\"predicate\":\"source.doc.type\",\"object\":\"passage\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.b-md-0000": "{\"predicate\":\"code.structure.belongs\",\"object\":\"setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md\"}\n{\"predicate\":\"dc.terms.title\",\"object\":\"Bronze orchard\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"source.doc.body-key\",\"object\":\"doc:3c0b9af57e8f7fce62082b61c2b1053f819d2ed79f3f6a0d9d3fbe9b16eff945\"}\n{\"predicate\":\"source.doc.body-store\",\"object\":\"objectstore\"}\n{\"predicate\":\"source.doc.chunk-index\",\"object\":0}\n{\"predicate\":\"source.doc.file-path\",\"object\":\"b.md\"}\n{\"predicate\":\"source.doc.mime-type\",\"object\":\"text/markdown\"}\n{\"predicate\":\"source.doc.section\",\"object\":\"Bronze orchard\"}\n{\"predicate\":\"source.doc.type\",\"object\":\"passage\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md": "{\"predicate\":\"dc.terms.title\",\"object\":\"Amber harbour\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Document\"}\n{\"predicate\":\"entity.role.navigational\",\"object\":\"document\"}\n{\"predicate\":\"source.doc.chunk-count\",\"object\":1}\n{\"predicate\":\"source.doc.file-hash\",\"object\":\"14847d40511eb68f75221e74d26d7b4785624c05d05c9e2eb9a729c5c06b04e9\"}\n{\"predicate\":\"source.doc.file-path\",\"object\":\"a.md\"}\n{\"predicate\":\"source.doc.mime-type\",\"object\":\"text/markdown\"}\n{\"predicate\":\"source.doc.type\",\"object\":\"document\"}",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md": "{\"predicate\":\"dc.terms.title\",\"object\":\"Bronze orchard\"}\n{\"predicate\":\"entity.indexing.profile\",\"object\":\"content\"}\n{\"predicate\":\"entity.ontology.class\",\"object\":\"http://www.ontologyrepository.com/CommonCoreOntologies/Document\"}\n{\"predicate\":\"entity.role.navigational\",\"object\":\"document\"}\n{\"predicate\":\"source.doc.chunk-count\",\"object\":1}\n{\"predicate\":\"source.doc.file-hash\",\"object\":\"3c0b9af57e8f7fce62082b61c2b1053f819d2ed79f3f6a0d9d3fbe9b16eff945\"}\n{\"predicate\":\"source.doc.file-path\",\"object\":\"b.md\"}\n{\"predicate\":\"source.doc.mime-type\",\"object\":\"text/markdown\"}\n{\"predicate\":\"source.doc.type\",\"object\":\"document\"}"
+        }
+      }
+    },
+    {
+      "name": "fresh_boot_has_no_private_lifecycle_bucket",
+      "passed": true,
+      "detail": {
+        "bucket": "SEMSOURCE_SOURCE_LIFECYCLE",
+        "present": false
+      }
+    },
+    {
+      "name": "initial_complete_desired_envelope_captured",
+      "passed": true,
+      "detail": {
+        "envelope": {
+          "type": "processor",
+          "name": "doc-source",
+          "enabled": true,
+          "config": {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "org": "setup03a",
+            "paths": [
+              "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/target"
+            ],
+            "ports": {
+              "outputs": [
+                {
+                  "name": "graph.ingest",
+                  "required": true,
+                  "description": "Entity state updates for graph ingestion",
+                  "config": {
+                    "kind": "jetstream",
+                    "stream_name": "GRAPH",
+                    "subjects": [
+                      "graph.ingest.entity"
+                    ]
+                  }
+                }
+              ]
+            },
+            "project": "setup03a-corpus-v1",
+            "watch_enabled": true
+          }
+        },
+        "kv_revision": 7
+      }
+    },
+    {
+      "name": "target_facts_and_exact_content_captured",
+      "passed": true,
+      "detail": {
+        "target_bodies": 2,
+        "target_ids": [
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.a-md-0000",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.b-md-0000",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md",
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md"
+        ]
+      }
+    },
+    {
+      "name": "initial_graph.lifecycle.source_unavailable",
+      "passed": true,
+      "detail": {
+        "body": {
+          "error": {
+            "code": "SOURCE_LIFECYCLE_UNAVAILABLE",
+            "message": "source lifecycle projection is unavailable"
+          }
+        },
+        "headers": null
+      }
+    },
+    {
+      "name": "initial_graph.lifecycle.run_unavailable",
+      "passed": true,
+      "detail": {
+        "body": {
+          "message": "SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable"
+        },
+        "headers": {
+          "X-Error-Class": [
+            "transient"
+          ],
+          "X-Status": [
+            "error"
+          ]
+        }
+      }
+    },
+    {
+      "name": "initial_lifecycle_http_gone",
+      "passed": true,
+      "detail": {
+        "body": {
+          "error": {
+            "code": "SOURCE_LIFECYCLE_UNAVAILABLE",
+            "message": "source lifecycle projection is unavailable"
+          }
+        },
+        "status": 410
+      }
+    },
+    {
+      "name": "initial_refusals_preserve_target_revisions",
+      "passed": true,
+      "detail": {
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.a-md-0000": 12,
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.b-md-0000": 5,
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md": 1,
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md": 6
+      }
+    },
+    {
+      "name": "desired_remove_receipt",
+      "passed": true,
+      "detail": {
+        "desired_changed": true,
+        "instance_name": "doc-source-setup03a-corpus-v1",
+        "projection_status": "unavailable",
+        "removed": true,
+        "restart_required": true,
+        "runtime_changed": false,
+        "timestamp": "2026-10-01T05:55:07.702477-05:00"
+      }
+    },
+    {
+      "name": "remove_keeps_current_producer_admitted",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 4,
+            "offered_total": 4,
+            "delivered_total": 4,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 2,
+              "web.doc": 2
+            }
+          },
+          {
+            "instance_name": "doc-source-removal-sibling",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 15,
+        "timestamp": "2026-10-01T05:55:07.451768-05:00"
+      }
+    },
+    {
+      "name": "disabled_envelope_retained_before_restart",
+      "passed": true,
+      "detail": {
+        "envelope": {
+          "type": "processor",
+          "name": "doc-source",
+          "enabled": false,
+          "config": {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "org": "setup03a",
+            "paths": [
+              "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/target"
+            ],
+            "ports": {
+              "outputs": [
+                {
+                  "name": "graph.ingest",
+                  "required": true,
+                  "description": "Entity state updates for graph ingestion",
+                  "config": {
+                    "kind": "jetstream",
+                    "stream_name": "GRAPH",
+                    "subjects": [
+                      "graph.ingest.entity"
+                    ]
+                  }
+                }
+              ]
+            },
+            "project": "setup03a-corpus-v1",
+            "watch_enabled": true
+          }
+        },
+        "kv_revision": 24
+      }
+    },
+    {
+      "name": "repeated_successful_remove_is_not_found",
+      "passed": true,
+      "detail": {
+        "desired_changed": false,
+        "runtime_changed": false,
+        "restart_required": false,
+        "instance_name": "doc-source-setup03a-corpus-v1",
+        "removed": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "no enabled source component named \"doc-source-setup03a-corpus-v1\" is registered"
+        },
+        "timestamp": "2026-10-01T05:55:07.70949-05:00"
+      }
+    },
+    {
+      "name": "desired_remove_checked_exit",
+      "passed": true,
+      "detail": {
+        "pid": 58363,
+        "forced": false,
+        "observed": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "disabled_producer_absent_after_restart",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-removal-sibling",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 11,
+        "timestamp": "2026-10-01T05:55:37.832879-05:00"
+      }
+    },
+    {
+      "name": "disabled_envelope_survives_restart",
+      "passed": true,
+      "detail": {
+        "envelope": {
+          "type": "processor",
+          "name": "doc-source",
+          "enabled": false,
+          "config": {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "org": "setup03a",
+            "paths": [
+              "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/target"
+            ],
+            "ports": {
+              "outputs": [
+                {
+                  "name": "graph.ingest",
+                  "required": true,
+                  "description": "Entity state updates for graph ingestion",
+                  "config": {
+                    "kind": "jetstream",
+                    "stream_name": "GRAPH",
+                    "subjects": [
+                      "graph.ingest.entity"
+                    ]
+                  }
+                }
+              ]
+            },
+            "project": "setup03a-corpus-v1",
+            "watch_enabled": true
+          }
+        },
+        "kv_revision": 24
+      }
+    },
+    {
+      "name": "removed_boot_has_no_private_lifecycle_bucket",
+      "passed": true,
+      "detail": {
+        "bucket": "SEMSOURCE_SOURCE_LIFECYCLE",
+        "present": false
+      }
+    },
+    {
+      "name": "removal_retains_exact_target_sibling_facts_and_content",
+      "passed": true,
+      "detail": {
+        "ast_reseed_metadata": {
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.alpha": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.beta": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.repo.setup03a-corpus-v1": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.beta-greet-go": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Run": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.beta-greet-go-Greet": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:07-05:00"
+          }
+        },
+        "unchanged_bodies": 7,
+        "unchanged_entities": 15
+      }
+    },
+    {
+      "name": "removed_graph.lifecycle.source_unavailable",
+      "passed": true,
+      "detail": {
+        "body": {
+          "error": {
+            "code": "SOURCE_LIFECYCLE_UNAVAILABLE",
+            "message": "source lifecycle projection is unavailable"
+          }
+        },
+        "headers": null
+      }
+    },
+    {
+      "name": "removed_graph.lifecycle.run_unavailable",
+      "passed": true,
+      "detail": {
+        "body": {
+          "message": "SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable"
+        },
+        "headers": {
+          "X-Error-Class": [
+            "transient"
+          ],
+          "X-Status": [
+            "error"
+          ]
+        }
+      }
+    },
+    {
+      "name": "removed_lifecycle_http_gone",
+      "passed": true,
+      "detail": {
+        "body": {
+          "error": {
+            "code": "SOURCE_LIFECYCLE_UNAVAILABLE",
+            "message": "source lifecycle projection is unavailable"
+          }
+        },
+        "status": 410
+      }
+    },
+    {
+      "name": "removed_refusals_preserve_target_revisions",
+      "passed": true,
+      "detail": {
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.a-md-0000": 12,
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.chunk.b-md-0000": 5,
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.a-md": 1,
+        "setup03a.semsource-bbc69b.setup03a-corpus-v1.web.doc.b-md": 6
+      }
+    },
+    {
+      "name": "desired_readd_receipt",
+      "passed": true,
+      "detail": {
+        "components": [
+          {
+            "created": true,
+            "factory_name": "doc-source",
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "source_type": "docs"
+          }
+        ],
+        "desired_changed": true,
+        "projection_status": "unavailable",
+        "ready_when": "after application restart: source_status.phase in ['watching', 'idle']",
+        "restart_required": true,
+        "runtime_changed": false,
+        "status_subject": "graph.ingest.status",
+        "timestamp": "2026-10-01T05:55:38.029391-05:00"
+      }
+    },
+    {
+      "name": "readd_waits_for_next_boot",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-removal-sibling",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 11,
+        "timestamp": "2026-10-01T05:55:37.832879-05:00"
+      }
+    },
+    {
+      "name": "readd_retains_enabled_desired_envelope",
+      "passed": true,
+      "detail": {
+        "envelope": {
+          "type": "processor",
+          "name": "doc-source",
+          "enabled": true,
+          "config": {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "org": "setup03a",
+            "paths": [
+              "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/target"
+            ],
+            "ports": {
+              "outputs": [
+                {
+                  "name": "graph.ingest",
+                  "required": true,
+                  "description": "Entity state updates for graph ingestion",
+                  "config": {
+                    "kind": "jetstream",
+                    "stream_name": "GRAPH",
+                    "subjects": [
+                      "graph.ingest.entity"
+                    ]
+                  }
+                }
+              ]
+            },
+            "project": "setup03a-corpus-v1",
+            "watch_enabled": true
+          }
+        },
+        "kv_revision": 26
+      }
+    },
+    {
+      "name": "desired_readd_checked_exit",
+      "passed": true,
+      "detail": {
+        "pid": 58489,
+        "forced": false,
+        "observed": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "readded_producer_admitted_after_restart",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-removal-sibling",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          },
+          {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 4,
+            "offered_total": 4,
+            "delivered_total": 4,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 2,
+              "web.doc": 2
+            }
+          }
+        ],
+        "total_entities": 15,
+        "timestamp": "2026-10-01T05:56:08.160732-05:00"
+      }
+    },
+    {
+      "name": "enabled_envelope_survives_restart",
+      "passed": true,
+      "detail": {
+        "envelope": {
+          "type": "processor",
+          "name": "doc-source",
+          "enabled": true,
+          "config": {
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "org": "setup03a",
+            "paths": [
+              "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/source/target"
+            ],
+            "ports": {
+              "outputs": [
+                {
+                  "name": "graph.ingest",
+                  "required": true,
+                  "description": "Entity state updates for graph ingestion",
+                  "config": {
+                    "kind": "jetstream",
+                    "stream_name": "GRAPH",
+                    "subjects": [
+                      "graph.ingest.entity"
+                    ]
+                  }
+                }
+              ]
+            },
+            "project": "setup03a-corpus-v1",
+            "watch_enabled": true
+          }
+        },
+        "kv_revision": 26
+      }
+    },
+    {
+      "name": "readded_boot_has_no_private_lifecycle_bucket",
+      "passed": true,
+      "detail": {
+        "bucket": "SEMSOURCE_SOURCE_LIFECYCLE",
+        "present": false
+      }
+    },
+    {
+      "name": "readd_preserves_exact_target_sibling_facts_and_content",
+      "passed": true,
+      "detail": {
+        "ast_reseed_metadata": {
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.alpha": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.folder.beta": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.code.repo.setup03a-corpus-v1": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.alpha-greet-go": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.file.beta-greet-go": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.alpha-greet-go-Run": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          },
+          "setup03a.semsource-bbc69b.setup03a-corpus-v1.golang.function.beta-greet-go-Greet": {
+            "before_created": "2026-10-01T05:54:37-05:00",
+            "after_created": "2026-10-01T05:55:38-05:00"
+          }
+        },
+        "unchanged_bodies": 7,
+        "unchanged_entities": 15
+      }
+    },
+    {
+      "name": "cleanup_checked_process_exit",
+      "passed": true,
+      "detail": {
+        "pid": 58852,
+        "forced": false,
+        "observed": true,
+        "exit_code": 0
+      }
+    }
+  ]
+}

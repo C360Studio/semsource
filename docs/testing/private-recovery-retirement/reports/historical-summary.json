@@ -1,0 +1,114 @@
+{
+  "report": "/tmp/semsource-lifecycle-correction/process-final-historical/report.json",
+  "passed": 9,
+  "total": 10,
+  "failures": [
+    {
+      "name": "removed_parent_and_passage_retained_with_source_removed",
+      "passed": false,
+      "detail": {
+        "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000": {
+          "entity": {
+            "id": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "passage"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "routing.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing"
+              },
+              {
+                "predicate": "source.doc.chunk-index",
+                "object": 0
+              },
+              {
+                "predicate": "code.structure.belongs",
+                "object": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md"
+              },
+              {
+                "predicate": "source.doc.section",
+                "object": "Cobalt lantern routing"
+              },
+              {
+                "predicate": "source.doc.body-store",
+                "object": "objectstore"
+              },
+              {
+                "predicate": "source.doc.body-key",
+                "object": "doc:495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 9
+        },
+        "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md": {
+          "entity": {
+            "id": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "document"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "routing.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "source.doc.file-hash",
+                "object": "495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing"
+              },
+              {
+                "predicate": "source.doc.chunk-count",
+                "object": 1
+              },
+              {
+                "predicate": "entity.role.navigational",
+                "object": "document"
+              },
+              {
+                "predicate": "entity.ontology.class",
+                "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Document"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 1
+        }
+      },
+      "error": "retained entity setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000 marker=<nil>, want source_removed\nretained entity setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md marker=<nil>, want source_removed"
+    }
+  ],
+  "container": "c25b42171d32e21fcf11563a41841ecf12f6619781263c9878e4dbdfbce3239e",
+  "container_inspect_exit": 1,
+  "container_inspect_stderr": "error: no such object: c25b42171d32e21fcf11563a41841ecf12f6619781263c9878e4dbdfbce3239e\n",
+  "container_absent": true,
+  "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+  "application_exit_evidence": "Historical harness preserved unchanged; no per-child checked-exit assertions. Additive suite supplies explicit checked graceful exits."
+}

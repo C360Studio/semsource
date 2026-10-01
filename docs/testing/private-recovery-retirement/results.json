@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "implementation_commit": "5334716b588f6960ed54c8cafdc7033b01088e8e",
+  "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+  "count_policy": "Go test pass/skip test and subtest events counted separately from package completions",
+  "gates": {
+    "unit_race": {
+      "result": "pass",
+      "events": {
+        "pass_test": 2555,
+        "pass_package": 64,
+        "skip_test": 9,
+        "skip_package": 6
+      },
+      "raw_log": "/tmp/semsource-lifecycle-correction/unit-race-final.jsonl",
+      "raw_log_sha256": "a47bcfd68b5db77dcde16d4e82732eef35494dc6d617058e6160c21d75d35427",
+      "skipped_tests": [
+        "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json",
+        "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json",
+        "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json",
+        "TestBoundsSweep",
+        "TestDilutionMargin",
+        "TestDilutionMarginReproducesLiveOrdering",
+        "TestRankProbe",
+        "TestMeasureCrossTUCollisions",
+        "TestParser_RealPlanCard"
+      ]
+    },
+    "integration_race": {
+      "result": "pass",
+      "events": {
+        "pass_test": 2674,
+        "pass_package": 65,
+        "skip_test": 9,
+        "skip_package": 5
+      },
+      "raw_log": "/tmp/semsource-lifecycle-correction/integration-race.jsonl",
+      "raw_log_sha256": "170397170308d7f52c483b509f62efe24cc848335a039fec260d121e058ec132",
+      "skipped_tests": [
+        "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource-example.json",
+        "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/semsource.json",
+        "TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints/tier0-statistical.json",
+        "TestBoundsSweep",
+        "TestDilutionMargin",
+        "TestDilutionMarginReproducesLiveOrdering",
+        "TestRankProbe",
+        "TestMeasureCrossTUCollisions",
+        "TestParser_RealPlanCard"
+      ],
+      "scope_note": "Broad run preceded final KV_WRITE_FAILED diagnostic-only cause fix; final affected paths passed subsequent independent focused race/integration runs recorded in reviews."
+    },
+    "e2e_local": {
+      "result": "pass",
+      "events": {
+        "pass_test": 7,
+        "pass_package": 1
+      },
+      "raw_log": "/tmp/semsource-lifecycle-correction/e2e-local.jsonl",
+      "raw_log_sha256": "4e1081683da47029b32a4b8eedf02e1da527fa6deea05d18ca4280240c178e30",
+      "skipped_tests": []
+    },
+    "garage": {
+      "result": "pass",
+      "events": {
+        "pass_test": 61,
+        "pass_package": 1
+      },
+      "raw_log": "/tmp/semsource-lifecycle-correction/garage.jsonl",
+      "raw_log_sha256": "63723c75a4d73adae813bb379a1ac0e124399efee4264d4719e187741db34b8f",
+      "skipped_tests": []
+    },
+    "lint": {
+      "result": "pass",
+      "raw_log": "/tmp/semsource-lifecycle-correction/lint-final-clean.log",
+      "raw_log_sha256": "1ee041383260e6dc3476d00e1c0df71fe2cbe621dfe19f4fb24bd79569e14d61"
+    },
+    "workflow_contracts": {
+      "result": "pass",
+      "raw_log": "/tmp/semsource-lifecycle-correction/workflow-contract-tests-final.log",
+      "raw_log_sha256": "ea097649747ed426b40ca6fc02ab1a1e288a6ecb39eee2e736974e6e3045adc8"
+    },
+    "agent_contracts": {
+      "result": "pass",
+      "raw_log": "/tmp/semsource-lifecycle-correction/agents-check-final.log",
+      "raw_log_sha256": "335d7e67b73a564c906aaaebd155158760403e915c512ece7657528b0bd2a1c6"
+    },
+    "openspec": {
+      "result": "pass",
+      "raw_log": "/tmp/semsource-lifecycle-correction/openspec-final.log",
+      "raw_log_sha256": "454eab9d9ce30bc39da024263fc7c484442b654d73599260c42a891d2b79f053"
+    },
+    "critical_path_coverage": {
+      "result": "pass",
+      "report": "critical-coverage.json",
+      "covered_statements": 99,
+      "total_statements": 114,
+      "percent": 86.8
+    },
+    "desired_readback_addendum": {
+      "result": "pass",
+      "review": "reviews/desired-readback.md",
+      "scope": "Test-only addition after qualified5334716; actual ConfigManager envelope/missing/malformed/isolation/disconnected read cases; independent race/vet/revive approval. Production unchanged."
+    }
+  },
+  "process_results": {
+    "bm25_corpus": {
+      "result": "failed",
+      "exit_code": 1,
+      "passed": 61,
+      "total": 63,
+      "report": "reports/bm25-corpus.json",
+      "report_sha256": "95ebf9302c064233f1c607f707472317b665e9a37885784a8123362651a0dfa4",
+      "failures": [
+        {
+          "name": "broker_restart_reingested_exact_relationship",
+          "classification": "known-at-pin",
+          "tracking": [
+            "https://github.com/C360Studio/semstreams/issues/1442",
+            "https://github.com/C360Studio/semengine/issues/15"
+          ],
+          "error": "calls=[setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+        },
+        {
+          "name": "broker_restart_reingested_exact_content",
+          "classification": "known-at-pin",
+          "tracking": [
+            "https://github.com/C360Studio/semstreams/issues/1442",
+            "https://github.com/C360Studio/semengine/issues/15"
+          ],
+          "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+        }
+      ],
+      "cleanup_report": "reports/bm25-cleanup.json"
+    },
+    "desired_contract": {
+      "result": "pass",
+      "exit_code": 0,
+      "elapsed_seconds": 213.3,
+      "cases": [
+        {
+          "case": "original",
+          "result": "pass",
+          "passed": 33,
+          "total": 33,
+          "report": "reports/desired-original.json",
+          "report_sha256": "cedefebe1f34b22bbfb808dd1c6e3f71010fd4a3c81d19d6aa51695239f340d2",
+          "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+          "failures": []
+        },
+        {
+          "case": "runtime_added",
+          "result": "pass",
+          "passed": 37,
+          "total": 37,
+          "report": "reports/desired-runtime_added.json",
+          "report_sha256": "b08b7507013bd1ef5b715d9e362f5e617ccca0f877bf5bb71cb1a282571da213",
+          "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+          "failures": []
+        }
+      ],
+      "checked_application_exits": 7,
+      "all_exits_observed_unforced_zero": true,
+      "cleanup_report": "reports/desired-summary.json"
+    },
+    "historical_source_removal": {
+      "result": "failed",
+      "exit_code": 1,
+      "passed": 9,
+      "total": 10,
+      "report": "reports/historical-removal.json",
+      "report_sha256": "05b6ca3714f44e0821fd8d7302a0ef5ed4f92359a60ee04ab160c6859c3a7693",
+      "cleanup_report": "reports/historical-summary.json",
+      "failures": [
+        {
+          "name": "removed_parent_and_passage_retained_with_source_removed",
+          "classification": "intentional withdrawal of unsupported private source projection; #215 remains deferred",
+          "error": "retained entity setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000 marker=<nil>, want source_removed\nretained entity setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md marker=<nil>, want source_removed"
+        }
+      ],
+      "checked_exit_limit": "Historical harness is byte-unchanged and has no per-child checked-exit assertion; use separate desired-contract evidence for that proof."
+    }
+  },
+  "remote_ci": "pending",
+  "scope_limits": [
+    "No full semembed-backed qualification rerun",
+    "No positive source-removal projection or selective reactivation qualification",
+    "No resolution or migration of retained legacy recovery state",
+    "Known SemStreams broker-reingestion defect remains failing"
+  ]
+}

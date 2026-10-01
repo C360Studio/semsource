@@ -1,0 +1,603 @@
+{
+  "corpus_version": "1",
+  "profile": "bm25-source-removal",
+  "semengine_slices": [
+    0,
+    1
+  ],
+  "started": "2026-10-01T10:58:10.748283Z",
+  "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+  "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+  "configuration": {
+    "graph": {
+      "coalesce_ms": 200,
+      "embedder_type": "bm25",
+      "gateway_bind": "127.0.0.1:57933",
+      "index_workers": 4
+    },
+    "http_port": 57930,
+    "metrics": {
+      "port": 57931
+    },
+    "namespace": "setup03a",
+    "source_roots": [
+      "/tmp/semsource-lifecycle-correction/process-final-historical/source"
+    ],
+    "sources": [
+      {
+        "languages": [
+          "go"
+        ],
+        "path": "/tmp/semsource-lifecycle-correction/process-final-historical/source",
+        "project": "setup03a",
+        "type": "ast",
+        "version": "corpus-v1",
+        "watch": true
+      },
+      {
+        "paths": [
+          "/tmp/semsource-lifecycle-correction/process-final-historical/source/docs"
+        ],
+        "project": "setup03a-docs",
+        "type": "docs",
+        "watch": true
+      }
+    ],
+    "websocket_bind": "127.0.0.1:57932"
+  },
+  "nats_container": "c25b42171d32e21fcf11563a41841ecf12f6619781263c9878e4dbdfbce3239e",
+  "observations": [
+    {
+      "name": "removal_initial_settled_sources",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-setup03a-docs",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 11,
+        "timestamp": "2026-10-01T05:58:41.087778-05:00"
+      }
+    },
+    {
+      "name": "governed_identity_authority",
+      "passed": true,
+      "detail": {
+        "expected_entities": {
+          "farewell": "setup03a.semsource-1fac1f.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "greet_alpha": "setup03a.semsource-1fac1f.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "greet_beta": "setup03a.semsource-1fac1f.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "run": "setup03a.semsource-1fac1f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+        },
+        "platform": "semsource-1fac1f",
+        "wire": {
+          "data": {
+            "matches": [
+              {
+                "entity_id": "setup03a.semsource-1fac1f.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                "matched_name": "Run",
+                "predicate": "dc.terms.title",
+                "exact_case": true
+              }
+            ]
+          },
+          "timestamp": "2026-10-01T05:58:41.214074-05:00"
+        }
+      }
+    },
+    {
+      "name": "removal_initial_document_entities",
+      "passed": true,
+      "detail": {
+        "entities": [
+          {
+            "id": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+            "triples": [
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.type",
+                "object": "passage",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.file-path",
+                "object": "routing.md",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.chunk-index",
+                "object": 0,
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "code.structure.belongs",
+                "object": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1,
+                "datatype": "@id"
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.section",
+                "object": "Cobalt lantern routing",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.body-store",
+                "object": "objectstore",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "source.doc.body-key",
+                "object": "doc:495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+                "predicate": "entity.indexing.profile",
+                "object": "content",
+                "source": "graph-ingest-indexing-profile",
+                "timestamp": "2026-10-01T05:58:11.103737-05:00",
+                "confidence": 1
+              }
+            ],
+            "storage_ref": {
+              "storage_instance": "objectstore",
+              "key": "doc:495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256",
+              "content_type": "text/markdown",
+              "size": 153
+            },
+            "message_type": {
+              "domain": "semsource",
+              "category": "entity",
+              "version": "v1"
+            },
+            "version": 1,
+            "updated_at": "0001-01-01T00:00:00Z"
+          },
+          {
+            "id": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+            "triples": [
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.type",
+                "object": "document",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.file-path",
+                "object": "routing.md",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.file-hash",
+                "object": "495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.chunk-count",
+                "object": 1,
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "entity.role.navigational",
+                "object": "document",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "entity.ontology.class",
+                "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Document",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:58:11.084592Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+                "predicate": "entity.indexing.profile",
+                "object": "content",
+                "source": "graph-ingest-indexing-profile",
+                "timestamp": "2026-10-01T05:58:11.103677-05:00",
+                "confidence": 1
+              }
+            ],
+            "message_type": {
+              "domain": "semsource",
+              "category": "entity",
+              "version": "v1"
+            },
+            "version": 1,
+            "updated_at": "0001-01-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "removal_receipt",
+      "passed": true,
+      "detail": {
+        "projection_status": "unavailable",
+        "desired_changed": true,
+        "runtime_changed": false,
+        "restart_required": true,
+        "instance_name": "doc-source-setup03a-docs",
+        "removed": true,
+        "timestamp": "2026-10-01T05:58:41.242965-05:00"
+      }
+    },
+    {
+      "name": "removal_deferred_until_restart",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-setup03a-docs",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 11,
+        "timestamp": "2026-10-01T05:58:41.087778-05:00"
+      }
+    },
+    {
+      "name": "removal_activated",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 9,
+        "timestamp": "2026-10-01T05:58:41.397764-05:00"
+      }
+    },
+    {
+      "name": "removed_parent_and_passage_retained_with_source_removed",
+      "passed": false,
+      "detail": {
+        "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000": {
+          "entity": {
+            "id": "setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "passage"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "routing.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing"
+              },
+              {
+                "predicate": "source.doc.chunk-index",
+                "object": 0
+              },
+              {
+                "predicate": "code.structure.belongs",
+                "object": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md"
+              },
+              {
+                "predicate": "source.doc.section",
+                "object": "Cobalt lantern routing"
+              },
+              {
+                "predicate": "source.doc.body-store",
+                "object": "objectstore"
+              },
+              {
+                "predicate": "source.doc.body-key",
+                "object": "doc:495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 9
+        },
+        "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md": {
+          "entity": {
+            "id": "setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md",
+            "version": 1,
+            "triples": [
+              {
+                "predicate": "source.doc.type",
+                "object": "document"
+              },
+              {
+                "predicate": "source.doc.file-path",
+                "object": "routing.md"
+              },
+              {
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown"
+              },
+              {
+                "predicate": "source.doc.file-hash",
+                "object": "495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256"
+              },
+              {
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing"
+              },
+              {
+                "predicate": "source.doc.chunk-count",
+                "object": 1
+              },
+              {
+                "predicate": "entity.role.navigational",
+                "object": "document"
+              },
+              {
+                "predicate": "entity.ontology.class",
+                "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Document"
+              },
+              {
+                "predicate": "entity.indexing.profile",
+                "object": "content"
+              }
+            ]
+          },
+          "kvRevision": 1
+        }
+      },
+      "error": "retained entity setup03a.semsource-1fac1f.setup03a-docs.web.chunk.routing-md-0000 marker=\u003cnil\u003e, want source_removed\nretained entity setup03a.semsource-1fac1f.setup03a-docs.web.doc.routing-md marker=\u003cnil\u003e, want source_removed"
+    },
+    {
+      "name": "readd_receipt_same_disabled_handle",
+      "passed": true,
+      "detail": {
+        "projection_status": "unavailable",
+        "desired_changed": true,
+        "runtime_changed": false,
+        "restart_required": true,
+        "components": [
+          {
+            "instance_name": "doc-source-setup03a-docs",
+            "factory_name": "doc-source",
+            "source_type": "docs",
+            "created": true
+          }
+        ],
+        "status_subject": "graph.ingest.status",
+        "ready_when": "after application restart: source_status.phase in ['watching', 'idle']",
+        "timestamp": "2026-10-01T05:59:01.513427-05:00"
+      }
+    },
+    {
+      "name": "readd_deferred_until_restart",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 9,
+        "timestamp": "2026-10-01T05:58:41.397764-05:00"
+      }
+    },
+    {
+      "name": "readd_activated_after_restart",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-setup03a-docs",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 0,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 3,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 11,
+        "timestamp": "2026-10-01T05:59:01.67571-05:00"
+      }
+    }
+  ]
+}

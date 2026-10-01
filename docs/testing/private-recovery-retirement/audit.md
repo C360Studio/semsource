@@ -4,7 +4,7 @@ The 2026-10-01 audit inspected SemSource `533b62a74eae2ec93776cc316f69d9b55bf91c
 code matches merged #213 (`3604a9ce`) and the earlier `ce241a5` implementation. The independent Go,
 evidence/history and architect reviews withdrew architectural approval of the private recovery design.
 The owner authorized removal under [PR #223][pr], without a replacement recovery system. The approved
-[corrective contract][design] is separate from [pending implementation evidence](README.md#evidence-status).
+[corrective contract][design] is separate from [implementation and qualification evidence](README.md#evidence-status).
 
 ## What the earlier review missed
 
@@ -78,6 +78,17 @@ old remote effect resolved. There is no compatibility recovery worker or overrid
 
 The broker-generation (#15), RPC boundary (#16) and desired-config (#17) findings remain independent.
 This reassessment does not erase the original known-at-pin failures or authorize substrate changes.
+
+## Corrective review boundary
+
+Corrective production is committed at `5334716b588f6960ed54c8cafdc7033b01088e8e`. Independent component
+and graph reviews approve removal of the private authority, the bounded read-only startup refusal,
+truthful desired-state receipts and retained ordinary staleness. A separate independent review approves
+the additive process oracle and CI wiring. These approvals do not reinstate the withdrawn architecture,
+qualify positive source projection/freshness or resolve historical unknown effects. Final local evidence
+records desired-state passes (33/33 and 37/37), known broker-restart failures (61/63 BM25) and the
+intentional missing-marker failure (9/10 unchanged removal probe). Hosted CI is still separate in
+[the evidence status](README.md#evidence-status).
 
 ## Audit artifact identity
 

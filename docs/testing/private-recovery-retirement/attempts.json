@@ -1,0 +1,243 @@
+{
+  "policy": "Earlier failures remain failures; only new harness assertions changed, with independent rereview. Existing corpus files and historical ledgers are unchanged.",
+  "attempts": [
+    {
+      "raw_report": "/tmp/semsource-lifecycle-correction/process-before/TestDesiredSourceLifecycleWithoutRecovery-original/report.json",
+      "raw_report_sha256": "a4a745085040e97874c0e562b0cba59d1632360f70bbb95cf7d1955b849b4325",
+      "binary_sha256": "09170e24f60af0ead2b209ce58bf9a4c4446316cc77e9c5fbe6f8a2da63b9421",
+      "passed": 7,
+      "total": 12,
+      "classification": "Expected failing-first contract check against the old private-recovery binary",
+      "failed_observations": [
+        {
+          "name": "fresh_boot_has_no_private_lifecycle_bucket",
+          "passed": false,
+          "error": "fresh runtime created private lifecycle storage"
+        },
+        {
+          "name": "initial_graph.lifecycle.source_unavailable",
+          "passed": false,
+          "detail": "{\"result\":{\"enumerated\":0,\"marked\":0,\"cleared\":0,\"complete\":false},\"error\":{\"code\":\"ownership_mismatch\",\"message\":\"source lifecycle projection requires the process-local authorized owner\",\"retryable\":true}}",
+          "error": "expected explicit projection refusal: RPC graph.lifecycle.source: {\"result\":{\"enumerated\":0,\"marked\":0,\"cleared\":0,\"complete\":false},\"error\":{\"code\":\"ownership_mismatch\",\"message\":\"source lifecycle projection requires the process-local authorized owner\",\"retryable\":true}}"
+        },
+        {
+          "name": "initial_graph.lifecycle.run_unavailable",
+          "passed": false,
+          "detail": "{\"message\":\"source_removed requires the authorized source lifecycle owner\"}",
+          "error": "expected explicit projection refusal: <nil>"
+        },
+        {
+          "name": "initial_lifecycle_http_gone",
+          "passed": false,
+          "detail": "source lifecycle intent not found\n",
+          "error": "lifecycle status=404, want 410/unavailable"
+        },
+        {
+          "name": "desired_remove_receipt",
+          "passed": false,
+          "detail": {
+            "desired_changed": true,
+            "generation": 1,
+            "instance_name": "doc-source-setup03a-corpus-v1",
+            "projection_phase": "pending",
+            "removed": true,
+            "restart_required": true,
+            "runtime_changed": false,
+            "timestamp": "2026-10-01T05:42:24.172154-05:00"
+          },
+          "error": "desired change omitted truthful activation/projection result"
+        }
+      ]
+    },
+    {
+      "raw_report": "/tmp/semsource-lifecycle-correction/process-corrected/TestDesiredSourceLifecycleWithoutRecovery-original/report.json",
+      "raw_report_sha256": "24714b3c346f88f24b2f9c71c2f07393966f6066507ea056709503e7d9133e40",
+      "binary_sha256": "14dfc00d2e710dd70f636b1234544e36fa0310cf1964213c23d3bf8bed3b156a",
+      "passed": 30,
+      "total": 32,
+      "classification": "Failed preliminary new harness: legacy RPC error envelope decoder was wrong; only the new test was corrected",
+      "failed_observations": [
+        {
+          "name": "initial_graph.lifecycle.run_unavailable",
+          "passed": false,
+          "detail": "{\"message\":\"SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable\"}",
+          "error": "expected explicit projection refusal: <nil>"
+        },
+        {
+          "name": "removed_graph.lifecycle.run_unavailable",
+          "passed": false,
+          "detail": "{\"message\":\"SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable\"}",
+          "error": "expected explicit projection refusal: <nil>"
+        }
+      ]
+    },
+    {
+      "raw_report": "/tmp/semsource-lifecycle-correction/process-corrected/TestDesiredSourceLifecycleWithoutRecovery-runtime_added/report.json",
+      "raw_report_sha256": "05898cddef25066a7f1c18ea8d1f844eabc413243ec5ea5dc06d27d84f17d960",
+      "binary_sha256": "14dfc00d2e710dd70f636b1234544e36fa0310cf1964213c23d3bf8bed3b156a",
+      "passed": 34,
+      "total": 36,
+      "classification": "Failed preliminary new harness: legacy RPC error envelope decoder was wrong; only the new test was corrected",
+      "failed_observations": [
+        {
+          "name": "initial_graph.lifecycle.run_unavailable",
+          "passed": false,
+          "detail": "{\"message\":\"SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable\"}",
+          "error": "expected explicit projection refusal: <nil>"
+        },
+        {
+          "name": "removed_graph.lifecycle.run_unavailable",
+          "passed": false,
+          "detail": "{\"message\":\"SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable\"}",
+          "error": "expected explicit projection refusal: <nil>"
+        }
+      ]
+    },
+    {
+      "raw_report": "/tmp/semsource-lifecycle-correction/corpus-bm25/report.json",
+      "raw_report_sha256": "b3c258294b72a70dc756faadb66b274370e556371d1ed0ee2994a041008b5b87",
+      "binary_sha256": "14dfc00d2e710dd70f636b1234544e36fa0310cf1964213c23d3bf8bed3b156a",
+      "passed": 61,
+      "total": 63,
+      "classification": "Pre-final binary: unchanged main corpus retains the same two known-at-pin failures",
+      "failed_observations": [
+        {
+          "name": "broker_restart_reingested_exact_relationship",
+          "passed": false,
+          "detail": {
+            "entity": {
+              "id": "setup03a.semsource-66b131.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "version": 5,
+              "triples": [
+                {
+                  "predicate": "code.artifact.type",
+                  "object": "function"
+                },
+                {
+                  "predicate": "dc.terms.title",
+                  "object": "Run"
+                },
+                {
+                  "predicate": "code.artifact.path",
+                  "object": "alpha/greet.go"
+                },
+                {
+                  "predicate": "code.artifact.project",
+                  "object": "setup03a"
+                },
+                {
+                  "predicate": "code.artifact.version",
+                  "object": "corpus-v1"
+                },
+                {
+                  "predicate": "code.artifact.language",
+                  "object": "golang"
+                },
+                {
+                  "predicate": "code.artifact.visibility",
+                  "object": "public"
+                },
+                {
+                  "predicate": "code.artifact.exported",
+                  "object": "true"
+                },
+                {
+                  "predicate": "code.metric.start-line",
+                  "object": 7
+                },
+                {
+                  "predicate": "code.metric.end-line",
+                  "object": 7
+                },
+                {
+                  "predicate": "code.metric.lines",
+                  "object": 1
+                },
+                {
+                  "predicate": "code.doc.comment",
+                  "object": "Run uses Greet to select the cobalt lantern route.\n"
+                },
+                {
+                  "predicate": "code.doc.signature",
+                  "object": "func Run() string"
+                },
+                {
+                  "predicate": "code.structure.belongs",
+                  "object": "setup03a.semsource-66b131.setup03a-corpus-v1.golang.file.alpha-greet-go"
+                },
+                {
+                  "predicate": "code.relationship.calls",
+                  "object": "setup03a.semsource-66b131.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+                },
+                {
+                  "predicate": "code.relationship.returns",
+                  "object": "builtin:string"
+                },
+                {
+                  "predicate": "dc.terms.created",
+                  "object": "2026-10-01T05:44:22-05:00"
+                },
+                {
+                  "predicate": "code.body.store",
+                  "object": "objectstore"
+                },
+                {
+                  "predicate": "code.body.key",
+                  "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+                },
+                {
+                  "predicate": "entity.ontology.class",
+                  "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+                },
+                {
+                  "predicate": "entity.indexing.profile",
+                  "object": "content"
+                }
+              ]
+            },
+            "kvRevision": 31
+          },
+          "error": "calls=[setup03a.semsource-66b131.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-66b131.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+        },
+        {
+          "name": "broker_restart_reingested_exact_content",
+          "passed": false,
+          "detail": {
+            "nodes": [
+              {
+                "Name": "Run",
+                "Path": "alpha/greet.go",
+                "Body": "func Run() string { return Farewell() }",
+                "Handle": "setup03a.semsource-66b131.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                "body_reason": "",
+                "relations": {
+                  "callee": [
+                    {
+                      "Name": "Farewell",
+                      "Path": "alpha/greet.go"
+                    }
+                  ],
+                  "container": [
+                    {
+                      "Name": "greet.go",
+                      "Path": "alpha/greet.go"
+                    }
+                  ]
+                }
+              }
+            ],
+            "deferred": false,
+            "unhydrated": null,
+            "misses": null,
+            "index": {
+              "ready": true,
+              "state": "ready",
+              "bootstrap_complete": true
+            }
+          },
+          "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+        }
+      ]
+    }
+  ]
+}
