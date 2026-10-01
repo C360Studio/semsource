@@ -187,8 +187,9 @@ regressions; no lexical, neural or generation claim is made by this plan.
 Architect inventory and an independent Go/component reviewer approve this consumer plan. The reviewer
 checked the public proof paths, exclusive dependency boundary, no-embedder readiness, restart/config
 obligations, resource ownership and 03B stop point. Strict OpenSpec, diff and line-length checks pass.
-No engine or consumer runtime tests were performed for this documentation-only update. This review
-admits no implementation, engine API, Tier 0 result or mainline substrate change.
+The reviewer ran documentation checks only; passing CI on the unchanged SemStreams reference does not
+qualify an engine workload. This review admits no implementation, engine API, Tier 0 result or
+mainline substrate change.
 
 [source221]: https://github.com/C360Studio/semsource/issues/221
 [engine8]: https://github.com/C360Studio/semengine/issues/8
