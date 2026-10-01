@@ -1,0 +1,28 @@
+{
+  "scope": "All six newly added production Go files; no function excluded",
+  "covered_statements": 99,
+  "total_statements": 114,
+  "percent": 86.8,
+  "minimum_percent": 80,
+  "passed": true,
+  "profiles": {
+    "critical-coverage-final.out": "2da3330437e13681642a531b4c2d8aaa5e94a06c56d4c4cf9170a94e1ab1ff53",
+    "process-coverage-original.out": "5f4c3494ecbfaf8048f60f9a2c876656d9ef971bf51e073ccad97941a60397a2"
+  },
+  "unit_integration_only_percent": 79.8,
+  "process_supplement": "Separate instrumented binary; original-source case33/33 exit0,92.01s; covers composition-root wiring. Qualified non-instrumented binary and all primary reports are unchanged.",
+  "package_limit": "This percentage applies to all newly added production files, not the whole repository.",
+  "union_profile": "critical-path.cover",
+  "union_profile_sha256": "849718b56bb08526e1626ef8e4432fb127920cd62e701e7e31b71fb4c57d801b",
+  "instrumented_process": {
+    "production_source_commit": "5334716b588f6960ed54c8cafdc7033b01088e8e",
+    "binary_sha256": "0cd4a9bbac31d7a4ea5c9f1a554f8ff18ca50ef1479dd8bee4704ad1b2b29c61",
+    "raw_report_sha256": "59d817f4bb2a8451427e82ac1e6381408c2051b15659025bf0b19dad1bc47385",
+    "raw_report": "/tmp/semsource-lifecycle-correction/process-coverage-original/TestDesiredSourceLifecycleWithoutRecovery-original/report.json",
+    "passed": 33,
+    "total": 33,
+    "exit_code": 0,
+    "container_id": "3e9bf839bcc8d81d0520d3a0d4c8a95b5cb5be9a42852e3074def526a48a0311",
+    "container_absent": true
+  }
+}

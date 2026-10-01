@@ -1,0 +1,22 @@
+{
+  "handler/audio/handler.go": "2c290cc80b29f68c414bae03432b64f5466425288dfb5a42aba2cd726b60582f",
+  "handler/cfgfile/handler.go": "ae37a46e7ea97470aad3b0d5708760016d9e8f3a41c5b5b5baaa118ee314fbde",
+  "handler/doc/entities.go": "97890bf0be654acc2df0a77cb8586e21bcca36d83cc80b0fdd289ff27f9c0c98",
+  "handler/image/handler.go": "a9fbdc4f09f6d6d0d3f7e1bd68308f51d3d23e5ffada69db0040c4f2fd08f690",
+  "handler/objectstore/handler.go": "baf6aef80627bb6388d53db661d61a4510eca1d4737520cd9c912c86e73875ed",
+  "handler/video/handler.go": "c3ef8df7d13eeb9e7cd41c840ea85cc3ce8418e604f57a49f596f135cbb88d5e",
+  "internal/entitypub/metrics.go": "3e5ae6ea81ef0bd54f0e63c02ac6a527a4b6f515016e8f9ba8e25103ee7a3ac6",
+  "internal/entitypub/payload_ownership.go": "7e1044679fc0025720b0f7aa3b4e05d0390b5151c2538b03e258a6d2bc05055e",
+  "internal/entitypub/payload_ownership_test.go": "4ed2663bab281d55bef7862ff6ef8e21524d741cd1b0afd553ba4795237ad80a",
+  "internal/entitypub/publisher.go": "82b5d32370cb943838d9f9a3e4841243219bf586c09f9f049d7dd19f35f35c77",
+  "processor/ast-source/bodystore.go": "2c9ee089d67b9d29997791d2534859cd64fb2539f76311547bd3504cf38eab65",
+  "processor/ast-source/component.go": "d5084d64ea40a23fb5ea2f2da951b1b736fb8f611192ac98fb074303cbb0a9ff",
+  "processor/audio-source/component.go": "1e158b58e064ef2aeb80e5ee8bb345e9f85b63243cacfb286beb0ab5ce2ccfb1",
+  "processor/cfgfile-source/component.go": "d9371edf8a482f9e4edebcb9d6834ae0212be307a07a00eea70906c50b711f3f",
+  "processor/doc-source/component.go": "e16b77b82088ded13891928b5aa68c3e384eb2da0b03ca3814b65fe2b8fcaf9e",
+  "processor/git-source/component.go": "a2bebd251fa0fe398c06058f243e4dce4b39e7ebbce334153a5323d967c8341f",
+  "processor/image-source/component.go": "c737dd401cbda3d7e64a009a5dd53b6ff83ceaccd2e67b047b35333ed65ef7c2",
+  "processor/objectstore-source/component.go": "acf58fecbfc09727f361449505f10572903e56d357a430c7d600194042f7d353",
+  "processor/url-source/component.go": "b125e4596a538ac1c76b6cb104cf3c4d1d388e10f321756fee64bcd16be1e6b2",
+  "processor/video-source/component.go": "abba17b15ff1e899164ef02936d7f8b7de796ce2ca376eeb64ad56996ab0f2ab"
+}

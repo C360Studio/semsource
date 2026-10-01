@@ -1,0 +1,14 @@
+{
+  "corpus_version": "removal-replay-v1",
+  "profile": "bm25-removal-replay",
+  "semengine_slices": [
+    0,
+    1
+  ],
+  "started": "2026-10-01T11:16:25.833924436Z",
+  "binary_sha256": "ced67cd60336b30061294eeb494ec4483c39ebdc443db69a565f6995b2a196ec",
+  "corpus_sha256": "c972f68cc82863046b147a5a68fc1e48a75fa016768afda9113da264e5f416bb",
+  "configuration": null,
+  "nats_container": "Unable to find image 'nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66' locally\ndocker.io/library/nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66: Pulling from library/nats\nf7ee36c9aa34: Already exists\nb371e0fcdf52: Pulling fs layer\nf29ecd94035e: Pulling fs layer\n33c8286ca67b: Pulling fs layer\nf29ecd94035e: Verifying Checksum\nf29ecd94035e: Download complete\n33c8286ca67b: Verifying Checksum\n33c8286ca67b: Download complete\nb371e0fcdf52: Verifying Checksum\nb371e0fcdf52: Download complete\nb371e0fcdf52: Pull complete\nf29ecd94035e: Pull complete\n33c8286ca67b: Pull complete\nDigest: sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66\nStatus: Downloaded newer image for nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66\n4c4c8b1c9a8e02272805dbec5a0a9cb381e595c638263da07ed52e8beaab7737",
+  "observations": null
+}

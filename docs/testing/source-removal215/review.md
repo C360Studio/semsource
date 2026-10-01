@@ -1,5 +1,14 @@
 # Independent source-removal implementation review
 
+## Architectural approval withdrawn — 2026-10-01
+
+The independent reassessment and owner ruling withdraw approval of the private recovery architecture.
+The earlier review below checked implementation against its selected contract; it did not prove that
+additional persistent authority met SemStreams #1147's settlement-first necessity test. Its commands,
+results and findings remain historical facts. See the [audit](../private-recovery-retirement/audit.md)
+and [corrective contract](../../../openspec/changes/remove-private-source-recovery/design.md).
+Corrective implementation and final review are pending; no existing unknown outcome is declared safe.
+
 The scoped review below is the implementation-era record. See the later
 [baseline-only merge-readiness approval](../setup-03a/merge-readiness.md) under the owner ruling.
 That disposition does not complete #215 or change any failed qualification result.

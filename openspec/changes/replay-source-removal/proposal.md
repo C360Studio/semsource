@@ -1,5 +1,14 @@
 # Durable source-removal projection
 
+## Superseded direction — 2026-10-01
+
+The owner withdrew architectural approval of this private recovery design and authorized removal in
+[PR #223](https://github.com/C360Studio/semsource/pull/223). The approved
+[corrective change](../remove-private-source-recovery/proposal.md) introduces no replacement recovery
+system. This proposal remains historical evidence; it no longer authorizes new journal/receipt/fence
+or replay work. Source-removal projection and positive reactivation are explicitly deferred.
+See the [reassessment record](../../../docs/testing/private-recovery-retirement/audit.md).
+
 ## Why
 
 Issue #215 is a retained-graph correctness gap. Desired source removal survives restart, but the

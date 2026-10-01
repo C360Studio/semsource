@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/c360studio/semsource/internal/seedproof"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -122,7 +121,6 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 
 			content, readErr := os.ReadFile(path)
 			if readErr != nil {
-				seedproof.Report(ctx, readErr)
 				h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
 				return nil
 			}
@@ -131,7 +129,6 @@ func (h *ConfigHandler) Ingest(ctx context.Context, cfg handler.SourceConfig) ([
 			entities = append(entities, parsed...)
 			return nil
 		})
-		seedproof.Report(ctx, err)
 		if err != nil && err != context.Canceled {
 			return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
 		}
@@ -185,19 +182,14 @@ func (h *ConfigHandler) IngestEntityStates(ctx context.Context, cfg handler.Sour
 
 			content, readErr := os.ReadFile(path)
 			if readErr != nil {
-				seedproof.Report(ctx, readErr)
 				h.logger.Warn("cfgfile: failed to read file", "path", path, "error", readErr)
 				return nil
 			}
 
-			if seedproof.Active(ctx) {
-				seedproof.Report(ctx, configParseError(base, content))
-			}
 			parsed := h.parseFileEntityStates(base, path, content, root, authority, now)
 			states = append(states, parsed...)
 			return nil
 		})
-		seedproof.Report(ctx, err)
 		if err != nil && err != context.Canceled {
 			return nil, fmt.Errorf("cfgfile: walk %s: %w", root, err)
 		}

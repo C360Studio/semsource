@@ -1,0 +1,98 @@
+[
+  {
+    "report": "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-original/report.json",
+    "passed": 33,
+    "total": 33,
+    "failures": [],
+    "checked_exits": [
+      {
+        "name": "desired_remove_checked_exit",
+        "passed": true,
+        "detail": {
+          "pid": 58363,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      },
+      {
+        "name": "desired_readd_checked_exit",
+        "passed": true,
+        "detail": {
+          "pid": 58489,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      },
+      {
+        "name": "cleanup_checked_process_exit",
+        "passed": true,
+        "detail": {
+          "pid": 58852,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      }
+    ],
+    "container": "d6aaff77b44a1ef28c14eae4b8486ecf0526cd99abec262fdaa4ab5c6714862e",
+    "container_inspect_exit": 1,
+    "container_inspect_stderr": "error: no such object: d6aaff77b44a1ef28c14eae4b8486ecf0526cd99abec262fdaa4ab5c6714862e\n",
+    "container_absent": true,
+    "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87"
+  },
+  {
+    "report": "/tmp/semsource-lifecycle-correction/process-final-desired/TestDesiredSourceLifecycleWithoutRecovery-runtime_added/report.json",
+    "passed": 37,
+    "total": 37,
+    "failures": [],
+    "checked_exits": [
+      {
+        "name": "runtime_add_checked_exit",
+        "passed": true,
+        "detail": {
+          "pid": 58894,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      },
+      {
+        "name": "desired_remove_checked_exit",
+        "passed": true,
+        "detail": {
+          "pid": 58915,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      },
+      {
+        "name": "desired_readd_checked_exit",
+        "passed": true,
+        "detail": {
+          "pid": 58966,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      },
+      {
+        "name": "cleanup_checked_process_exit",
+        "passed": true,
+        "detail": {
+          "pid": 59006,
+          "forced": false,
+          "observed": true,
+          "exit_code": 0
+        }
+      }
+    ],
+    "container": "62d1a9ea668efd69ae5cb22e0ff0f1d9b16af89736bf23c1077d358ec5c4df58",
+    "container_inspect_exit": 1,
+    "container_inspect_stderr": "error: no such object: 62d1a9ea668efd69ae5cb22e0ff0f1d9b16af89736bf23c1077d358ec5c4df58\n",
+    "container_absent": true,
+    "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87"
+  }
+]

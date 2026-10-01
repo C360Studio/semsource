@@ -8,13 +8,9 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// systemsForRemovedInstance looks up instanceName's stored component config
-// (before it is deleted) and derives the entity-ID system slug(s) its
-// entities carry, so remove_source can scope the staleness lifecycle trigger
-// (source_removed marking) to exactly what the removed source produced.
-// Returns nil when the instance is unknown or its factory type isn't yet
-// resolvable — a soft miss: unmarked entities on removal was already the
-// pre-existing behavior for those cases, so this is purely additive.
+// systemsForRemovedInstance derives the stored component's entity-ID systems.
+// Unknown handles or unsupported factories return no scope. This helper does
+// not trigger source-removal marking or change desired/runtime membership.
 func systemsForRemovedInstance(instanceName string, store sourcespawn.ConfigStore) []string {
 	if store == nil {
 		return nil

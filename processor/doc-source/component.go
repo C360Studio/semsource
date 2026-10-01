@@ -26,7 +26,6 @@ import (
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/seedloss"
-	"github.com/c360studio/semsource/internal/seedproof"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	source "github.com/c360studio/semsource/source/vocabulary"
@@ -257,37 +256,26 @@ func (c *Component) markRunning() {
 // It runs in its own goroutine; a failure surfaces through the source's
 // last_error and a WARN, because there is no longer a Start to fail.
 func (c *Component) runSeed(ctx context.Context) error {
-	if err := c.publisher.RunInitialSeed(ctx, func(ctx context.Context) error {
-		before := c.ingestErrors.Load()
-
-		// Retry initial ingest — paths may not exist yet if a git clone is still
-		// in progress (repo expansion pattern). We check IsPathReady rather than
-		// just os.Stat because git clone creates the directory before populating it.
-		if err := retry.Do(ctx, retry.Persistent(), func() error {
-			for _, p := range c.config.Paths {
-				if err := workspace.IsPathReady(p); err != nil {
-					// Bounded by retry.Persistent (~30 attempts), but a source that
-					// never reaches its paths seeds nothing at all — surface it once
-					// rather than leaving the whole wait at Debug.
-					c.pathsUnavailable.Enter(c.logger,
-						"source paths are not available yet — seeding cannot start",
-						"path", p, "error", err)
-					return err
-				}
+	// Retry initial ingest — paths may not exist yet if a git clone is still
+	// in progress (repo expansion pattern). We check IsPathReady rather than
+	// just os.Stat because git clone creates the directory before populating it.
+	if err := retry.Do(ctx, retry.Persistent(), func() error {
+		for _, p := range c.config.Paths {
+			if err := workspace.IsPathReady(p); err != nil {
+				// Bounded by retry.Persistent (~30 attempts), but a source that
+				// never reaches its paths seeds nothing at all — surface it once
+				// rather than leaving the whole wait at Debug.
+				c.pathsUnavailable.Enter(c.logger,
+					"source paths are not available yet — seeding cannot start",
+					"path", p, "error", err)
+				return err
 			}
-			return c.ingestOnce(ctx)
-		}); err != nil {
-			return fmt.Errorf("initial doc ingest failed: %w", err)
 		}
-		c.pathsUnavailable.Clear(c.logger, "source paths became available")
-
-		if failed := (c.ingestErrors.Load()) - before; failed > 0 {
-			seedproof.Report(ctx, fmt.Errorf("initial seed had %d enumeration or validation errors", failed))
-		}
-		return nil
+		return c.ingestOnce(ctx)
 	}); err != nil {
-		return err
+		return fmt.Errorf("initial doc ingest failed: %w", err)
 	}
+	c.pathsUnavailable.Clear(c.logger, "source paths became available")
 
 	c.logger.Info("Doc-source initial ingest complete",
 		"paths", c.config.Paths,
@@ -439,8 +427,8 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via entitypub.
-func (c *Component) publishEntity(ctx context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.SendContext(ctx, payload)
+func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
+	return c.publisher.Send(payload)
 }
 
 // notePassageCount records how many passages a document just published and
@@ -609,7 +597,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		DeliveredTotal: c.publisher.Published(),
 		LostTotal:      c.publisher.Lost(),
 		SeedLost:       c.seedLoss.LostSince(c.publisher.Lost()),
-		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors(),
+		ErrorCount:     c.ingestErrors.Load() + c.publisher.Lost(),
 		TypeCounts:     c.distinct.TypeCounts(),
 		// Publisher distress: retrying against a refusing transport reports
 		// no drops and no errors while being functionally stalled (#188).
@@ -751,15 +739,12 @@ func (c *Component) Health() component.HealthStatus {
 	status := "stopped"
 	if running {
 		status = "running"
-		if c.publisher.ReceiptErrors() > 0 {
-			status = "receipt_pending"
-		}
 	}
 
 	return component.HealthStatus{
-		Healthy:    running && c.publisher.ReceiptErrors() == 0,
+		Healthy:    running,
 		LastCheck:  time.Now(),
-		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost() + c.publisher.ReceiptErrors()),
+		ErrorCount: int(c.ingestErrors.Load() + c.publisher.Lost()),
 		Uptime:     time.Since(startTime),
 		Status:     status,
 	}

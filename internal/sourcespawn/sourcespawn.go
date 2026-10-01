@@ -1,6 +1,7 @@
 package sourcespawn
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -225,6 +226,18 @@ func AddWithChecker(
 	results := make([]Result, 0, len(pending))
 	for _, write := range pending {
 		if err := store.PutComponentToKV(ctx, write.name, write.config); err != nil {
+			// ConfigManager can commit KV before its memory application fails.
+			// An optional authoritative read preserves that fact without hiding
+			// the error or continuing later writes in an expanded source.
+			if reader, ok := store.(interface {
+				ReadComponentConfig(context.Context, string) (types.ComponentConfig, bool, error)
+			}); ok {
+				got, exists, readErr := reader.ReadComponentConfig(ctx, write.name)
+				err = errors.Join(err, readErr)
+				if readErr == nil && exists && sameComponentConfig(got, write.config) {
+					results = append(results, write.result)
+				}
+			}
 			return results, &Error{
 				Code:    CodeKVWriteFailed,
 				Message: fmt.Sprintf("put component %q to KV", write.name),
@@ -319,6 +332,12 @@ func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 	}
 	envelope.Enabled = false
 	if err := store.PutComponentToKV(ctx, instanceName, envelope); err != nil {
+		if reader, ok := store.(interface {
+			ReadComponentConfig(context.Context, string) (types.ComponentConfig, bool, error)
+		}); ok {
+			_, _, readErr := reader.ReadComponentConfig(ctx, instanceName)
+			err = errors.Join(err, readErr)
+		}
 		return &Error{
 			Code:    CodeKVWriteFailed,
 			Message: fmt.Sprintf("persist disabled component %q to KV", instanceName),
@@ -326,6 +345,15 @@ func Remove(ctx context.Context, instanceName string, store ConfigStore) error {
 		}
 	}
 	return nil
+}
+
+func sameComponentConfig(a, b types.ComponentConfig) bool {
+	x, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	y, err := json.Marshal(b)
+	return err == nil && bytes.Equal(x, y)
 }
 
 // componentSpec is the internal pre-marshal form of one component to write.

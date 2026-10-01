@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourceauthority"
-	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"strings"
@@ -58,7 +57,7 @@ type Component struct {
 	lastStats    passStats
 
 	// runGate serializes every lifecycle owner with cancellation-aware admission.
-	runGate sourcelifecycle.Gate
+	runGate requestGate
 	workers workerjoin.Group
 }
 
@@ -207,9 +206,9 @@ func (c *Component) subscribeHandlers(ctx context.Context) (sub, diffSub, lifecy
 	c.mu.Lock()
 	c.lifecycleSub = lifecycleSub
 	c.mu.Unlock()
-	sourceSub, sourceErr := c.client.SubscribeForRequests(ctx, sourcelifecycle.ProjectionSubject, c.handleSourceProjection)
+	sourceSub, sourceErr := c.client.SubscribeForRequests(ctx, sourceProjectionSubject, c.handleSourceProjection)
 	if sourceErr != nil {
-		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", sourcelifecycle.ProjectionSubject, sourceErr)
+		return nil, nil, nil, fmt.Errorf("subscribe %s: %w", sourceProjectionSubject, sourceErr)
 	}
 	c.mu.Lock()
 	c.sourceSub = sourceSub
@@ -238,7 +237,7 @@ func (c *Component) periodic(ctx context.Context, interval time.Duration) {
 // the additive delta. Read-and-append only — never retracts or overwrites — and
 // idempotent via diffNew. Passes are serialized (runGate).
 func (c *Component) runPass(ctx context.Context) (passStats, error) {
-	release, err := c.runGate.Acquire(ctx)
+	release, err := c.runGate.acquire(ctx)
 	if err != nil {
 		return passStats{}, err
 	}
@@ -354,7 +353,7 @@ func (c *Component) Stop(ctx context.Context) error {
 	}
 	// Direct projectors are synchronous callers, outside subscription/worker
 	// ownership. After sealing admission, this gate joins every accepted call.
-	release, err := c.runGate.Acquire(ctx)
+	release, err := c.runGate.acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("join supersession projection: %w", err)
 	}
@@ -391,8 +390,8 @@ func (c *Component) Meta() component.Metadata {
 // InputPorts implements component.Discoverable.
 func (c *Component) InputPorts() []component.Port {
 	return []component.Port{{Name: "source.lifecycle", Direction: component.DirectionInput,
-		Config: component.NATSRequestPort{Subject: sourcelifecycle.ProjectionSubject}, Required: true,
-		Description: "Generation-bound source lifecycle projection"}}
+		Config: component.NATSRequestPort{Subject: sourceProjectionSubject}, Required: true,
+		Description: "Retired source lifecycle API; requests are refused"}}
 }
 
 // OutputPorts implements component.Discoverable.
@@ -445,5 +444,5 @@ func (c *Component) DataFlow() component.FlowMetrics {
 // RequestSubjects returns every NATS request/reply subject this component
 // serves, for the subject-ownership guard. See sourcemanifest.RequestSubjects.
 func RequestSubjects() []string {
-	return []string{versionDiffSubject, sourcelifecycle.ProjectionSubject}
+	return []string{versionDiffSubject, sourceProjectionSubject}
 }

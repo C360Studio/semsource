@@ -1,0 +1,6 @@
+{
+  "container_id": "df3791977d268cd6a9bc37f41a977e1410938f5e589fb13d5c07008f98d6627e",
+  "inspect_exit_code": 1,
+  "absent": true,
+  "detail": "error: no such object: df3791977d268cd6a9bc37f41a977e1410938f5e589fb13d5c07008f98d6627e"
+}

@@ -1,5 +1,15 @@
 # Implementation and proof tasks
 
+## Superseded execution direction — 2026-10-01
+
+The owner-authorized [corrective tasks](../remove-private-source-recovery/tasks.md) replace this
+implementation direction. Architectural approval of the private recovery design is withdrawn.
+Do not execute remaining expansion/recovery tasks below under the old approval. Checked items remain
+records of past implementation/proof; unchecked acceptance stays unproven, not waived or completed.
+The corrective contract removes this machinery and explicitly defers source-removal projection and
+positive reactivation. [Current status](../../../docs/testing/private-recovery-retirement/README.md)
+keeps corrective implementation evidence separate from the historical results below.
+
 The owner's 2026-10-01 [baseline merge disposition](../../../docs/testing/setup-03a/merge-readiness.md)
 ends this SemStreams repair work at the recorded safe implementation. The unchecked proof and contract
 items below remain open under #215 and SemEngine #18–#20 decisions; they are not silently completed.

@@ -44,7 +44,7 @@ jobs:
       # missing from it has integration tests that compile, pass locally, and
       # never run. Add new ones as they land.
       - name: Integration tests
-        run: go test -tags=integration ./internal/governance/ ./internal/sourcelifecycle/ ./internal/sourcespawn/ ./processor/ast-source/ ./processor/supersession/ ./processor/mcp-gateway/ ./processor/code-context/ ./storage/s3store/ ./handler/objectstore/ ./processor/objectstore-source/
+        run: go test -tags=integration ./cmd/semsource/ ./internal/governance/ ./internal/sourcespawn/ ./processor/ast-source/ ./processor/supersession/ ./processor/mcp-gateway/ ./processor/code-context/ ./storage/s3store/ ./handler/objectstore/ ./processor/objectstore-source/
 
   lint:
     runs-on: ubuntu-latest
@@ -176,6 +176,30 @@ jobs:
         run: |
           go test -tags=e2e -v -timeout 10m ./test/e2e/ \
             -run 'TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal'
+
+
+      - name: Desired source lifecycle without private recovery
+        env:
+          SETUP03A_NATS_IMAGE: nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66
+        run: |
+          # The frozen harness expects docker run output to contain only its ID.
+          docker pull "$SETUP03A_NATS_IMAGE"
+          qualification_dir="$RUNNER_TEMP/source-lifecycle-qualification"
+          mkdir -p "$qualification_dir"
+          go build -o "$qualification_dir/semsource" ./cmd/semsource
+          SETUP03A_BINARY="$qualification_dir/semsource" \
+            SETUP03A_OUT="$qualification_dir/evidence" \
+            SETUP03A_IDENTITY=governed SETUP03A_PROFILE=bm25 \
+            go test -tags=qualification,removal -count=1 -v -timeout 10m ./test/setup03a \
+              -run '^TestDesiredSourceLifecycleWithoutRecovery$'
+
+      - name: Preserve source lifecycle failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desired-source-lifecycle-${{ github.sha }}
+          path: ${{ runner.temp }}/source-lifecycle-qualification/evidence/**
+          if-no-files-found: ignore
 
   build-and-push:
     needs: [test, lint, test-integration]

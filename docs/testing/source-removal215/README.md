@@ -1,5 +1,14 @@
 # Source removal replay: issue #215
 
+## Superseding corrective ruling — 2026-10-01
+
+The owner authorized [PR #223](https://github.com/C360Studio/semsource/pull/223) to remove the private
+journal/receipt/fence/replay architecture without a substitute. Its architectural approval is withdrawn.
+The [corrective contract and pending implementation evidence](../private-recovery-retirement/README.md)
+make source-removal projection and positive reactivation explicitly unavailable while preserving desired
+configuration and ordinary staleness. The evidence below remains the record of the old implementation;
+no old result or positive expectation is rewritten. #215 remains open/deferred.
+
 Current SETUP 03A merge disposition: [baseline-only readiness](../setup-03a/merge-readiness.md).
 Issue #215 remains open. Its partial qualification below is preserved; SemEngine #18–#20 own the
 contract decisions, and no SemStreams repair is awaited for this baseline merge.

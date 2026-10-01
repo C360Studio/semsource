@@ -33,9 +33,8 @@ const lifecycleEdgeSource = "lifecycle"
 // a caller-announced scope. Housed alongside the correspondence/supersession
 // pass because it reuses the same enumeration machinery (QueryPrefixAll) and
 // trigger shape (NATS subject, request/reply). The pass never infers scope on
-// its own — every caller (ast-source, doc-source, source-manifest's
-// remove_source) states org+systems (and, when a filesystem check applies, a
-// root path) explicitly in a graph.LifecycleRunRequest.
+// its own — ordinary file/passage callers state org+systems and, for a filesystem check, a
+// root path explicitly in a graph.LifecycleRunRequest. Whole-source removal is unavailable.
 
 // handleLifecycleRun is the NATS request handler for graph.LifecycleTriggerSubject.
 func (c *Component) handleLifecycleRun(ctx context.Context, data []byte) ([]byte, error) {
@@ -59,9 +58,9 @@ func (c *Component) handleLifecycleRun(ctx context.Context, data []byte) ([]byte
 // the-delta, so re-running converges rather than duplicating markers.
 func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRunRequest) (graph.LifecycleRunResponse, error) {
 	if req.Reason == graph.LifecycleReasonSourceRemoved {
-		return graph.LifecycleRunResponse{}, fmt.Errorf("source_removed requires the authorized source lifecycle owner")
+		return graph.LifecycleRunResponse{}, fmt.Errorf("SOURCE_LIFECYCLE_UNAVAILABLE: source lifecycle projection is unavailable")
 	}
-	release, err := c.runGate.Acquire(ctx)
+	release, err := c.runGate.acquire(ctx)
 	if err != nil {
 		return graph.LifecycleRunResponse{}, err
 	}

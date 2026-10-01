@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semsource/internal/sourcelifecycle"
 	"github.com/c360studio/semstreams/component"
 )
 
@@ -115,6 +114,6 @@ func DefaultConfig() Config {
 // sourceProjectionPorts declares the owned exact request subject even with custom output configuration.
 func sourceProjectionPorts() []component.PortDefinition {
 	return []component.PortDefinition{{
-		Name: "source.lifecycle", Config: component.NATSRequestPort{Subject: sourcelifecycle.ProjectionSubject},
-		Required: true, Description: "Generation-bound source lifecycle projection"}}
+		Name: "source.lifecycle", Config: component.NATSRequestPort{Subject: sourceProjectionSubject},
+		Required: true, Description: "Retired source lifecycle API; requests are refused"}}
 }

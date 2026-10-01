@@ -1,0 +1,4133 @@
+{
+  "corpus_version": "1",
+  "profile": "bm25",
+  "semengine_slices": [
+    0,
+    1
+  ],
+  "started": "2026-10-01T10:54:25.038019Z",
+  "binary_sha256": "b5ffe3710d161cd3246209aff127e833832ede7ec6c3e0c4f52e612f4d48be87",
+  "corpus_sha256": "9724050f1ebdc0623460557bd4bb5c73c9b2591b4032737b79f9e7db821b0258",
+  "configuration": {
+    "graph": {
+      "coalesce_ms": 200,
+      "embedder_type": "bm25",
+      "gateway_bind": "127.0.0.1:57767",
+      "index_workers": 4
+    },
+    "http_port": 57764,
+    "metrics": {
+      "port": 57765
+    },
+    "namespace": "setup03a",
+    "source_roots": [
+      "/tmp/semsource-lifecycle-correction/corpus-final-bm25/source"
+    ],
+    "sources": [
+      {
+        "languages": [
+          "go"
+        ],
+        "path": "/tmp/semsource-lifecycle-correction/corpus-final-bm25/source",
+        "project": "setup03a",
+        "type": "ast",
+        "version": "corpus-v1",
+        "watch": true
+      },
+      {
+        "paths": [
+          "/tmp/semsource-lifecycle-correction/corpus-final-bm25/source/docs"
+        ],
+        "project": "setup03a-docs",
+        "type": "docs",
+        "watch": true
+      }
+    ],
+    "websocket_bind": "127.0.0.1:57766"
+  },
+  "nats_container": "df3791977d268cd6a9bc37f41a977e1410938f5e589fb13d5c07008f98d6627e",
+  "observations": [
+    {
+      "name": "ingestion_ready",
+      "passed": true,
+      "detail": {
+        "namespace": "setup03a",
+        "phase": "ready",
+        "sources": [
+          {
+            "instance_name": "doc-source-setup03a-docs",
+            "source_type": "docs",
+            "phase": "watching",
+            "entity_count": 2,
+            "offered_total": 2,
+            "delivered_total": 2,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "error_count": 0,
+            "type_counts": {
+              "web.chunk": 1,
+              "web.doc": 1
+            }
+          },
+          {
+            "instance_name": "ast-source-setup03a-corpus-v1",
+            "source_type": "ast",
+            "phase": "watching",
+            "entity_count": 9,
+            "offered_total": 9,
+            "delivered_total": 9,
+            "lost_total": 0,
+            "seed_lost": 0,
+            "files_parsed": 2,
+            "bodies_offloaded": 4,
+            "error_count": 0,
+            "type_counts": {
+              "code.folder": 2,
+              "code.repo": 1,
+              "golang.file": 2,
+              "golang.function": 4
+            }
+          }
+        ],
+        "total_entities": 11,
+        "timestamp": "2026-10-01T05:54:57.252045-05:00"
+      }
+    },
+    {
+      "name": "governed_identity_authority",
+      "passed": true,
+      "detail": {
+        "expected_entities": {
+          "farewell": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "greet_alpha": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "greet_beta": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "run": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run"
+        },
+        "platform": "semsource-f54ae2",
+        "wire": {
+          "data": {
+            "matches": [
+              {
+                "entity_id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+                "matched_name": "Run",
+                "predicate": "dc.terms.title",
+                "exact_case": true
+              }
+            ]
+          },
+          "timestamp": "2026-10-01T05:54:57.415058-05:00"
+        }
+      }
+    },
+    {
+      "name": "initial_persisted_authority",
+      "passed": true,
+      "detail": {
+        "id": "semsource-f54ae2",
+        "org": "setup03a",
+        "stem": "semsource"
+      }
+    },
+    {
+      "name": "initial_entity_run",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:a40a82bbe5615dea547597dd67447f4ba4443199f2f310a16b3637e61c31f779"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 6
+      }
+    },
+    {
+      "name": "initial_entity_greet_alpha",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet explains the cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 10
+      }
+    },
+    {
+      "name": "initial_entity_greet_beta",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "beta/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet selects the alternate cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.beta-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 11
+      }
+    },
+    {
+      "name": "initial_entity_farewell",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Farewell"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Farewell returns the amber beacon route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Farewell() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 5
+      }
+    },
+    {
+      "name": "initial_exact_relationship",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:a40a82bbe5615dea547597dd67447f4ba4443199f2f310a16b3637e61c31f779"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 6
+      }
+    },
+    {
+      "name": "initial_provenance",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:a40a82bbe5615dea547597dd67447f4ba4443199f2f310a16b3637e61c31f779"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 6
+      }
+    },
+    {
+      "name": "initial_exact_content",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Run",
+            "Path": "alpha/greet.go",
+            "Body": "func Run() string { return Greet() }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+            "body_reason": "",
+            "relations": {
+              "callee": [
+                {
+                  "Name": "Greet",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "cold_duplicate_name_anchors",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Greet",
+            "Path": "alpha/greet.go",
+            "Body": "func Greet() string { return \"cobalt lantern\" }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+            "body_reason": "",
+            "relations": {
+              "caller": [
+                {
+                  "Name": "Run",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          },
+          {
+            "Name": "Greet",
+            "Path": "beta/greet.go",
+            "Body": "func Greet() string { return \"alternate cobalt lantern\" }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+            "body_reason": "",
+            "relations": {
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "beta/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "cold_exact_absence",
+      "passed": true,
+      "detail": {
+        "nodes": null,
+        "deferred": false,
+        "unhydrated": null,
+        "misses": [
+          {
+            "query": "AbsentQualificationSymbol"
+          }
+        ],
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "cold_code_scope_before_limit",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Greet",
+            "Path": "alpha/greet.go",
+            "Body": "func Greet() string { return \"cobalt lantern\" }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+            "body_reason": "",
+            "relations": {
+              "caller": [
+                {
+                  "Name": "Run",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "cold_doc_scope_before_limit",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Cobalt lantern routing",
+            "Path": "routing.md",
+            "Body": "",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+            "body_reason": "",
+            "relations": {
+              "passage": [
+                {
+                  "Name": "Cobalt lantern routing",
+                  "Path": "routing.md"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "cold_doc_exact_passage_content",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Cobalt lantern routing",
+            "Path": "routing.md",
+            "Body": "# Cobalt lantern routing\n\nThe cobalt lantern routing protocol sends blue parcels to the north depot.\nThe exact qualification token is cobalt-lantern-v1.\n",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-docs.web.chunk.routing-md-0000",
+            "body_reason": "",
+            "relations": {
+              "parent_document": [
+                {
+                  "Name": "Cobalt lantern routing",
+                  "Path": "routing.md"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "warm_duplicate_name_anchors",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Greet",
+            "Path": "alpha/greet.go",
+            "Body": "func Greet() string { return \"cobalt lantern\" }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+            "body_reason": "",
+            "relations": {
+              "caller": [
+                {
+                  "Name": "Run",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          },
+          {
+            "Name": "Greet",
+            "Path": "beta/greet.go",
+            "Body": "func Greet() string { return \"alternate cobalt lantern\" }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+            "body_reason": "",
+            "relations": {
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "beta/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "warm_exact_absence",
+      "passed": true,
+      "detail": {
+        "nodes": null,
+        "deferred": false,
+        "unhydrated": null,
+        "misses": [
+          {
+            "query": "AbsentQualificationSymbol"
+          }
+        ],
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "warm_code_scope_before_limit",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Greet",
+            "Path": "alpha/greet.go",
+            "Body": "func Greet() string { return \"cobalt lantern\" }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+            "body_reason": "",
+            "relations": {
+              "caller": [
+                {
+                  "Name": "Run",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "warm_doc_scope_before_limit",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Cobalt lantern routing",
+            "Path": "routing.md",
+            "Body": "",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+            "body_reason": "",
+            "relations": {
+              "passage": [
+                {
+                  "Name": "Cobalt lantern routing",
+                  "Path": "routing.md"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "warm_doc_exact_passage_content",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Cobalt lantern routing",
+            "Path": "routing.md",
+            "Body": "# Cobalt lantern routing\n\nThe cobalt lantern routing protocol sends blue parcels to the north depot.\nThe exact qualification token is cobalt-lantern-v1.\n",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-docs.web.chunk.routing-md-0000",
+            "body_reason": "",
+            "relations": {
+              "parent_document": [
+                {
+                  "Name": "Cobalt lantern routing",
+                  "Path": "routing.md"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "graph_search_public_query",
+      "passed": true,
+      "detail": {
+        "strategy": "graphrag",
+        "entities": [
+          {
+            "id": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+            "triples": [
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.type",
+                "object": "document",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.file-path",
+                "object": "routing.md",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.mime-type",
+                "object": "text/markdown",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.file-hash",
+                "object": "495a3ac47f8abca443865af56ffbe0f2a0cac2d9199849a8b17c6b9a67a49256",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "dc.terms.title",
+                "object": "Cobalt lantern routing",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "source.doc.chunk-count",
+                "object": 1,
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "entity.role.navigational",
+                "object": "document",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "entity.ontology.class",
+                "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Document",
+                "source": "semsource",
+                "timestamp": "2026-10-01T10:54:27.24988Z",
+                "confidence": 1
+              },
+              {
+                "subject": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+                "predicate": "entity.indexing.profile",
+                "object": "content",
+                "source": "graph-ingest-indexing-profile",
+                "timestamp": "2026-10-01T05:54:27.269263-05:00",
+                "confidence": 1
+              }
+            ],
+            "message_type": {
+              "domain": "semsource",
+              "category": "entity",
+              "version": "v1"
+            },
+            "version": 1,
+            "updated_at": "0001-01-01T00:00:00Z"
+          }
+        ],
+        "sources": [
+          {
+            "entity_id": "setup03a.semsource-f54ae2.setup03a-docs.web.doc.routing-md",
+            "relevance": 0.9322194130653265
+          }
+        ],
+        "count": 1,
+        "duration_ms": 0,
+        "degraded": true,
+        "degraded_reason": "community_cache_not_ready"
+      }
+    },
+    {
+      "name": "edited_persisted_authority",
+      "passed": true,
+      "detail": {
+        "id": "semsource-f54ae2",
+        "org": "setup03a",
+        "stem": "semsource"
+      }
+    },
+    {
+      "name": "edited_entity_run",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:a40a82bbe5615dea547597dd67447f4ba4443199f2f310a16b3637e61c31f779"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 6
+      }
+    },
+    {
+      "name": "edited_entity_greet_alpha",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet explains the cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 10
+      }
+    },
+    {
+      "name": "edited_entity_greet_beta",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "beta/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet selects the alternate cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.beta-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 11
+      }
+    },
+    {
+      "name": "edited_entity_farewell",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Farewell"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Farewell returns the amber beacon route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Farewell() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 5
+      }
+    },
+    {
+      "name": "edited_exact_relationship",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 2,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 14
+      }
+    },
+    {
+      "name": "edited_provenance",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 2,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 14
+      }
+    },
+    {
+      "name": "edited_exact_content",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Run",
+            "Path": "alpha/greet.go",
+            "Body": "func Run() string { return Farewell() }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+            "body_reason": "",
+            "relations": {
+              "callee": [
+                {
+                  "Name": "Farewell",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "deleted_lifecycle_pass",
+      "passed": true,
+      "detail": {
+        "entities": 9,
+        "paths": 4,
+        "marked": 4,
+        "cleared": 0
+      }
+    },
+    {
+      "name": "deleted_retains_stale_history",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 3,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            },
+            {
+              "predicate": "entity.lifecycle.stale",
+              "object": "path_missing"
+            }
+          ]
+        },
+        "kvRevision": 20
+      }
+    },
+    {
+      "name": "deleted_query_visibility",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Run",
+            "Path": "alpha/greet.go",
+            "Body": "func Run() string { return Farewell() }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+            "body_reason": "",
+            "relations": {
+              "callee": [
+                {
+                  "Name": "Farewell",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "recreated_lifecycle_pass",
+      "passed": true,
+      "detail": {
+        "entities": 9,
+        "paths": 4,
+        "marked": 0,
+        "cleared": 4
+      }
+    },
+    {
+      "name": "recreated_same_identity_not_stale",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 4,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 24
+      }
+    },
+    {
+      "name": "recreated_persisted_authority",
+      "passed": true,
+      "detail": {
+        "id": "semsource-f54ae2",
+        "org": "setup03a",
+        "stem": "semsource"
+      }
+    },
+    {
+      "name": "recreated_entity_run",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 4,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 24
+      }
+    },
+    {
+      "name": "recreated_entity_greet_alpha",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "version": 4,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet explains the cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 23
+      }
+    },
+    {
+      "name": "recreated_entity_greet_beta",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "version": 1,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "beta/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet selects the alternate cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.beta-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:27-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 11
+      }
+    },
+    {
+      "name": "recreated_entity_farewell",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "version": 4,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Farewell"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Farewell returns the amber beacon route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Farewell() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 22
+      }
+    },
+    {
+      "name": "recreated_exact_relationship",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 4,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 24
+      }
+    },
+    {
+      "name": "recreated_provenance",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 4,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:57-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 24
+      }
+    },
+    {
+      "name": "recreated_exact_content",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Run",
+            "Path": "alpha/greet.go",
+            "Body": "func Run() string { return Farewell() }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+            "body_reason": "",
+            "relations": {
+              "callee": [
+                {
+                  "Name": "Farewell",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "application_restart_persisted_authority",
+      "passed": true,
+      "detail": {
+        "id": "semsource-f54ae2",
+        "org": "setup03a",
+        "stem": "semsource"
+      }
+    },
+    {
+      "name": "application_restart_entity_run",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 31
+      }
+    },
+    {
+      "name": "application_restart_entity_greet_alpha",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet explains the cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 33
+      }
+    },
+    {
+      "name": "application_restart_entity_greet_beta",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "version": 2,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "beta/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet selects the alternate cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.beta-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 35
+      }
+    },
+    {
+      "name": "application_restart_entity_farewell",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Farewell"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Farewell returns the amber beacon route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Farewell() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 29
+      }
+    },
+    {
+      "name": "application_restart_exact_relationship",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 31
+      }
+    },
+    {
+      "name": "application_restart_provenance",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 31
+      }
+    },
+    {
+      "name": "application_restart_exact_content",
+      "passed": true,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Run",
+            "Path": "alpha/greet.go",
+            "Body": "func Run() string { return Farewell() }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+            "body_reason": "",
+            "relations": {
+              "callee": [
+                {
+                  "Name": "Farewell",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      }
+    },
+    {
+      "name": "accepted_unindexed_before_broker_restart",
+      "passed": true,
+      "detail": {
+        "ack": {
+          "stream": "GRAPH",
+          "seq": 37
+        },
+        "authority_after_ack": 31,
+        "authority_before": 31,
+        "storage": "memory"
+      }
+    },
+    {
+      "name": "memory_transport_not_durable",
+      "passed": true,
+      "detail": {
+        "contract": "source re-ingestion, not publish-ack durability",
+        "observation_error": "nats: API error: code=404 err_code=10059 description=stream not found",
+        "pending_sequence": 37,
+        "survived": false
+      }
+    },
+    {
+      "name": "authority_survives_broker_restart_before_reingest",
+      "passed": true,
+      "detail": {
+        "bucket": "ENTITY_STATES",
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "triples": [
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.type",
+              "object": "function",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "dc.terms.title",
+              "object": "Run",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.project",
+              "object": "setup03a",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.language",
+              "object": "golang",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.visibility",
+              "object": "public",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.artifact.exported",
+              "object": "true",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.metric.start-line",
+              "object": 7,
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.metric.end-line",
+              "object": 7,
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.metric.lines",
+              "object": 1,
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.doc.signature",
+              "object": "func Run() string",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.body.store",
+              "object": "objectstore",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+              "source": "",
+              "timestamp": "0001-01-01T00:00:00Z",
+              "confidence": 0
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm",
+              "source": "semsource",
+              "timestamp": "2026-10-01T05:54:58.014687-05:00",
+              "confidence": 1
+            },
+            {
+              "subject": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+              "predicate": "entity.indexing.profile",
+              "object": "content",
+              "source": "graph-ingest-indexing-profile",
+              "timestamp": "2026-10-01T05:54:27.269649-05:00",
+              "confidence": 1
+            }
+          ],
+          "storage_ref": {
+            "storage_instance": "objectstore",
+            "key": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e",
+            "content_type": "text/plain; charset=utf-8",
+            "size": 39
+          },
+          "message_type": {
+            "domain": "semsource",
+            "category": "entity",
+            "version": "v1"
+          },
+          "version": 5,
+          "updated_at": "2026-10-01T05:54:58.028254-05:00"
+        },
+        "revision": 31
+      }
+    },
+    {
+      "name": "content_survives_broker_restart_before_reingest",
+      "passed": true,
+      "detail": "func Run() string { return Farewell() }"
+    },
+    {
+      "name": "broker_restart_reingested_persisted_authority",
+      "passed": true,
+      "detail": {
+        "id": "semsource-f54ae2",
+        "org": "setup03a",
+        "stem": "semsource"
+      }
+    },
+    {
+      "name": "broker_restart_reingested_entity_run",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 31
+      }
+    },
+    {
+      "name": "broker_restart_reingested_entity_greet_alpha",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet explains the cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:831062b6d1ca3a31cd8df2bc91e6d7a17b26918a42ba7065ba6e5c4c8dd8850f"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 33
+      }
+    },
+    {
+      "name": "broker_restart_reingested_entity_greet_beta",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.beta-greet-go-Greet",
+          "version": 2,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Greet"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "beta/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 4
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Greet selects the alternate cobalt lantern routing protocol.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Greet() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.beta-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:11ac234bf43a4be4000764a41a06663d44de3ee38df133d9b64b4ef9264e0c5a"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 35
+      }
+    },
+    {
+      "name": "broker_restart_reingested_entity_farewell",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Farewell"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 10
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Farewell returns the amber beacon route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Farewell() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:e0be7935fdc2e26af62513073be17eabd7febd3e08e68d5d304915a8ea6267d2"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 29
+      }
+    },
+    {
+      "name": "broker_restart_reingested_exact_relationship",
+      "passed": false,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 31
+      },
+      "error": "calls=[setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell] want exactly setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Greet"
+    },
+    {
+      "name": "broker_restart_reingested_provenance",
+      "passed": true,
+      "detail": {
+        "entity": {
+          "id": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+          "version": 5,
+          "triples": [
+            {
+              "predicate": "code.artifact.type",
+              "object": "function"
+            },
+            {
+              "predicate": "dc.terms.title",
+              "object": "Run"
+            },
+            {
+              "predicate": "code.artifact.path",
+              "object": "alpha/greet.go"
+            },
+            {
+              "predicate": "code.artifact.project",
+              "object": "setup03a"
+            },
+            {
+              "predicate": "code.artifact.version",
+              "object": "corpus-v1"
+            },
+            {
+              "predicate": "code.artifact.language",
+              "object": "golang"
+            },
+            {
+              "predicate": "code.artifact.visibility",
+              "object": "public"
+            },
+            {
+              "predicate": "code.artifact.exported",
+              "object": "true"
+            },
+            {
+              "predicate": "code.metric.start-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.end-line",
+              "object": 7
+            },
+            {
+              "predicate": "code.metric.lines",
+              "object": 1
+            },
+            {
+              "predicate": "code.doc.comment",
+              "object": "Run uses Greet to select the cobalt lantern route.\n"
+            },
+            {
+              "predicate": "code.doc.signature",
+              "object": "func Run() string"
+            },
+            {
+              "predicate": "code.structure.belongs",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.file.alpha-greet-go"
+            },
+            {
+              "predicate": "code.relationship.calls",
+              "object": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Farewell"
+            },
+            {
+              "predicate": "code.relationship.returns",
+              "object": "builtin:string"
+            },
+            {
+              "predicate": "dc.terms.created",
+              "object": "2026-10-01T05:54:58-05:00"
+            },
+            {
+              "predicate": "code.body.store",
+              "object": "objectstore"
+            },
+            {
+              "predicate": "code.body.key",
+              "object": "code:34d2bfa3ea5b507ae6d40ae28f23df6c8ef0064593abd04023f9c2279c85400e"
+            },
+            {
+              "predicate": "entity.ontology.class",
+              "object": "http://www.ontologyrepository.com/CommonCoreOntologies/Algorithm"
+            },
+            {
+              "predicate": "entity.indexing.profile",
+              "object": "content"
+            }
+          ]
+        },
+        "kvRevision": 31
+      }
+    },
+    {
+      "name": "broker_restart_reingested_exact_content",
+      "passed": false,
+      "detail": {
+        "nodes": [
+          {
+            "Name": "Run",
+            "Path": "alpha/greet.go",
+            "Body": "func Run() string { return Farewell() }",
+            "Handle": "setup03a.semsource-f54ae2.setup03a-corpus-v1.golang.function.alpha-greet-go-Run",
+            "body_reason": "",
+            "relations": {
+              "callee": [
+                {
+                  "Name": "Farewell",
+                  "Path": "alpha/greet.go"
+                }
+              ],
+              "container": [
+                {
+                  "Name": "greet.go",
+                  "Path": "alpha/greet.go"
+                }
+              ]
+            }
+          }
+        ],
+        "deferred": false,
+        "unhydrated": null,
+        "misses": null,
+        "index": {
+          "ready": true,
+          "state": "ready",
+          "bootstrap_complete": true
+        }
+      },
+      "error": "expected one Run with exact body \"func Run() string { return Greet() }\""
+    },
+    {
+      "name": "rpc_wildcard_collision_reproduced",
+      "passed": true,
+      "detail": {
+        "stream": "GRAPH",
+        "seq": 21
+      }
+    }
+  ]
+}

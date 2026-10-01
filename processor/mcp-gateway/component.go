@@ -74,11 +74,11 @@ func (c *Component) buildServer() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "semsource", Version: serverVersion}, nil)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "add_source",
-		Description: "Register a source (repo/git/docs/config/url) for semsource to index. Path-based sources must be under an allowlisted root. Returns handles + a readiness condition to poll. Repo/git sources materialize declared git submodule trees on clone and report per-path submodule state on source_status; per-submodule identity expansion currently applies to boot-configured sources only.",
+		Description: "Register a source (repo/git/docs/config/url) for semsource to index. Path-based sources must be under an allowlisted root. Persists desired configuration and returns handles; ingestion activates after application restart. Source-removal projection and positive reactivation are unavailable. Repo/git sources materialize declared git submodule trees on clone and report per-path submodule state on source_status; per-submodule identity expansion currently applies to boot-configured sources only.",
 	}, c.addSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "remove_source",
-		Description: "Deregister a source by its handle (instance name). Stops ingestion; existing graph data is not retracted. Removal is verifiable: the source leaves source_status within one aggregation pass, and an unknown handle returns NOT_FOUND (never silent success).",
+		Description: "Disable a source in desired configuration by its handle (instance name). Ingestion stops after application restart; the running source set and graph history remain unchanged. Automatic source-removal projection is unavailable. Unknown or already-disabled handles return NOT_FOUND.",
 	}, c.removeSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "source_status",
