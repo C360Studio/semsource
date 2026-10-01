@@ -5,8 +5,10 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,10 +20,15 @@ import (
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semsource/entityid"
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/sourceintent"
+	"github.com/c360studio/semsource/internal/sourcelifecycle"
+	"github.com/c360studio/semsource/internal/sourcespawn"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
+	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 	"github.com/c360studio/semsource/processor/supersession"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	source "github.com/c360studio/semsource/source/vocabulary"
@@ -36,8 +43,15 @@ import (
 //     demotes it below a live sibling in fusion ranking (both retained);
 //  2. recreating the file and re-running the lifecycle pass clears the
 //     marker;
-//  3. a remove_source-shaped trigger (no root_path) marks every in-scope
-//     entity source_removed unconditionally, regardless of file presence.
+//  3. the legacy source_removed trigger is refused while the source is live;
+//     the real journal/coordinator waits for checked producer retirement before
+//     marking retained entities through the local, effect-fenced owner;
+//  4. a later file-presence sweep cannot clear sticky source_removed markers.
+//
+// Desired configuration uses the stateful memConfigStore fixture seam. This
+// qualifies real journal, consumer-tail, graph and mutation effects, not full
+// ConfigManager persistence or OS process replacement (the qualification suite
+// covers those). Retained convergence remains pending on SemStreams #1444.
 func TestIntegration_StalenessLifecycle(t *testing.T) {
 	ctx := context.Background()
 	tc := natsclient.NewTestClient(t,
@@ -79,6 +93,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 		"watch_paths": []map[string]any{
 			{"path": root, "org": org, "project": project, "languages": []string{"go"}},
 		},
+		"instance_name":  "ast-source-svc",
 		"watch_enabled":  true,
 		"index_interval": "", // manual lifecycle triggering below; no periodic sweep noise
 	})
@@ -194,17 +209,62 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	}
 	waitPredicateAbsent(t, ctx, qc, deletedEntity.ID, source.EntityLifecycleStale, 20*time.Second)
 
-	// --- (3) remove_source shape: no root_path marks every in-scope entity
-	// unconditionally, regardless of file presence. ---
+	// --- (3) an active producer cannot be removed through the legacy RPC. ---
 	if _, err := semsourcegraph.PublishLifecycleTrigger(ctx, tc.Client, semsourcegraph.LifecycleRunRequest{
-		Org:     org,
-		Systems: []string{system},
-		Reason:  semsourcegraph.LifecycleReasonSourceRemoved,
-	}); err != nil {
-		t.Fatalf("trigger lifecycle pass (source_removed): %v", err)
+		Org: org, Systems: []string{system}, Reason: semsourcegraph.LifecycleReasonSourceRemoved,
+	}); err == nil || !strings.Contains(err.Error(), "authorized source lifecycle owner") {
+		t.Fatalf("legacy source_removed must explicitly refuse: %v", err)
+	}
+	assertStalenessRemovalAbsent(ctx, t, qc, liveEntity.ID, deletedEntity.ID)
+
+	owner, journal := stalenessRemovalOwner(ctx, t, tc.Client, astCfg, scomp)
+	release, err := owner.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, prepareErr := owner.PrepareRemoval(ctx, "ast-source-svc")
+	if prepareErr == nil {
+		prepareErr = owner.PersistRemoval(ctx, record)
+	}
+	release()
+	if prepareErr != nil {
+		t.Fatal(prepareErr)
+	}
+	var blocked *sourceintent.Blocker
+	if err := owner.ReconcileOnce(ctx); !errors.As(err, &blocked) || blocked.Code != sourceintent.CodeRetirement {
+		t.Fatalf("enabled boot must block removal effects: %v", err)
+	}
+	assertStalenessRemovalAbsent(ctx, t, qc, liveEntity.ID, deletedEntity.ID)
+
+	// The fixture advances its immutable boot admission only after Stop proves
+	// this real producer and all accepted publication work have retired.
+	if err := stopWithin(5*time.Second, astComp.Stop); err != nil {
+		t.Fatalf("retire AST producer: %v", err)
+	}
+	release, err = owner.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, bindErr := owner.BindBoot(ctx)
+	release()
+	if bindErr != nil {
+		t.Fatal(bindErr)
+	}
+	awaitStalenessRetainedPass(ctx, t, owner, journal)
+	waitTriple(t, ctx, qc, liveEntity.ID, source.EntityLifecycleStale, source.LifecycleReasonSourceRemoved, 20*time.Second)
+	waitTriple(t, ctx, qc, deletedEntity.ID, source.EntityLifecycleStale, source.LifecycleReasonSourceRemoved, 20*time.Second)
+
+	// --- (4) present files do not re-authorize a removed source. ---
+	summary, err := semsourcegraph.PublishLifecycleTrigger(ctx, tc.Client, semsourcegraph.LifecycleRunRequest{
+		Org: org, Systems: []string{system}, RootPath: root, Reason: semsourcegraph.LifecycleReasonFileDeleted,
+	})
+	if err != nil || summary == nil || summary.Cleared != 0 {
+		t.Fatalf("legacy sweep cleared removed source: %+v %v", summary, err)
 	}
 	waitTriple(t, ctx, qc, liveEntity.ID, source.EntityLifecycleStale, source.LifecycleReasonSourceRemoved, 20*time.Second)
 	waitTriple(t, ctx, qc, deletedEntity.ID, source.EntityLifecycleStale, source.LifecycleReasonSourceRemoved, 20*time.Second)
+	// Selective source_removed reactivation is a distinct blocked acceptance
+	// (#1445); file recreation above proves only the file_deleted contract.
 }
 
 // waitPredicateAbsent polls until entity id no longer carries predicate, or
@@ -228,4 +288,73 @@ func waitPredicateAbsent(t *testing.T, ctx context.Context, qc *natsclient.Clien
 		time.Sleep(150 * time.Millisecond)
 	}
 	t.Fatalf("entity %s still carries predicate %s after %s", id, predicate, timeout)
+}
+
+func assertStalenessRemovalAbsent(ctx context.Context, t *testing.T, client *natsclient.Client, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		entity, ok := fetchEntity(ctx, client, id)
+		if !ok || entity == nil {
+			t.Fatalf("retained entity missing: %s", id)
+		}
+		if countObject(entity, source.EntityLifecycleStale, source.LifecycleReasonSourceRemoved) != 0 {
+			t.Fatalf("active entity was removed: %s", id)
+		}
+	}
+}
+func stalenessRemovalOwner(ctx context.Context, t *testing.T, client *natsclient.Client, astCfg json.RawMessage, projector *supersession.Component) (*sourcelifecycle.Coordinator, *sourcelifecycle.KVJournal) {
+	t.Helper()
+	store := newMemConfigStore()
+	if err := store.PutComponentToKV(ctx, "ast-source-svc", types.ComponentConfig{Name: "ast-source", Type: types.ComponentTypeProcessor, Enabled: true, Config: astCfg}); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := sourcelifecycle.OpenJournal(ctx, client, fixtureAuthority(), "acme", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := &sourcelifecycle.LocalProjector{}
+	if err := local.Bind(projector); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := sourcelifecycle.NewCoordinator(sourcelifecycle.CoordinatorConfig{
+		Authority: fixtureAuthority(), Namespace: "acme", Journal: journal, Store: store,
+		Tail: sourcelifecycle.NATSTail{Client: client}, Projector: local,
+		Inputs: []sourceintent.StreamInput{{Stream: "GRAPH", Consumer: "graph-ingest-graph-ingest-entity", Filters: []string{"graph.ingest.entity"}}},
+		RepairManifest: func(ctx context.Context, handle string) error {
+			return sourcemanifest.RepairRemovalManifest(ctx, store, sourcespawn.Options{Org: "acme"}, handle)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := owner.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if _, err := owner.BindBoot(ctx); err != nil {
+		t.Fatal(err)
+	}
+	return owner, journal
+}
+func awaitStalenessRetainedPass(ctx context.Context, t *testing.T, owner *sourcelifecycle.Coordinator, journal *sourcelifecycle.KVJournal) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	var last error
+	for time.Now().Before(deadline) {
+		last = owner.ReconcileOnce(ctx)
+		var blocked *sourceintent.Blocker
+		if errors.As(last, &blocked) && blocked.Code == sourceintent.CodeAppliedTailUnproven {
+			record, _, err := journal.Get(ctx, "ast-source-svc")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if record.Phase != sourceintent.Pending || record.Progress.CompletedCount < 2 || record.Effect == nil || record.Effect.Outcome != sourceintent.EffectVerified {
+				t.Fatalf("retained projection overstated/lost durable evidence: %+v", record)
+			}
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("retained pass did not converge with honest #1444 pending state: %v", last)
 }

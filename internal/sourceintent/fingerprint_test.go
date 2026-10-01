@@ -3,15 +3,14 @@ package sourceintent
 import (
 	"encoding/json"
 	"github.com/c360studio/semsource/graph"
+	sourcevocab "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semstreams/message"
 	"testing"
 )
 
 func TestSourceFingerprintCanonicalEvidence(t *testing.T) {
 	id := "acme.platform.docs.web.doc.one"
-	triples := []message.Triple{{Subject: id, Predicate: "source.doc.title", Object: "title"}, {Subject: id, Predicate: "source.doc.chunk_count", Object: json.Number("9007199254740993")}}
-	// Use an admitted predicate for the numeric fact, irrespective of its value.
-	triples[1].Predicate = graph.OwnedPredicates()[0]
+	triples := []message.Triple{{Subject: id, Predicate: "source.doc.title", Object: "title"}, {Subject: id, Predicate: sourcevocab.DocChunkCount, Object: json.Number("9007199254740993")}}
 	first, err := SourceFingerprint(id, triples)
 	if err != nil {
 		t.Fatal(err)
