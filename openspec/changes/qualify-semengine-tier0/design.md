@@ -19,7 +19,9 @@ requirements to 03B; it does not choose missing engine APIs or duplicate that wo
 
 ## Current seams and required changes after admission
 
-Code references identify the merged consumer layout. Their names describe current code, not promised
+Code references identify current main after #223 and #242 (`8e477ea`). The private source-recovery
+implementation removed by #223 is outside the port scope; the frozen corpus remains reference evidence.
+Their names describe current code, not promised
 SemEngine types, flags, subjects or package paths.
 
 | Seam | Current behavior | Required Tier 0 outcome |
@@ -118,8 +120,8 @@ and 04C; do not relabel BM25 as a no-embedder proof.
 Tier 0 must pass `broker_restart_reingested_exact_relationship` and
 `broker_restart_reingested_exact_content`. The reference known-at-pin classification does not carry
 into engine qualification. Preserve the authentic acknowledged-but-unindexed setup, persistent
-entity/content checks and changed-source re-ingestion oracle. The current [private guard capture][guard]
-is diagnostic reference evidence, not an engine API or an applied-input completeness proof.
+entity/content checks and changed-source re-ingestion oracle. Historical diagnostic capture is
+reference evidence, not an engine API or an applied-input completeness proof.
 
 The [old collision probe][collision] deliberately succeeds when wildcard GRAPH steals an RPC and
 returns PubAck. Preserve that historical reproduction, but qualify #16's admitted safe composition and
@@ -127,7 +129,7 @@ startup-refusal behavior with new engine assertions. Reproducing the hazard cann
 
 Keep the disabled component envelope from [sourcespawn.Remove][remove] until #17's approved replacement
 passes original-file and runtime-added remove/restart/re-add cases. Preserve truthful restart-required
-receipts and unknown-handle/error semantics. [The existing real-manager regression][config-test] is a
+responses and unknown-handle/error semantics. [The existing real-manager regression][config-test] is a
 starting behavior oracle, not permission to retain SemStreams test dependencies in the engine branch.
 
 Reuse or adapt [checked process exit evidence][checked-stop] for the new lane: graceful shutdown must
@@ -195,17 +197,17 @@ mainline substrate change.
 [engine8]: https://github.com/C360Studio/semengine/issues/8
 [engine9]: https://github.com/C360Studio/semengine/issues/9
 [engine21]: https://github.com/C360Studio/semengine/pull/21
-[graph-compose]: ../../../cmd/semsource/run.go#L732
+[graph-compose]: ../../../cmd/semsource/run.go#L720
 [graph-config]: ../../../config/config.go#L32
 [provider-validation]: ../../../config/config.go#L385
 [registries]: ../../../cmd/semsource/run.go#L294
-[gateway]: ../../../cmd/semsource/run.go#L879
+[gateway]: ../../../cmd/semsource/run.go#L867
 [fusion]: ../../../processor/code-context/component.go#L193
 [verbs]: ../../../processor/code-context/component.go#L64
 [remove]: ../../../internal/sourcespawn/sourcespawn.go#L304
 [selector]: ../../../test/setup03a/qualification_test.go#L92
 [stop]: ../../../test/setup03a/qualification_test.go#L428
-[transport]: ../../../cmd/semsource/run.go#L987
+[transport]: ../../../cmd/semsource/run.go#L975
 [ingestion]: ../../../test/setup03a/qualification_test.go#L131
 [structural]: ../../../test/setup03a/qualification_test.go#L667
 [code-body]: ../../../test/setup03a/qualification_test.go#L711
@@ -219,7 +221,6 @@ mainline substrate change.
 [provider-faults]: ../../../test/setup03a/provider_test.go#L27
 [exact-seed]: ../../../processor/code-context/exact_seed.go#L34
 [response-oracle]: ../../../test/setup03a/qualification_test.go#L589
-[guard]: ../../../test/setup03a/qualification_test.go#L1009
 [collision]: ../../../test/setup03a/qualification_test.go#L929
 [config-test]: ../../../internal/sourcespawn/removal_tombstone_integration_test.go#L18
 [checked-stop]: ../../../test/setup03a/removal_replay_helpers_test.go#L77

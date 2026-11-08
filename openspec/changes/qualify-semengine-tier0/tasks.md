@@ -2,7 +2,9 @@
 
 ## 1. Planning claim and prerequisites
 
-- [x] Record merged reference #213 at `3604a9ce8d5aec717253d7a905389f7910efd25d` and open consumer issue #221.
+- [ ] Obtain owner approval of this proposal and design. The merged reference #213 is recorded at
+  `3604a9ce8d5aec717253d7a905389f7910efd25d`; consumer issue #221 is open.
+  Hold: OPEN-Q proposal awaits owner approval
 - [x] Inspect live SemEngine #8/#9 and PR #21; record 03B contract work as a dependency, not an engine API.
 - [x] Inventory concrete composition/provider and corpus dependencies; architect accepts the bounded
   consumer inventory for planning only. Record current seams, required changes and code references in
