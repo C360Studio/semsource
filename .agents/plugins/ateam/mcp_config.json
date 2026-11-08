@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "ateam": {
-      "command": "ateam",
-      "args": ["mcp"]
+      "command": "scripts/ateam",
+      "args": [
+        "mcp"
+      ]
     }
   }
 }

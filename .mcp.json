@@ -2,8 +2,10 @@
   "mcpServers": {
     "ateam": {
       "type": "stdio",
-      "command": "ateam",
-      "args": ["mcp"]
+      "command": "scripts/ateam",
+      "args": [
+        "mcp"
+      ]
     }
   }
 }

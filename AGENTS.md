@@ -33,7 +33,7 @@ Non-interactive: `semsource add ast --path ./src --language go --watch`, `semsou
 `semsource` with no args auto-runs if `semsource.json` exists.
 
 ```bash
-task tools:install                         # once: revive at the CI pin; ateam (pinned) into .tools/bin
+task tools:install                         # once: revive at the CI pin; ateam pin into the main checkout's .tools/bin
 task lint                                  # vet + gofmt + revive (warnings fail)
 go build ./...
 go test ./...                              # unit tests only
@@ -48,6 +48,9 @@ task ateam:doctor                          # harness (pinned ateam): AGENTS.md s
 
 Before pushing, also run `task ui:image:release:test` if you touched `.github/workflows/`, `Taskfile.yml`, or
 `scripts/` — those shell contract suites assert the *shape* of the workflows and are not covered by the Go gate.
+
+Hooks and MCP registrations call `scripts/ateam`, which runs the main checkout's pinned `.tools/bin/ateam`
+(shared by every worktree) and falls back to the `ateam` on PATH.
 
 ## Architecture
 

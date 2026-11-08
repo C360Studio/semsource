@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event session-start --agent codex"
+            "command": "scripts/ateam hook --event session-start --agent codex"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event before-prompt --agent codex"
+            "command": "scripts/ateam hook --event before-prompt --agent codex"
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event pre-compact --agent codex"
+            "command": "scripts/ateam hook --event pre-compact --agent codex"
           }
         ]
       }
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event turn-end --agent codex"
+            "command": "scripts/ateam hook --event turn-end --agent codex"
           }
         ]
       }

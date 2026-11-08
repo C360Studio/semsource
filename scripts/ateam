@@ -1,0 +1,22 @@
+#!/bin/sh
+# Run the pinned ateam for this repository; hooks and MCP registrations call this.
+#
+# `task tools:ateam` installs the Taskfile pin into the MAIN checkout's
+# .tools/bin, so every linked worktree shares one install. Prefer that, then a
+# worktree-local install, then whatever ateam is on PATH (a developer build).
+# Hooks run on every prompt against a 10 ms budget, so this resolves the main
+# checkout by reading the worktree's .git file instead of forking git.
+here=${0%/*}/..
+if [ -f "$here/.git" ]; then
+	read -r gitdir <"$here/.git"
+	gitdir=${gitdir#gitdir: }
+	main=${gitdir%/.git/worktrees/*}
+else
+	main=$here
+fi
+for bin in "$main/.tools/bin/ateam" "$here/.tools/bin/ateam"; do
+	[ -x "$bin" ] && exec "$bin" "$@"
+done
+command -v ateam >/dev/null 2>&1 && exec ateam "$@"
+echo "ateam is not installed; run: task tools:ateam" >&2
+exit 127

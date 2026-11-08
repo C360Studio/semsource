@@ -5,5 +5,5 @@ inherit = "core"
 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
 
 [mcp_servers.ateam]
-command = "ateam"
+command = "scripts/ateam"
 args = ["mcp"]

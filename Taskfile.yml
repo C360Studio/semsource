@@ -7,11 +7,14 @@ vars:
   # fails loudly when a local install drifts from the pin, which is otherwise
   # how you get a green local lint and a red CI one.
   REVIVE_VERSION: v1.15.0
-  # The ateam pin. Installed repo-local (gitignored .tools/bin) so it survives
-  # reboots and never collides with a sister repo pinning another release in the
-  # shared $(go env GOPATH)/bin. Gates run this binary; hooks run the ateam on PATH.
+  # The ateam pin. Installed into the MAIN checkout's gitignored .tools/bin, so it
+  # survives reboots, is shared by every linked worktree, and never collides with
+  # a sister repo pinning another release in the shared $(go env GOPATH)/bin.
+  # Hooks and MCP reach it through scripts/ateam; gates run it directly.
   ATEAM_VERSION: v0.3.9
-  ATEAM: "{{.ROOT_DIR}}/.tools/bin/ateam"
+  ATEAM_BIN_DIR:
+    sh: echo "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.tools/bin"
+  ATEAM: "{{.ATEAM_BIN_DIR}}/ateam"
 
 tasks:
   default:
@@ -31,11 +34,11 @@ tasks:
       - task: tools:ateam
 
   tools:ateam:
-    desc: Install the pinned ateam release into .tools/bin (skips when already at the pin)
+    desc: Install the pinned ateam into the main checkout's .tools/bin (skips when already at the pin)
     status:
       - '"{{.ATEAM}}" version 2>/dev/null | grep -q "ateam {{.ATEAM_VERSION}} "'
     cmds:
-      - GOBIN="{{.ROOT_DIR}}/.tools/bin" GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@{{.ATEAM_VERSION}}
+      - GOBIN="{{.ATEAM_BIN_DIR}}" GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@{{.ATEAM_VERSION}}
 
   ateam:doctor:
     desc: Run ateam doctor --check with the pinned ateam (installs it first if missing or drifted)

@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event session-start --agent gemini"
+            "command": "scripts/ateam hook --event session-start --agent gemini"
           }
         ]
       }
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event before-prompt --agent gemini"
+            "command": "scripts/ateam hook --event before-prompt --agent gemini"
           }
         ]
       }
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event pre-compact --agent gemini"
+            "command": "scripts/ateam hook --event pre-compact --agent gemini"
           }
         ]
       }
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event turn-end --agent gemini"
+            "command": "scripts/ateam hook --event turn-end --agent gemini"
           }
         ]
       }
@@ -51,8 +51,10 @@
   },
   "mcpServers": {
     "ateam": {
-      "command": "ateam",
-      "args": ["mcp"]
+      "command": "scripts/ateam",
+      "args": [
+        "mcp"
+      ]
     }
   }
 }

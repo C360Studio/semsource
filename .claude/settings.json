@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event session-start --agent claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/ateam hook --event session-start --agent claude"
           }
         ]
       }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event before-prompt --agent claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/ateam hook --event before-prompt --agent claude"
           }
         ]
       }
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event pre-compact --agent claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/ateam hook --event pre-compact --agent claude"
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ateam hook --event turn-end --agent claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/ateam hook --event turn-end --agent claude"
           }
         ]
       }
