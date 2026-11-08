@@ -45,3 +45,6 @@ go.work.sum
 .worktrees/
 .enjoy-logs/
 benchmarks/runs/
+
+# Repo-local pinned tools (task tools:ateam).
+.tools/

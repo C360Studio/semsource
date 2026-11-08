@@ -81,7 +81,7 @@ are platform-specific by design — do not mirror them.
 
 ```bash
 task agents:check     # or: ./scripts/check-agent-sync.sh
-ateam doctor --check  # ateam's harness: AGENTS.md size, rules-index parity, hooks, skill adapters
+task ateam:doctor     # pinned ateam doctor --check: AGENTS.md size, rules-index parity, hooks, skill adapters
 ```
 
 This is the scripted form of what semstreams documents as a manual read-only procedure. It fails, with

@@ -33,7 +33,7 @@ Non-interactive: `semsource add ast --path ./src --language go --watch`, `semsou
 `semsource` with no args auto-runs if `semsource.json` exists.
 
 ```bash
-task tools:install                         # once: revive at the CI-pinned version
+task tools:install                         # once: revive at the CI pin; ateam (pinned) into .tools/bin
 task lint                                  # vet + gofmt + revive (warnings fail)
 go build ./...
 go test ./...                              # unit tests only
@@ -43,7 +43,7 @@ go test -tags=garage ./storage/s3store/     # S3 compatibility against real Gara
 go test -run TestName ./path/to/package    # single test
 go test -race -tags=integration ./...      # race detection
 task agents:check                          # agent contracts/adapters/skills vs the semstreams pin
-ateam doctor --check                       # harness: AGENTS.md size, rules-index parity, hooks, adapters
+task ateam:doctor                          # harness (pinned ateam): AGENTS.md size, rules-index parity, hooks
 ```
 
 Before pushing, also run `task ui:image:release:test` if you touched `.github/workflows/`, `Taskfile.yml`, or
@@ -175,7 +175,7 @@ edge cases stay review-only. A new rule names what enforces it and adds its row 
 | `review` | A PR merges only when CI is green and no required job carries a known, unfixed flake; rerun-to-green is not a fix | review |
 | `review` | PR bodies record `implemented-by: <agent> (<model>)`; a completed OpenSpec change is archived before the PR is ready | `.agents/protocol.md`; `ateam doctor` warns |
 | `verify+review` | Spawning a role agent whose scope matches the diff is the default and needs no user permission; a reviewer is never weaker than the implementer | `task agents:check`; `.agents/README.md` |
-| `verify` | `AGENTS.md` < 24,000 bytes, `CLAUDE.md` only imports it, `.agents/rules-index.md` mirrors these sections; contracts and skills have thin adapters, specialist contracts open with a pointer to their base | `ateam doctor --check`; `task agents:check` |
+| `verify` | `AGENTS.md` < 24,000 bytes, `CLAUDE.md` only imports it, `.agents/rules-index.md` mirrors these sections; contracts and skills have thin adapters, specialist contracts open with a pointer to their base | `task ateam:doctor`; `task agents:check` |
 
 ## Spec-driven development (OpenSpec)
 

@@ -7,6 +7,11 @@ vars:
   # fails loudly when a local install drifts from the pin, which is otherwise
   # how you get a green local lint and a red CI one.
   REVIVE_VERSION: v1.15.0
+  # The ateam pin. Installed repo-local (gitignored .tools/bin) so it survives
+  # reboots and never collides with a sister repo pinning another release in the
+  # shared $(go env GOPATH)/bin. Gates run this binary; hooks run the ateam on PATH.
+  ATEAM_VERSION: v0.3.9
+  ATEAM: "{{.ROOT_DIR}}/.tools/bin/ateam"
 
 tasks:
   default:
@@ -20,9 +25,23 @@ tasks:
       - go build -o bin/semsource ./cmd/semsource
 
   tools:install:
-    desc: Install pinned Go dev tools (revive)
+    desc: Install pinned Go dev tools (revive; ateam into .tools/bin)
     cmds:
       - go install github.com/mgechev/revive@{{.REVIVE_VERSION}}
+      - task: tools:ateam
+
+  tools:ateam:
+    desc: Install the pinned ateam release into .tools/bin (skips when already at the pin)
+    status:
+      - '"{{.ATEAM}}" version 2>/dev/null | grep -q "ateam {{.ATEAM_VERSION}} "'
+    cmds:
+      - GOBIN="{{.ROOT_DIR}}/.tools/bin" GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@{{.ATEAM_VERSION}}
+
+  ateam:doctor:
+    desc: Run ateam doctor --check with the pinned ateam (installs it first if missing or drifted)
+    deps: [tools:ateam]
+    cmds:
+      - '"{{.ATEAM}}" doctor --check'
 
   tools:check:
     desc: Verify pinned Go dev tools are installed at the expected version

@@ -43,4 +43,4 @@ Mirror of `AGENTS.md` § Rules and what enforces them, section for section and r
 | `review` | A PR merges only when CI is green and no required job carries a known, unfixed flake; rerun-to-green is not a fix | review |
 | `review` | PR bodies record `implemented-by: <agent> (<model>)`; a completed OpenSpec change is archived before the PR is ready | `.agents/protocol.md`; `ateam doctor` warns |
 | `verify+review` | Spawning a role agent whose scope matches the diff is the default and needs no user permission; a reviewer is never weaker than the implementer | `task agents:check`; `.agents/README.md` |
-| `verify` | `AGENTS.md` < 24,000 bytes, `CLAUDE.md` only imports it, `.agents/rules-index.md` mirrors these sections; contracts and skills have thin adapters, specialist contracts open with a pointer to their base | `ateam doctor --check`; `task agents:check` |
+| `verify` | `AGENTS.md` < 24,000 bytes, `CLAUDE.md` only imports it, `.agents/rules-index.md` mirrors these sections; contracts and skills have thin adapters, specialist contracts open with a pointer to their base | `task ateam:doctor`; `task agents:check` |
