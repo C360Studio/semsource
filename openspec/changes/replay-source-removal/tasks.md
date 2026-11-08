@@ -39,6 +39,7 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
   `TestIntegrationJournalRetentionAndReceipts` and `TestIntegrationJournalRefusesMemoryBucket`.
 - [ ] Add the explicit real-NATS startup refusal case for positive global MaxMsgs after successful
   Ensure; the existing policy-validator unit case does not independently exercise that startup path.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [x] Implement intent-before-disable-before-ack. Prove prepare, disable, ambiguous committed disable,
   manifest and pending-promotion failures in `TestRemovalIntentBeforeDesiredAck` and
   `TestRemovalCrashBoundaries`.
@@ -55,6 +56,7 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
   `TestDirectProjectionStopJoinsCanceledCall` and `TestDirectProjectionCannotEnterAfterStopBegins`.
 - [ ] Add a combined owner-shutdown test that stops the replay worker while a producer receipt remains
   in flight; standalone publisher drain and direct projection Stop tests cover the separate owners.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 
 ## 3. Retirement, scope, and projection
 
@@ -71,6 +73,7 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
 - [ ] Complete explicit broker fault cases for stream recreation, AckNone/AckAll, wrong filter/delivery
   policy and recreated consumer with zero backlog. Implemented fail-closed checks are not a substitute
   for each originally planned fault proof; terminal accepted-input proof remains blocked by #1444.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [x] Derive exact producer selectors; prove Project/version, repo child, authority and taxonomy
   isolation plus overlap refusal in `TestRemovalExactSourceScope`, `TestScopeFamiliesAndMalformedIdentity`
   and `TestRemovalReplayScopeAndArtifactIsolation`.
@@ -88,6 +91,7 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
   and `TestRemovalProjectionCancellation`; final process retirement recovers without an operator resend.
 - [ ] Add an explicit retained-pass late-arrival process case; repeated coordinator passes are proven,
   but the final process workload does not inject a new retained entity after its first marker pass.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 
 ## 4. Current publication receipts and reactivation
 
@@ -118,16 +122,20 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
 - [ ] Intended acceptance, blocked by #1445: clear only source_removed at the SAME authoritative revision
   used for the source-fact comparison. Preserve newer stale reasons and recompute after conflicts;
   a hidden reread/retry is not an admitted conditional mutation.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [ ] Intended acceptance, blocked by #1445: make current same-ID parents/passages fresh while removed
   symbols/files/tail passages remain stale. Final selective process result is 24/26; completion and
   A freshness remain failed, while A-only publication proof and retained-stale B pass.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [x] Prove checked-stop/offline-delete/reseed A-only evidence and two remove/add cycles in the final
   selective and rapid-re-add process cases. The rapid case observes zero transient old-removal markers.
 - [ ] Prove the separate crash after A+B receipts but before receipt persistence/projection, offline B
   deletion, and partial-removal/re-add selective recovery; checked-stop evidence is not that crash proof.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [ ] Specify and prove continuing publication/withdrawal eligibility, including later B recreation and
   an old B receipt followed by deletion or failed enumeration. Historical receipts and sticky revisions
   are insufficient; current ListSeeds inventory does not qualify live-B freshness.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 
 ## 5. Real process acceptance
 
@@ -147,6 +155,7 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
   checked additive exits, all six exact broker cleanup results and raw temporary-evidence limitations.
 - [ ] Pass the intended selective freshness process case. Keep its two final failed assertions visible;
   passing pending/no-clear observations must not substitute for positive acceptance.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 
 ## 6. Review and delivery
 
@@ -168,13 +177,18 @@ they do not close the open acceptance gates. The combined process run exits 1 wi
 
 - [ ] Obtain a supported stream-incarnation-aware applied/unresolved-input contract proving the entire
   accepted input set, including MaxDeliver, terminal rejection and retention gaps (#1444).
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [ ] Obtain a public caller-revision-fenced conditional reconcile with classified conflict/unknown
   outcomes and no hidden reread/retry (#1445); rerun positive freshness and independent graph review.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [ ] Qualify continuing publication/withdrawal eligibility before live batches can grant freshness.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [ ] Qualify unknown remote mutation outcome resolution (#1446). Durable refusal is safety evidence,
   not automatic recovery of an uncertain remote commit.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 - [ ] Complete full semantic/semembed and eventual separate-branch SemEngine qualification before any
   mainline cutover. This BM25 follow-up and local numeric fingerprint tests do not satisfy those gates.
+  Hold: owner withdrew approval (PR #223); source-removal projection is #215, contracts SemEngine #18/#19/#20.
 
 ## 8. Generation and commit uncertainty review follow-up
 

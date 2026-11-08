@@ -11,9 +11,19 @@ invariant under periodic republication (audit 2026-07-19).
 ### Requirement: Ready means seeded
 
 The aggregate ingestion `phase` SHALL be `ready` only when every configured source has completed
-its initial seed; while any source is still seeding the phase SHALL be observably `seeding`; any
-errored source SHALL yield `degraded`. The documented consumer gate (poll until `ready`) therefore
-guarantees the initial corpus is fully published.
+its initial seed AND no source lost an entity it offered during that seed; while any source is
+still seeding the phase SHALL be observably `seeding`; any errored source — and any source whose
+seed lost entities it had offered — SHALL yield `degraded`.
+
+The documented consumer gate (poll until `ready`) therefore guarantees that no source silently
+dropped part of the corpus it ingested. It does not guarantee that every entity has finished
+landing at the instant `ready` is first observed: publishing is asynchronous and continues after a
+source finishes walking its inputs. The guarantee is against silent loss, which is permanent, not
+against in-flight delivery, which resolves on its own.
+
+Completing a seed is necessary but not sufficient for `ready`. A `degraded` phase arising from
+delivery loss SHALL be sticky: it SHALL NOT return to `ready` on the strength of continued activity
+alone, but only once a subsequent pass completes with no loss.
 
 #### Scenario: Mid-seed window is observable
 
@@ -22,13 +32,27 @@ guarantees the initial corpus is fully published.
 
 #### Scenario: Ready after the last source completes
 
+- **GIVEN** no configured source has lost an offered entity
 - **WHEN** the final configured source reports initial-seed completion
-- **THEN** `phase` transitions to `ready`
+- **THEN** `phase` transitions to `ready`, without waiting for entities still in flight
 
 #### Scenario: Errored source degrades the aggregate
 
 - **WHEN** any source reports phase `errored`
 - **THEN** the aggregate phase is `degraded`, not `ready`
+
+#### Scenario: A seed that completed with loss does not report ready
+
+- **GIVEN** a source whose initial seed completed after entities it offered failed to be delivered
+- **WHEN** the status surface is polled
+- **THEN** the aggregate phase is `degraded`, not `ready`, and that source reports a non-zero loss
+  figure
+
+#### Scenario: Loss-degraded phase is sticky
+
+- **GIVEN** the aggregate is `degraded` because a seed completed with loss
+- **WHEN** sources continue watching and report no further errors
+- **THEN** the phase remains `degraded` until a subsequent pass completes with no loss
 
 ### Requirement: Readiness sub-signals are present and honest on every surface
 
@@ -142,13 +166,14 @@ duration of that seed, so that a stalled seed is distinguishable from a slow one
 Reporting SHALL NOT be limited to the transitions into and out of seeding.
 
 Each progress report SHALL carry the source's cumulative confirmed-delivery count
-so far, so a consumer or operator can observe whether it is advancing. Progress
-reporting SHALL be interval-based and independent of entity volume, so a large
-corpus does not turn observability into its own load.
+so far, so a consumer or operator can observe whether it is advancing. "Confirmed
+delivery" carries the meaning fixed by *Source status reflects delivery truth*:
+acceptance for publication is not confirmation. Progress reporting SHALL be
+interval-based and independent of entity volume, so a large corpus does not turn
+observability into its own load.
 
-This does not change readiness semantics: `ready` continues to mean every
-configured source finished its initial seed. Progress is visible *before* that
-point; it is not a new gate.
+Progress reporting is not itself a gate. It is visible *before* readiness and does not alter it;
+readiness semantics are defined solely by *Ready means seeded*.
 
 #### Scenario: A long seed shows movement
 
@@ -167,8 +192,8 @@ point; it is not a new gate.
 #### Scenario: Readiness gating is unchanged
 
 - **WHEN** a consumer gates on the aggregate phase being `ready`
-- **THEN** the gate behaves exactly as before, and progress reporting during
-  seeding does not cause it to report ready early
+- **THEN** progress reporting during seeding does not cause the gate to report ready early, and
+  does not alter the gate's conditions, which are governed entirely by *Ready means seeded*
 
 ### Requirement: Pre-publish seed work is visibly alive
 
@@ -242,3 +267,45 @@ structs, mirrored types) SHALL NOT appear in source components.
 - **WHEN** the aggregator decodes it
 - **THEN** the report is rejected with an error log naming the decode
   failure, rather than accepted with the unknown fields discarded
+
+### Requirement: Offering, delivery, and loss are separately named on every status surface
+
+Per-source status SHALL carry the number of entities offered for publication, the number confirmed
+delivered, and the number lost as three separately named figures, on every status surface that
+carries per-source counts.
+
+The offered figure SHALL count every entity the source handed to its publisher, including those the
+publisher refused rather than buffered. A refused entity is counted as lost, so excluding it from
+the offered figure would place it on one side of the arithmetic only.
+
+No status surface SHALL publish a single figure that conflates offering with delivery. Such a figure
+cannot answer the only question a consumer asks of it — whether the corpus actually arrived — and
+reads as throughput while overstating delivery.
+
+Each figure SHALL be independently meaningful: the delivered figure SHALL never exceed the number
+of entities confirmed onto the graph stream, and the loss figure SHALL count every entity that was
+offered and did not arrive.
+
+No arithmetic relationship between the figures is required to hold at any instant. Status is a
+sample of a live asynchronous system, and entities legitimately sit between offered and delivered
+while publishing continues. Requiring the figures to reconcile exactly would demand a moving system
+hold still, and would make a routine in-flight window indistinguishable from loss.
+
+#### Scenario: A lossy seed reports all three figures
+
+- **GIVEN** a seed in which some offered entities were never delivered
+- **WHEN** the status surface is polled after that seed completes
+- **THEN** the source reports a non-zero loss figure and a delivered figure equal to the number
+  confirmed onto the stream
+
+#### Scenario: A clean seed reports zero loss
+
+- **GIVEN** a seed in which every offered entity was delivered
+- **WHEN** the status surface is polled after that seed completes
+- **THEN** the loss figure is zero
+
+#### Scenario: No conflated figure is published
+
+- **WHEN** any status surface carrying per-source counts is polled
+- **THEN** no field in the response reports offering and delivery as a single number
+
