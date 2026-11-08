@@ -44,6 +44,8 @@ go test -run TestName ./path/to/package    # single test
 go test -race -tags=integration ./...      # race detection
 task agents:check                          # agent contracts/adapters/skills vs the semstreams pin
 task ateam:doctor                          # harness (pinned ateam): AGENTS.md size, rules-index parity, hooks
+task spec:check                            # openspec validate --strict + Hold: placement (in task check and CI)
+task merge:check -- <pr>                   # the Merge check locally: ruleset, attestation lines, review record, flakes
 ```
 
 Before pushing, also run `task ui:image:release:test` if you touched `.github/workflows/`, `Taskfile.yml`, or
@@ -175,8 +177,8 @@ edge cases stay review-only. A new rule names what enforces it and adds its row 
 | `review` | Non-trivial or cross-cutting work starts with an OpenSpec change before code; specs are seeded lazily and verified against code, never backfilled | "Spec-driven development" below |
 | `review` | Before claiming or mutating state, Deliverable, Scope/non-goals, Definition of Done, and Stop boundary are clear | `.agents/protocol.md` |
 | `review` | A claim is a draft PR with `Closes #n`, opened before the work, from its own worktree | `.agents/protocol.md` |
-| `review` | A PR merges only when CI is green and no required job carries a known, unfixed flake; rerun-to-green is not a fix | review |
-| `review` | PR bodies record `implemented-by: <agent> (<model>)`; a completed OpenSpec change is archived before the PR is ready | `.agents/protocol.md`; `ateam doctor` warns |
+| `verify+review` | A PR merges only when CI is green on an up-to-date head and no `class:flake` issue is open; rerun-to-green is not a fix | `main` ruleset + `Merge check` (`task merge:check`) |
+| `verify+review` | Code PR bodies record `implemented-by: <agent> (<model>)` and a not-weaker `reviewed-by: <agent> (<model>, <effort>)` with a review record at the head; a completed OpenSpec change is archived before the PR is ready | `Merge check`; `ateam doctor` warns |
 | `verify+review` | Spawning a role agent whose scope matches the diff is the default and needs no user permission; a reviewer is never weaker than the implementer | `task agents:check`; `.agents/README.md` |
 | `verify` | `AGENTS.md` < 24,000 bytes, `CLAUDE.md` only imports it, `.agents/rules-index.md` mirrors these sections; contracts and skills have thin adapters, specialist contracts open with a pointer to their base | `task ateam:doctor`; `task agents:check` |
 
@@ -212,8 +214,9 @@ The shared protocol is `.agents/protocol.md`; read it before taking, landing, or
   Stop boundary. If one is ambiguous, propose a 3–4 bullet Definition of Done and ask at most 1–3 questions.
 - **Claim:** a draft PR opened before the work, in its own worktree on an agent-prefixed branch (`claude/`, `codex/`,
   `gemini/`; Enjoy desktop sessions use `move_to_worktree` under `.worktrees/`). No draft PR, no claim.
-- **Merge:** CI green on a head up to date with `main`, no known unfixed flake on a required job, and
-  `implemented-by:` in the PR body; squash merge.
+- **Merge:** the `main` ruleset requires `lint`, `test`, `test-integration`, `ui-quality`, `e2e-local`, and
+  `Merge check` on an up-to-date head; `Merge check` wants `implemented-by:`, `reviewed-by:`, and an approving review
+  record on a code PR, and no open `class:flake` issue; squash merge.
 - **Close:** the squash merge of a PR that declared `Closes #n` is the authorization; otherwise the owner's word on
   the issue.
 

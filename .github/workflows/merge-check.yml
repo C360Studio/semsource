@@ -1,0 +1,107 @@
+name: Merge check
+
+# The merge gate is `ateam review gate` (task merge:check), a required check of
+# its own apart from CI. It reads pull request state — the implemented-by: and
+# reviewed-by: lines, the review record comment, open class:flake issues — so it
+# also runs on edited: a reviewer's description edit reaches it without a CI rerun.
+#
+# It judges from the base commit: the Taskfile pin it installs and the review
+# policy it reads come from main, never from the tree under review, so a pull
+# request cannot loosen them. This file itself is read from the pull request's
+# merge ref, so edits to it are part of what is reviewed.
+#
+# Tokens: on GitHub the gate reads through gh with the job token (GH_TOKEN) and
+# ignores ATEAM_TOKEN_READ / ATEAM_TOKEN_WRITE, so CI sets neither. Those split
+# read/write tokens matter only for local `ateam review check` and state sync.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+# One run per pull request at a time, queued: a running check finishes rather
+# than being cancelled, so no cancelled Merge check sits beside a passing one.
+concurrency:
+  group: merge-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The awaiting probe (ateam#262): answers awaiting=true only for a code pull
+  # request with no reviewed-by: line and no review record yet. The main ruleset
+  # does not require it.
+  awaiting:
+    name: Merge check probe
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      awaiting: ${{ steps.probe.outputs.awaiting }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: ./.github/actions/setup-task
+
+      - name: Install ateam at the Taskfile pin
+        run: task tools:ateam
+
+      - name: Is the pull request awaiting its review record
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          out=$(.tools/bin/ateam review gate --awaiting "$PR_NUMBER")
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -xE 'awaiting=(true|false)' >> "$GITHUB_OUTPUT"
+
+  # Skipped and renamed on a draft, and while the probe finds a code pull request
+  # not yet judgeable, so the required check named "Merge check" is absent (which
+  # blocks the merge) instead of red. A failed probe leaves no answer, so the full
+  # check runs.
+  merge-check:
+    needs: awaiting
+    name: ${{ github.event.pull_request.draft && 'Merge check (draft, skipped)' || needs.awaiting.outputs.awaiting == 'true' && 'Merge check (awaiting review record, skipped)' || 'Merge check' }}
+    if: ${{ always() && !github.event.pull_request.draft && needs.awaiting.outputs.awaiting != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: ./.github/actions/setup-task
+
+      - name: Install ateam at the Taskfile pin
+        run: task tools:ateam
+
+      - name: Check required checks, the review and its strength, and known flakes
+        env:
+          # Every check the main ruleset must require; dropping one from the
+          # ruleset fails here.
+          ATEAM_REQUIRED_CHECKS: lint,test,test-integration,ui-quality,e2e-local,Merge check
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: .tools/bin/ateam review gate "$PR_NUMBER"
