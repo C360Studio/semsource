@@ -15,6 +15,8 @@ vars:
   ATEAM_BIN_DIR:
     sh: echo "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.tools/bin"
   ATEAM: "{{.ATEAM_BIN_DIR}}/ateam"
+  # ateam state spec-check shells out to openspec; CI installs this release.
+  OPENSPEC_VERSION: 1.7.0
 
 tasks:
   default:
@@ -40,11 +42,39 @@ tasks:
     cmds:
       - GOBIN="{{.ATEAM_BIN_DIR}}" GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@{{.ATEAM_VERSION}}
 
+  tools:openspec:
+    desc: Install the pinned openspec CLI globally with npm (CI; spec:check needs it on PATH)
+    status:
+      - 'openspec --version 2>/dev/null | grep -qx "{{.OPENSPEC_VERSION}}"'
+    cmds:
+      - npm install -g @fission-ai/openspec@{{.OPENSPEC_VERSION}}
+
+  # The session variables are unset so a gate run never takes the writer lease.
   ateam:doctor:
     desc: Run ateam doctor --check with the pinned ateam (installs it first if missing or drifted)
     deps: [tools:ateam]
     cmds:
-      - '"{{.ATEAM}}" doctor --check'
+      - env -u ATEAM_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_SESSION_ID -u GEMINI_SESSION_ID "{{.ATEAM}}" doctor --check
+
+  spec:check:
+    desc: openspec validate --all --strict, then fail on a Hold written outside every task (ateam state spec-check)
+    deps: [tools:ateam]
+    cmds:
+      - '"{{.ATEAM}}" state spec-check'
+
+  spec:queue:
+    desc: Show each in-flight OpenSpec change with its ticked/total count, holds and caveats
+    deps: [tools:ateam]
+    cmds:
+      - '"{{.ATEAM}}" state spec-queue'
+
+  merge:check:
+    desc: Run ateam review gate on PR <n> (-- <n>) — required checks on main, attestation lines and review record, open class:flake issues. Reads GitHub, so not in check
+    deps: [tools:ateam]
+    cmds:
+      # The checks the main ruleset requires; ateam defaults to "Required", which
+      # this repo does not have. Keep in step with merge-check.yml's list.
+      - ATEAM_REQUIRED_CHECKS="${ATEAM_REQUIRED_CHECKS:-lint,test,test-integration,ui-quality,e2e-local,Merge check}" "{{.ATEAM}}" review gate {{.CLI_ARGS}}
 
   tools:check:
     desc: Verify pinned Go dev tools are installed at the expected version
@@ -139,7 +169,9 @@ tasks:
       - ./scripts/tier2-dev-smoke.sh
 
   check:
-    desc: Run all checks (lint + test)
+    desc: Run all checks (lint + harness doctor + OpenSpec + test)
     cmds:
       - task: lint
+      - task: ateam:doctor
+      - task: spec:check
       - task: test

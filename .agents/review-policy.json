@@ -45,5 +45,6 @@
       "high": ["high"]
     }
   },
-  "cross_provider": true
+  "cross_provider": true,
+  "review_launch": "agent"
 }
