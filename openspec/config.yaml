@@ -2,7 +2,7 @@ schema: spec-driven
 
 # Project context shown to AI when creating OpenSpec artifacts. This is the
 # canonical planning context (OpenSpec 1.5 folds the former openspec/project.md
-# in here); fuller detail lives in CLAUDE.md and docs/adr/.
+# in here); fuller detail lives in AGENTS.md and docs/adr/.
 context: |
   SemSource is the source-knowledge ingestion service for the C360 sem* family
   (Go; NATS JetStream via github.com/c360studio/semstreams; Task runner; revive).

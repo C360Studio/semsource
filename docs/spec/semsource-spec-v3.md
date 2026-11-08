@@ -16,9 +16,9 @@
 > - **Config format:** JSON (`semsource.json`), not YAML.
 > - **Event types:** there is no SEED/DELTA/RETRACT/HEARTBEAT envelope or `GraphEvent` type; emission
 >   is per-entity to `graph.ingest.entity` as payload `semsource.entity.v1`.
-> - **Milestones (§10):** M1–M5 are complete; see `CLAUDE.md` for the current milestone status.
+> - **Milestones (§10):** M1–M5 are complete; see `ROADMAP.md` for the current release status.
 >
-> For current architecture see `CLAUDE.md`, ADR-0004 (fusion gateway), ADR-0005 (ontology),
+> For current architecture see `AGENTS.md`, ADR-0004 (fusion gateway), ADR-0005 (ontology),
 > ADR-0006 (external service), and `docs/integration/m5-consumer-integration.md`.
 
 ---

@@ -106,9 +106,23 @@ for theirs in "$upstream"/.agents/skills/*/SKILL.md; do
 	fi
 done
 
+# ── ateam base contracts are read by skills and specialists, not spawned ────
+# architect/developer/reviewer are ateam's generated bases (drift-checked by
+# `ateam doctor --check`); they carry no adapter. Every specialist must open by
+# pointing at its base, or a subagent reading only the specialist never sees it.
+is_base() { case "$1" in architect | developer | reviewer) return 0 ;; esac; return 1; }
+
+for canonical in .agents/contracts/*.md; do
+	role=$(basename "$canonical" .md)
+	is_base "$role" && continue
+	sed -n '1,5p' "$canonical" | grep -Eq '\.agents/contracts/(architect|developer|reviewer)\.md' ||
+		fail "$role: $canonical does not open with a pointer to its base contract"
+done
+
 # ── Adapters stay thin and name exactly their canonical contract ─────────────
 for canonical in .agents/contracts/*.md; do
 	role=$(basename "$canonical" .md)
+	is_base "$role" && continue
 
 	claude=".claude/agents/$role.md"
 	if [ ! -f "$claude" ]; then
@@ -146,20 +160,20 @@ for canonical in .agents/skills/*/SKILL.md; do
 	[ "$lines" -le 12 ] || fail "$name: $adapter is $lines lines — an adapter that carries the body is a second copy to drift"
 done
 
-# ── AGENTS.md and CLAUDE.md must route the same roles, on the same terms ────
+# ── The entry point must route every role, on the same terms ──────────────────
 # Two entry points that name different agents is how a Codex session and a Claude
 # session end up working to different contracts in the same repository. The
 # spawning rule is checked too: it is the difference between a reviewer that runs
 # and one that waits to be asked, and it is one deletion away from silently
 # reverting to the latter.
+# CLAUDE.md is an `@AGENTS.md` import (ateam), so AGENTS.md is the one entry to check.
+grep -qx '@AGENTS.md' CLAUDE.md || fail "CLAUDE.md does not import @AGENTS.md"
 for canonical in .agents/contracts/*.md; do
 	role=$(basename "$canonical" .md)
-	for entry in AGENTS.md CLAUDE.md; do
-		grep -Fq "$role" "$entry" || fail "$role: $entry does not route this role"
-	done
+	grep -Fq "$role" AGENTS.md || fail "$role: AGENTS.md does not route this role"
 done
 
-for entry in AGENTS.md CLAUDE.md .agents/README.md; do
+for entry in AGENTS.md .agents/README.md; do
 	grep -Fq 'no user permission needed' "$entry" ||
 		fail "$entry no longer states that spawning a matching role agent is the default and needs no permission"
 done
