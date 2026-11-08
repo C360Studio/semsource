@@ -285,9 +285,7 @@ test("renders the owned SemSource shell truthfully", async ({ page }) => {
   await expect(page.getByText(/status snapshot/i)).toContainText(
     "2026-07-15T11:59:00Z",
   );
-  await expect(page.getByText(/last index progress/i)).toContainText(
-    "2026-07-15T11:58:00Z",
-  );
+  await expect(page.getByText(/last index progress/i)).toHaveCount(0);
   await expect(page.getByText(/inventory updated/i)).toContainText(
     "2026-07-15T12:00:00Z",
   );
