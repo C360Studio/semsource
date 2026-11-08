@@ -48,7 +48,6 @@ const capabilities = {
       ready: true,
       state: "ready",
       lag: 0,
-      last_synced: "2026-07-15T11:58:00Z",
     },
     semantic_index: {
       available: true,

@@ -44,3 +44,24 @@ func TestIndexReadinessFrom_HealthyReplyPassesThrough(t *testing.T) {
 		t.Errorf("IndexReadinessJSON missing available:true: %s", data)
 	}
 }
+
+// TestIndexReadinessFrom_DropsLegacyStatusFields pins the ADR-109 port prep
+// (#227): a SemStreams-era reply still carrying the legacy phase / revision /
+// last_synced trio yields only the revision-numeric contract, so no consumer
+// can start gating on a field SemEngine's graph-index no longer emits.
+func TestIndexReadinessFrom_DropsLegacyStatusFields(t *testing.T) {
+	raw := []byte(`{"ready":true,"state":"ready","indexed_revision":42,"target_revision":42,` +
+		`"phase":"ready","revision":"42","last_synced":"2026-07-15T15:00:00Z"}`)
+	var round map[string]any
+	if err := json.Unmarshal(IndexReadinessJSON(raw, nil, "structural index"), &round); err != nil {
+		t.Fatalf("IndexReadinessJSON not valid JSON: %v", err)
+	}
+	for _, legacy := range []string{"phase", "revision", "last_synced"} {
+		if _, ok := round[legacy]; ok {
+			t.Errorf("readiness re-emits legacy field %q: %v", legacy, round)
+		}
+	}
+	if round["indexed_revision"] != float64(42) || round["target_revision"] != float64(42) {
+		t.Errorf("revision-numeric contract lost: %v", round)
+	}
+}

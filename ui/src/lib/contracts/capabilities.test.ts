@@ -194,17 +194,6 @@ describe("parseCapabilities", () => {
         return value;
       },
     ],
-    [
-      "numeric revision disagreement",
-      () => {
-        const value = structuredClone(ready);
-        Object.assign(value.readiness.structural_index, {
-          indexed_revision: 8,
-          revision: "7",
-        });
-        return value;
-      },
-    ],
   ])("rejects invalid %s", (_label, build) => {
     expect(() => parseCapabilities(build())).toThrow();
   });
@@ -230,17 +219,6 @@ describe("parseCapabilities", () => {
     });
     expect(parseCapabilities(value).readiness.semantic_index.state).toBe(
       "reset_required",
-    );
-  });
-
-  it("accepts matching unsigned decimal revision evidence", () => {
-    const value = structuredClone(ready);
-    Object.assign(value.readiness.structural_index, {
-      indexed_revision: 8,
-      revision: "8",
-    });
-    expect(parseCapabilities(value).readiness.structural_index.revision).toBe(
-      "8",
     );
   });
 

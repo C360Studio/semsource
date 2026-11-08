@@ -181,12 +181,6 @@
               >Revision lag {capabilities.readiness.structural_index.lag}</small
             >
           {/if}
-          {#if capabilities.readiness.structural_index.last_synced}
-            <small
-              >Last index progress {capabilities.readiness.structural_index
-                .last_synced}</small
-            >
-          {/if}
         </article>
         <article data-state={capabilities.readiness.semantic_index.state}>
           <span>Semantic index</span>

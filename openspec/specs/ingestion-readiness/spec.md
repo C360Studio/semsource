@@ -73,6 +73,15 @@ the key SHALL NOT be silently omitted.
 - **THEN** the corresponding object reports `available: false` and a reason, and the remainder of
   the status payload is returned normally
 
+#### Scenario: Legacy status fields are not re-emitted
+
+- **GIVEN** a graph index or embedding status reply that still carries the legacy `phase`,
+  `revision`, or `last_synced` fields
+- **WHEN** SemSource assembles the readiness object on any status surface
+- **THEN** the object carries only `available`, `ready`, `state`, `indexed_revision`,
+  `target_revision`, `lag`, and `reason`
+- **AND** read-your-write freshness is compared against the numeric `indexed_revision` alone
+
 ### Requirement: Entity counts are distinct-entity truth
 
 `entity_count`, `type_counts`, and `total_entities` SHALL report the cardinality of distinct
