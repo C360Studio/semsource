@@ -2,21 +2,21 @@
 
 ## Superseded execution direction — 2026-10-01
 
-The owner-authorized [corrective tasks](../remove-private-source-recovery/tasks.md) replace this
+The owner-authorized [corrective tasks](../2026-11-08-remove-private-source-recovery/tasks.md) replace this
 implementation direction. Architectural approval of the private recovery design is withdrawn.
 Do not execute remaining expansion/recovery tasks below under the old approval. Checked items remain
 records of past implementation/proof; unchecked acceptance stays unproven, not waived or completed.
 The corrective contract removes this machinery and explicitly defers source-removal projection and
-positive reactivation. [Current status](../../../docs/testing/private-recovery-retirement/README.md)
+positive reactivation. [Current status](../../../../docs/testing/private-recovery-retirement/README.md)
 keeps corrective implementation evidence separate from the historical results below.
 
-The owner's 2026-10-01 [baseline merge disposition](../../../docs/testing/setup-03a/merge-readiness.md)
+The owner's 2026-10-01 [baseline merge disposition](../../../../docs/testing/setup-03a/merge-readiness.md)
 ends this SemStreams repair work at the recorded safe implementation. The unchecked proof and contract
 items below remain open under #215 and SemEngine #18–#20 decisions; they are not silently completed.
 SemSource next consumes SemEngine Tier 0 at SETUP 04A after its separate admission gates.
 
 Production implementation is committed at `ce241a5c6e07f69e5450bb60885b537e89ea27a9`.
-The [final result ledger](../../../docs/testing/source-removal215/final-results.json) identifies the
+The [final result ledger](../../../../docs/testing/source-removal215/final-results.json) identifies the
 clean binary and later test-only follow-up. Checked tasks cover the stated implementation or proof;
 they do not close the open acceptance gates. The combined process run exits 1 with two #1445 failures.
 

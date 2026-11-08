@@ -2,12 +2,16 @@
 
 ## Superseded direction — 2026-10-01
 
+**Archived as withdrawn (2026-11-08, owner).** Its 14 open tasks were never completed and its spec delta
+was not applied to current specs. The retained-graph gap stays on #215; the contracts are SemEngine
+#18/#19/#20.
+
 The owner withdrew architectural approval of this private recovery design and authorized removal in
 [PR #223](https://github.com/C360Studio/semsource/pull/223). The approved
-[corrective change](../remove-private-source-recovery/proposal.md) introduces no replacement recovery
+[corrective change](../2026-11-08-remove-private-source-recovery/proposal.md) introduces no replacement recovery
 system. This proposal remains historical evidence; it no longer authorizes new journal/receipt/fence
 or replay work. Source-removal projection and positive reactivation are explicitly deferred.
-See the [reassessment record](../../../docs/testing/private-recovery-retirement/audit.md).
+See the [reassessment record](../../../../docs/testing/private-recovery-retirement/audit.md).
 
 ## Why
 

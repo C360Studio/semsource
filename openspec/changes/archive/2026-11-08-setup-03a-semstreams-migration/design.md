@@ -76,7 +76,7 @@ reduced probes. Use `go list -deps -test` plus production measurement with equal
 
 Missing evidence blocks the affected behavior claim. The 2026-10-01 owner ruling accepts the measured
 SETUP 03A baseline, with independent component and graph/event merge-readiness approval at `705ae66`.
-[The current disposition](../../../docs/testing/setup-03a/merge-readiness.md) supersedes the earlier
+[The current disposition](../../../../docs/testing/setup-03a/merge-readiness.md) supersedes the earlier
 requirement to keep the baseline PR draft while substrate qualification was incomplete. Keep open
 behavior/proof tasks unarchived and preserve failed results; readiness is not full system qualification.
 

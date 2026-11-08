@@ -6,7 +6,7 @@ The independent reassessment and owner ruling withdraw approval of the private r
 The earlier review below checked implementation against its selected contract; it did not prove that
 additional persistent authority met SemStreams #1147's settlement-first necessity test. Its commands,
 results and findings remain historical facts. See the [audit](../private-recovery-retirement/audit.md)
-and [corrective contract](../../../openspec/changes/remove-private-source-recovery/design.md).
+and [corrective contract](../../../openspec/changes/archive/2026-11-08-remove-private-source-recovery/design.md).
 Corrective implementation and final review are pending; no existing unknown outcome is declared safe.
 
 The scoped review below is the implementation-era record. See the later

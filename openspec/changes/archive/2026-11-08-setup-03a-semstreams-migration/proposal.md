@@ -27,7 +27,7 @@ within each revision against that revision's retained store.
 ## Current baseline acceptance ruling
 
 The owner ruling of 2026-10-01 directs PR #213 to merge readiness as a measured **03A baseline**.
-[The additive readiness record](../../../docs/testing/setup-03a/merge-readiness.md) supersedes historical
+[The additive readiness record](../../../../docs/testing/setup-03a/merge-readiness.md) supersedes historical
 baseline merge holds without rewriting their evidence. Independent component and graph reviewers
 approve baseline-only readiness at `705ae66`; this is technical approval, not a completed GitHub merge.
 
