@@ -1,15 +1,15 @@
 # Qualify SemSource on SemEngine Tier 0
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-08)
 
 ## Why
 
 The SETUP 03A SemStreams baseline merged in #213 as
 `3604a9ce8d5aec717253d7a905389f7910efd25d`. SemSource's next substrate work is the 04A graph-foundation
 consumer qualification tracked by #221 and SemEngine #9. SemEngine 03B contracts and port admission
-are still in progress in SemEngine #8 / PR #21; current engine main supplies a harness, not a usable
-production graph engine. A consumer plan can record the work and exact prerequisites without
-inventing public APIs or starting extraction.
+were approved in SemEngine #8 / merged PR #21. The next consumer pin, `v0.1.0-alpha.3`, waits for
+change 5 (PR #550) to merge and be tagged. A consumer plan can record the work and exact prerequisites
+without inventing public APIs or treating a pre-release pin as Tier 0 qualification.
 
 ## What Changes
 
@@ -20,8 +20,8 @@ inventing public APIs or starting extraction.
 - Preserve the frozen SemStreams reference, failed expectations, provider controls and baseline results.
 
 This initial planning commit changes no runtime, module pin, test expectation or fixture. The branch
-still contains the reference SemStreams module because no engine contract/source commit is admitted
-for consumption. It is not a Tier 0 build or an engine qualification result.
+still contains the reference SemStreams module because the admitted next consumer pin is not yet
+available. It is not a Tier 0 build or an engine qualification result.
 
 ## Capabilities
 

@@ -2,9 +2,8 @@
 
 ## 1. Planning claim and prerequisites
 
-- [ ] Obtain owner approval of this proposal and design. The merged reference #213 is recorded at
+- [x] Obtain owner approval of this proposal and design. The merged reference #213 is recorded at
   `3604a9ce8d5aec717253d7a905389f7910efd25d`; consumer issue #221 is open.
-  Hold: OPEN-Q proposal awaits owner approval
 - [x] Inspect live SemEngine #8/#9 and PR #21; record 03B contract work as a dependency, not an engine API.
 - [x] Inventory concrete composition/provider and corpus dependencies; architect accepts the bounded
   consumer inventory for planning only. Record current seams, required changes and code references in
@@ -14,6 +13,11 @@
   Implementation still requires the separate engine admission gate below.
 - [ ] Record approved 03B contracts, package scope, relevant #15–#20 repair/decision dispositions and
   the exact admitted usable SemEngine Tier 0 commit before implementation begins.
+  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`.
+  The [2026-11-08 pin ruling](https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898)
+  permits registry/import integration on alpha.3; it grants no tier qualification. At this check,
+  PR #550 is open and the latest release tag is alpha.2; no alpha.3 SHA is available.
+  Hold: Await SemEngine change 5 / PR #550 merge and v0.1.0-alpha.3 consumer pin under #9.
 
 ## 2. Future implementation after admission
 
@@ -49,4 +53,5 @@
 - [ ] Retain Tier 0 as a lower-profile regression obligation for 04B/04C; mainline stays on SemStreams
   until the complete semembed-backed workload and retained lower-profile gates pass.
 
-Current stop point: planning only. No implementation task is admitted by creating this claim.
+Current stop point: task 1.5, engine admission. Owner proposal approval is recorded; implementation
+awaits the admitted consumer pin and its exact SHA. Tier qualification retains every acceptance gate.

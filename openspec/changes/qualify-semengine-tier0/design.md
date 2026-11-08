@@ -7,10 +7,13 @@ merged #213, `3604a9ce8d5aec717253d7a905389f7910efd25d`. This branch still uses 
 module; it is not an engine build or a qualified Tier 0 composition.
 
 The architect's consumer inventory and independent review approve this bounded plan for planning only.
-The reviewer found no scope or qualification-mapping blocker. Runtime migration requires approved [03B contracts and port scope][engine8], currently
-claimed by Claude in [PR #21][engine21], plus an exact usable, admitted SemEngine Tier 0 SHA. At planning
-start, engine main `34c9dc64fd4467001c33686a776cbe6b7c6878f9` provides foundation/harness packages,
-not the required production engine.
+The reviewer found no scope or qualification-mapping blocker. Owner proposal/design approval was
+recorded on 2026-11-08. [03B contracts and port scope][engine8] landed through [PR #21][engine21]
+at `9286055e2c9a18426a73da38a60766845ab9e48e` on 2026-10-01.
+The [2026-11-08 consumer-pin ruling][consumer-pin] permits registry/import integration after change 5
+(PR #550) merges and is tagged `v0.1.0-alpha.3`. At this check PR #550 is open and only alpha.1/alpha.2
+release tags exist. Admission task 1.5 therefore remains held for the exact usable consumer pin;
+that pre-release pin will not itself establish Tier 0 qualification.
 A planning PR, compiling reference binary or elapsed time cannot satisfy this gate.
 
 SemSource owns composition, source adapters, consumer query policy and the acceptance workload.
@@ -197,6 +200,7 @@ mainline substrate change.
 [engine8]: https://github.com/C360Studio/semengine/issues/8
 [engine9]: https://github.com/C360Studio/semengine/issues/9
 [engine21]: https://github.com/C360Studio/semengine/pull/21
+[consumer-pin]: https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898
 [graph-compose]: ../../../cmd/semsource/run.go#L720
 [graph-config]: ../../../config/config.go#L32
 [provider-validation]: ../../../config/config.go#L385
