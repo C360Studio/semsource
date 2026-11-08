@@ -72,7 +72,9 @@ tasks:
     desc: Run ateam review gate on PR <n> (-- <n>) — required checks on main, attestation lines and review record, open class:flake issues. Reads GitHub, so not in check
     deps: [tools:ateam]
     cmds:
-      - '"{{.ATEAM}}" review gate {{.CLI_ARGS}}'
+      # The checks the main ruleset requires; ateam defaults to "Required", which
+      # this repo does not have. Keep in step with merge-check.yml's list.
+      - ATEAM_REQUIRED_CHECKS="${ATEAM_REQUIRED_CHECKS:-lint,test,test-integration,ui-quality,e2e-local,Merge check}" "{{.ATEAM}}" review gate {{.CLI_ARGS}}
 
   tools:check:
     desc: Verify pinned Go dev tools are installed at the expected version
