@@ -22,6 +22,7 @@ separate from full #215 acceptance, SETUP 03B engine admission and the 04C mainl
   Execution is recorded, but the promised recovery behavior is not proven. These exact failures are
   known-at-pin under SemStreams #1442 / SemEngine #15 and do not block the accepted 03A baseline;
   the assertions remain failed and the recovery proof task remains open.
+  Hold: changed-source recovery (#1442) moved to SemEngine #15; not provable on the SemStreams pin.
 - [x] 2.4 Freeze provider image/build, actual model artifact/version, dimensions, and preprocessing.
 - [x] 2.5 Run beta.161 structural/BM25 and full semembed baselines; record snapshots, commands, per-case
   outcomes, observed defects, and unavailable evidence without silently skipping gates.
@@ -47,6 +48,7 @@ separate from full #215 acceptance, SETUP 03B engine admission and the 04C mainl
   reviewed; terminal all-input completion, selective freshness and unknown-effect recovery remain open.
   SemStreams #1444/#1445/#1446 map to SemEngine #18/#19/#20 contract decisions in 03B. Safe refusal is
   not a positive freshness pass; this follow-up does not block the owner-accepted baseline.
+  Hold: source-removal/re-add acceptance is #215 (milestone 2), contracts SemEngine #18/#19/#20.
 
 ## 4. Defect probes and dependency measurement
 
@@ -54,6 +56,7 @@ separate from full #215 acceptance, SETUP 03B engine admission and the 04C mainl
   Guarded OSH transport was measured; the current #175 parser guard reduces historical offered volume.
   The original unguarded #178 failure has not been reproduced or established fixed. Keep #178 open;
   the owner ruling makes this a nonblocking baseline follow-up, not a completed capacity proof.
+  Hold: GRAPH capacity reproduction stays on #178, owner-ruled nonblocking for the baseline.
 - [x] 4.2 Probe RPC stream collision (SemStreams #1143) at both pins and assess retained request paths.
 - [x] 4.3 Measure production/test-inclusive closures with commands and raw non-test line counts;
   compare direct-import/registration cut and composed port-set closure.
@@ -109,5 +112,7 @@ that the composition root supplies in production.
 - [x] 7.3 Hand off `test/setup03a` as the acceptance corpus for 04A on a wholly SemEngine integration
   branch after 03B approval. Require a true no-embedder composition; BM25 structural coverage is only
   its baseline. Keep #178, #215, #216 and #219 open without treating them as baseline merge blockers.
-- [ ] 7.4 PR owner records final GitHub checks and merge execution. Stop this delivery after the baseline
+- [x] 7.4 PR owner records final GitHub checks and merge execution. Stop this delivery after the baseline
   handoff; do not start 04A implementation, alter pins, or archive open acceptance work here.
+  PR #213 squash-merged 2026-10-01 at `3604a9c` with test, test-integration, lint, ui-quality,
+  e2e-local, ui-smoke-dev, quickstart-e2e and garage-compat green.
