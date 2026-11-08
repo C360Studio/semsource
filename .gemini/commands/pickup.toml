@@ -1,0 +1,2 @@
+description = "Run pickup workflow."
+prompt = "Read .agents/skills/pickup/SKILL.md fully and follow the canonical workflow."

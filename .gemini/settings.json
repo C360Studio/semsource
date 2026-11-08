@@ -1,0 +1,58 @@
+{
+  "context": {
+    "fileName": "AGENTS.md"
+  },
+  "model": {
+    "chatCompression": {
+      "contextPercentageThreshold": 0.5
+    }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ateam hook --event session-start --agent gemini"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ateam hook --event before-prompt --agent gemini"
+          }
+        ]
+      }
+    ],
+    "PreCompress": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ateam hook --event pre-compact --agent gemini"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ateam hook --event turn-end --agent gemini"
+          }
+        ]
+      }
+    ]
+  },
+  "mcpServers": {
+    "ateam": {
+      "command": "ateam",
+      "args": ["mcp"]
+    }
+  }
+}

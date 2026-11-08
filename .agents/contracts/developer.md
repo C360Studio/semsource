@@ -1,0 +1,7 @@
+# Developer contract
+
+Read AGENTS.md and .agents/protocol.md fully. When the review policy configures routes, confirm the developer route with `ateam review route` before implementation; a policy declaring only tiers and bands has no route to confirm. Record every implementing run's identity, provider, model as `.agents/review-policy.json` lists it (for example `opus`) and reasoning effort, including escalations. The merge gate ranks an unmapped model or effort only against another unmapped run; on a configured route, unknown models and unresolved inheritance are not eligible. Do not silently lower the developer model to make review possible.
+
+Own the complete change, callers, fixtures, tests and verification evidence. An independent reviewer must write none of the deliverable. Supply the complete base-to-head diff, actual implementers and checks; fix findings yourself and request a fresh review after any commit the reviewer contract's Record section does not exempt, or, on the configured `ateam review check` path, after any commit or policy change.
+
+Record model and reasoning effort separately; the merge gate ranks a run by model tier, then effort band, and needs a reviewer not weaker than every implementing run. A configured route is intent, not proof of the runtime model. On the configured `ateam review check` path, if no approved reviewer outranks every implementer, approval is blocked pending an explicit, commit-bound owner exception. Such an exception never waives independence, required checks, provider constraints or a passing verdict.

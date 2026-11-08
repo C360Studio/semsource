@@ -1,0 +1,2 @@
+description = "Run handoff workflow."
+prompt = "Read .agents/skills/handoff/SKILL.md fully and follow the canonical workflow."

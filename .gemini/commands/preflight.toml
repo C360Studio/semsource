@@ -1,0 +1,2 @@
+description = "Run preflight workflow."
+prompt = "Read .agents/skills/preflight/SKILL.md fully and follow the canonical workflow."

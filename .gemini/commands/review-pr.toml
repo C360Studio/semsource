@@ -1,0 +1,2 @@
+description = "Run review-pr workflow."
+prompt = "Read .agents/skills/review-pr/SKILL.md fully and follow the canonical workflow."

@@ -1,0 +1,2 @@
+description = "Run ponytail workflow."
+prompt = "Read .agents/skills/ponytail/SKILL.md fully and follow the canonical workflow."

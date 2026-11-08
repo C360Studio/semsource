@@ -1,0 +1,22 @@
+{
+  "ateam": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "ateam hook --event session-start --agent agy"
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "ateam hook --event before-prompt --agent agy"
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "ateam hook --event turn-end --agent agy"
+      }
+    ]
+  }
+}
