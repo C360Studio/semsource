@@ -41,3 +41,10 @@ go.work.sum
 # this repository from adopting the layout semstreams uses.
 
 /semsource
+.ateam/
+.worktrees/
+.enjoy-logs/
+benchmarks/runs/
+
+# Repo-local pinned tools (task tools:ateam).
+.tools/

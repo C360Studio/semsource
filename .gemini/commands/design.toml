@@ -1,0 +1,2 @@
+description = "Run design workflow."
+prompt = "Read .agents/skills/design/SKILL.md fully and follow the canonical workflow."

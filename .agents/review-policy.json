@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "model_tiers": {
+    "frontier": [
+      "claude:opus",
+      "claude:claude-opus-5-5",
+      "claude:claude-opus-4-7",
+      "claude:claude-opus-4-6",
+      "claude:fable",
+      "codex:gpt-6-astra",
+      "codex:gpt-6-sol",
+      "codex:gpt-6.1-sol",
+      "gemini:gemini-4-argon",
+      "gemini:pro"
+    ],
+    "workhorse": [
+      "claude:sonnet",
+      "claude:claude-sonnet-4-6",
+      "claude:claude-sonnet-4-5",
+      "gemini:gemini-3.8-flash",
+      "gemini:gemini-3.1-pro",
+      "gemini:flash"
+    ],
+    "light": [
+      "claude:haiku",
+      "claude:claude-haiku-4-5",
+      "codex:gpt-5.4",
+      "gemini:flash_lite"
+    ]
+  },
+  "effort_bands": {
+    "claude": {
+      "low": ["low"],
+      "mid": ["medium"],
+      "high": ["high", "xhigh", "max"]
+    },
+    "codex": {
+      "low": ["none", "minimal", "low"],
+      "mid": ["medium"],
+      "high": ["high", "xhigh", "max"]
+    },
+    "gemini": {
+      "low": ["minimal", "low"],
+      "mid": ["medium"],
+      "high": ["high"]
+    }
+  },
+  "cross_provider": true
+}

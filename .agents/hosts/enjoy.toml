@@ -1,0 +1,15 @@
+# Enjoy host manifest for ateam review request and notify (#295). A gate file:
+# a change here changes what review_launch: agent does, so it needs the owner's
+# gate-change-approved label.
+#
+# Enjoy is MCP-only: it starts and messages conversations through its MCP
+# tools, never a command, so both actions are tool text the agent follows.
+# Enjoy puts no conversation id in the environment: pass your conversation id
+# as --return-to to ateam review request, and the reviewer passes the launch
+# spec's return_to to ateam review notify.
+
+[launch]
+tool = "call the Enjoy MCP tool start_conversation with provider {agent}, model {model}, effort {effort} and prompt '{prompt}'; tell the reviewer to finish with ateam review notify --record <record file> --return-to {return_to} {pr}"
+
+[notify]
+tool = "call the Enjoy MCP tool queue_message for conversation {return_to} (message_project_conversation only when that conversation is in another project)"

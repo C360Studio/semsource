@@ -39,10 +39,14 @@ never commits, and a finding is an input to your judgment rather than a verdict 
 Massively-parallel `Workflow` orchestration remains opt-in and is a separate question — that
 restriction does not extend to these role agents.
 
-We deliberately do **not** mirror semstreams' architect/developer/reviewer role triad. Those roles
-carry a framework's design authority; SemSource is a consumer, and our two roles are scoped to the
-failure classes that are actually ours — component structure and entity/event semantics. Adopting
-the triad would be inventing authority we don't hold.
+We still do **not** adopt semstreams' architect/developer/reviewer role triad as spawnable agents.
+Those roles carry a framework's design authority; SemSource is a consumer, and our two specialists are
+scoped to the failure classes that are actually ours. The `architect.md`, `developer.md`, and
+`reviewer.md` files under `contracts/` are a different thing: **ateam's generated base contracts**
+(added by `ateam init`, drift-checked by `ateam doctor --check`). They state the rules every run of that
+kind follows — independence, model/effort records, the `reviewed-by:` grammar — and are read by the
+`design` and `review-pr` skills and by each specialist, which opens with a pointer to its base. They
+have no `.claude/agents/` or `.codex/agents/` adapter; do not edit their generated paragraphs.
 
 ## Shared decision skills
 
@@ -77,6 +81,7 @@ are platform-specific by design — do not mirror them.
 
 ```bash
 task agents:check     # or: ./scripts/check-agent-sync.sh
+task ateam:doctor     # pinned ateam doctor --check: AGENTS.md size, rules-index parity, hooks, skill adapters
 ```
 
 This is the scripted form of what semstreams documents as a manual read-only procedure. It fails, with
@@ -88,7 +93,9 @@ a named reason, when:
 4. an adapter stops naming its canonical file, grows a body, or gains a write tool;
 5. a Claude agent has no frontmatter — which makes it **undiscoverable**, the exact state both of ours
    shipped in before this check existed, while CLAUDE.md advertised them;
-6. `upstream.manifest` records a semstreams version other than the one `go.mod` pins, which would mean
+6. a specialist contract stops opening with a pointer to its ateam base contract, or `CLAUDE.md`
+   stops being an `@AGENTS.md` import;
+7. `upstream.manifest` records a semstreams version other than the one `go.mod` pins, which would mean
    the check was comparing against the wrong source.
 
 ## When the semstreams pin moves
