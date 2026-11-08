@@ -7,6 +7,8 @@
 # Enjoy puts no conversation id in the environment: pass your conversation id
 # as --return-to to ateam review request, and the reviewer passes the launch
 # spec's return_to to ateam review notify.
+# Always pass --return-to <conversation id>: without it ateam review request
+# prints an empty return_to and the reviewer has nowhere to report.
 
 [launch]
 tool = "call the Enjoy MCP tool start_conversation with provider {agent}, model {model}, effort {effort} and prompt '{prompt}'; tell the reviewer to finish with ateam review notify --record <record file> --return-to {return_to} {pr}"
