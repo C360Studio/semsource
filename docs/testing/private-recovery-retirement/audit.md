@@ -104,7 +104,7 @@ permanent artifact store. These recorded SHA-256 values identify the inputs to t
 | `existing-focused-results.log` | `adfc1b0511a2bb14313ea7a3806cd469483b9fc891102f773a4ea8395a82041d` |
 
 [pr]: https://github.com/C360Studio/semsource/pull/223
-[design]: ../../../openspec/changes/remove-private-source-recovery/design.md
+[design]: ../../../openspec/changes/archive/2026-11-08-remove-private-source-recovery/design.md
 [results]: ../source-removal215/final-results.json
 [ss1147]: https://github.com/C360Studio/semstreams/issues/1147
 [ss759]: https://github.com/C360Studio/semstreams/issues/759

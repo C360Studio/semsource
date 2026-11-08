@@ -174,7 +174,7 @@ SHA, on a separate branch wholly using SemEngine. Full semembed-backed 04C still
 
 [pr]: https://github.com/C360Studio/semsource/pull/223
 [checks]: https://github.com/C360Studio/semsource/pull/223/checks
-[design]: ../../../openspec/changes/remove-private-source-recovery/design.md
+[design]: ../../../openspec/changes/archive/2026-11-08-remove-private-source-recovery/design.md
 [baseline]: ../setup-03a/merge-readiness.md
 [e18]: https://github.com/C360Studio/semengine/issues/18
 [e19]: https://github.com/C360Studio/semengine/issues/19
