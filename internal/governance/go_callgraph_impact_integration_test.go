@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ast/golang"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
@@ -65,6 +65,9 @@ func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fus
 // while a case-lookalike symbol in another package contributes nothing. The
 // pipeline is real end to end — the Go parser resolves the fixture's edges,
 // graph-ingest/index/query serve them, and the fusion engine walks them.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Impact reflects the resolved Go call graph
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Impact seeds resolve exactly
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Impact names its dependents
 func TestIntegration_GoCallGraphImpact(t *testing.T) {
 	ctx := context.Background()
 
@@ -118,9 +121,9 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 		t.Fatalf("cross-package call unresolved: Run.Calls = %v, want %s", caller.Calls, def.ID)
 	}
 
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/projection"
@@ -24,11 +24,13 @@ import (
 // caller) depends on entities being BORN with their envelope first — this test
 // fails if the substrate ever quietly auto-vivifies again, or if our contract
 // lets a mutation through to an unborn subject.
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: No source relies on triple.add auto-vivify
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Standalone mode declares projection intent before graph-ingest
 func TestIntegration_MutationToMissingEntity_ReturnsNotFoundAndNoStub(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	tc := natsclient.NewTestClient(t, natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t, natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

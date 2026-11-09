@@ -21,6 +21,7 @@ import (
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
 )
 
@@ -61,14 +62,16 @@ const tailMarker = "The nonsense marker phrase zzqfx9182-tail-only-marker appear
 // (tasks.md 9.5); asserting rank here would make this test fail for a cause it is not
 // testing. This test asserts presence and retrievability only: the tail passage exists,
 // carries a resolvable body, and the fusion engine returns that body verbatim.
+// spec: openspec/specs/doc-passage-chunking/spec.md#Requirement: Every byte of an ingested document is retrievable
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Doc evidence is passage-scoped
 func TestIntegration_DocTailPhraseSurvivesPassageChunking(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
 		// Bind ONLY the entity ingest subject, never a wildcard — a wildcard also
 		// matches graph-query's request/reply forwards and races a PubAck onto the
 		// reply inbox (semstreams#1143).
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -110,7 +113,7 @@ func TestIntegration_DocTailPhraseSurvivesPassageChunking(t *testing.T) {
 func ingestTailFixture(
 	t *testing.T,
 	ctx context.Context,
-	tc *natsclient.TestClient,
+	tc *natstest.Server,
 ) (tailPassage *handler.EntityState, tailBody string, states []*handler.EntityState, storeReg *storeregistry.Registry) {
 	t.Helper()
 

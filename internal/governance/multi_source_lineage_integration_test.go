@@ -11,6 +11,7 @@ import (
 	"time"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -38,11 +39,17 @@ import (
 //   - the versioned-source differentiator ranks live — the current version outranks
 //     the demoted historical one;
 //   - both sources are queryable in the same graph (cross-source retrieval).
+//
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Version and source identity on code entities
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Deterministic cross-version correspondence
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Supersession edges
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Changed-versus-unchanged classification
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Historical version demotion
 func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

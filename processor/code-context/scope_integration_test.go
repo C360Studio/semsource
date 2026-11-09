@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/graph/readiness"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 )
@@ -30,11 +30,12 @@ import (
 // semsource seam — that the correct scope is SELECTED per lens and reaches the
 // wire — deterministically, without standing up the embedding subsystem (the
 // governance harness deliberately keeps the NL path out; validated separately).
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Domain-scoped NL retrieval per lens
 func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 	ctx := context.Background()
 	// WithKV: readiness moved from a request subject to GRAPH_STATUS KV state
 	// (ADR-083), so this test needs JetStream where it previously did not.
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 
 	// Readiness is KV STATE, not a request subject (ADR-083, beta.157): the client
 	// watches GRAPH_STATUS/graph-index rather than asking graph.index.query.status,

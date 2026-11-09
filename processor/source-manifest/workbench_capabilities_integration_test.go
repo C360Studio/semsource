@@ -10,11 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/natsclient"
 )
 
+// spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
 func TestIntegration_WorkbenchMissingReadinessRespondersDoNotOpenCircuit(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 	ctx := context.Background()
 	sub, err := tc.Client.SubscribeForRequests(ctx, "semsource.test.unrelated", func(_ context.Context, body []byte) ([]byte, error) {
 		return body, nil

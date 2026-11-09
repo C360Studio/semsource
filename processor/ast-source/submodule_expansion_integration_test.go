@@ -4,9 +4,11 @@ package astsource
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -15,7 +17,10 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
+	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semsource/internal/subwatch"
 )
@@ -55,6 +60,7 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 // NATS and seeds entities. This is the seam none of the unit tiers cross:
 // strict component decoding must accept exactly what expansion emits, and the
 // walk must produce version-scoped entities from the submodule tree.
+// spec: openspec/specs/git-submodule-ingestion/spec.md#Requirement: Submodule entities carry the submodule's own identity
 func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	// Fixture: sub v1 (Greet), v2 adds Farewell; parent pins root@v2, nested@v1.
 	sub := filepath.Join(t.TempDir(), "sub")
@@ -99,8 +105,8 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	})
 	w.Tick(context.Background())
 
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch"},
 		}),
@@ -126,16 +132,71 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 		}
 		defer func() { _ = stopWithin(5*time.Second, c.Stop) }()
 
+		// Delivery barrier: wait for the initial index to finish (the phase
+		// turns "watching" only after it), then Stop, which returns nil only
+		// once every buffered entity is published. Only then is the GRAPH
+		// snapshot below complete.
 		deadline := time.Now().Add(20 * time.Second)
-		for c.distinct.Count() == 0 && time.Now().Before(deadline) {
+		for c.currentPhase() != "watching" && time.Now().Before(deadline) {
 			time.Sleep(100 * time.Millisecond)
+		}
+		if phase := c.currentPhase(); phase != "watching" {
+			t.Fatalf("%q initial index did not complete: phase %q", name, phase)
 		}
 		if c.distinct.Count() == 0 {
 			t.Errorf("%q seeded no entities from its submodule tree", name)
 		}
+		if err := stopWithin(10*time.Second, c.Stop); err != nil {
+			t.Fatalf("%q did not settle its publications: %v", name, err)
+		}
 	}
 	if booted != 2 {
 		t.Fatalf("booted %d ast instances, want 2 (one per pin)", booted)
+	}
+
+	// Identity: each pin's spawned scope is the submodule's own project at its
+	// gitlink SHA, and the emitted symbols land under exactly those scopes.
+	scopeBySHA := map[string]string{}
+	for name, cc := range store.puts {
+		if cc.Name != "ast-source" {
+			continue
+		}
+		var astCfg struct {
+			WatchPaths []struct{ Project, Version string } `json:"watch_paths"`
+		}
+		if err := json.Unmarshal(cc.Config, &astCfg); err != nil || len(astCfg.WatchPaths) != 1 {
+			t.Fatalf("%q: watch_paths = %+v, err %v", name, astCfg.WatchPaths, err)
+		}
+		wp := astCfg.WatchPaths[0]
+		if strings.Contains(wp.Project, "parentproj") {
+			t.Errorf("%q is scoped to the parent project: %q", name, wp.Project)
+		}
+		scopeBySHA[wp.Version] = entityid.ScopedSystemSlug(wp.Project, wp.Version)
+	}
+	v1Scope, v2Scope := scopeBySHA[shaV1[:12]], scopeBySHA[shaV2[:12]]
+	if v1Scope == "" || v2Scope == "" || v1Scope == v2Scope {
+		t.Fatalf("pin scopes = %v, want distinct scopes for %s and %s", scopeBySHA, shaV1[:12], shaV2[:12])
+	}
+	symbolScopes := map[string]map[string]bool{}
+	for _, id := range publishedEntityIDs(t, tc.Client) {
+		parts := strings.Split(id, ".")
+		if len(parts) != 6 || parts[4] != "function" {
+			continue
+		}
+		for _, sym := range []string{"Greet", "Farewell"} {
+			if strings.HasSuffix(parts[5], "-"+sym) {
+				if symbolScopes[sym] == nil {
+					symbolScopes[sym] = map[string]bool{}
+				}
+				symbolScopes[sym][parts[2]] = true
+			}
+		}
+	}
+	if want := map[string]bool{v1Scope: true, v2Scope: true}; !reflect.DeepEqual(symbolScopes["Greet"], want) {
+		t.Errorf("Greet scopes = %v, want both pins %v", symbolScopes["Greet"], want)
+	}
+	if want := map[string]bool{v2Scope: true}; !reflect.DeepEqual(symbolScopes["Farewell"], want) {
+		t.Errorf("Farewell scopes = %v, want only the newer pin %v", symbolScopes["Farewell"], want)
 	}
 
 	// The two spawned instance names carry the two distinct version scopes.
@@ -149,4 +210,47 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 			t.Errorf("no spawned instance carries version scope %s (names: %v)", sha, names)
 		}
 	}
+}
+
+// publishedEntityIDs reads every message on the GRAPH stream and returns the
+// entity IDs the publisher stamped into each Nats-Msg-Id ("<id>:<hash>").
+func publishedEntityIDs(t *testing.T, client *natsclient.Client) []string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	js, err := client.JetStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cons, err := js.OrderedConsumer(ctx, "GRAPH", jetstream.OrderedConsumerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := cons.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for remaining := int(info.NumPending); remaining > 0; {
+		batch, err := cons.Fetch(remaining, jetstream.FetchMaxWait(5*time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := 0
+		for msg := range batch.Messages() {
+			got++
+			msgID := msg.Headers().Get(jetstream.MsgIDHeader)
+			if i := strings.LastIndex(msgID, ":"); i > 0 {
+				ids = append(ids, msgID[:i])
+			}
+		}
+		if err := batch.Error(); err != nil {
+			t.Fatal(err)
+		}
+		if got == 0 {
+			t.Fatalf("stream fetch returned nothing with %d pending", remaining)
+		}
+		remaining -= got
+	}
+	return ids
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
@@ -18,6 +17,7 @@ import (
 	"github.com/c360studio/semstreams/vocabulary/cco"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/ontology"
@@ -29,11 +29,12 @@ import (
 // surface. It ingests two code entities with a call edge, then asserts the
 // client correctly speaks graph.index.query.status, graph.query.batch/entity,
 // graph.query.relationships, and graph.query.prefix end to end.
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: The fusion graph client maps onto graph query verbs
 func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -143,15 +144,16 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 // pair (the caller stamped with body handle triples), offloads the body, and
 // asserts the fused response carries the readiness envelope, the ObjectStore-
 // dereferenced verbatim source, the callee relation, and the BFO/CCO class.
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Code-lens fusion hydrates verbatim bodies from the content store
 func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
 		// The GRAPH stream must bind ONLY the entity ingest subject, NOT a
 		// wildcard like "graph.ingest.>": a wildcard also matches graph-query's
 		// request/reply forwards and races a PubAck onto the reply inbox, silently
 		// zeroing batch/prefix results (semstreams#1143).
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

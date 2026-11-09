@@ -10,12 +10,12 @@ import (
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
@@ -27,11 +27,12 @@ import (
 // ranker (reading the negative code.lineage.superseded_by weight) places the
 // current (un-superseded) entity ABOVE the historical one — while the historical
 // entity stays present in the results (bounded reorder, not exclusion).
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Historical version demotion
 func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

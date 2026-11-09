@@ -15,8 +15,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/c360studio/semsource/internal/graphstatus"
+	"github.com/c360studio/semsource/internal/natstest"
 	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
 
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
@@ -25,9 +25,10 @@ import (
 // add_source tool call becomes a NATS request on graph.ingest.add.{namespace},
 // and the reply is returned to the caller. A stub responder stands in for
 // source-manifest so the test isolates the translation.
+// spec: openspec/specs/mcp-gateway-contract/spec.md#Requirement: add_source is a namespaced NATS ingest request
 func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.ingest.add.acme",
 		func(_ context.Context, data []byte) ([]byte, error) {
@@ -78,9 +79,10 @@ func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 // (graph.query.status request/reply), plus the graph-index structural and
 // graph-embedding semantic readiness, which since ADR-083 are KV envelopes under
 // GRAPH_STATUS rather than request/reply subjects — plus the note.
+// spec: openspec/specs/ingestion-readiness/spec.md#Requirement: Readiness sub-signals are present and honest on every surface
 func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 
 	sub1, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status",
 		func(_ context.Context, _ []byte) ([]byte, error) {
@@ -148,9 +150,10 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 // TestIntegration_QueryToolsTranslateToNATS proves the read-side MCP tools are
 // real NATS-backed facades, not just advertised names. Each tool call is routed
 // to its owned request/reply subject and returns the responder payload verbatim.
+// spec: openspec/specs/advertised-surface-coverage/spec.md#Requirement: Agent-facing MCP tools have happy-path coverage
 func TestIntegration_QueryToolsTranslateToNATS(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	tests := []struct {
 		name        string

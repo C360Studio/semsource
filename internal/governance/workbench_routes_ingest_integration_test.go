@@ -12,10 +12,10 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
@@ -24,6 +24,8 @@ import (
 // tree (the audit's motivating case: SemSource's own workbench "+page.svelte"
 // and "+layout.svelte" were silently rejected by graph-ingest) and asserts the
 // route components land in the governed graph with zero source errors.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Produced entity IDs satisfy the graph-ingest segment contract
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -33,9 +35,9 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	routesDir := filepath.Join(repoRoot, "ui", "src", "routes")
 
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

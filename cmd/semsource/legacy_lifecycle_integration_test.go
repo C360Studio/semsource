@@ -9,13 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/internal/natstest"
 )
 
+// spec: openspec/specs/private-recovery-retirement/spec.md#Requirement: Legacy state is refused without interpretation
 func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	if err := checkLegacyLifecycle(ctx, tc.Client); err != nil {
@@ -113,8 +115,9 @@ func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/private-recovery-retirement/spec.md#Requirement: Legacy state is refused without interpretation
 func TestRootRefusesBeforeProvisioning(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	bucket, err := tc.Client.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{Bucket: legacyLifecycleBucket})

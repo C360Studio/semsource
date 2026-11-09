@@ -12,10 +12,10 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
@@ -27,11 +27,13 @@ import (
 // and every produced entity actually lands in the governed graph — with the
 // source reporting zero errors. Before this change these entities passed the
 // producer gate and were Termed by graph-ingest while status looked healthy.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Produced entity IDs satisfy the graph-ingest segment contract
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

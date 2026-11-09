@@ -8,11 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/natsclient"
 )
 
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Component Stop keeps a subscription until its callbacks drain
 func TestIntegrationStopRetainsActiveSubscriptionOnDeadline(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	entered, release := make(chan struct{}), make(chan struct{})

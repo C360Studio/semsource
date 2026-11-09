@@ -12,12 +12,12 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 )
@@ -28,11 +28,12 @@ import (
 // (`from pkg.util import helper` → `helper()`) resolved to helper's definition ID
 // end to end through graph-ingest → graph-index → the relations facet. Before #45
 // the parser emitted no call edges at all, so this role was always empty.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Imported callees resolve to their defining module
 func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

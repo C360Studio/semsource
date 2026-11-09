@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/internal/graphstatus"
+	"github.com/c360studio/semsource/internal/natstest"
 	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
@@ -25,12 +25,13 @@ import (
 // The assertions are on the error CLASS and on the owner being named, not on a
 // code string: ADR-060 is explicit that adopters branch on the class, because
 // the code string is not the stable surface.
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: KV port declarations conform to the framework bucket catalog
 func TestReader_UnprovisionedBucketIsClassifiedNotReady(t *testing.T) {
 	// JetStream/KV is UP, but no SemStreams component has run, so GRAPH_STATUS
 	// is genuinely absent rather than unreachable. Without WithKV the lookup
 	// fails at the JetStream layer ("no responders") and never reaches the
 	// catalog seam this test exists to exercise.
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -67,12 +68,13 @@ func TestReader_UnprovisionedBucketIsClassifiedNotReady(t *testing.T) {
 // previous test depends on: a bucket outside the framework catalog is a
 // PERMANENT misconfiguration, not a transient missing owner. Conflating the two
 // would make an operator typo look like something worth retrying forever.
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: KV port declarations conform to the framework bucket catalog
 func TestReader_OffCatalogKeyIsInvalidNotNotReady(t *testing.T) {
 	if _, ok := semgraph.SpecFor("GRAPH_STATUS_TYPO"); ok {
 		t.Fatal("GRAPH_STATUS_TYPO unexpectedly resolves in the framework catalog")
 	}
 
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

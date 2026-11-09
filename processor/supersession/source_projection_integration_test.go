@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	gtypes "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Retired projection surfaces are explicitly unavailable
 func TestIntegrationSourceProjectionOwnsRefusalRPC(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	e := replayEntity("acme.semsource.docs.web.doc.a", "")
@@ -51,8 +52,9 @@ func TestIntegrationSourceProjectionOwnsRefusalRPC(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Retired projection surfaces are explicitly unavailable
 func TestIntegrationCanceledQueuedProjectionCannotMutate(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	e := replayEntity("acme.semsource.docs.web.doc.a", "")

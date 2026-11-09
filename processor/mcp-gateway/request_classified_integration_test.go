@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
@@ -18,8 +18,9 @@ import (
 // seam — and therefore as an MCP isError result — never as successful tool
 // text. With the old plain Request() the envelope body came back as a normal
 // answer, detectable only by the missing contract_version.
+// spec: openspec/specs/mcp-gateway-contract/spec.md#Requirement: Downstream errors are tool errors
 func TestIntegration_RequestSurfacesClassifiedHandlerErrors(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 	ctx := context.Background()
 
 	// A downstream handler that fails: SubscribeForRequests replies with the

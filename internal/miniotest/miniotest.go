@@ -1,5 +1,5 @@
 // Package miniotest provisions a MinIO server for integration tests, the way
-// natsclient.NewTestClient provisions NATS: one container, started on first
+// natstest provisions NATS: one container, started on first
 // use, torn down with the process.
 //
 // MinIO rather than Garage because it containerizes in one step with env-var

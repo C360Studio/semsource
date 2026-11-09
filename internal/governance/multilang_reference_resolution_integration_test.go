@@ -12,12 +12,12 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 )
@@ -29,11 +29,12 @@ import (
 // dangled (wrong entity-type segment / raw project / referrer-relative path), so
 // the reverse closure was empty; this asserts the edge now resolves end to end
 // through graph-ingest → graph-index → the fusion relations facet.
+// spec: openspec/specs/code-reference-resolution/spec.md#Requirement: Cross-file references resolve per-language to the defining file
 func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

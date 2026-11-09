@@ -5,14 +5,16 @@ package governance
 import (
 	"context"
 	"encoding/json"
-	"github.com/c360studio/semsource/entityid"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
+
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/binaryproof"
+	"github.com/c360studio/semsource/internal/natstest"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semstreams/component"
@@ -27,11 +29,13 @@ import (
 	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Entity birth carries a semantic envelope
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Source entities declare indexing intent
 func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -193,11 +197,13 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_owner_lease_mismatch_total")
 }
 
+// spec: openspec/specs/binary-source-service/spec.md#Requirement: Binary bytes stay out of graph triples
+// spec: openspec/specs/binary-source-service/spec.md#Requirement: Binary source projections are governed
 func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -266,11 +272,12 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_owner_lease_mismatch_total")
 }
 
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Current query surfaces remain available
 func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

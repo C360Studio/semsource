@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
@@ -31,11 +32,12 @@ import (
 // removed-in-to symbol, then calls graph.query.versionDiff and asserts the
 // classification, counts, and verbatim before/after bodies — plus the honest
 // missing-version envelope.
+// spec: openspec/specs/version-change-detection/spec.md#Requirement: Version changeset query
 func TestIntegration_VersionDiff(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

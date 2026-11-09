@@ -14,7 +14,6 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
@@ -22,6 +21,7 @@ import (
 	"github.com/c360studio/semstreams/storage/objectstore"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 )
@@ -34,11 +34,12 @@ import (
 // dereferences the handle back to the verbatim body. No hand-stamped triples, no
 // manual Put: the producer → consumer seam end to end, including the byName path
 // the label-alias fix restored.
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Code-lens fusion hydrates verbatim bodies from the content store
 func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

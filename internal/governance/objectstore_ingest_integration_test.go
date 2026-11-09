@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
 	nats "github.com/nats-io/nats.go"
+
+	"github.com/c360studio/semstreams/component"
 
 	semgraph "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/metric"
@@ -21,6 +22,7 @@ import (
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	"github.com/c360studio/semsource/handler/objectstore"
 	"github.com/c360studio/semsource/internal/miniotest"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	objectstoresource "github.com/c360studio/semsource/processor/objectstore-source"
 )
@@ -46,6 +48,9 @@ var corpus = map[string]string{
 // Everything below the component is real. The one thing it deliberately does
 // not prove is Garage compatibility — MinIO passing does not establish that,
 // and #202 exists to close it.
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Enumeration is prefix-scoped and complete
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Objects the document pipeline cannot parse are skipped loudly
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Per-source status is reported on the shared contract
 func TestIntegration_ObjectStoreCorpusReachesTheGraph(t *testing.T) {
 	ctx := context.Background()
 
@@ -58,9 +63,9 @@ func TestIntegration_ObjectStoreCorpusReachesTheGraph(t *testing.T) {
 	}
 
 	// ── The graph ───────────────────────────────────────────────────────────
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/natsclient"
 )
 
@@ -36,9 +37,10 @@ func graphToolComponent(t *testing.T, client *natsclient.Client) *Component {
 // The stub returns entities WITHOUT digests — the substrate's common
 // sub-threshold shape, and the exact case upstream's own formatter drops
 // (semstreams#823). The match list must still be populated.
+// spec: openspec/specs/graphrag-access/spec.md#Requirement: An answer discloses how far it escalated
 func TestIntegration_GraphSearchRanksAndDiscloses(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	const substrateBody = `{"entities":[
 		{"id":"acme.semsource.golang.x.function.Foo","triples":[{"predicate":"dc.terms.title","object":"Foo"},{"predicate":"code.artifact.path","object":"a.go"}]},

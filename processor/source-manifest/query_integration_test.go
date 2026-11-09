@@ -8,14 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 )
 
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: A request subject has exactly one handler
+// spec: openspec/specs/advertised-surface-coverage/spec.md#Requirement: Documented status and query routes have behavior tests
 func TestIntegration_QuerySubjects(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithStreams(natstest.Stream{
 			Name: "GRAPH",
 			Subjects: []string{
 				"graph.ingest.manifest",

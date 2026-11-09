@@ -13,11 +13,11 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 
 	"github.com/c360studio/semsource/config"
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/processor/supersession"
@@ -31,11 +31,12 @@ import (
 // into) — instantiates the RESULTING component configs as real ast-source
 // components over a live graph stack, runs the supersession pass, and asserts
 // graph.query.versionDiff answers the fixture's known changeset.
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Version is declarable on every registration surface
 func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

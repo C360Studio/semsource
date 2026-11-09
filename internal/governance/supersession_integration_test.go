@@ -11,6 +11,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
@@ -27,11 +28,14 @@ import (
 // symbols at two versions (one whose body changed, one unchanged), triggers the
 // pass over NATS, and asserts the lineage edges, change classification,
 // idempotency, and retention of the superseded version.
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Supersession edges
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Changed-versus-unchanged classification
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Retention-safe supersession
 func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

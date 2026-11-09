@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 // startedComponent builds and starts an ast-source against a real test NATS,
 // pointed at watchRoot.
 func startedComponent(t *testing.T, watchRoot string) (*Component, func()) {
 	t.Helper()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch"},
 		}),
