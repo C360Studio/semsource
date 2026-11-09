@@ -31,6 +31,7 @@ import (
 // into) — instantiates the RESULTING component configs as real ast-source
 // components over a live graph stack, runs the supersession pass, and asserts
 // graph.query.versionDiff answers the fixture's known changeset.
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Version is declarable on every registration surface
 func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

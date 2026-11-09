@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestNew_CoreOnlyBrokerHasNoJetStream(t *testing.T) {
 	srv := New(t)
 
@@ -21,6 +22,7 @@ func TestNew_CoreOnlyBrokerHasNoJetStream(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestNew_StreamsAreCreatedBounded(t *testing.T) {
 	srv := New(t, WithStreams(Stream{Name: "GRAPH", Subjects: []string{"graph.ingest.entity"}}))
 

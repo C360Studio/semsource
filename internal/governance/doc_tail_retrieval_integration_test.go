@@ -62,6 +62,8 @@ const tailMarker = "The nonsense marker phrase zzqfx9182-tail-only-marker appear
 // (tasks.md 9.5); asserting rank here would make this test fail for a cause it is not
 // testing. This test asserts presence and retrievability only: the tail passage exists,
 // carries a resolvable body, and the fusion engine returns that body verbatim.
+// spec: openspec/specs/doc-passage-chunking/spec.md#Requirement: Every byte of an ingested document is retrievable
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Doc evidence is passage-scoped
 func TestIntegration_DocTailPhraseSurvivesPassageChunking(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

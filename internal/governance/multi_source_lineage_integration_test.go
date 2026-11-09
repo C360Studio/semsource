@@ -39,6 +39,12 @@ import (
 //   - the versioned-source differentiator ranks live — the current version outranks
 //     the demoted historical one;
 //   - both sources are queryable in the same graph (cross-source retrieval).
+//
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Version and source identity on code entities
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Deterministic cross-version correspondence
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Supersession edges
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Changed-versus-unchanged classification
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Historical version demotion
 func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

@@ -41,6 +41,9 @@ import (
 //  3. whole-source removal projection is explicitly unavailable, and refusal
 //     leaves both retained entities unmarked. Positive source-removal proof is
 //     deferred; historical process evidence is preserved unchanged.
+//
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: Stale facts are distinguishable from live facts
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Retired projection surfaces are explicitly unavailable
 func TestIntegration_StalenessLifecycle(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

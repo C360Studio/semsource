@@ -12,6 +12,7 @@ import (
 	gtypes "github.com/c360studio/semstreams/graph"
 )
 
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Retired projection surfaces are explicitly unavailable
 func TestIntegrationSourceProjectionOwnsRefusalRPC(t *testing.T) {
 	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -51,6 +52,7 @@ func TestIntegrationSourceProjectionOwnsRefusalRPC(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Retired projection surfaces are explicitly unavailable
 func TestIntegrationCanceledQueuedProjectionCannotMutate(t *testing.T) {
 	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

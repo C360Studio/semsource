@@ -18,6 +18,7 @@ import (
 // seam — and therefore as an MCP isError result — never as successful tool
 // text. With the old plain Request() the envelope body came back as a normal
 // answer, detectable only by the missing contract_version.
+// spec: openspec/specs/mcp-gateway-contract/spec.md#Requirement: Downstream errors are tool errors
 func TestIntegration_RequestSurfacesClassifiedHandlerErrors(t *testing.T) {
 	tc := natstest.New(t)
 	ctx := context.Background()

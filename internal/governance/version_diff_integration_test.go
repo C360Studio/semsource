@@ -32,6 +32,7 @@ import (
 // removed-in-to symbol, then calls graph.query.versionDiff and asserts the
 // classification, counts, and verbatim before/after bodies — plus the honest
 // missing-version envelope.
+// spec: openspec/specs/version-change-detection/spec.md#Requirement: Version changeset query
 func TestIntegration_VersionDiff(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

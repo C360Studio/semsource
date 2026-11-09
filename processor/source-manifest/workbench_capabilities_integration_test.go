@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 )
 
+// spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
 func TestIntegration_WorkbenchMissingReadinessRespondersDoNotOpenCircuit(t *testing.T) {
 	tc := natstest.New(t)
 	ctx := context.Background()

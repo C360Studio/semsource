@@ -78,6 +78,7 @@ func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 // (graph.query.status request/reply), plus the graph-index structural and
 // graph-embedding semantic readiness, which since ADR-083 are KV envelopes under
 // GRAPH_STATUS rather than request/reply subjects — plus the note.
+// spec: openspec/specs/ingestion-readiness/spec.md#Requirement: Readiness sub-signals are present and honest on every surface
 func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t, natstest.WithJetStream())
@@ -148,6 +149,7 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 // TestIntegration_QueryToolsTranslateToNATS proves the read-side MCP tools are
 // real NATS-backed facades, not just advertised names. Each tool call is routed
 // to its owned request/reply subject and returns the responder payload verbatim.
+// spec: openspec/specs/advertised-surface-coverage/spec.md#Requirement: Agent-facing MCP tools have happy-path coverage
 func TestIntegration_QueryToolsTranslateToNATS(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t)

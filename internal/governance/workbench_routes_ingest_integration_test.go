@@ -24,6 +24,8 @@ import (
 // tree (the audit's motivating case: SemSource's own workbench "+page.svelte"
 // and "+layout.svelte" were silently rejected by graph-ingest) and asserts the
 // route components land in the governed graph with zero source errors.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Produced entity IDs satisfy the graph-ingest segment contract
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {

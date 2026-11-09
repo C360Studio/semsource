@@ -27,6 +27,8 @@ import (
 // and every produced entity actually lands in the governed graph — with the
 // source reporting zero errors. Before this change these entities passed the
 // producer gate and were Termed by graph-ingest while status looked healthy.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Produced entity IDs satisfy the graph-ingest segment contract
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

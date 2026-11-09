@@ -55,6 +55,7 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 // NATS and seeds entities. This is the seam none of the unit tiers cross:
 // strict component decoding must accept exactly what expansion emits, and the
 // walk must produce version-scoped entities from the submodule tree.
+// spec: openspec/specs/git-submodule-ingestion/spec.md#Requirement: Submodule entities carry the submodule's own identity
 func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	// Fixture: sub v1 (Greet), v2 adds Farewell; parent pins root@v2, nested@v1.
 	sub := filepath.Join(t.TempDir(), "sub")

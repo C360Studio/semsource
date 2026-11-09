@@ -65,6 +65,9 @@ func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fus
 // while a case-lookalike symbol in another package contributes nothing. The
 // pipeline is real end to end — the Go parser resolves the fixture's edges,
 // graph-ingest/index/query serve them, and the fusion engine walks them.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Impact reflects the resolved Go call graph
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Impact seeds resolve exactly
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Impact names its dependents
 func TestIntegration_GoCallGraphImpact(t *testing.T) {
 	ctx := context.Background()
 

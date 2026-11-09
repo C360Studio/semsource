@@ -19,6 +19,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Removal is real and observable
 func TestIntegrationReadDesiredConfigRetainedAuthority(t *testing.T) {
 	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -67,6 +68,7 @@ func TestIntegrationReadDesiredConfigRetainedAuthority(t *testing.T) {
 	desiredReadNoLegacy(ctx, t, tc.Client)
 }
 
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Owned entities use the effective deployment authority
 func TestIntegrationReadDesiredConfigNamespaceIsolation(t *testing.T) {
 	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -97,6 +99,7 @@ func TestIntegrationReadDesiredConfigNamespaceIsolation(t *testing.T) {
 	desiredReadNoLegacy(ctx, t, tc.Client)
 }
 
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: KV port declarations conform to the framework bucket catalog
 func TestIntegrationReadDesiredConfigUnavailableStorage(t *testing.T) {
 	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)

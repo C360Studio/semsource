@@ -29,6 +29,7 @@ import (
 // dangled (wrong entity-type segment / raw project / referrer-relative path), so
 // the reverse closure was empty; this asserts the edge now resolves end to end
 // through graph-ingest → graph-index → the fusion relations facet.
+// spec: openspec/specs/code-reference-resolution/spec.md#Requirement: Cross-file references resolve per-language to the defining file
 func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

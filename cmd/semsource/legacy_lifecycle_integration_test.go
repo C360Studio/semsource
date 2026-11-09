@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semsource/internal/natstest"
 )
 
+// spec: openspec/specs/private-recovery-retirement/spec.md#Requirement: Legacy state is refused without interpretation
 func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
 	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -114,6 +115,7 @@ func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/private-recovery-retirement/spec.md#Requirement: Legacy state is refused without interpretation
 func TestRootRefusesBeforeProvisioning(t *testing.T) {
 	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)

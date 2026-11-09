@@ -66,6 +66,7 @@ func launchSequence(brokers ...*fakeBroker) (launcher, *int) {
 	}, &launches
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_TransientPortAbsenceRecoversWithoutReplacement(t *testing.T) {
 	b := &fakeBroker{portErrs: []error{errAbsent, errAbsent}}
 	launch, launches := launchSequence(b)
@@ -79,6 +80,7 @@ func TestStart_TransientPortAbsenceRecoversWithoutReplacement(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_PersistentPortAbsenceReplacesOnceThenFails(t *testing.T) {
 	first, second := &fakeBroker{keepAbsent: true}, &fakeBroker{keepAbsent: true}
 	launch, launches := launchSequence(first, second)
@@ -95,6 +97,7 @@ func TestStart_PersistentPortAbsenceReplacesOnceThenFails(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_PersistentAbsenceThenPublishedSucceedsOnReplacement(t *testing.T) {
 	first, second := &fakeBroker{keepAbsent: true}, &fakeBroker{}
 	launch, launches := launchSequence(first, second)
@@ -113,6 +116,7 @@ func TestStart_PersistentAbsenceThenPublishedSucceedsOnReplacement(t *testing.T)
 // counts, so the container is replaced. synctest's fake clock makes the order
 // exact: the first call sees absence, the 100 ms poll fires, and the 150 ms
 // window ends inside the second call.
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_WindowExpiringMidCallStillReplaces(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		first := &fakeBroker{keepAbsent: true, blockAfter: 1}
@@ -128,6 +132,7 @@ func TestStart_WindowExpiringMidCallStillReplaces(t *testing.T) {
 	})
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_CancelledDuringCleanupCarriesCause(t *testing.T) {
 	custom := errors.New("test deadline from caller")
 	termErr := errors.New("docker: remove failed")
@@ -166,6 +171,7 @@ func TestStart_CancelledDuringCleanupCarriesCause(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_FailedTerminationStopsReplacement(t *testing.T) {
 	termErr := errors.New("docker: remove failed")
 	first := &fakeBroker{keepAbsent: true, terminateErr: termErr}
@@ -180,6 +186,7 @@ func TestStart_FailedTerminationStopsReplacement(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_NonAbsenceFailuresAreNotReplaced(t *testing.T) {
 	inspectErr := errors.New("inspect: connection refused")
 	hostErr := errors.New("docker host unknown")
@@ -199,6 +206,7 @@ func TestStart_NonAbsenceFailuresAreNotReplaced(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_CancelledTestIsNotReplaced(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	b := &fakeBroker{keepAbsent: true}
@@ -218,6 +226,7 @@ func TestStart_CancelledTestIsNotReplaced(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_FailedLaunchRemovesReturnedContainer(t *testing.T) {
 	b := &fakeBroker{}
 	launchErr := errors.New("wait for log: context deadline exceeded")
@@ -231,6 +240,7 @@ func TestStart_FailedLaunchRemovesReturnedContainer(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/nats-test-fixture/specs/integration-fixture-reproducibility/spec.md#Requirement: NATS integration fixture is SemSource-owned and bounded
 func TestStart_LaunchIsBoundedByStartTimeout(t *testing.T) {
 	var deadline time.Time
 	var ok bool

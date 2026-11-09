@@ -35,6 +35,7 @@ import (
 // honest reading is in the change's evidence, not in the pass/fail of this
 // test. It asserts only that nothing was lost, because a measurement that
 // silently tolerated loss would be worse than none.
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Enumeration is prefix-scoped and complete
 func TestIntegration_UnboundedPrefixIngestMeasurement(t *testing.T) {
 	const (
 		documents  = 1000

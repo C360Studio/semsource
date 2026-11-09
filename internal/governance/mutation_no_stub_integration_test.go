@@ -24,6 +24,8 @@ import (
 // caller) depends on entities being BORN with their envelope first — this test
 // fails if the substrate ever quietly auto-vivifies again, or if our contract
 // lets a mutation through to an unborn subject.
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: No source relies on triple.add auto-vivify
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Standalone mode declares projection intent before graph-ingest
 func TestIntegration_MutationToMissingEntity_ReturnsNotFoundAndNoStub(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -28,6 +28,7 @@ import (
 // (`from pkg.util import helper` → `helper()`) resolved to helper's definition ID
 // end to end through graph-ingest → graph-index → the relations facet. Before #45
 // the parser emitted no call edges at all, so this role was always empty.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Imported callees resolve to their defining module
 func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

@@ -48,6 +48,9 @@ var corpus = map[string]string{
 // Everything below the component is real. The one thing it deliberately does
 // not prove is Garage compatibility — MinIO passing does not establish that,
 // and #202 exists to close it.
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Enumeration is prefix-scoped and complete
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Objects the document pipeline cannot parse are skipped loudly
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Per-source status is reported on the shared contract
 func TestIntegration_ObjectStoreCorpusReachesTheGraph(t *testing.T) {
 	ctx := context.Background()
 

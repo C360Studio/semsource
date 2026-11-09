@@ -14,6 +14,7 @@ import (
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
 
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Removal is real and observable
 func TestIntegrationRemovePreservesPartialDesiredReceipt(t *testing.T) {
 	tc := natstest.New(t)
 	sub, err := tc.Client.SubscribeForRequests(t.Context(), "graph.ingest.remove.acme", func(_ context.Context, _ []byte) ([]byte, error) {

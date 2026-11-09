@@ -85,6 +85,8 @@ func (m *memConfigStore) DeleteComponentFromKV(_ context.Context, name string) e
 // over real NATS: add/remove persists the next boot's manifest while the running
 // source remains visible until restart. The process restart is covered by E2E.
 // source_removed lifecycle replay is a separate migration merge blocker.
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: Removal is real and observable
+// spec: openspec/specs/source-lifecycle/spec.md#Requirement: The manifest mirrors the running set
 func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

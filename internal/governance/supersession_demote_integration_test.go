@@ -27,6 +27,7 @@ import (
 // ranker (reading the negative code.lineage.superseded_by weight) places the
 // current (un-superseded) entity ABOVE the historical one — while the historical
 // entity stays present in the results (bounded reorder, not exclusion).
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Historical version demotion
 func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

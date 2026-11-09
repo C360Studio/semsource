@@ -40,6 +40,9 @@ import (
 //   - Assertion B drives the fusion docs engine over the registry resolver (the
 //     code-context wiring adopted in this slice) and asserts the hydrated node body
 //     is the verbatim passage.
+//
+// spec: openspec/specs/doc-passage-chunking/spec.md#Requirement: A document body is never silently unindexed
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Doc evidence is passage-scoped
 func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

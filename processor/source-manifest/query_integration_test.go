@@ -13,6 +13,8 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 )
 
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: A request subject has exactly one handler
+// spec: openspec/specs/advertised-surface-coverage/spec.md#Requirement: Documented status and query routes have behavior tests
 func TestIntegration_QuerySubjects(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

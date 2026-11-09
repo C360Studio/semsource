@@ -15,6 +15,8 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Component configuration changes explicitly require restart
+// spec: openspec/specs/consumer-migration-baseline/spec.md#Requirement: The disabled-envelope workaround remains retained
 func TestIntegrationRemovedFileSourceStaysDisabledAfterConfigRestart(t *testing.T) {
 	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

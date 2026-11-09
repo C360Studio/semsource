@@ -30,6 +30,7 @@ import (
 // semsource seam — that the correct scope is SELECTED per lens and reaches the
 // wire — deterministically, without standing up the embedding subsystem (the
 // governance harness deliberately keeps the NL path out; validated separately).
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Domain-scoped NL retrieval per lens
 func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 	ctx := context.Background()
 	// WithKV: readiness moved from a request subject to GRAPH_STATUS KV state

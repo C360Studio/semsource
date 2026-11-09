@@ -28,6 +28,9 @@ import (
 // symbols at two versions (one whose body changed, one unchanged), triggers the
 // pass over NATS, and asserts the lineage edges, change classification,
 // idempotency, and retention of the superseded version.
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Supersession edges
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Changed-versus-unchanged classification
+// spec: openspec/specs/versioned-source-supersession/spec.md#Requirement: Retention-safe supersession
 func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,
