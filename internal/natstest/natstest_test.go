@@ -129,16 +129,40 @@ func TestStart_WindowExpiringMidCallStillReplaces(t *testing.T) {
 }
 
 func TestStart_CancelledDuringCleanupCarriesCause(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	first := &fakeBroker{keepAbsent: true, onTerminate: cancel}
-	launch, launches := launchSequence(first, &fakeBroker{})
+	custom := errors.New("test deadline from caller")
+	termErr := errors.New("docker: remove failed")
+	for _, tc := range []struct {
+		name    string
+		cause   error
+		termErr error
+	}{
+		{"canceled, clean removal", nil, nil},
+		{"canceled, failed removal", nil, termErr},
+		{"custom cause, clean removal", custom, nil},
+		{"custom cause, failed removal", custom, termErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			first := &fakeBroker{keepAbsent: true, terminateErr: tc.termErr, onTerminate: func() { cancel(tc.cause) }}
+			launch, launches := launchSequence(first, &fakeBroker{})
 
-	_, _, err := start(ctx, launch, 50*time.Millisecond)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("error = %v, want it to carry context.Canceled", err)
-	}
-	if *launches != 1 {
-		t.Fatalf("launches = %d, want 1", *launches)
+			_, _, err := start(ctx, launch, 50*time.Millisecond)
+			want := []error{errAbsent, context.Canceled}
+			if tc.cause != nil {
+				want = []error{errAbsent, tc.cause}
+			}
+			if tc.termErr != nil {
+				want = append(want, tc.termErr)
+			}
+			for _, w := range want {
+				if !errors.Is(err, w) {
+					t.Errorf("error %v does not carry %v", err, w)
+				}
+			}
+			if *launches != 1 {
+				t.Fatalf("launches = %d, want 1", *launches)
+			}
+		})
 	}
 }
 

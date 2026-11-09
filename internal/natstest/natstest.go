@@ -154,8 +154,7 @@ func dockerLauncher(cfg config) launcher {
 	return func(ctx context.Context) (broker, error) {
 		container, err := testcontainers.GenericContainer(ctx, req)
 		if container == nil {
-			// A nil *DockerContainer in a non-nil interface would defeat
-			// terminate's nil check.
+			// Keep a nil Container a nil broker, so terminate skips it.
 			return nil, err
 		}
 		return container, err
@@ -174,17 +173,15 @@ func start(ctx context.Context, launch launcher, window time.Duration) (broker, 
 			return container, url, nil
 		}
 		err = fmt.Errorf("attempt %d: %w", attempt, err)
-		if termErr := terminate(container); termErr != nil {
-			// A broker that could not be removed must not be hidden behind a
-			// successful replacement.
-			return nil, "", errors.Join(failures, err, termErr)
-		}
-		failures = errors.Join(failures, err)
+		termErr := terminate(container)
+		failures = errors.Join(failures, err, termErr)
 		if ctx.Err() != nil {
-			// The test ended (possibly during cleanup); say so, and stop.
+			// The test ended, possibly during cleanup: say so, and stop.
 			return nil, "", errors.Join(failures, context.Cause(ctx))
 		}
-		if !portMissing {
+		// A broker that could not be removed must not be hidden behind a
+		// successful replacement.
+		if termErr != nil || !portMissing {
 			break
 		}
 	}
