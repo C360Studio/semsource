@@ -64,7 +64,7 @@ Status values:
 | `processor/graph-index` | 2 (1) | present | Factory `Register` in `run.go` |
 | `processor/graph-ingest` | 2 (1) | present | Factory `Register` in `run.go`. ADR-110: SemSource is a caller of the write seam (it publishes on `graph.ingest.*`) and never writes `ENTITY_STATES` itself |
 | `processor/graph-query` | 2 (1) | present | Factory `Register` in `run.go`. Readiness comes from query replies (ADR-109; see #227 below) |
-| `gateway/graph-gateway` | 1 (1) | consumer-side, permanently (not a tier-0 deferral); **owner decision needed** | SemEngine 03B D4/D5: GraphQL is a consumer-owned public adapter (layer 4), not engine surface; re-admission needs a consumer assertion through its HTTP surface. The 03B premise "SemSource does not exercise it" (A3.3) grepped only `test/setup03a`; the UI profile's `semstreams-ui` image calls `/graphql` (`src/lib/services/graphApi.ts`), and `test/ui/ui-profile.spec.cjs:91` plus `scripts/core-profile-smoke.sh:92` assert the route. SemTeams is absorbing a trimmed gateway into `semteams/internal/gateway/graphgateway` (semteams #402/#406), which `internal/` makes unimportable here. At the port SemSource drops GraphQL from the UI profile or owns its own adapter |
+| `gateway/graph-gateway` | 1 (1) | `defer-exclude` upstream (03B D4/D5: GraphQL is a consumer-owned layer-4 adapter, not a tier-0 deferral); re-admission asked: [semengine#567](https://github.com/C360Studio/semengine/issues/567) | The 03B premise "SemSource does not exercise it" (A3.3) grepped only `test/setup03a`. SemSpec federates over SemSource's GraphQL (`entity`, `entitiesByPrefix`, `entitiesByPredicate`, `traverse`; semspec `graph/gatherer.go`), SemDragon configures it, and the UI profile's Caddy exposes `/graphql`. SemSource's own `ui/` does not call it. The consumer assertion that #567 needs is [#251](https://github.com/C360Studio/semsource/issues/251) |
 | `graph/inference` | 1 (1) | present (the hierarchy part only, semengine#97) | `RegisterPayloads` for the hierarchy container; graph-ingest refuses to construct without it |
 | `graph/readiness` | 1 (0) | present | Tests only |
 | `output/websocket` | 1 (1) | change 5 per 04A D2; [semengine#34](https://github.com/C360Studio/semengine/issues/34) open; not in the 2026-11-08 change-5 direction | Port-refactor: it reads applied state instead of a NATS subject. The raw `/ws` stream contract changes with it |
@@ -87,9 +87,32 @@ SemEngine's component manager already fails closed.
 | 112, natsclient contract | natsclient uses nats.go as nats.go provides it, plus a cuttable dialer, no locks across nats.go calls, and two settings options | Review the 19 non-test `natsclient` importers for assumptions outside the contract. The fixture coupling is #228 |
 | 113, Start context bounds Start | `Start(ctx)` returns when ready and holds nothing; continuing work runs under its own run context; `Stop` is the only stop | Audit the 12 non-test `Start(ctx)` implementations under `processor/`, `internal/`, and `cmd/` for run goroutines derived from the `Start` context |
 
+## Test fixture and CI
+
+`natsclient.NewTestClient` is not carried. Its replacement, `internal/harness/natsfixture`, is internal to SemEngine
+([#228](https://github.com/C360Studio/semsource/issues/228), ask
+[semengine#568](https://github.com/C360Studio/semengine/issues/568)).
+
+- **Sites:** 48 calls in 38 `//go:build integration` files, plus 3 `*natsclient.TestClient` helper parameters.
+- **Options:** only `WithKV` (33), `WithStreams` (26), and `WithJetStream` (1).
+- **Members:** only `.Client`, plus `.URL` in `cmd/semsource`.
+- **Lifetime:** every broker is per-test; nothing uses a shared broker.
+- **CI:** the `test-integration` lane already has Docker. The pins differ:
+  - testcontainers-go: SemSource `v0.40.0`, SemEngine `v0.44.0`
+  - NATS test image: SemSource pin `2.14-alpine`, SemEngine `nats:2.15.0-alpine` by digest
+  - nats.go: SemSource `v1.52.0`, SemEngine `v1.55.0`
+
+Re-measure the fixture sites:
+
+```sh
+git grep -c 'natsclient.NewTestClient(' -- '*_test.go' | awk -F: '{s+=$2; n++} END {print n" files, "s" sites"}'
+```
+
 ## Open items
 
-- **graph-gateway:** an owner decision is needed: drop GraphQL from the UI profile at the port, or own a consumer
-  adapter. The 03B "not exercised" premise missed the UI profile (see the row).
+- **graph-gateway:** the owner ruled (2026-11-09) to ask for re-admission:
+  [semengine#567](https://github.com/C360Studio/semengine/issues/567), with SemSource's assertion in
+  [#251](https://github.com/C360Studio/semsource/issues/251).
+- **NATS test fixture:** waiting on [semengine#568](https://github.com/C360Studio/semengine/issues/568) (see below).
 - **pkg/buffer:** waiting on [semengine#566](https://github.com/C360Studio/semengine/issues/566).
 - **output/websocket:** waiting on [semengine#34](https://github.com/C360Studio/semengine/issues/34) being scheduled.
