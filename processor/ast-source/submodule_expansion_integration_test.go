@@ -132,12 +132,22 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 		}
 		defer func() { _ = stopWithin(5*time.Second, c.Stop) }()
 
+		// Delivery barrier: wait for the initial index to finish (the phase
+		// turns "watching" only after it), then Stop, which returns nil only
+		// once every buffered entity is published. Only then is the GRAPH
+		// snapshot below complete.
 		deadline := time.Now().Add(20 * time.Second)
-		for c.distinct.Count() == 0 && time.Now().Before(deadline) {
+		for c.currentPhase() != "watching" && time.Now().Before(deadline) {
 			time.Sleep(100 * time.Millisecond)
+		}
+		if phase := c.currentPhase(); phase != "watching" {
+			t.Fatalf("%q initial index did not complete: phase %q", name, phase)
 		}
 		if c.distinct.Count() == 0 {
 			t.Errorf("%q seeded no entities from its submodule tree", name)
+		}
+		if err := stopWithin(10*time.Second, c.Stop); err != nil {
+			t.Fatalf("%q did not settle its publications: %v", name, err)
 		}
 	}
 	if booted != 2 {
