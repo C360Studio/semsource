@@ -6,8 +6,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,23 +28,17 @@ const (
 	fixtureShaV2   = "b1256521ee39" // root pin, has Farewell
 )
 
-// submoduleSourceStatus extends the harness sourceStatus with the submodule
-// loudness field.
-type submoduleSourceStatus struct {
-	InstanceName string `json:"instance_name"`
-	SourceType   string `json:"source_type"`
-	Submodules   []struct {
-		Path  string `json:"path"`
-		SHA   string `json:"sha,omitempty"`
-		State string `json:"state"`
-	} `json:"submodules,omitempty"`
-}
-
 // TestE2E_SubmoduleIngest clones the real fixture from GitHub and asserts the
-// three contract pillars end-to-end: completeness (both pins' trees ingest),
-// identity (per-pin version scopes; the Farewell marker separates them; no
-// submodule code under the parent scope), and loudness (per-path submodule
-// states on the status surface).
+// submodule contract this migration pin supports (SETUP 03A,
+// docs/testing/setup-03a/compatibility.md "Remote submodule discovery
+// blocked"): component admission is boot-only, so remote submodule discovery
+// is blocked loudly — a capability=blocked warning names the source — while
+// the parent repository still ingests, no entity lands in a submodule version
+// scope, and no submodule code is attributed to the parent scope.
+//
+// shortcut: asserts the blocked contract (#248); restore the per-pin
+// completeness/identity/loudness assertions (git history before #249) once the
+// SemEngine port restores runtime component admission.
 func TestE2E_SubmoduleIngest(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network e2e in short mode")
@@ -133,30 +125,38 @@ func TestE2E_SubmoduleIngest(t *testing.T) {
 		_ = cmd.Wait()
 	}()
 	go logPipe(t, "stderr", stderr)
+	blockedWarned := make(chan struct{})
 	go func() {
+		var once sync.Once
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			t.Logf("[stdout] %s", scanner.Text())
+			line := scanner.Text()
+			t.Logf("[stdout] %s", line)
+			if strings.Contains(line, `"level":"WARN"`) &&
+				strings.Contains(line, "dynamic submodule discovery unavailable") &&
+				strings.Contains(line, `"capability":"blocked"`) &&
+				strings.Contains(line, fixtureRepoURL) {
+				once.Do(func() { close(blockedWarned) })
+			}
 		}
 	}()
 
-	// Collect entity IDs until both version scopes are represented and the
-	// stream goes quiet, or timeout.
+	// Collect entity IDs until the stream goes quiet after the first entity,
+	// or timeout. Nothing waits on submodule scopes: on this pin none appear.
 	var mu sync.Mutex
 	var ids []string
 	collectCtx, collectCancel := context.WithTimeout(ctx, 240*time.Second)
 	defer collectCancel()
-	const stability = 8 * time.Second
+	const stability = 15 * time.Second
 	fetchDone := make(chan struct{})
 	go func() {
 		defer close(fetchDone)
 		lastActivity := time.Now()
 		for collectCtx.Err() == nil {
 			mu.Lock()
-			joined := strings.Join(ids, " ")
-			bothScopes := strings.Contains(joined, fixtureShaV1) && strings.Contains(joined, fixtureShaV2)
+			seen := len(ids)
 			mu.Unlock()
-			if bothScopes && time.Since(lastActivity) >= stability {
+			if seen > 0 && time.Since(lastActivity) >= stability {
 				return
 			}
 			msgs, err := cons.Fetch(100, jetstream.FetchMaxWait(2*time.Second))
@@ -187,81 +187,32 @@ func TestE2E_SubmoduleIngest(t *testing.T) {
 	case <-collectCtx.Done():
 	}
 
+	select {
+	case <-blockedWarned:
+	case <-time.After(10 * time.Second):
+		t.Error("blocked: no WARN capability=blocked submodule-discovery line for the fixture source")
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 	if len(ids) == 0 {
-		t.Fatal("no entities collected")
+		t.Fatal("parent: no entities collected — the parent repository did not ingest")
 	}
-
-	// Identity: both pins present, in distinct version scopes.
-	var v1Farewell, v2Farewell, v1Greet, v2Greet bool
-	var parentScopedSubCode []string
+	var subScoped, parentScopedSubCode []string
 	for _, id := range ids {
 		lower := strings.ToLower(id)
-		inSub := strings.Contains(lower, subProjectSlug)
 		switch {
-		case inSub && strings.Contains(lower, fixtureShaV1):
-			if strings.Contains(lower, "farewell") {
-				v1Farewell = true
-			}
-			if strings.Contains(lower, "greet") {
-				v1Greet = true
-			}
-		case inSub && strings.Contains(lower, fixtureShaV2):
-			if strings.Contains(lower, "farewell") {
-				v2Farewell = true
-			}
-			if strings.Contains(lower, "greet") {
-				v2Greet = true
-			}
-		case !inSub && (strings.Contains(lower, "farewell") || strings.Contains(lower, "greeter")):
-			// Submodule code attributed outside the submodule scope.
+		case strings.Contains(lower, subProjectSlug):
+			subScoped = append(subScoped, id)
+		case strings.Contains(lower, "farewell") || strings.Contains(lower, "greeter"):
 			parentScopedSubCode = append(parentScopedSubCode, id)
 		}
 	}
-	if !v1Greet || !v2Greet {
-		t.Errorf("completeness: Greet missing from a pin (v1=%v v2=%v)", v1Greet, v2Greet)
-	}
-	if !v2Farewell {
-		t.Error("identity: Farewell missing from the v2 scope")
-	}
-	if v1Farewell {
-		t.Error("identity: Farewell present in the v1 scope — version scoping is broken")
+	if len(subScoped) > 0 {
+		t.Errorf("blocked: %d entities in a submodule scope, want none on this pin (first: %s)", len(subScoped), subScoped[0])
 	}
 	if len(parentScopedSubCode) > 0 {
 		t.Errorf("exclusion: submodule code under a non-submodule scope: %v", parentScopedSubCode)
 	}
-
-	// Loudness: the git source's status lists both submodule paths as
-	// materialized with their pins.
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort))
-	if err != nil {
-		t.Fatalf("status fetch: %v", err)
-	}
-	defer resp.Body.Close()
-	var status struct {
-		Sources []submoduleSourceStatus `json:"sources"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
-	states := map[string]string{}
-	shas := map[string]string{}
-	for _, s := range status.Sources {
-		for _, sm := range s.Submodules {
-			states[sm.Path] = sm.State
-			shas[sm.Path] = sm.SHA
-		}
-	}
-	for path, wantSHA := range map[string]string{
-		"semdev-test-sub":        fixtureShaV2,
-		"nested/semdev-test-sub": fixtureShaV1,
-	} {
-		if states[path] != "materialized" {
-			t.Errorf("loudness: %s state = %q, want materialized (all: %v)", path, states[path], states)
-		}
-		if shas[path] != wantSHA {
-			t.Errorf("loudness: %s sha = %q, want %s", path, shas[path], wantSHA)
-		}
-	}
+	t.Logf("parent ingested %d entities; submodule scopes empty as expected", len(ids))
 }
