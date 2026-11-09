@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/natsclient"
+	cerrdefs "github.com/containerd/errdefs"
+	"github.com/docker/go-connections/nat"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -87,7 +89,7 @@ func New(t testing.TB, opts ...Option) *Server {
 		opt(&cfg)
 	}
 
-	container, url, err := start(t.Context(), cfg)
+	container, url, err := start(t.Context(), dockerLauncher(cfg), portWindow)
 	if err != nil {
 		t.Fatalf("start NATS: %v", err)
 	}
@@ -118,10 +120,24 @@ func New(t testing.TB, opts ...Option) *Server {
 	return &Server{Client: client, URL: url}
 }
 
-// start runs the container and resolves its client URL. A container whose
-// mapped port cannot be read (Docker reporting it running before the port
-// binding is visible, gh#736) is replaced once.
-func start(ctx context.Context, cfg config) (testcontainers.Container, string, error) {
+// broker is the part of a testcontainers.Container this package uses, so the
+// setup and cleanup paths can be tested without Docker.
+type broker interface {
+	Host(ctx context.Context) (string, error)
+	MappedPort(ctx context.Context, port nat.Port) (nat.Port, error)
+	Terminate(ctx context.Context, opts ...testcontainers.TerminateOption) error
+}
+
+// launcher creates and starts one broker container. A failed start may still
+// return a container to remove.
+type launcher func(ctx context.Context) (broker, error)
+
+// portWindow bounds how long a started container's client port may stay
+// unpublished before the container is replaced: Docker can report a container
+// running before its port binding is visible (gh#736).
+const portWindow = 10 * time.Second
+
+func dockerLauncher(cfg config) launcher {
 	args := []string{"--port", "4222"}
 	if cfg.jetstream {
 		args = append(args, "--js")
@@ -135,33 +151,76 @@ func start(ctx context.Context, cfg config) (testcontainers.Container, string, e
 		},
 		Started: true,
 	}
+	return func(ctx context.Context) (broker, error) {
+		container, err := testcontainers.GenericContainer(ctx, req)
+		if container == nil {
+			// A nil *DockerContainer in a non-nil interface would defeat
+			// terminate's nil check.
+			return nil, err
+		}
+		return container, err
+	}
+}
 
+// start launches a broker and resolves its client URL. Each attempt, pull and
+// readiness included, is bounded by startTimeout. A container is replaced
+// once, and only when its client port was observed absent for the whole
+// window, the container was removed cleanly, and the test is still running.
+func start(ctx context.Context, launch launcher, window time.Duration) (broker, string, error) {
 	var failures error
 	for attempt := 1; attempt <= 2; attempt++ {
-		container, err := testcontainers.GenericContainer(ctx, req)
-		if err != nil {
-			// A failed start may still return a container to remove.
-			return nil, "", errors.Join(failures, err, terminate(container))
-		}
-		url, err := clientURL(ctx, container)
+		container, url, portMissing, err := attemptStart(ctx, launch, window)
 		if err == nil {
 			return container, url, nil
 		}
-		failures = errors.Join(failures, fmt.Errorf("attempt %d: %w", attempt, err), terminate(container))
+		err = fmt.Errorf("attempt %d: %w", attempt, err)
+		if termErr := terminate(container); termErr != nil {
+			// A broker that could not be removed must not be hidden behind a
+			// successful replacement.
+			return nil, "", errors.Join(failures, err, termErr)
+		}
+		failures = errors.Join(failures, err)
+		if !portMissing || ctx.Err() != nil {
+			break
+		}
 	}
 	return nil, "", failures
 }
 
-func clientURL(ctx context.Context, container testcontainers.Container) (string, error) {
+// attemptStart reports portMissing only when the container started and its
+// host resolved, but the client port stayed unpublished for the window.
+func attemptStart(ctx context.Context, launch launcher, window time.Duration) (broker, string, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
+	container, err := launch(ctx)
+	if err != nil {
+		return container, "", false, fmt.Errorf("start container: %w", err)
+	}
 	host, err := container.Host(ctx)
 	if err != nil {
-		return "", fmt.Errorf("container host: %w", err)
+		return container, "", false, fmt.Errorf("container host: %w", err)
 	}
-	port, err := container.MappedPort(ctx, clientPort)
-	if err != nil {
-		return "", fmt.Errorf("mapped port %s: %w", clientPort, err)
+
+	observe, stop := context.WithTimeout(ctx, window)
+	defer stop()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		port, err := container.MappedPort(observe, clientPort)
+		if err == nil {
+			return container, fmt.Sprintf("nats://%s:%s", host, port.Port()), false, nil
+		}
+		if !cerrdefs.IsNotFound(err) {
+			return container, "", false, fmt.Errorf("mapped port %s: %w", clientPort, err)
+		}
+		select {
+		case <-observe.Done():
+			return container, "", ctx.Err() == nil,
+				fmt.Errorf("mapped port %s not published within %s: %w", clientPort, window, err)
+		case <-tick.C:
+		}
 	}
-	return fmt.Sprintf("nats://%s:%s", host, port.Port()), nil
 }
 
 // connect builds the client the way production does (NewClient, Connect),
@@ -189,7 +248,7 @@ func connect(ctx context.Context, url string) (*natsclient.Client, error) {
 // cleanup closes the client before removing the broker, so the client's
 // drain does not race a vanished server. Each step gets a fresh deadline: the
 // test context is already done when cleanup runs.
-func cleanup(client *natsclient.Client, container testcontainers.Container) error {
+func cleanup(client *natsclient.Client, container broker) error {
 	return errors.Join(closeClient(client), terminate(container))
 }
 
@@ -202,7 +261,7 @@ func closeClient(client *natsclient.Client) error {
 	return nil
 }
 
-func terminate(container testcontainers.Container) error {
+func terminate(container broker) error {
 	if container == nil {
 		return nil
 	}
