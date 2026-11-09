@@ -83,6 +83,7 @@ describe("parseCapabilities", () => {
     expect(() => parseCapabilities(malformed)).toThrow(/readiness reason/i);
   });
 
+  // spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
   it.each([
     [
       "overall",
@@ -222,6 +223,7 @@ describe("parseCapabilities", () => {
     );
   });
 
+  // spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
   it("rejects impossible source dates while accepting live Go timestamps", () => {
     const invalid = structuredClone(ready);
     Object.assign(invalid.readiness.source, {

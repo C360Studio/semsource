@@ -49,6 +49,7 @@ func TestIndexReadinessFrom_HealthyReplyPassesThrough(t *testing.T) {
 // (#227): a SemStreams-era reply still carrying the legacy phase / revision /
 // last_synced trio yields only the revision-numeric contract, so no consumer
 // can start gating on a field SemEngine's graph-index no longer emits.
+// spec: openspec/specs/ingestion-readiness/spec.md#Requirement: Readiness sub-signals are present and honest on every surface
 func TestIndexReadinessFrom_DropsLegacyStatusFields(t *testing.T) {
 	raw := []byte(`{"ready":true,"state":"ready","indexed_revision":42,"target_revision":42,` +
 		`"phase":"ready","revision":"42","last_synced":"2026-07-15T15:00:00Z"}`)
