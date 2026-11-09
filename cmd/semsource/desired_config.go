@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semstreams/component"
 	semconfig "github.com/c360studio/semstreams/config"
@@ -26,7 +27,26 @@ func prepareComponentRegistry(ctx context.Context, cfg *config.Config, manager *
 	if err := registerComponentFactories(registry, componentWiring{Ingest: &ingest, ScopeSystems: scopes}); err != nil {
 		return nil, err
 	}
+	if err := requireRegisteredFactories(registry, manager.GetConfig().Get().Components); err != nil {
+		return nil, err
+	}
 	return registry, nil
+}
+
+// requireRegisteredFactories fails boot when an enabled component names a
+// factory nobody registered. The pinned ComponentManager logs such a component
+// and skips it, so without this check a dropped registration boots a service
+// that silently lacks the component.
+func requireRegisteredFactories(registry *component.Registry, components semconfig.ComponentConfigs) error {
+	for instance, cc := range components {
+		if !cc.Enabled {
+			continue
+		}
+		if _, ok := registry.GetFactory(cc.Name); !ok {
+			return fmt.Errorf("component %q names unregistered factory %q", instance, cc.Name)
+		}
+	}
+	return nil
 }
 
 // readDesiredConfig observes existing ConfigManager authority after ambiguous writes.
