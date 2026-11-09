@@ -325,4 +325,3 @@ verbatim, alongside the entity's relations, its stamped class, and deterministic
 - **GIVEN** ast-source indexing a real Go tree, offloading bodies to the content store
 - **WHEN** a fusion request resolves a function by name and wants its body
 - **THEN** the returned body is the function's verbatim source, not a placeholder
-

@@ -4,17 +4,22 @@ package astsource
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
+	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semsource/internal/subwatch"
@@ -139,6 +144,51 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 		t.Fatalf("booted %d ast instances, want 2 (one per pin)", booted)
 	}
 
+	// Identity: each pin's spawned scope is the submodule's own project at its
+	// gitlink SHA, and the emitted symbols land under exactly those scopes.
+	scopeBySHA := map[string]string{}
+	for name, cc := range store.puts {
+		if cc.Name != "ast-source" {
+			continue
+		}
+		var astCfg struct {
+			WatchPaths []struct{ Project, Version string } `json:"watch_paths"`
+		}
+		if err := json.Unmarshal(cc.Config, &astCfg); err != nil || len(astCfg.WatchPaths) != 1 {
+			t.Fatalf("%q: watch_paths = %+v, err %v", name, astCfg.WatchPaths, err)
+		}
+		wp := astCfg.WatchPaths[0]
+		if strings.Contains(wp.Project, "parentproj") {
+			t.Errorf("%q is scoped to the parent project: %q", name, wp.Project)
+		}
+		scopeBySHA[wp.Version] = entityid.ScopedSystemSlug(wp.Project, wp.Version)
+	}
+	v1Scope, v2Scope := scopeBySHA[shaV1[:12]], scopeBySHA[shaV2[:12]]
+	if v1Scope == "" || v2Scope == "" || v1Scope == v2Scope {
+		t.Fatalf("pin scopes = %v, want distinct scopes for %s and %s", scopeBySHA, shaV1[:12], shaV2[:12])
+	}
+	symbolScopes := map[string]map[string]bool{}
+	for _, id := range publishedEntityIDs(t, tc.Client) {
+		parts := strings.Split(id, ".")
+		if len(parts) != 6 || parts[4] != "function" {
+			continue
+		}
+		for _, sym := range []string{"Greet", "Farewell"} {
+			if strings.HasSuffix(parts[5], "-"+sym) {
+				if symbolScopes[sym] == nil {
+					symbolScopes[sym] = map[string]bool{}
+				}
+				symbolScopes[sym][parts[2]] = true
+			}
+		}
+	}
+	if want := map[string]bool{v1Scope: true, v2Scope: true}; !reflect.DeepEqual(symbolScopes["Greet"], want) {
+		t.Errorf("Greet scopes = %v, want both pins %v", symbolScopes["Greet"], want)
+	}
+	if want := map[string]bool{v2Scope: true}; !reflect.DeepEqual(symbolScopes["Farewell"], want) {
+		t.Errorf("Farewell scopes = %v, want only the newer pin %v", symbolScopes["Farewell"], want)
+	}
+
 	// The two spawned instance names carry the two distinct version scopes.
 	names := make([]string, 0, len(store.puts))
 	for n := range store.puts {
@@ -150,4 +200,47 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 			t.Errorf("no spawned instance carries version scope %s (names: %v)", sha, names)
 		}
 	}
+}
+
+// publishedEntityIDs reads every message on the GRAPH stream and returns the
+// entity IDs the publisher stamped into each Nats-Msg-Id ("<id>:<hash>").
+func publishedEntityIDs(t *testing.T, client *natsclient.Client) []string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	js, err := client.JetStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cons, err := js.OrderedConsumer(ctx, "GRAPH", jetstream.OrderedConsumerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := cons.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for remaining := int(info.NumPending); remaining > 0; {
+		batch, err := cons.Fetch(remaining, jetstream.FetchMaxWait(5*time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := 0
+		for msg := range batch.Messages() {
+			got++
+			msgID := msg.Headers().Get(jetstream.MsgIDHeader)
+			if i := strings.LastIndex(msgID, ":"); i > 0 {
+				ids = append(ids, msgID[:i])
+			}
+		}
+		if err := batch.Error(); err != nil {
+			t.Fatal(err)
+		}
+		if got == 0 {
+			t.Fatalf("stream fetch returned nothing with %d pending", remaining)
+		}
+		remaining -= got
+	}
+	return ids
 }

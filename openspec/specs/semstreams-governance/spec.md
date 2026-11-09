@@ -273,4 +273,3 @@ This applies to code-context, source-manifest, and supersession.
 
 - **WHEN** the callback is released and `Stop` runs again with a live context
 - **THEN** it returns nil, the component is no longer running, it holds no subscriptions, and the request completes
-
