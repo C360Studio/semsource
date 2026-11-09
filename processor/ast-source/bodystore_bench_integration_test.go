@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/storage/objectstore"
 
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
@@ -25,7 +25,7 @@ func testLogger() *slog.Logger { return slog.New(slog.NewTextHandler(os.Stderr, 
 // bodyOffloadStore returns a real object store backed by the test NATS.
 func bodyOffloadStore(t *testing.T) *objectstore.Store {
 	t.Helper()
-	tc := natsclient.NewTestClient(t, natsclient.WithJetStream())
+	tc := natstest.New(t, natstest.WithJetStream())
 	store, err := objectstore.NewStoreWithConfig(context.Background(), tc.Client, objectstore.Config{
 		BucketName:   graph.BodyStoreBucket,
 		InstanceName: graph.BodyStoreInstance,

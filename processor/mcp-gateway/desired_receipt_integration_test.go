@@ -8,13 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semsource/processor/source-manifest"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/c360studio/semsource/internal/natstest"
+	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
 
 func TestIntegrationRemovePreservesPartialDesiredReceipt(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 	sub, err := tc.Client.SubscribeForRequests(t.Context(), "graph.ingest.remove.acme", func(_ context.Context, _ []byte) ([]byte, error) {
 		return json.Marshal(sourcemanifest.RemoveReply{InstanceName: "docs", Removed: true, DesiredChanged: true, RestartRequired: true, ProjectionStatus: "unavailable", Error: &sourcemanifest.IngestError{Code: sourcemanifest.CodeKVWriteFailed, Message: "manifest write failed"}})
 	})

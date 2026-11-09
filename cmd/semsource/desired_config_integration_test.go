@@ -11,14 +11,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/c360studio/semsource/internal/natstest"
 	semconfig "github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 func TestIntegrationReadDesiredConfigRetainedAuthority(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	want := types.ComponentConfig{
@@ -66,7 +68,7 @@ func TestIntegrationReadDesiredConfigRetainedAuthority(t *testing.T) {
 }
 
 func TestIntegrationReadDesiredConfigNamespaceIsolation(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	for _, owner := range []struct{ org, stem, project string }{
@@ -96,7 +98,7 @@ func TestIntegrationReadDesiredConfigNamespaceIsolation(t *testing.T) {
 }
 
 func TestIntegrationReadDesiredConfigUnavailableStorage(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	if read, err := readDesiredConfig(ctx, tc.Client, "acme", "missing"); err == nil || read != nil {

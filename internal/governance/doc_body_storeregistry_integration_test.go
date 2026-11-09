@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
@@ -21,6 +20,7 @@ import (
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -42,12 +42,12 @@ import (
 //     is the verbatim passage.
 func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
 		// Bind ONLY the entity ingest subject, never a wildcard — a wildcard also
 		// matches graph-query's request/reply forwards and races a PubAck onto the
 		// reply inbox (semstreams#1143).
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

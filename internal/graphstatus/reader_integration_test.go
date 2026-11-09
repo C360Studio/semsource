@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/internal/graphstatus"
+	"github.com/c360studio/semsource/internal/natstest"
 	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
@@ -30,7 +30,7 @@ func TestReader_UnprovisionedBucketIsClassifiedNotReady(t *testing.T) {
 	// is genuinely absent rather than unreachable. Without WithKV the lookup
 	// fails at the JetStream layer ("no responders") and never reaches the
 	// catalog seam this test exists to exercise.
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -72,7 +72,7 @@ func TestReader_OffCatalogKeyIsInvalidNotNotReady(t *testing.T) {
 		t.Fatal("GRAPH_STATUS_TYPO unexpectedly resolves in the framework catalog")
 	}
 
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

@@ -12,10 +12,10 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
 
 	semsourceconfig "github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
@@ -87,9 +87,9 @@ func (m *memConfigStore) DeleteComponentFromKV(_ context.Context, name string) e
 // source_removed lifecycle replay is a separate migration merge blocker.
 func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity", "graph.ingest.manifest", "graph.ingest.status", "graph.ingest.predicates"},
 		}),
@@ -200,7 +200,7 @@ func manifestSourceEntryForDocs(t *testing.T) semsourceconfig.SourceEntry {
 	return semsourceconfig.SourceEntry{Type: "docs", Paths: []string{t.TempDir()}}
 }
 
-func publishStatusReport(t *testing.T, ctx context.Context, tc *natsclient.TestClient, instance string) {
+func publishStatusReport(t *testing.T, ctx context.Context, tc *natstest.Server, instance string) {
 	t.Helper()
 	report, _ := json.Marshal(sourcemanifest.SourceStatusReport{
 		InstanceName: instance,
@@ -214,7 +214,7 @@ func publishStatusReport(t *testing.T, ctx context.Context, tc *natsclient.TestC
 	}
 }
 
-func waitForSourceInStatus(t *testing.T, ctx context.Context, tc *natsclient.TestClient, instance string, want bool) {
+func waitForSourceInStatus(t *testing.T, ctx context.Context, tc *natstest.Server, instance string, want bool) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	var last string

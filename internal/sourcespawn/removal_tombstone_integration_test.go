@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/internal/natstest"
 	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
 )
 
 func TestIntegrationRemovedFileSourceStaysDisabledAfterConfigRestart(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	const handle = "url-source-example-com"

@@ -15,8 +15,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/c360studio/semsource/internal/graphstatus"
+	"github.com/c360studio/semsource/internal/natstest"
 	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
 
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
@@ -27,7 +27,7 @@ import (
 // source-manifest so the test isolates the translation.
 func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.ingest.add.acme",
 		func(_ context.Context, data []byte) ([]byte, error) {
@@ -80,7 +80,7 @@ func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 // GRAPH_STATUS rather than request/reply subjects — plus the note.
 func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t, natsclient.WithKV())
+	tc := natstest.New(t, natstest.WithJetStream())
 
 	sub1, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status",
 		func(_ context.Context, _ []byte) ([]byte, error) {
@@ -150,7 +150,7 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 // to its owned request/reply subject and returns the responder payload verbatim.
 func TestIntegration_QueryToolsTranslateToNATS(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	tests := []struct {
 		name        string

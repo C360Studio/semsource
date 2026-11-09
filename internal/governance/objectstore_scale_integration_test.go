@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/miniotest"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 )
 
@@ -49,9 +49,9 @@ func TestIntegration_UnboundedPrefixIngestMeasurement(t *testing.T) {
 		return store.Put(ctx, fmt.Sprintf("corpus/%05d.md", i), []byte(body))
 	})
 
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

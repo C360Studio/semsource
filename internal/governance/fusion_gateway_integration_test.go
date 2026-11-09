@@ -9,7 +9,6 @@ import (
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
@@ -18,6 +17,7 @@ import (
 	"github.com/c360studio/semstreams/vocabulary/cco"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/ontology"
@@ -31,9 +31,9 @@ import (
 // graph.query.relationships, and graph.query.prefix end to end.
 func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -145,13 +145,13 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 // dereferenced verbatim source, the callee relation, and the BFO/CCO class.
 func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
 		// The GRAPH stream must bind ONLY the entity ingest subject, NOT a
 		// wildcard like "graph.ingest.>": a wildcard also matches graph-query's
 		// request/reply forwards and races a PubAck onto the reply inbox, silently
 		// zeroing batch/prefix results (semstreams#1143).
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

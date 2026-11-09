@@ -89,30 +89,27 @@ SemEngine's component manager already fails closed.
 
 ## Test fixture and CI
 
-`natsclient.NewTestClient` is not carried. Its replacement, `internal/harness/natsfixture`, is internal to SemEngine
-([#228](https://github.com/C360Studio/semsource/issues/228), ask
-[semengine#568](https://github.com/C360Studio/semengine/issues/568)).
+`natsclient.NewTestClient` is not carried, and SemEngine ruled a consumer test fixture consumer-owned
+([semengine#568](https://github.com/C360Studio/semengine/issues/568), 2026-11-09). SemSource's fixture is
+`internal/natstest` ([#228](https://github.com/C360Studio/semsource/issues/228)): `natstest.New(t, opts...)` returns
+a `*natsclient.Client` built with `NewClient`/`Connect`, the recipe SemEngine documents. At the port only the
+`natsclient` import inside `internal/natstest` changes.
 
-- **Sites:** 48 calls in 38 `//go:build integration` files, plus 3 `*natsclient.TestClient` helper parameters.
-- **Options:** only `WithKV` (33), `WithStreams` (26), and `WithJetStream` (1).
-- **Members:** only `.Client`, plus `.URL` in `cmd/semsource`.
-- **Lifetime:** every broker is per-test; nothing uses a shared broker.
-- **CI:** the `test-integration` lane already has Docker. The pins differ:
-  - testcontainers-go: SemSource `v0.40.0`, SemEngine `v0.44.0`
-  - NATS test image: SemSource pin `2.14-alpine`, SemEngine `nats:2.15.0-alpine` by digest
-  - nats.go: SemSource `v1.52.0`, SemEngine `v1.55.0`
-
-Re-measure the fixture sites:
-
-```sh
-git grep -c 'natsclient.NewTestClient(' -- '*_test.go' | awk -F: '{s+=$2; n++} END {print n" files, "s" sites"}'
-```
+- **Sites migrated:** 48 calls in 38 `//go:build integration` files, plus 3 helper parameters (now `*natstest.Server`).
+- **Options:** `WithJetStream` (it replaces `WithKV` and `WithJetStream`) and `WithStreams(natstest.Stream{...})`.
+  Streams keep the same bounds (1 h, 64 MiB, discard old).
+- **Lifetime:** one broker per test, as before. SemEngine's suggestion of one shared broker per package, emptied
+  between tests, is the marked `// shortcut:` upgrade.
+- **Pins at the port:**
+  - NATS image: `natstest.Image` pins `nats:2.14.4-alpine` by digest (the SETUP 03A lane's image); SemEngine pins
+    `nats:2.15.0-alpine`.
+  - testcontainers-go: SemSource `v0.40.0`, SemEngine `v0.44.0`.
+  - nats.go: SemSource `v1.52.0`, SemEngine `v1.55.0`.
 
 ## Open items
 
 - **graph-gateway:** the owner ruled (2026-11-09) to ask for re-admission:
   [semengine#567](https://github.com/C360Studio/semengine/issues/567), with SemSource's assertion in
   [#251](https://github.com/C360Studio/semsource/issues/251).
-- **NATS test fixture:** waiting on [semengine#568](https://github.com/C360Studio/semengine/issues/568) (see below).
 - **pkg/buffer:** waiting on [semengine#566](https://github.com/C360Studio/semengine/issues/566).
 - **output/websocket:** waiting on [semengine#34](https://github.com/C360Studio/semengine/issues/34) being scheduled.

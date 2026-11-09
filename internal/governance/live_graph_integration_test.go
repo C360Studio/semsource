@@ -5,14 +5,16 @@ package governance
 import (
 	"context"
 	"encoding/json"
-	"github.com/c360studio/semsource/entityid"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
+
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/binaryproof"
+	"github.com/c360studio/semsource/internal/natstest"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semstreams/component"
@@ -29,9 +31,9 @@ import (
 
 func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -195,9 +197,9 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 
 func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
@@ -268,9 +270,9 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 
 func TestIntegration_GraphQueryPrefixAndSummaryForSemsourceEntities(t *testing.T) {
 	ctx := context.Background()
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),

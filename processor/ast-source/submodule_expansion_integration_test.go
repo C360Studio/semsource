@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semsource/internal/subwatch"
 )
@@ -99,8 +99,8 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	})
 	w.Tick(context.Background())
 
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity", "graph.ingest.batch"},
 		}),

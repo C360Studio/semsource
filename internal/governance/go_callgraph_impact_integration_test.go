@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/fusion"
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ast/golang"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
@@ -118,9 +118,9 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 		t.Fatalf("cross-package call unresolved: Run.Calls = %v, want %s", caller.Calls, def.ID)
 	}
 
-	tc := natsclient.NewTestClient(t,
-		natsclient.WithKV(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{
+	tc := natstest.New(t,
+		natstest.WithJetStream(),
+		natstest.WithStreams(natstest.Stream{
 			Name:     "GRAPH",
 			Subjects: []string{"graph.ingest.entity"},
 		}),
