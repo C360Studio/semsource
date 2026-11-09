@@ -64,7 +64,7 @@ Status values:
 | `processor/graph-index` | 2 (1) | present | Factory `Register` in `run.go` |
 | `processor/graph-ingest` | 2 (1) | present | Factory `Register` in `run.go`. ADR-110: SemSource is a caller of the write seam (it publishes on `graph.ingest.*`) and never writes `ENTITY_STATES` itself |
 | `processor/graph-query` | 2 (1) | present | Factory `Register` in `run.go`. Readiness comes from query replies (ADR-109; see #227 below) |
-| `gateway/graph-gateway` | 1 (1) | consumer-side; **owner decision needed** | SemEngine ledger row is `defer-exclude`: layer 4 of 03B D5 is consumer-owned (semengine#8 comment 5930898291). SemSource composes it for GraphQL (`/graph-gateway/graphql`, exposed at `/graphql` by the UI profile). At the port SemSource either drops GraphQL or owns its own adapter |
+| `gateway/graph-gateway` | 1 (1) | consumer-side, permanently (not a tier-0 deferral); **owner decision needed** | SemEngine 03B D4/D5: GraphQL is a consumer-owned public adapter (layer 4), not engine surface; re-admission needs a consumer assertion through its HTTP surface. The 03B premise "SemSource does not exercise it" (A3.3) grepped only `test/setup03a`; the UI profile's `semstreams-ui` image calls `/graphql` (`src/lib/services/graphApi.ts`), and `test/ui/ui-profile.spec.cjs:91` plus `scripts/core-profile-smoke.sh:92` assert the route. SemTeams is absorbing a trimmed gateway into `semteams/internal/gateway/graphgateway` (semteams #402/#406), which `internal/` makes unimportable here. At the port SemSource drops GraphQL from the UI profile or owns its own adapter |
 | `graph/inference` | 1 (1) | present (the hierarchy part only, semengine#97) | `RegisterPayloads` for the hierarchy container; graph-ingest refuses to construct without it |
 | `graph/readiness` | 1 (0) | present | Tests only |
 | `output/websocket` | 1 (1) | change 5 per 04A D2; [semengine#34](https://github.com/C360Studio/semengine/issues/34) open; not in the 2026-11-08 change-5 direction | Port-refactor: it reads applied state instead of a NATS subject. The raw `/ws` stream contract changes with it |
@@ -89,6 +89,7 @@ SemEngine's component manager already fails closed.
 
 ## Open items
 
-- **graph-gateway:** an owner decision is needed: drop GraphQL at the port, or own a consumer adapter.
+- **graph-gateway:** an owner decision is needed: drop GraphQL from the UI profile at the port, or own a consumer
+  adapter. The 03B "not exercised" premise missed the UI profile (see the row).
 - **pkg/buffer:** waiting on [semengine#566](https://github.com/C360Studio/semengine/issues/566).
 - **output/websocket:** waiting on [semengine#34](https://github.com/C360Studio/semengine/issues/34) being scheduled.
