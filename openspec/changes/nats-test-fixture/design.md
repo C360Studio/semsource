@@ -38,10 +38,16 @@
 5. **Replace only on observed absence.** A port is absent when testcontainers reports `errdefs.NotFound` for the
    whole 10 s window. Host failures, inspect failures and cancellation are not absence.
 
+6. **State 7 tested behaviors that no spec states.** Each of the 4 requirements restates exactly what its tests
+   assert, and nothing more. The owner ruled (#228, 2026-11-09) to add them here, so they're spec-backed now and
+   not rediscovered at the port.
+
 ## Risks / Trade-offs
 
 - 48 containers per integration run. That is the existing cost; the shared-broker upgrade addresses it.
 - A cold image pull counts against the 30 s attempt bound. The pin had the same bound.
+- The 4 new requirements describe behavior as tested, so a test's blind spot is also the spec's. 11 citations to
+  existing requirements are medium-confidence fits and are listed on #228 for review.
 
 ## Migration Plan
 

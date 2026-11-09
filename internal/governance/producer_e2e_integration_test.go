@@ -34,6 +34,7 @@ import (
 // dereferences the handle back to the verbatim body. No hand-stamped triples, no
 // manual Put: the producer → consumer seam end to end, including the byName path
 // the label-alias fix restored.
+// spec: openspec/changes/nats-test-fixture/specs/fusion-gateway/spec.md#Requirement: Code-lens fusion hydrates verbatim bodies from the content store
 func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

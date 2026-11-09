@@ -21,8 +21,13 @@ cite one (`ateam test-spec`).
   - bounded setup;
   - a single, guarded replacement when the client port is unpublished;
   - visible cleanup and cancellation causes.
-- Add `// spec:` citations to the 12 fixture tests and the 46 migrated integration tests. Each migrated test cites
-  the existing requirement it proves.
+- Add the four requirements that 7 migrated tests prove but no spec states yet:
+  - `fusion-gateway`: the fusion graph client's mapping onto `graph.query.*`;
+  - `fusion-gateway`: code-lens hydration of verbatim bodies;
+  - `mcp-gateway-contract`: `add_source` as a namespaced ingest request;
+  - `semstreams-governance`: `Stop` keeping a subscription until its callbacks drain.
+  Each is written from the test's assertions (owner ruling 2026-11-09 on #228).
+- Add `// spec:` citations to the 12 fixture tests and all 46 migrated integration tests.
 
 ## Non-goals
 
@@ -34,4 +39,4 @@ cite one (`ateam test-spec`).
 
 - Test-only code: `internal/natstest/`, 38 `_test.go` files, `.github/workflows/ci.yml` (integration list),
   `go.mod` (tidy).
-- One capability spec gains a requirement. No consumer-visible surface changes.
+- Four capability specs gain requirements (five in total). No consumer-visible surface changes.

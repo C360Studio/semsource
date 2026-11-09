@@ -25,6 +25,7 @@ import (
 // add_source tool call becomes a NATS request on graph.ingest.add.{namespace},
 // and the reply is returned to the caller. A stub responder stands in for
 // source-manifest so the test isolates the translation.
+// spec: openspec/changes/nats-test-fixture/specs/mcp-gateway-contract/spec.md#Requirement: add_source is a namespaced NATS ingest request
 func TestIntegration_AddSourceTranslatesToNATS(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t)

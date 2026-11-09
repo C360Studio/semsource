@@ -17,12 +17,11 @@
 - [x] 3.1 Cite the 12 `internal/natstest` tests to the new requirement
 - [x] 3.2 Cite the 46 migrated integration tests to the requirements they prove; flag any with no fitting
   requirement on #228 (39 cited; 7 flagged)
-- [ ] 3.2a Resolve the 7 flagged tests (no fitting requirement exists). The owner decides: new requirements in
-  this change, or a separate change.
-  Hold: OPEN-Q 7 migrated tests have no fitting requirement; owner to choose where their requirements live
-- [ ] 3.3 `ateam test-spec --base cb74efd` exits 0
+- [x] 3.2a Add requirements for the 7 tests with no fitting requirement (fusion-gateway ×2, mcp-gateway-contract,
+  semstreams-governance) and cite them
+- [x] 3.3 `ateam test-spec --base cb74efd` exits 0
 
 ## 4. Close
 
-- [ ] 4.1 Archive this change (seed the requirement into `openspec/specs/integration-fixture-reproducibility/`)
-  and repoint any citation to the archived path before the PR is marked ready
+- [ ] 4.1 Archive this change (seed the 5 requirements into their `openspec/specs/` capabilities) and repoint the
+  19 delta-path citations to `openspec/specs/` before the PR is marked ready
