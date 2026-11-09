@@ -180,7 +180,11 @@ func start(ctx context.Context, launch launcher, window time.Duration) (broker, 
 			return nil, "", errors.Join(failures, err, termErr)
 		}
 		failures = errors.Join(failures, err)
-		if !portMissing || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			// The test ended (possibly during cleanup); say so, and stop.
+			return nil, "", errors.Join(failures, context.Cause(ctx))
+		}
+		if !portMissing {
 			break
 		}
 	}

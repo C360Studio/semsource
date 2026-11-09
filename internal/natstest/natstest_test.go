@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -21,6 +22,7 @@ type fakeBroker struct {
 	keepAbsent   bool
 	blockAfter   int // when > 0, calls after this many block until their context ends
 	portCalls    int
+	onTerminate  func()
 	terminateErr error
 	terminated   int
 }
@@ -46,6 +48,9 @@ func (f *fakeBroker) MappedPort(ctx context.Context, _ nat.Port) (nat.Port, erro
 
 func (f *fakeBroker) Terminate(context.Context, ...testcontainers.TerminateOption) error {
 	f.terminated++
+	if f.onTerminate != nil {
+		f.onTerminate()
+	}
 	return f.terminateErr
 }
 
@@ -105,17 +110,35 @@ func TestStart_PersistentAbsenceThenPublishedSucceedsOnReplacement(t *testing.T)
 
 // The window's deadline can land inside a MappedPort call, which then returns
 // the deadline error instead of not-found. The absence already observed still
-// counts, so the container is replaced.
+// counts, so the container is replaced. synctest's fake clock makes the order
+// exact: the first call sees absence, the 100 ms poll fires, and the 150 ms
+// window ends inside the second call.
 func TestStart_WindowExpiringMidCallStillReplaces(t *testing.T) {
-	first := &fakeBroker{keepAbsent: true, blockAfter: 1}
+	synctest.Test(t, func(t *testing.T) {
+		first := &fakeBroker{keepAbsent: true, blockAfter: 1}
+		launch, launches := launchSequence(first, &fakeBroker{})
+
+		if _, _, err := start(t.Context(), launch, 150*time.Millisecond); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		if *launches != 2 || first.terminated != 1 || first.portCalls != 2 {
+			t.Fatalf("launches=%d first.terminated=%d portCalls=%d, want 2, 1, 2",
+				*launches, first.terminated, first.portCalls)
+		}
+	})
+}
+
+func TestStart_CancelledDuringCleanupCarriesCause(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	first := &fakeBroker{keepAbsent: true, onTerminate: cancel}
 	launch, launches := launchSequence(first, &fakeBroker{})
 
-	if _, _, err := start(t.Context(), launch, 150*time.Millisecond); err != nil {
-		t.Fatalf("start: %v", err)
+	_, _, err := start(ctx, launch, 50*time.Millisecond)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want it to carry context.Canceled", err)
 	}
-	// 150 ms spans one 100 ms poll, so the second call is the one cut short.
-	if *launches != 2 || first.terminated != 1 || first.portCalls != 2 {
-		t.Fatalf("launches=%d first.terminated=%d portCalls=%d, want 2, 1, 2", *launches, first.terminated, first.portCalls)
+	if *launches != 1 {
+		t.Fatalf("launches = %d, want 1", *launches)
 	}
 }
 
