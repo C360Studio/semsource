@@ -37,8 +37,6 @@ export interface ReadinessSignal {
   indexed_revision?: number;
   target_revision?: number;
   lag?: number;
-  revision?: string;
-  last_synced?: string;
   reason?: CapabilityReason;
 }
 export interface WorkbenchCapabilities {
@@ -173,8 +171,6 @@ function readinessSignal(
       kind === "index" ? integer(item, "target_revision") : undefined,
     lag: kind === "index" ? integer(item, "lag") : undefined,
     timestamp: kind === "source" ? string(item, "timestamp") : undefined,
-    revision: kind === "index" ? string(item, "revision") : undefined,
-    last_synced: kind === "index" ? string(item, "last_synced") : undefined,
     reason: reason(item.reason, "readiness reason"),
   };
   if (
@@ -185,13 +181,9 @@ function readinessSignal(
     fail("malformed source timestamp");
   if (
     kind === "source" &&
-    [
-      "indexed_revision",
-      "target_revision",
-      "lag",
-      "revision",
-      "last_synced",
-    ].some((field) => item[field] !== undefined)
+    ["indexed_revision", "target_revision", "lag"].some(
+      (field) => item[field] !== undefined,
+    )
   )
     fail("index evidence on source readiness");
   if (
@@ -218,13 +210,6 @@ function readinessSignal(
     )
       fail("revision lag does not match revisions");
   }
-  if (
-    result.indexed_revision !== undefined &&
-    result.revision !== undefined &&
-    /^\d+$/.test(result.revision) &&
-    BigInt(result.revision) !== BigInt(result.indexed_revision)
-  )
-    fail("numeric revision does not match indexed revision");
   return result;
 }
 

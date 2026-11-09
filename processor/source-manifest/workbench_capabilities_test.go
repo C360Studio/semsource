@@ -438,8 +438,6 @@ func readyIndexStatus(revision uint64) semgraph.IndexStatusResponse {
 		State:           "ready",
 		IndexedRevision: revision,
 		TargetRevision:  revision,
-		Revision:        "ready-revision",
-		LastSynced:      "2026-07-15T15:00:00Z",
 	}
 }
 

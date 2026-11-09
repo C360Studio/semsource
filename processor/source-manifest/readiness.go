@@ -39,8 +39,6 @@ func indexReadinessFrom(raw []byte, err error, label string) workbenchIndexReadi
 		IndexedRevision: status.IndexedRevision,
 		TargetRevision:  status.TargetRevision,
 		Lag:             status.Lag,
-		Revision:        status.Revision,
-		LastSynced:      status.LastSynced,
 	}
 }
 

@@ -83,6 +83,7 @@ describe("parseCapabilities", () => {
     expect(() => parseCapabilities(malformed)).toThrow(/readiness reason/i);
   });
 
+  // spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
   it.each([
     [
       "overall",
@@ -194,17 +195,6 @@ describe("parseCapabilities", () => {
         return value;
       },
     ],
-    [
-      "numeric revision disagreement",
-      () => {
-        const value = structuredClone(ready);
-        Object.assign(value.readiness.structural_index, {
-          indexed_revision: 8,
-          revision: "7",
-        });
-        return value;
-      },
-    ],
   ])("rejects invalid %s", (_label, build) => {
     expect(() => parseCapabilities(build())).toThrow();
   });
@@ -233,17 +223,7 @@ describe("parseCapabilities", () => {
     );
   });
 
-  it("accepts matching unsigned decimal revision evidence", () => {
-    const value = structuredClone(ready);
-    Object.assign(value.readiness.structural_index, {
-      indexed_revision: 8,
-      revision: "8",
-    });
-    expect(parseCapabilities(value).readiness.structural_index.revision).toBe(
-      "8",
-    );
-  });
-
+  // spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
   it("rejects impossible source dates while accepting live Go timestamps", () => {
     const invalid = structuredClone(ready);
     Object.assign(invalid.readiness.source, {

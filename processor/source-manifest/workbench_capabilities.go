@@ -80,8 +80,6 @@ type workbenchIndexReadiness struct {
 	IndexedRevision *uint64                    `json:"indexed_revision,omitempty"`
 	TargetRevision  *uint64                    `json:"target_revision,omitempty"`
 	Lag             *uint64                    `json:"lag,omitempty"`
-	Revision        string                     `json:"revision,omitempty"`
-	LastSynced      string                     `json:"last_synced,omitempty"`
 	Reason          *workbenchCapabilityReason `json:"reason,omitempty"`
 }
 
@@ -113,8 +111,6 @@ type workbenchIndexStatusWire struct {
 	IndexedRevision *uint64 `json:"indexed_revision,omitempty"`
 	TargetRevision  *uint64 `json:"target_revision,omitempty"`
 	Lag             *uint64 `json:"lag,omitempty"`
-	Revision        string  `json:"revision,omitempty"`
-	LastSynced      string  `json:"last_synced,omitempty"`
 }
 
 // handleWorkbenchCapabilities serves the product-owned browser bootstrap
