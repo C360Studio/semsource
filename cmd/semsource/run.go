@@ -45,13 +45,21 @@ import (
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semsource/workspace"
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
 	semconfig "github.com/c360studio/semstreams/config"
+	graphgateway "github.com/c360studio/semstreams/gateway/graph-gateway"
+	"github.com/c360studio/semstreams/graph/inference"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadbuiltins"
+	"github.com/c360studio/semstreams/output/websocket"
 	"github.com/c360studio/semstreams/payloadregistry"
+	graphclustering "github.com/c360studio/semstreams/processor/graph-clustering"
+	graphembedding "github.com/c360studio/semstreams/processor/graph-embedding"
+	graphindex "github.com/c360studio/semstreams/processor/graph-index"
+	graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
+	graphquery "github.com/c360studio/semstreams/processor/graph-query"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
 )
 
@@ -283,17 +291,31 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 	return cfg, result, nil
 }
 
-// registerComponentFactories registers the semstreams built-in factories
-// (graph, agentic, etc.) alongside semsource's own factories. semsource runs as
-// a standalone service that owns its full component set.
+// componentWiring carries the run-time inputs semsource's own factories close
+// over.
 type componentWiring struct {
 	Ingest       *sourcemanifest.IngestHandlerConfig
 	ScopeSystems map[string][]string
 }
 
+// registerComponentFactories registers exactly the semstreams factories that
+// buildSemstreamsConfig composes, then semsource's own (semengine#3: explicit
+// per-package registration at the composition root, no aggregator). A config
+// naming any other factory fails boot in requireRegisteredFactories.
 func registerComponentFactories(registry *component.Registry, wiring ...componentWiring) error {
-	if err := componentregistry.Register(registry); err != nil {
-		return fmt.Errorf("register semstreams components: %w", err)
+	for name, register := range map[string]func(*component.Registry) error{
+		"graph-ingest":     graphingest.Register,
+		"graph-index":      graphindex.Register,
+		"graph-embedding":  graphembedding.Register,
+		"graph-query":      graphquery.Register,
+		"graph-gateway":    graphgateway.Register,
+		"graph-clustering": graphclustering.Register,
+		"objectstore":      objectstore.Register,
+		"websocket":        websocket.Register,
+	} {
+		if err := register(registry); err != nil {
+			return fmt.Errorf("register %s factory: %w", name, err)
+		}
 	}
 	if err := registerSemsourceFactories(registry, wiring...); err != nil {
 		return err
@@ -302,14 +324,22 @@ func registerComponentFactories(registry *component.Registry, wiring ...componen
 	return nil
 }
 
-// buildPayloadRegistry constructs the payload registry, registers semstreams
-// first-party builtins, and layers semsource's own payload types on top.
+// buildPayloadRegistry constructs the payload registry with the semstreams
+// payloads the composed components carry (core message types, objectstore's
+// stored message, graph-ingest's hierarchy container — which graph-ingest
+// requires at construction), then layers semsource's own payload types on top.
 // The result is plumbed through service.Dependencies.PayloadRegistry so every
 // component receives the same registry via component.Dependencies.
 func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 	reg := payloadregistry.New()
-	if err := payloadbuiltins.Register(reg); err != nil {
-		return nil, fmt.Errorf("register builtin payloads: %w", err)
+	if err := message.RegisterPayloads(reg); err != nil {
+		return nil, fmt.Errorf("register message payloads: %w", err)
+	}
+	if err := objectstore.RegisterPayloads(reg); err != nil {
+		return nil, fmt.Errorf("register objectstore payloads: %w", err)
+	}
+	if err := inference.RegisterPayloads(reg); err != nil {
+		return nil, fmt.Errorf("register inference payloads: %w", err)
 	}
 	if err := graph.RegisterPayloads(reg); err != nil {
 		return nil, fmt.Errorf("register graph payloads: %w", err)

@@ -176,7 +176,9 @@ func TestRegister_RejectsNilRegistry(t *testing.T) {
 
 // TestSourceIntroducesNoPayloadType asserts what task 4.5 assumes rather than
 // leaving it assumed: object-store artifacts become ordinary document
-// entities, so the payload registry is untouched by this source.
+// entities, so the payload registry is untouched by this source. It matches the
+// source's import alias, not "objectstore": the semstreams objectstore storage
+// component's payloads are registered there and are a different package.
 func TestSourceIntroducesNoPayloadType(t *testing.T) {
 	runGo, err := os.ReadFile("../../cmd/semsource/run.go")
 	if err != nil {
@@ -193,7 +195,7 @@ func TestSourceIntroducesNoPayloadType(t *testing.T) {
 		t.Fatal("could not delimit buildPayloadRegistry")
 	}
 
-	if body := registry[start : start+end]; strings.Contains(body, "objectstore") {
+	if body := registry[start : start+end]; strings.Contains(body, "objectstoresource") {
 		t.Errorf("buildPayloadRegistry mentions the object-store source:\n%s", body)
 	}
 }
