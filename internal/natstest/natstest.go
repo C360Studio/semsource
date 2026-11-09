@@ -202,24 +202,52 @@ func attemptStart(ctx context.Context, launch launcher, window time.Duration) (b
 		return container, "", false, fmt.Errorf("container host: %w", err)
 	}
 
+	port, absent, err := observePort(ctx, container, window)
+	if err != nil {
+		return container, "", absent, err
+	}
+	return container, fmt.Sprintf("nats://%s:%s", host, port.Port()), false, nil
+}
+
+// observePort polls the client port until it is published or the window
+// ends. absent is true only when the port was seen unpublished and the window
+// itself ran out; an error from the attempt's own context (startTimeout or the
+// test ending) carries that cause and is never treated as absence.
+func observePort(ctx context.Context, container broker, window time.Duration) (nat.Port, bool, error) {
 	observe, stop := context.WithTimeout(ctx, window)
 	defer stop()
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
+
+	var lastAbsent error
 	for {
 		port, err := container.MappedPort(observe, clientPort)
-		if err == nil {
-			return container, fmt.Sprintf("nats://%s:%s", host, port.Port()), false, nil
+		switch {
+		case err == nil:
+			return port, false, nil
+		case ctx.Err() != nil:
+			return "", false, fmt.Errorf("mapped port %s: %w", clientPort, errors.Join(context.Cause(ctx), err))
+		case cerrdefs.IsNotFound(err):
+			lastAbsent = err
+		case observe.Err() == nil:
+			return "", false, fmt.Errorf("mapped port %s: %w", clientPort, err)
 		}
-		if !cerrdefs.IsNotFound(err) {
-			return container, "", false, fmt.Errorf("mapped port %s: %w", clientPort, err)
+		// A call cut short by the window's own deadline falls through here.
+
+		if observe.Err() == nil {
+			select {
+			case <-tick.C:
+				continue
+			case <-observe.Done():
+			}
 		}
-		select {
-		case <-observe.Done():
-			return container, "", ctx.Err() == nil,
-				fmt.Errorf("mapped port %s not published within %s: %w", clientPort, window, err)
-		case <-tick.C:
+		if ctx.Err() != nil {
+			return "", false, fmt.Errorf("mapped port %s: %w", clientPort, errors.Join(context.Cause(ctx), lastAbsent))
 		}
+		if lastAbsent == nil {
+			return "", false, fmt.Errorf("mapped port %s: no observation within %s", clientPort, window)
+		}
+		return "", true, fmt.Errorf("mapped port %s not published within %s: %w", clientPort, window, lastAbsent)
 	}
 }
 

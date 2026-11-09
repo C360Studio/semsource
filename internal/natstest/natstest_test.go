@@ -19,13 +19,20 @@ type fakeBroker struct {
 	hostErr      error
 	portErrs     []error
 	keepAbsent   bool
+	blockAfter   int // when > 0, calls after this many block until their context ends
+	portCalls    int
 	terminateErr error
 	terminated   int
 }
 
 func (f *fakeBroker) Host(context.Context) (string, error) { return "127.0.0.1", f.hostErr }
 
-func (f *fakeBroker) MappedPort(context.Context, nat.Port) (nat.Port, error) {
+func (f *fakeBroker) MappedPort(ctx context.Context, _ nat.Port) (nat.Port, error) {
+	f.portCalls++
+	if f.blockAfter > 0 && f.portCalls > f.blockAfter {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
 	if f.keepAbsent {
 		return "", errAbsent
 	}
@@ -96,6 +103,22 @@ func TestStart_PersistentAbsenceThenPublishedSucceedsOnReplacement(t *testing.T)
 	}
 }
 
+// The window's deadline can land inside a MappedPort call, which then returns
+// the deadline error instead of not-found. The absence already observed still
+// counts, so the container is replaced.
+func TestStart_WindowExpiringMidCallStillReplaces(t *testing.T) {
+	first := &fakeBroker{keepAbsent: true, blockAfter: 1}
+	launch, launches := launchSequence(first, &fakeBroker{})
+
+	if _, _, err := start(t.Context(), launch, 150*time.Millisecond); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	// 150 ms spans one 100 ms poll, so the second call is the one cut short.
+	if *launches != 2 || first.terminated != 1 || first.portCalls != 2 {
+		t.Fatalf("launches=%d first.terminated=%d portCalls=%d, want 2, 1, 2", *launches, first.terminated, first.portCalls)
+	}
+}
+
 func TestStart_FailedTerminationStopsReplacement(t *testing.T) {
 	termErr := errors.New("docker: remove failed")
 	first := &fakeBroker{keepAbsent: true, terminateErr: termErr}
@@ -139,8 +162,9 @@ func TestStart_CancelledTestIsNotReplaced(t *testing.T) {
 		return b, nil
 	}
 
-	if _, _, err := start(ctx, launch, time.Second); err == nil {
-		t.Fatal("start succeeded")
+	_, _, err := start(ctx, launch, time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want it to carry context.Canceled", err)
 	}
 	if launches != 1 || b.terminated != 1 {
 		t.Fatalf("launches=%d terminated=%d, want 1 and 1", launches, b.terminated)
