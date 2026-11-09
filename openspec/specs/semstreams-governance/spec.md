@@ -20,7 +20,6 @@ local replacement, fork, vendored substitute, or unreleased commit as compatibil
 **THEN** `go.mod` requires `github.com/c360studio/semstreams v1.0.0-beta.160`
 **AND** the module has no `replace` directive
 
-
 ### Requirement: Toolchain gate precedes compatibility work
 
 SemSource MUST run with a Go toolchain that satisfies the SemStreams module
@@ -86,7 +85,6 @@ to the sole runtime — never selected through a compatibility mode field or env
 outcomes
 **AND** SemSource does not blind-retry the mutation
 
-
 ### Requirement: No source relies on triple.add auto-vivify
 
 SemSource MUST NOT rely on `graph.mutation.triple.add` or
@@ -119,7 +117,6 @@ two MUST NOT be conflated.
 **AND** it is the substrate's handler that answered, deterministically, with no SemSource handler
 competing
 
-
 ### Requirement: Incompatible beta graph state is rebuilt from source
 
 An upgrading deployment MUST start beta.160 adoption on newly provisioned NATS storage, per the
@@ -141,7 +138,6 @@ provide an in-place converter, alias reader, or dual writer.
 
 - **WHEN** retained deployed graph state from an earlier beta is discovered during adoption
 - **THEN** that adoption stops rather than migrating, preserving, or wiping in place
-
 
 ### Requirement: KV port declarations conform to the framework bucket catalog
 
@@ -259,3 +255,22 @@ semstreams issue.
 - **WHEN** an unwanted result traces to substrate behavior with no configuration seam
 - **THEN** it is filed upstream with evidence, and SemSource states the resulting limitation rather
   than substituting a local implementation
+
+### Requirement: Component Stop keeps a subscription until its callbacks drain
+
+When a component's `Stop` cannot drain a request subscription before its context ends, because a callback is still
+running, `Stop` SHALL return an error and SHALL keep the subscription and its running state, so a later `Stop` can
+retry the drain. A later `Stop` that drains successfully SHALL clear both, and the in-flight request SHALL complete.
+This applies to code-context, source-manifest, and supersession.
+
+#### Scenario: Stop's deadline expires during a callback
+
+- **GIVEN** a component holding a request subscription whose handler is blocked mid-callback
+- **WHEN** `Stop` runs with an already-ended context
+- **THEN** it returns an error and the component still holds the subscription
+
+#### Scenario: Stop is retried after the callback finishes
+
+- **WHEN** the callback is released and `Stop` runs again with a live context
+- **THEN** it returns nil, the component is no longer running, it holds no subscriptions, and the request completes
+

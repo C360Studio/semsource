@@ -2,8 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md`
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approves `proposal.md` and `design.md`
 
 ## 2. Fixture and migration (PR #252, done ahead of approval)
 
@@ -23,5 +22,5 @@
 
 ## 4. Close
 
-- [ ] 4.1 Archive this change (seed the 5 requirements into their `openspec/specs/` capabilities) and repoint the
+- [x] 4.1 Archive this change (seed the 5 requirements into their `openspec/specs/` capabilities) and repoint the
   19 delta-path citations to `openspec/specs/` before the PR is marked ready

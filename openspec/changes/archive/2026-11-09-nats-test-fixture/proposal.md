@@ -2,7 +2,7 @@
 
 Closes [#228](https://github.com/C360Studio/semsource/issues/228). Track: `design` (adds a spec Requirement).
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-09)
 
 ## Why
 

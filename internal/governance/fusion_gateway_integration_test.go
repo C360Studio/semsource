@@ -29,7 +29,7 @@ import (
 // surface. It ingests two code entities with a call edge, then asserts the
 // client correctly speaks graph.index.query.status, graph.query.batch/entity,
 // graph.query.relationships, and graph.query.prefix end to end.
-// spec: openspec/changes/nats-test-fixture/specs/fusion-gateway/spec.md#Requirement: The fusion graph client maps onto graph query verbs
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: The fusion graph client maps onto graph query verbs
 func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,
@@ -144,7 +144,7 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 // pair (the caller stamped with body handle triples), offloads the body, and
 // asserts the fused response carries the readiness envelope, the ObjectStore-
 // dereferenced verbatim source, the callee relation, and the BFO/CCO class.
-// spec: openspec/changes/nats-test-fixture/specs/fusion-gateway/spec.md#Requirement: Code-lens fusion hydrates verbatim bodies from the content store
+// spec: openspec/specs/fusion-gateway/spec.md#Requirement: Code-lens fusion hydrates verbatim bodies from the content store
 func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,

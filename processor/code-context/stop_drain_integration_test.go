@@ -12,7 +12,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 )
 
-// spec: openspec/changes/nats-test-fixture/specs/semstreams-governance/spec.md#Requirement: Component Stop keeps a subscription until its callbacks drain
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: Component Stop keeps a subscription until its callbacks drain
 func TestIntegrationStopRetainsActiveSubscriptionOnDeadline(t *testing.T) {
 	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
