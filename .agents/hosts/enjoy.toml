@@ -9,9 +9,12 @@
 # spec's return_to to ateam review notify.
 # Always pass --return-to <conversation id>: without it ateam review request
 # prints an empty return_to and the reviewer has nowhere to report.
+# The reviewer's notify carries ATEAM_HOST=enjoy: a reviewer's shell may lack
+# ENJOY_MCP_ENDPOINT, and on the cli host ateam review notify exits 0 printing
+# nothing, so the notification is silently lost (ateam v0.3.9; PR #252).
 
 [launch]
-tool = "call the Enjoy MCP tool start_conversation with provider {agent}, model {model}, effort {effort} and prompt '{prompt}'; tell the reviewer to finish with ateam review notify --record <record file> --return-to {return_to} {pr}"
+tool = "call the Enjoy MCP tool start_conversation with provider {agent}, model {model}, effort {effort} and prompt '{prompt}'; tell the reviewer to finish with ATEAM_HOST=enjoy ateam review notify --record <record file> --return-to {return_to} {pr}"
 
 [notify]
 tool = "call the Enjoy MCP tool queue_message for conversation {return_to} (message_project_conversation only when that conversation is in another project)"
