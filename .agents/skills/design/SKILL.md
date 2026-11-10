@@ -7,7 +7,7 @@ description: >-
 
 # Draft a Design
 
-Read [the shared protocol](../../protocol.md) and [the architect contract](../../contracts/architect.md) first. Use this skill only on the `design` track (protocol § 2 Clarify); a `quick` change has no `design.md`. You draft text; the owner rules and a developer implements.
+Read [the architect contract](../../contracts/architect.md) first; it names the protocol sections a design needs. Use this skill only on the `design` track (protocol § 2 step 1, Clarify); a `quick` change has no `design.md`. You draft text; the owner rules and a developer implements.
 
 ## 1. Inventory What Exists
 
