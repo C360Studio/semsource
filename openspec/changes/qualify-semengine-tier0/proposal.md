@@ -35,7 +35,7 @@ full 04A Tier 0 qualification still awaits the remaining Slice 04A deliverables 
 ## Impact
 
 SemSource owns its composition, source adapters, public consumer interfaces and known-answer workload.
-SemEngine owns the substrate, public contracts and extraction admission. SemSpec, SemDragon, SemOps
+SemEngine owns the substrate, public contracts and extraction admission. SemTeams, SemDragon
 and other consumers keep the existing SemSource mainline interfaces while this separate branch is
 prepared. Implementation scope remains subject to approved 03B contracts and independent review.
 

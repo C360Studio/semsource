@@ -99,7 +99,7 @@ func RegisterPayloads(reg *payloadregistry.Registry) error {
 ## Step 5: Wire into bootstrap
 
 `cmd/semsource/run.go`'s `buildPayloadRegistry()` layers semsource payloads
-over the semstreams builtins. An existing package (`graph`,
+over the substrate builtin registry (`builtinregistry.NewDefault()`). An existing package (`graph`,
 `sourcemanifest`) is already wired; a **new** package needs its call added:
 
 ```go

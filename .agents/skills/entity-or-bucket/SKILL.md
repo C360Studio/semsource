@@ -1,136 +1,79 @@
 ---
 name: entity-or-bucket
-description: Decide whether a fact lives in the graph as entity triples or in a private/operational KV bucket, and how a rule reads it. Use when adding any new durable state, proposing a new bucket, or when a fact needs to be rule-readable.
-argument-hint: [description of the fact being stored]
+description: >-
+  Decide whether a fact lives in the graph, as triples on an entity in ENTITY_STATES, or in a bucket of its own.
+  Use when adding durable state, proposing a new bucket, or when other code must read a fact.
 ---
 
-# Entity or Bucket
+# Entity or bucket
 
-## What fact are you storing?
-
-$ARGUMENTS
+Start from the fact the user names. "The graph" here is `ENTITY_STATES`, the NATS key-value bucket in which
+graph-ingest keeps one current record per entity: its triples, each a subject, a predicate and an object.
 
 ## The default
 
-**Live in `ENTITY_STATES` as triples about an identified entity.** A private or
-operational KV bucket is an *exception* that must name its ground.
-
-This is not a preference. It is the load-bearing rubric from
-`docs/adr/049-lifecycle-harness-prime-schema-over-entity-states.md` (generalized
-beyond lifecycle by ADR-055), and it carries a burden of proof: **new subsystems
-wanting a private bucket file an ADR that defends the choice on the rubric.**
+A fact lives in `ENTITY_STATES` as triples about an identified entity. A bucket of its own is the exception, and it
+names one of the grounds below. The rubric is SemStreams ADR-049, generalized by its ADR-055; neither record is
+carried into `docs/adr/`, so this skill is its home here. A new subsystem that wants its own bucket writes an ADR that
+defends the choice on these grounds.
 
 ## Own a bucket only when you can name the ground
 
-1. **CAS atomicity** over multi-field state that cannot be expressed as a single
-   triple-batch write. *Bar: high — `AddTriplesBatch` IS atomic per-entity.*
-2. **Strict-ordering replace** semantics that per-predicate latest-wins cannot
-   satisfy. *Bar: high — `ENTITY_STATES` already has per-predicate latest-wins.*
-3. **Retention or topology genuinely differs** from the graph — e.g. a longer
-   compliance window, or a history depth that IS the data (`STORAGE_REPORT`
-   History 10 exists to be a growth series, not to preserve accretion).
-4. **Write rate would dominate or pollute the graph** if mixed in.
-   *Example: agent trajectories — defensible.*
-5. **Bulky payload** that does not belong in the graph — content to ObjectStore
-   or a private bucket, with a ref-triple in the graph pointing at it.
-6. **Bootstrap circularity** — the fact gates whether the graph plane may be read
-   at all, so it cannot itself live on that plane. *Example: `GRAPH_STATUS`
-   readiness; the rule processor's own graph evaluation is gated on it.*
+1. **Compare-and-set over several fields** that one write of an entity's triples cannot express. The bar is high:
+   graph-ingest stores each entity as one entry and changes it with one revision-checked write (`graph-entity-writes`
+   spec, "The revision is the only fence").
+2. **Ordering that the graph's replace rule cannot give.** The bar is high: a single-valued predicate is already
+   replaced in timestamp order (`graph-entity-writes` spec, "Timestamp orders a replace").
+3. **Retention or layout that differs from the graph**: a longer window, or a history that is the data itself.
+   `STORAGE_REPORT` keeps ten revisions because they are a growth series (`graph/kvcatalog/kvcatalog.go`).
+4. **A write rate that would swamp the graph** if mixed into it.
+5. **Bulky content** that does not belong in the graph. Store the content elsewhere and put a triple in the graph
+   that holds its key.
+6. **Bootstrap circularity**: the fact says whether the graph may be read at all, so it cannot live in the graph.
+   That was SemStreams' case for `GRAPH_STATUS`, whose readiness records a consumer could wait on before it read. It
+   is history here: in SemEngine the worker that answers a query says in its reply whether it can answer yet, and no
+   consumer reads a bucket before it asks ([ADR-109](../../../docs/adr/109-ready-after-boot.md), Decision 1).
 
-Ground 6 is an addition to ADR-049's original five, recorded here because
-`GRAPH_STATUS` fits none of the first five and its real justification was
-unwritten.
+Ground 6 is SemStreams' addition to ADR-049's first five: `GRAPH_STATUS` fits none of them. The bucket stays, as
+information for operators and tools; graph-ingest writes its record there (`processor/graph-ingest/readiness.go`).
+Nothing in SemEngine waits on it, and no value in it changes what a query returns (ADR-109, Decision 3).
 
-## Live in ENTITY_STATES when
+## Keep it in ENTITY_STATES when
 
-1. The data IS facts the graph should reason over.
-2. You want graph queries, inference, or community detection to see it.
-3. You want one queryable current state shared by graph consumers. This does
-   **not** give you durable audit: `ENTITY_STATES` is History 1.
-4. **Multiple consumer surfaces — rules, GraphQL, dashboards, inference — need
-   the same state through their natural interface.**
-5. You do not need fine-grained CAS that graph-ingest's batched write cannot
-   provide.
+1. The data is facts the graph should reason over.
+2. Graph queries or inference should see it. Community records (`COMMUNITY_INDEX`) are derived from entity IDs by
+   `graph/clustering` (grouping by ID prefix, not detection) and rebuilt from `ENTITY_STATES`; they are not facts.
+3. Several readers need one current state through their own interfaces. That state is not an audit trail:
+   `ENTITY_STATES` keeps one revision per key (`graph/kvcatalog/kvcatalog.go`).
+4. You need no compare-and-set finer than graph-ingest's one write per entity.
 
-## The test that does NOT work
+## The test that does not work
 
-**Do not classify by "does it accrete or is it replaced".** It mis-predicts.
-`TOOL_CALL_OUTCOMES` and `AGENT_LOOPS`' `COMPLETE_{loopID}` records are both
-write-once and identity-bearing — never wholly replaced — yet both correctly live
-in buckets, on grounds 4 and 5. Accretion versus replacement is a *consequence* of
-which ground applies, never the test.
+Do not decide by "does it accumulate, or is it replaced". Accumulation or replacement follows from the ground that
+applies; it is never the test. The unit is the fact, not the subject: one subject can have facts in the graph and
+content in a bucket, reached through a key that a triple holds. That is not a violation.
 
-**The unit is the FACT, not the subject.** One subject legitimately has facts on
-both planes. An agent loop has facts *about the run* in the graph (outcome, model,
-tokens, cost) and the *content the run produced* in `AGENT_LOOPS`, retrieved by a
-key the graph handed you. That is not a violation — it is "rules carry references,
-not payloads" working as designed.
+## Who reacts to the fact
 
-## Consumption: what can read the fact once it is stored
+Placement decides storage; who can react to the fact is a separate question. Do not have the owner watch its own
+bucket and republish the changes it thinks are interesting: the producer then decides what every consumer depends on,
+where SemEngine has the consumer declare it
+([ADR-088](../../../docs/adr/088-readiness-is-per-producer-aggregation-is-the-consumers.md)). A fact with no strong
+bucket ground that something must react to belongs in the graph.
 
-Placement decides storage. Consumability is a *separate* question, and this section
-records what is true today rather than prescribing a workaround — the design is
-under active review.
-
-**What rules evaluate today.** Two typed sources: authoritative `EntityState`
-(decoded triples — `$entity.triple.*`, `.length`, `.triples`) and messages
-(dotted-path over an arbitrary payload, `$message.*`, ADR-039).
-
-**Why operational KV is not among them — and what the reason is NOT.** The rule
-processor declares `KVWatchPort{Bucket: ENTITY_STATES}` (`processor/rule/config.go:225`)
-and its evaluator is typed on `*graph.EntityState` (`processor/rule/interfaces.go:50`).
-The watch pattern must satisfy `ValidateEntityIDPattern`, so a key like
-`COMPLETE_7c9e6679-7425-40de-944b-e07fc1f90ae7` cannot be expressed as a watch pattern.
-
-Three things are commonly assumed to be the obstacle and are NOT:
-
-- **Not transport.** A KV bucket IS a JetStream stream (`KV_<bucket>`,
-  `natsclient/backing_stream_prefix.go:22-23`). Every KV write is already a message
-  on a stream; the bucket is not a dead end.
-- **Not the port abstraction.** `component.KVWatchPort` (`component/port_kv.go:6-11`)
-  is a general port type carrying `Bucket`, `Keys`, `History`, and an
-  `InterfaceContract`. Six components declare one. The rule processor's is pinned by
-  its own declaration, not by a framework limit.
-- **Not trigger semantics.** Transition state is keyed `(rule ID, entityKey)`
-  (`processor/rule/stateful_evaluator.go:136`) and `DetectTransition` is a pure
-  boolean over the previous and current match, with revision-based replay protection
-  at `:155`. None of that is entity-specific. A rewrite whose *classification* did
-  not change yields `TransitionNone` and does not fire — which is why a condition
-  should carry a classification rather than a raw measurement.
-
-**The actual gap is a typed decoder.** A `StorageResource` or a readiness envelope is
-not triples, so `$entity.triple.*` has no referent. That is precisely what
-`processor/rule/entity_pattern_contract.go:17` names: *"typed operational-KV rule
-adapters require a separately designed decoder and evaluator."* Work not done, not a
-prohibition.
-
-**What NOT to do while that is undecided.** Do not have the owning component watch its
-own bucket and materialize a message stream of "interesting" changes. That puts the
-PRODUCER in charge of predicting which transitions a consumer cares about, which is a
-framework-declared threshold in disguise — the thing ADR-088 rules against
-(*"declaring a key you do not depend on defers you on someone else's outage"*). It is
-also strictly lossier than the report it summarizes. The consumer declaring what it
-depends on is the shape this framework already uses for readiness, and it is the shape
-any future lane should keep.
-
-**Meanwhile**, placement is the lever you do control. If a fact has no strong bucket
-ground and something needs to react to it, that is ADR-049's item 4 — *"multiple
-consumer surfaces (rules, GraphQL, dashboards, inference) need to read the same
-state"* — and it belongs in the graph as triples.
+How rules read facts (the pin's rule processor reads only `ENTITY_STATES` and messages) returns with the rule
+processor in change 6.
 
 ## Before you propose a new bucket
 
-- [ ] Which numbered ground (1–6) does it meet? If none, it goes in the graph.
-- [ ] Is the ground about the FACT, or about a subject that also has graph facts?
-- [ ] Does anything need to react to it? If so, how does it reach the entity or
-      message plane — as a triple, or as a published message?
-- [ ] Is it framework-owned state? Then it needs a catalog descriptor
-      (`framework-bucket-catalog`) binding owner, write policy, and retention.
-- [ ] Ground 1–6 met and non-obvious? ADR-049 says file an ADR defending it.
+- [ ] Which ground, 1 to 6, does it meet? If none, the fact goes in the graph.
+- [ ] Is the ground about the fact, or about a subject that also has facts in the graph?
+- [ ] Does anything need to react to it? Then how does it reach that reader: as a triple, or as a published message?
+- [ ] Does the framework guarantee its ownership or retention? Then it gets a descriptor in `graph/kvcatalog`, naming
+      its owner, write policy and retention.
+- [ ] Is the ground not obvious? Write the ADR.
 
 ## See also
 
-- `docs/adr/049-lifecycle-harness-prime-schema-over-entity-states.md` — the rubric
-- `openspec/specs/framework-bucket-catalog/spec.md` — ownership, retention, and
-  the must-exist reader seam, once you have decided to own a bucket
-- `/kv-or-stream` — a different question: fact-vs-work-request, not where state lives
+- `graph/kvcatalog/kvcatalog.go`: which buckets the framework owns, and the rule for adding one.
+- [kv-or-stream](../kv-or-stream/SKILL.md): a different question, whether something is a fact or a request for work.

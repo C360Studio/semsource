@@ -120,7 +120,7 @@ tasks:
       - go test -race ./...
 
   agents:check:
-    desc: Verify agent contracts, adapters, and shared skills against the semstreams pin
+    desc: Verify agent contracts, adapters, and shared skills against the semengine pin
     cmds:
       - ./scripts/check-agent-sync.sh
 

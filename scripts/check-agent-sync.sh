@@ -26,30 +26,43 @@ fail() {
 }
 ok() { printf 'ok    %s\n' "$1"; }
 
-# ── Resolve the semstreams source we actually depend on ─────────────────────
-pinned=$(go list -m -f '{{.Version}}' github.com/c360studio/semstreams)
+# ── Resolve the semengine source we track against ───────────────────────────
+module=$(awk -F'\t' '$1 == "upstream_module" { print $2 }' "$manifest")
+[ -n "$module" ] || module="github.com/c360studio/semengine"
 recorded=$(awk -F'\t' '$1 == "upstream_version" { print $2 }' "$manifest")
+pinned=$(go list -m -f '{{.Version}}' "$module" 2>/dev/null || true)
 
-if [ "$pinned" != "$recorded" ]; then
-	fail "manifest records upstream $recorded but go.mod pins $pinned.
+# When go.mod pins $module directly (not an indirect transitive version), enforce version parity.
+if grep -Eq "^[[:space:]]*${module}[[:space:]]+${pinned}\$" go.mod; then
+	if [ "$pinned" != "$recorded" ]; then
+		fail "manifest records upstream $recorded ($module) but go.mod pins $pinned.
       Re-reconcile the shared skills against the pinned version and update
       $manifest — a stale manifest checks nothing."
-	printf '\n%d check(s) failed.\n' "$failures" >&2
-	exit 1
+		printf '\n%d check(s) failed.\n' "$failures" >&2
+		exit 1
+	fi
 fi
 
-upstream=$(go list -m -f '{{.Dir}}' github.com/c360studio/semstreams)
+upstream=$(go mod download -json "${module}@${recorded}" 2>/dev/null | sed -n 's/^[[:space:]]*"Dir":[[:space:]]*"\(.*\)",*$/\1/p')
 if [ -z "$upstream" ] || [ ! -d "$upstream/.agents/skills" ]; then
-	fail "cannot read semstreams $pinned sources (run: go mod download github.com/c360studio/semstreams)"
+	fail "cannot read $module $recorded sources (run: go mod download ${module}@${recorded})"
 	printf '\n%d check(s) failed.\n' "$failures" >&2
 	exit 1
 fi
-ok "semstreams $pinned resolved"
+ok "$module $recorded resolved"
+
+# ateam-managed skills live in both repos under ateam doctor --check; do not duplicate in upstream.manifest.
+is_ateam_skill() {
+	case "$1" in
+	design | handoff | pickup | ponytail | preflight | review-pr) return 0 ;;
+	esac
+	return 1
+}
 
 # ── Shared decision skills: vendored must match, forked/excluded must be re-read on change ──
 while IFS="$(printf '\t')" read -r name mode sha; do
 	case "$name" in \#*|'') continue ;; esac
-	[ "$name" = upstream_version ] && continue
+	case "$name" in upstream_version | upstream_module) continue ;; esac
 
 	ours=".agents/skills/$name/SKILL.md"
 	theirs="$upstream/.agents/skills/$name/SKILL.md"
@@ -77,8 +90,8 @@ while IFS="$(printf '\t')" read -r name mode sha; do
 		if cmp -s "$ours" "$theirs"; then
 			ok "$name: vendored, matches upstream"
 		else
-			fail "$name: VENDORED COPY HAS DRIFTED from semstreams $pinned.
-      semstreams owns this truth. Refresh it and update the digest:
+			fail "$name: VENDORED COPY HAS DRIFTED from $module $recorded.
+      $module owns this truth. Refresh it and update the digest:
         cp '$theirs' $ours"
 		fi
 		;;
@@ -100,8 +113,9 @@ done < "$manifest"
 # ── An upstream skill we track under neither mode is one nobody decided about ──
 for theirs in "$upstream"/.agents/skills/*/SKILL.md; do
 	name=$(basename "$(dirname "$theirs")")
+	is_ateam_skill "$name" && continue
 	if ! awk -F'\t' -v n="$name" '$1 == n { found = 1 } END { exit !found }' "$manifest"; then
-		fail "$name: semstreams $pinned ships this shared decision skill and we do not track it.
+		fail "$name: $module $recorded ships this shared decision skill and we do not track it.
       Vendor it, record a deliberate fork, or document a reviewed exclusion in $manifest."
 	fi
 done
@@ -182,4 +196,4 @@ if [ "$failures" -ne 0 ]; then
 	printf '\n%d check(s) failed.\n' "$failures" >&2
 	exit 1
 fi
-printf '\nAgent configuration is consistent with semstreams %s.\n' "$pinned"
+printf '\nAgent configuration is consistent with %s %s.\n' "$module" "$recorded"

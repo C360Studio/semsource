@@ -17,11 +17,12 @@
   and #69 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`).
   The [2026-11-08 pin ruling](https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898)
   (amended on #9 / #557) is met by `v0.1.0-alpha.3` at `057bc8bfe2f737000a354fd1a38aa60d65cbf9f1`
-  (tag object `138ae55881dbb7ced9840a872e3247f7b89d623b`, 2026-11-10), which unblocks consumer
-  integration on the qualification branch (#231, #232, #253, #256, #257) without granting Tier 0
-  qualification.
-  Hold: Full 04A Tier 0 qualification awaits the complete Slice 04A release under SemEngine #9
-  (`processor/graph-clustering`, #15, #16, #579, and #34 / #566 / #567 dispositions).
+  (tag object `138ae55881dbb7ced9840a872e3247f7b89d623b`, 2026-11-10): pre-swap tasks #232
+  (`task agents:check` + decision skills re-pinned to `semengine@v0.1.0-alpha.3`) and #257
+  (`semvocab v0.2.2` + CCO v2.2 / BFO 2020 class and relation adoption) are complete on this branch.
+  Hold: `go.mod` `semstreams -> semengine` swap (#231, #253, #256) and full 04A Tier 0 qualification
+  await the remaining 4 absent packages (`pkg/buffer` #566, `gateway/graph-gateway` #567,
+  `output/websocket` #34, `processor/graph-clustering` #9) and Slice 04A qualification repairs (#15, #16, #579).
 
 ## 2. Future implementation after admission
 

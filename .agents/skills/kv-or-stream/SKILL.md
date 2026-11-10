@@ -1,94 +1,65 @@
 ---
 name: kv-or-stream
-description: Decide between KV Watch and JetStream Stream for a new communication path. Use when designing inter-component communication, adding new message flows, or choosing storage primitives.
-argument-hint: [description of the communication being designed]
+description: >-
+  Decide between a KV watch and a JetStream stream for a new communication path. Use when designing communication
+  between components, adding a message flow, or choosing a NATS storage primitive.
 ---
 
-# KV Watch vs JetStream Stream Decision
+# KV watch or JetStream stream
 
-## What are you designing?
+Start from the communication the user names. A KV watch is a subscription to changes in a NATS key-value bucket; a
+JetStream stream is a durable log that a consumer reads and acknowledges message by message.
 
-$ARGUMENTS
+## Four tests
 
-## The 4-Test Heuristic
+Apply them in order; the first clear answer usually settles it.
 
-Apply these tests in order. The first clear answer is usually sufficient.
+1. **Restart.** If the component restarted, should it reload current facts, or resume work it had not acknowledged?
+   Reload facts: **KV watch**. Resume unacknowledged work: **stream**. A stream redelivers what was not
+   acknowledged, not what was not finished: work done before a crash cut off its acknowledgement is delivered again,
+   so the owner makes the work safe to repeat or detects the repeat. The cited graph-ingest recovery test demonstrates
+   that reapplying the input preserves the graph's statements (`graph-ingest-recovery` spec, "Recovery on a file
+   stream is redelivery"; `TestIntegration_Settlement_ProcessKilledBetweenApplyAndAck`).
+2. **Fan-out or queue.** Should every interested component react, or only one? Every one: **KV watch**. One:
+   **stream**.
+3. **Processing time.** Is the reaction fast and idempotent (safe to repeat), or slow with side effects? Fast and
+   idempotent: **KV watch**. Slow or with side effects: **stream**.
+4. **Nature.** Is it a fact about the world, or a request to do something? A fact (entity state, an index entry,
+   current status): **KV watch**. A request (run a task, call a model, run a tool): **stream**.
 
-### Test 1: Restart Test (sharpest)
+If the tests disagree, the concept may be two things; split it before choosing.
 
-If this processor restarted, should it rehydrate current facts or resume
-unacknowledged work?
+## What an owner of a KV watch takes on
 
-- **Rehydrate current facts** --> **KV Watch**
-- **Resume queued work without repeating acknowledged work** --> **JetStream Stream**
+A KV watch has no acknowledgement, and SemEngine promises no second delivery of a change a handler failed on. An
+owner that derives state from a watch applies the desired state idempotently, repairs and re-drives failed work
+itself, and reports readiness or degradation where a reader can see it. Treat the start of a watch as loading the
+inputs a restart needs, not as a retry loop. If the owner cannot take those on, change the design. Never use a KV
+watch as a work queue.
 
-### Test 2: Fan-out vs Queue
-
-Should multiple processors all react to this, or should only one handle it?
-
-- **All react** (fan-out) --> **KV Watch**
-- **Only one handles it** (queue) --> **JetStream Stream**
-
-### Test 3: Processing Time
-
-Is the processing fast and idempotent, or slow with real side effects?
-
-- **Fast and idempotent** --> **KV Watch**
-- **Slow or has side effects** --> **JetStream Stream**
-
-### Test 4: Nature Test
-
-Is this a fact about the world, or a request to do something?
-
-- **Fact** (entity state, index entry, current status) --> **KV Watch**
-- **Request** (execute task, call LLM, run tool) --> **JetStream Stream**
-
-## Conflict Check
-
-If any test gives conflicting answers, the concept may be two things conflated. Revisit whether it should be split into separate concerns.
-
-## Mandatory KV Watch Owner Rule
-
-KV Watch has no processing acknowledgment or redelivery. A derived owner that
-chooses it must use idempotent desired-state apply, explicit failed-work
-repair/redrive, and visible readiness/degradation. Bootstrap hydrates restart
-inputs; it is not continuous retry. If the owner cannot accept those obligations,
-redesign the seam. Never treat a KV watch as a work queue.
-
-## Common Cases Reference
+## Common cases
 
 | Communication | Primitive | Reason |
-|--------------|-----------|--------|
-| Entity state changed | KV Watch | Current fact; fan-out; idempotent reaction |
-| New task to execute | JetStream Stream | Request; queue; expensive; side effects |
-| Index update | Owner KV write; admitted observers react | Only declared owner writes |
-| LLM call | JetStream Stream | Request; queue; slow; costly |
-| Loop current state | KV | Fact; queryable; recoverable |
-| Tool execution request | JetStream Stream | Request; queue; side effects |
-| Tool result returned | JetStream Stream | Response; at-least-once delivery |
-| External telemetry | Graphable or typed ingest | graph-ingest owns authority write |
+| --- | --- | --- |
+| Entity state changed | KV watch | Current fact; fan-out; idempotent reaction |
+| A task to run | Stream | Request; one handler; side effects |
+| Index update | The index owner's KV write; readers watch it | Only the declared owner writes |
+| A slow or costly call (a model, a tool) | Stream | Request; one handler; slow |
+| Its result | Stream | A reply that must arrive at least once |
+| Outside telemetry becoming graph facts | A `graph.Graphable` payload to graph-ingest | graph-ingest is the only writer of `ENTITY_STATES` |
 
-## Key Architecture Context
+## What the primitives give you
 
-**The KV twofer**: every NATS KV bucket is backed by a JetStream stream. A
-single KV write provides current state and change notification. Retained history
-is optional and bounded per bucket; it is not automatically an audit ledger.
+- Every KV bucket is stored as a JetStream stream named `KV_<bucket>` (`natsclient/backing_stream_prefix.go`), so a
+  KV write is both the current value and a change that watchers see.
+- A bucket keeps as many revisions per key as its `History` setting. `ENTITY_STATES` is configured to keep one
+  (`graph/kvcatalog/kvcatalog.go`); do not use its history to rebuild earlier state or as a backup.
+- A stream consumer acknowledges each message, and a message it does not acknowledge is delivered again
+  (`natsclient/delivery_settlement_integration_test.go` drives this against the pinned server).
+- How nats.go marks the end of the current values when a watch starts is not promised here: no test in this tree
+  drives it (ADR-112). A design that depends on it cites a probe.
+- Many local readers of one bucket share one `graphview.View` (`pkg/graphview`), never one `WatchAll` each: the view
+  decodes each write once and gives every reader a snapshot followed by its changes. A reader that needs its own
+  filter, history replay, every revision or its own acknowledgement still opens a real consumer.
 
-- **State**: `kv.Get(key)` returns current value
-- **Events**: `kv.Watch(pattern)` fires on every change (fan-out)
-- **History**: only revisions retained by that bucket's configured history depth
-
-`ENTITY_STATES` has history 1. Its watchers bootstrap from current values, but
-its history cannot reconstruct prior authority or serve as disaster recovery.
-
-**Bootstrap phase**: when a KV watcher starts, it delivers all current matching
-values, then a `nil` entry signals transition to live updates. This is current
-state hydration, not replay of every historical change.
-
-**JetStream consumers**: durable state tracks acknowledgments. Restart can
-redeliver unacknowledged work; acknowledged work is not replayed.
-
-**Using both is normal**: A component using KV for state AND JetStream for work items in the same process is the standard pattern (see agentic-loop).
-
-Read `docs/concepts/03-streams-vs-kv-watches.md` for full documentation.
-Read `docs/concepts/02-kv-twofer.md` for KV Twofer details.
+Using both in one component, KV for state and a stream for work, is the normal shape.

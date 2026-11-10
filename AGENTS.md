@@ -6,7 +6,7 @@ The single entry point for AI coding agents (Claude, Codex, Gemini). `CLAUDE.md`
 
 SemSource is the source-knowledge ingestion service for the C360 sem* family. It ingests repos, docs, URLs, config
 files, and media into governed SemStreams graph facts, then exposes source/query/status surfaces for agents and
-operator UIs (SemSpec, SemDragon, SemOps, SemTeams). The raw WebSocket export still exists for stream-oriented consumers, but the primary read contracts are
+operator UIs (SemTeams, SemDragon). The raw WebSocket export still exists for stream-oriented consumers, but the primary read contracts are
 graph query, MCP, HTTP status, and GraphQL through the UI profile. Part of Complete 360 Studio; MIT licensed.
 
 **Product boundary:** SemSource owns source ingestion and projection. SemStreams owns the governed graph substrate and
@@ -226,7 +226,7 @@ Agents mutate only this repository. SemStreams, SemEngine, and other sister repo
 
 Canonical, platform-neutral definitions live in `.agents/`; `.claude/` and `.codex/` hold thin adapters that name
 exactly one canonical file and carry none of its body. `.agents/README.md` is the map. Run `task agents:check`
-after touching any of it, or after moving the semstreams pin.
+after touching any of it, or after moving the semengine pin.
 
 | Contract | Use it for |
 | --- | --- |
@@ -245,8 +245,8 @@ concurrently when a change touches both failure classes; spawn neither when it t
 outside its scope returns noise. The owner session keeps the decision — these roles return findings, never commits. Massively-parallel
 `Workflow` orchestration is a separate question and remains opt-in.
 
-Decision skills in `.agents/skills/`: `kv-or-stream`, `entity-or-bucket`, and `orchestration-check` are **vendored**
-from semstreams (must match the pinned upstream byte for byte); `new-payload` and `query-pattern` are **deliberate
+Decision skills in `.agents/skills/`: `kv-or-stream` and `entity-or-bucket` are **vendored**
+from semengine (must match the pinned upstream byte for byte; `orchestration-check` is retained until SemEngine Change 6); `new-payload` and `query-pattern` are **deliberate
 forks** whose manifest records the upstream digest last reconciled. ateam ships `pickup`, `handoff`, `preflight`,
 `review-pr`, `design`, and `ponytail`. The `openspec-*` entries under `.claude/skills/` are Claude-workflow tooling.
 
