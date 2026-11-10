@@ -43,9 +43,9 @@ if grep -Eq "^[[:space:]]*${module}[[:space:]]+${pinned}\$" go.mod; then
 	fi
 fi
 
-upstream=$(go mod download -json "${module}@${recorded}" 2>/dev/null | sed -n 's/^[[:space:]]*"Dir":[[:space:]]*"\(.*\)",*$/\1/p')
+upstream=$(GOTOOLCHAIN=auto go mod download -json "${module}@${recorded}" 2>/dev/null | sed -n 's/^[[:space:]]*"Dir":[[:space:]]*"\(.*\)",*$/\1/p')
 if [ -z "$upstream" ] || [ ! -d "$upstream/.agents/skills" ]; then
-	fail "cannot read $module $recorded sources (run: go mod download ${module}@${recorded})"
+	fail "cannot read $module $recorded sources (run: GOTOOLCHAIN=auto go mod download ${module}@${recorded})"
 	printf '\n%d check(s) failed.\n' "$failures" >&2
 	exit 1
 fi
