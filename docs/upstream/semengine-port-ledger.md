@@ -65,7 +65,7 @@ Status values:
 | `processor/graph-index` | 2 (1) | present | Factory `Register` in `run.go` |
 | `processor/graph-ingest` | 2 (1) | present | Factory `Register` in `run.go`. ADR-110: SemSource is a caller of the write seam (it publishes on `graph.ingest.*`) and never writes `ENTITY_STATES` itself |
 | `processor/graph-query` | 2 (1) | present | Factory `Register` in `run.go`. Readiness comes from query replies (ADR-109; see #227 below) |
-| `gateway/graph-gateway` | 1 (1) | `defer-exclude` upstream (03B D4/D5: GraphQL is a consumer-owned layer-4 adapter, not a tier-0 deferral); re-admission asked: [semengine#567](https://github.com/C360Studio/semengine/issues/567) | The 03B premise "SemSource does not exercise it" (A3.3) grepped only `test/setup03a`. SemSpec federates over SemSource's GraphQL (`entity`, `entitiesByPrefix`, `entitiesByPredicate`, `traverse`; semspec `graph/gatherer.go`), SemDragon configures it, and the UI profile's Caddy exposes `/graphql`. SemSource's own `ui/` does not call it. The consumer assertion that #567 needs is [#251](https://github.com/C360Studio/semsource/issues/251) |
+| `gateway/graph-gateway` | 1 (1) | `defer-exclude` upstream (03B D4/D5: GraphQL is a consumer-owned layer-4 adapter, not a tier-0 deferral); re-admission asked: [semengine#567](https://github.com/C360Studio/semengine/issues/567) | The 03B premise "SemSource does not exercise it" (A3.3) grepped only `test/setup03a`. SemSource's GraphQL route is a published consumer contract (`docs/integration/m5-consumer-integration.md:178-185`), SemDragon configures `/graph-gateway/graphql`, SemTeams needs the same GraphQL surface (`semteams#402`/`#406`), and the UI profile's Caddy exposes `/graphql`. (Note: `semspec` is retired and excluded from consumer requirements.) The consumer assertion for #567 (`test/ui/ui-profile.spec.cjs` and `scripts/core-profile-smoke.sh` asserting `entity`, `entitiesByPrefix`, `entitiesByPredicate`, and `pathSearch` against seeded IDs and triples) is in [#251](https://github.com/C360Studio/semsource/issues/251) |
 | `graph/inference` | 1 (1) | present (the hierarchy part only, semengine#97) | `RegisterPayloads` for the hierarchy container; graph-ingest refuses to construct without it |
 | `graph/readiness` | 1 (0) | present | Tests only (`Reading.Raw` removed in `v0.1.0-alpha.3` #577) |
 | `output/websocket` | 1 (1) | change 5 per 04A D2; [semengine#34](https://github.com/C360Studio/semengine/issues/34) open; not in `v0.1.0-alpha.3` | Port-refactor: it reads applied state instead of a NATS subject. The raw `/ws` stream contract changes with it |
@@ -149,8 +149,8 @@ a `*natsclient.Client` built with `NewClient`/`Connect`, the recipe SemEngine do
        `https://semspec.dev/ontology/agentic/`, #208), propose a C360-local pack in `semvocab` (alongside `semvocab#33`
        `packs/agnt`) anchored via `superclasses` to `bfo-2020` and `cco-2.2`.
 - **graph-gateway:** the owner ruled (2026-11-09) to ask for re-admission:
-  [semengine#567](https://github.com/C360Studio/semengine/issues/567), with SemSource's assertion in
-  [#251](https://github.com/C360Studio/semsource/issues/251).
+  [semengine#567](https://github.com/C360Studio/semengine/issues/567), with SemSource's seeded GraphQL assertions (`test/ui/ui-profile.spec.cjs`, `scripts/core-profile-smoke.sh` covering `entity`, `entitiesByPrefix`, `entitiesByPredicate`, and `pathSearch`) in
+  [#251](https://github.com/C360Studio/semsource/issues/251). Owner ruling (2026-11-10): `semspec` is retired and not considered an active consumer (`traverse` is retired `semspec`-only and out of scope).
 - **pkg/buffer:** waiting on [semengine#566](https://github.com/C360Studio/semengine/issues/566).
 - **output/websocket:** waiting on [semengine#34](https://github.com/C360Studio/semengine/issues/34) being scheduled.
 - **processor/graph-clustering:** next port in SemEngine Slice 04A per

@@ -196,7 +196,7 @@ for source_type in ast docs config; do
 done
 echo "Source manifest reachable with ast/docs/config sources"
 
-echo "Checking $graphql_url"
+echo "Checking $graphql_url GET route"
 graphql_get_code=$(curl -sS --max-time 10 \
 	-o "$graphql_get_body" \
 	-w '%{http_code}' \
@@ -206,24 +206,7 @@ if [ "$graphql_get_code" = "404" ] || [ "$graphql_get_code" -ge 500 ]; then
 	echo "Body: $(cat "$graphql_get_body")" >&2
 	exit 1
 fi
-
-graphql_post_code=$(curl -sS --max-time 10 \
-	-o "$graphql_post_body" \
-	-w '%{http_code}' \
-	-X POST \
-	-H 'Content-Type: application/json' \
-	-d '{"query":"query CoreProfileSmoke { __typename }"}' \
-	"$graphql_url") || fail "graph-gateway/graphql POST route is not reachable"
-if [ "$graphql_post_code" -lt 200 ] || [ "$graphql_post_code" -ge 500 ]; then
-	echo "Unexpected graph-gateway/graphql POST status: $graphql_post_code" >&2
-	echo "Body: $(cat "$graphql_post_body")" >&2
-	exit 1
-fi
-if ! grep -q '"data"' "$graphql_post_body" && ! grep -q '"errors"' "$graphql_post_body"; then
-	echo "Unexpected graph-gateway/graphql POST body: $(cat "$graphql_post_body")" >&2
-	exit 1
-fi
-echo "GraphQL gateway route reachable"
+echo "GraphQL gateway GET route reachable"
 
 echo "Checking $mcp_url"
 mcp_code=$(curl -sS --max-time 5 \
@@ -397,8 +380,110 @@ wait_for_status_readiness() {
 	return 1
 }
 
-echo "Waiting for index.ready before checking structural queries (code_context/code_impact)"
+echo "Waiting for index.ready before checking structural queries (GraphQL + code_context/code_impact)"
 wait_for_status_readiness 'index.ready' '"index":{"available":true,"ready":true' || exit 1
+
+graphql_post() {
+	label=$1
+	payload=$2
+	code=$(curl -sS --max-time 10 \
+		-o "$graphql_post_body" \
+		-w '%{http_code}' \
+		-X POST \
+		-H 'Content-Type: application/json' \
+		-d "$payload" \
+		"$graphql_url") || fail "graph-gateway/graphql POST ($label) is not reachable"
+	if [ "$code" != "200" ]; then
+		echo "Unexpected graph-gateway/graphql POST ($label) status: $code" >&2
+		echo "Body: $(cat "$graphql_post_body")" >&2
+		exit 1
+	fi
+	if grep -q '"errors":\[' "$graphql_post_body"; then
+		echo "graph-gateway/graphql POST ($label) returned errors: $(cat "$graphql_post_body")" >&2
+		exit 1
+	fi
+	if ! grep -q '"data":{' "$graphql_post_body"; then
+		echo "graph-gateway/graphql POST ($label) missing data: $(cat "$graphql_post_body")" >&2
+		exit 1
+	fi
+	cat "$graphql_post_body"
+}
+
+main_suffix=".workspace.golang.function.src-main-go-main"
+
+echo "Checking GraphQL entitiesByPredicate(predicate, value) and entitiesByPredicate(predicate)"
+gql_by_title=$(graphql_post "entitiesByPredicate(predicate, value)" \
+	'{"query":"query($predicate: String!, $value: String!) { entitiesByPredicate(predicate: $predicate, value: $value) }","variables":{"predicate":"dc.terms.title","value":"main"}}')
+if ! printf '%s' "$gql_by_title" | grep -Fq '"entitiesByPredicate":{"entities":['; then
+	echo "entitiesByPredicate(dc.terms.title, main) did not return {\"entities\":[...]} shape: $gql_by_title" >&2
+	exit 1
+fi
+main_entity_id=$(printf '%s' "$gql_by_title" | sed -n 's/.*"\([^".]*\.[^".]*\.workspace\.golang\.function\.src-main-go-main\)".*/\1/p' | head -1)
+if [ -z "$main_entity_id" ]; then
+	echo "entitiesByPredicate(dc.terms.title, main) did not return a main function entity ID: $gql_by_title" >&2
+	exit 1
+fi
+authority=${main_entity_id%"$main_suffix"}
+main_file_id="${authority}.workspace.golang.file.src-main-go"
+
+gql_by_type=$(graphql_post "entitiesByPredicate(predicate)" \
+	'{"query":"query($predicate: String!) { entitiesByPredicate(predicate: $predicate) }","variables":{"predicate":"code.artifact.type"}}')
+if ! printf '%s' "$gql_by_type" | grep -Fq '"entitiesByPredicate":{"entities":['; then
+	echo "entitiesByPredicate(code.artifact.type) did not return {\"entities\":[...]} shape: $gql_by_type" >&2
+	exit 1
+fi
+for expected_id in "$main_entity_id" "$main_file_id"; do
+	if ! printf '%s' "$gql_by_type" | grep -Fq "\"$expected_id\""; then
+		echo "entitiesByPredicate(code.artifact.type) missing $expected_id: $gql_by_type" >&2
+		exit 1
+	fi
+done
+
+echo "Checking GraphQL entity(id) ID and triples"
+gql_entity=$(graphql_post "entity(id)" \
+	"{\"query\":\"query(\$id: String!) { entity(id: \$id) { entity { id triples { predicate object } } kvRevision } }\",\"variables\":{\"id\":\"$main_entity_id\"}}")
+for expected_fragment in \
+	"\"entity\":{\"entity\":{\"id\":\"$main_entity_id\"" \
+	'"predicate":"dc.terms.title","object":"main"' \
+	'"predicate":"code.artifact.type","object":"function"' \
+	'"predicate":"code.artifact.path","object":"src/main.go"' \
+	"\"predicate\":\"code.structure.belongs\",\"object\":\"$main_file_id\""; do
+	if ! printf '%s' "$gql_entity" | grep -Fq "$expected_fragment"; then
+		echo "entity($main_entity_id) missing $expected_fragment: $gql_entity" >&2
+		exit 1
+	fi
+done
+
+echo "Checking GraphQL entitiesByPrefix(prefix) IDs and triples"
+gql_prefix=$(graphql_post "entitiesByPrefix(prefix)" \
+	"{\"query\":\"query(\$prefix: String!) { entitiesByPrefix(prefix: \$prefix) { entities { id triples { predicate object } } next_cursor } }\",\"variables\":{\"prefix\":\"${authority}.workspace.golang\"}}")
+for expected_fragment in \
+	'"entitiesByPrefix":{"entities":[' \
+	"\"id\":\"$main_entity_id\"" \
+	"\"id\":\"$main_file_id\"" \
+	'"predicate":"dc.terms.title","object":"main"' \
+	'"predicate":"code.artifact.path","object":"src/main.go"'; do
+	if ! printf '%s' "$gql_prefix" | grep -Fq "$expected_fragment"; then
+		echo "entitiesByPrefix(${authority}.workspace.golang) missing $expected_fragment: $gql_prefix" >&2
+		exit 1
+	fi
+done
+
+echo "Checking GraphQL pathSearch(start, depth, direction[, predicates])"
+gql_path_search=$(graphql_post "pathSearch(start, depth, direction, predicates)" \
+	"{\"query\":\"query(\$start: String!, \$depth: Int!, \$direction: String!, \$predicates: [String]) { pathSearch(start: \$start, depth: \$depth, direction: \$direction, predicates: \$predicates) { entities { id } paths { from predicate to } } }\",\"variables\":{\"start\":\"$main_entity_id\",\"depth\":1,\"direction\":\"OUTGOING\",\"predicates\":[\"code.structure.belongs\"]}}")
+for expected_fragment in \
+	"\"id\":\"$main_entity_id\"" \
+	"\"id\":\"$main_file_id\"" \
+	"\"from\":\"$main_entity_id\"" \
+	'"predicate":"code.structure.belongs"' \
+	"\"to\":\"$main_file_id\""; do
+	if ! printf '%s' "$gql_path_search" | grep -Fq "$expected_fragment"; then
+		echo "pathSearch($main_entity_id) missing $expected_fragment: $gql_path_search" >&2
+		exit 1
+	fi
+done
+echo "GraphQL gateway verified for entity, entitiesByPrefix, entitiesByPredicate, and pathSearch"
 
 echo "Checking code_context content for the known fixture symbol"
 context_body=$(mcp_call code_context '{"query":"main"}')

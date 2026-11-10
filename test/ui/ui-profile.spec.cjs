@@ -79,7 +79,204 @@ async function assertAdvertisedGetRoutes(request, capabilities) {
   }
 }
 
-async function assertProxyAllowlist(request) {
+async function postGraphQL(request, label, query, variables) {
+  const response = await request.post("/graphql", {
+    data: variables ? { query, variables } : { query },
+    failOnStatusCode: false,
+  });
+  const body = await expectBackendResponse(response, `graphql ${label}`);
+  expect(
+    response.ok(),
+    `graphql ${label} HTTP ${response.status()}: ${bodySnippet(body)}`,
+  ).toBe(true);
+  const parsed = JSON.parse(body);
+  expect(
+    parsed.errors,
+    `graphql ${label} returned errors: ${bodySnippet(body)}`,
+  ).toBeUndefined();
+  expect(parsed.data, `graphql ${label} missing data: ${bodySnippet(body)}`).toBeTruthy();
+  return parsed.data;
+}
+
+function expectTriple(triples, predicate, expectedObject) {
+  expect(Array.isArray(triples)).toBe(true);
+  const match = triples.find(
+    (triple) =>
+      triple?.predicate === predicate &&
+      (expectedObject === undefined || String(triple?.object) === String(expectedObject)),
+  );
+  expect(
+    match,
+    `missing triple (${predicate}${expectedObject !== undefined ? ` = ${expectedObject}` : ""}) in ${JSON.stringify(triples)}`,
+  ).toBeTruthy();
+}
+
+// Exercises the live GraphQL query operations served by graph-gateway
+// (semsource#251 / semengine#567):
+//   - entitiesByPredicate(predicate[, value])
+//   - entity(id)
+//   - entitiesByPrefix(prefix)
+//   - pathSearch(start, depth, direction[, predicates])
+async function assertGraphQLSeededOperations(request, projectKey) {
+  const alphaSuffix =
+    ".workspace.golang.function.src-workbench_fixture-go-UiProfileFixtureAlpha";
+
+  // 1a. entitiesByPredicate(predicate, value) — returns { entities: [String] }.
+  // Discover the minted authority (<org>.<platform>) from the alpha entity ID.
+  const byTitleData = await postGraphQL(
+    request,
+    "entitiesByPredicate(predicate, value)",
+    `query($predicate: String!, $value: String!) {
+      entitiesByPredicate(predicate: $predicate, value: $value)
+    }`,
+    {
+      predicate: "dc.terms.title",
+      value: "UiProfileFixtureAlpha",
+    },
+  );
+  const titleMatches = byTitleData.entitiesByPredicate?.entities;
+  expect(Array.isArray(titleMatches)).toBe(true);
+  const alphaCandidates = titleMatches.filter(
+    (id) =>
+      typeof id === "string" &&
+      id.startsWith(`${projectKey}.`) &&
+      id.endsWith(alphaSuffix),
+  );
+  expect(alphaCandidates).toHaveLength(1);
+  const alphaID = alphaCandidates[0];
+  const authority = alphaID.slice(0, alphaID.length - alphaSuffix.length);
+  const betaID = `${authority}.workspace.golang.function.src-workbench_fixture-go-UiProfileFixtureBeta`;
+  const fileID = `${authority}.workspace.golang.file.src-workbench_fixture-go`;
+
+  // 1b. entitiesByPredicate(predicate) without value filter
+  const byTypeData = await postGraphQL(
+    request,
+    "entitiesByPredicate(predicate)",
+    `query($predicate: String!) {
+      entitiesByPredicate(predicate: $predicate)
+    }`,
+    {
+      predicate: "code.artifact.type",
+    },
+  );
+  expect(byTypeData.entitiesByPredicate?.entities).toEqual(
+    expect.arrayContaining([alphaID, betaID, fileID]),
+  );
+
+  // 2. entity(id) — pins ExactEntity { entity { id triples } kvRevision }
+  const entityData = await postGraphQL(
+    request,
+    "entity(id)",
+    `query($id: String!) {
+      entity(id: $id) {
+        entity {
+          id
+          triples { predicate object }
+        }
+        kvRevision
+      }
+    }`,
+    { id: alphaID },
+  );
+  expect(entityData.entity?.kvRevision).toEqual(expect.any(Number));
+  const alphaEntity = entityData.entity?.entity;
+  expect(alphaEntity?.id).toBe(alphaID);
+  expectTriple(alphaEntity?.triples, "dc.terms.title", "UiProfileFixtureAlpha");
+  expectTriple(alphaEntity?.triples, "code.artifact.type", "function");
+  expectTriple(
+    alphaEntity?.triples,
+    "code.artifact.path",
+    "src/workbench_fixture.go",
+  );
+  expectTriple(alphaEntity?.triples, "code.structure.belongs", fileID);
+
+  // 3. entitiesByPrefix(prefix) — pins EntityPage { entities { id triples } next_cursor }
+  const prefix = `${authority}.workspace.golang.function`;
+  const prefixData = await postGraphQL(
+    request,
+    "entitiesByPrefix(prefix)",
+    `query($prefix: String!) {
+      entitiesByPrefix(prefix: $prefix) {
+        entities {
+          id
+          triples { predicate object }
+        }
+        next_cursor
+      }
+    }`,
+    { prefix },
+  );
+  expect(Array.isArray(prefixData.entitiesByPrefix)).toBe(false);
+  const prefixEntities = prefixData.entitiesByPrefix?.entities;
+  expect(Array.isArray(prefixEntities)).toBe(true);
+  const byId = new Map(prefixEntities.map((entity) => [entity.id, entity]));
+  expect(byId.has(alphaID)).toBe(true);
+  expect(byId.has(betaID)).toBe(true);
+  expectTriple(
+    byId.get(betaID)?.triples,
+    "dc.terms.title",
+    "UiProfileFixtureBeta",
+  );
+  expectTriple(byId.get(betaID)?.triples, "code.relationship.calls", alphaID);
+
+  // 4. pathSearch(start, depth, direction[, predicates])
+  // Routes to graph.query.pathSearch and returns PathSearchResult { entities, paths }.
+  const pathSearchUnfiltered = await postGraphQL(
+    request,
+    "pathSearch(start, depth, direction)",
+    `query($start: String!, $depth: Int!, $direction: String!) {
+      pathSearch(start: $start, depth: $depth, direction: $direction) {
+        entities { id }
+        paths { from predicate to }
+      }
+    }`,
+    {
+      start: betaID,
+      depth: 1,
+      direction: "OUTGOING",
+    },
+  );
+  const unfilteredIds = (pathSearchUnfiltered.pathSearch?.entities || []).map(
+    (entity) => entity.id,
+  );
+  expect(unfilteredIds).toEqual(
+    expect.arrayContaining([betaID, alphaID, fileID]),
+  );
+
+  const pathSearchCallsOnly = await postGraphQL(
+    request,
+    "pathSearch(start, depth, direction, predicates)",
+    `query($start: String!, $depth: Int!, $direction: String!, $predicates: [String]) {
+      pathSearch(start: $start, depth: $depth, direction: $direction, predicates: $predicates) {
+        entities { id }
+        paths { from predicate to }
+      }
+    }`,
+    {
+      start: betaID,
+      depth: 1,
+      direction: "OUTGOING",
+      predicates: ["code.relationship.calls"],
+    },
+  );
+  const callsOnlyIds = (pathSearchCallsOnly.pathSearch?.entities || []).map(
+    (entity) => entity.id,
+  );
+  expect(callsOnlyIds).toEqual(expect.arrayContaining([betaID, alphaID]));
+  expect(callsOnlyIds).not.toContain(fileID);
+  const flatSteps = (pathSearchCallsOnly.pathSearch?.paths || []).flat();
+  expect(flatSteps).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        from: betaID,
+        predicate: "code.relationship.calls",
+        to: alphaID,
+      }),
+    ]),
+  );
+}
+
+async function assertProxyAllowlist(request, projectKey) {
   const health = await request.get("/health", { failOnStatusCode: false });
   const healthBody = await expectBackendResponse(health, "health");
   expect(health.ok(), bodySnippet(healthBody)).toBe(true);
@@ -88,17 +285,7 @@ async function assertProxyAllowlist(request) {
     healthy: true,
   });
 
-  const graphQL = await request.post("/graphql", {
-    data: { query: "query UiProfileSmoke { __typename }" },
-    failOnStatusCode: false,
-  });
-  const graphQLBody = await expectBackendResponse(graphQL, "graphql");
-  expect(graphQL.status()).toBeLessThan(500);
-  expect(JSON.parse(graphQLBody)).toEqual(
-    expect.objectContaining({
-      [graphQL.ok() ? "data" : "errors"]: expect.anything(),
-    }),
-  );
+  await assertGraphQLSeededOperations(request, projectKey);
 
   const metrics = await request.get("/metrics", { failOnStatusCode: false });
   const metricsBody = await expectBackendResponse(metrics, "metrics");
@@ -200,7 +387,7 @@ test("advertised API routes stay behind the Caddy allowlist", async ({
     },
   });
   await assertAdvertisedGetRoutes(request, capabilities);
-  await assertProxyAllowlist(request);
+  await assertProxyAllowlist(request, capabilities.project.key);
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
   expect(response?.ok()).toBe(true);
   if (process.env.UI_PROFILE_FORCE_FAILURE === "1") {
