@@ -111,12 +111,12 @@ function expectTriple(triples, predicate, expectedObject) {
   ).toBeTruthy();
 }
 
-// Exercises the consumer GraphQL contract SemSpec federates over
-// (semspec graph/gatherer.go; semsource#251 / semengine#567):
+// Exercises the live GraphQL query operations served by graph-gateway
+// (semsource#251 / semengine#567):
 //   - entitiesByPredicate(predicate[, value])
 //   - entity(id)
 //   - entitiesByPrefix(prefix)
-//   - traverse / pathSearch(start, depth, direction[, predicates])
+//   - pathSearch(start, depth, direction[, predicates])
 async function assertGraphQLSeededOperations(request, projectKey) {
   const alphaSuffix =
     ".workspace.golang.function.src-workbench_fixture-go-UiProfileFixtureAlpha";
@@ -219,10 +219,9 @@ async function assertGraphQLSeededOperations(request, projectKey) {
   );
   expectTriple(byId.get(betaID)?.triples, "code.relationship.calls", alphaID);
 
-  // 4. traverse(start, depth, direction[, predicates]) via pathSearch
-  // SemSpec's TraverseRelationships sends start / depth / direction; graph-gateway
-  // routes pathSearch(start, depth, direction, predicates) to graph.query.pathSearch.
-  const traverseUnfiltered = await postGraphQL(
+  // 4. pathSearch(start, depth, direction[, predicates])
+  // Routes to graph.query.pathSearch and returns PathSearchResult { entities, paths }.
+  const pathSearchUnfiltered = await postGraphQL(
     request,
     "pathSearch(start, depth, direction)",
     `query($start: String!, $depth: Int!, $direction: String!) {
@@ -237,14 +236,14 @@ async function assertGraphQLSeededOperations(request, projectKey) {
       direction: "OUTGOING",
     },
   );
-  const unfilteredIds = (traverseUnfiltered.pathSearch?.entities || []).map(
+  const unfilteredIds = (pathSearchUnfiltered.pathSearch?.entities || []).map(
     (entity) => entity.id,
   );
   expect(unfilteredIds).toEqual(
     expect.arrayContaining([betaID, alphaID, fileID]),
   );
 
-  const traverseCallsOnly = await postGraphQL(
+  const pathSearchCallsOnly = await postGraphQL(
     request,
     "pathSearch(start, depth, direction, predicates)",
     `query($start: String!, $depth: Int!, $direction: String!, $predicates: [String]) {
@@ -260,12 +259,12 @@ async function assertGraphQLSeededOperations(request, projectKey) {
       predicates: ["code.relationship.calls"],
     },
   );
-  const callsOnlyIds = (traverseCallsOnly.pathSearch?.entities || []).map(
+  const callsOnlyIds = (pathSearchCallsOnly.pathSearch?.entities || []).map(
     (entity) => entity.id,
   );
   expect(callsOnlyIds).toEqual(expect.arrayContaining([betaID, alphaID]));
   expect(callsOnlyIds).not.toContain(fileID);
-  const flatSteps = (traverseCallsOnly.pathSearch?.paths || []).flat();
+  const flatSteps = (pathSearchCallsOnly.pathSearch?.paths || []).flat();
   expect(flatSteps).toEqual(
     expect.arrayContaining([
       expect.objectContaining({

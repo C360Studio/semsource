@@ -418,7 +418,7 @@ if ! printf '%s' "$gql_by_title" | grep -Fq '"entitiesByPredicate":{"entities":[
 	echo "entitiesByPredicate(dc.terms.title, main) did not return {\"entities\":[...]} shape: $gql_by_title" >&2
 	exit 1
 fi
-main_entity_id=$(printf '%s' "$gql_by_title" | sed -n 's/.*"\(c360\.[^"]*\.workspace\.golang\.function\.src-main-go-main\)".*/\1/p' | head -1)
+main_entity_id=$(printf '%s' "$gql_by_title" | sed -n 's/.*"\([^".]*\.[^".]*\.workspace\.golang\.function\.src-main-go-main\)".*/\1/p' | head -1)
 if [ -z "$main_entity_id" ]; then
 	echo "entitiesByPredicate(dc.terms.title, main) did not return a main function entity ID: $gql_by_title" >&2
 	exit 1
@@ -469,8 +469,8 @@ for expected_fragment in \
 	fi
 done
 
-echo "Checking GraphQL pathSearch / traverse(start, depth, direction[, predicates])"
-gql_traverse=$(graphql_post "pathSearch(start, depth, direction, predicates)" \
+echo "Checking GraphQL pathSearch(start, depth, direction[, predicates])"
+gql_path_search=$(graphql_post "pathSearch(start, depth, direction, predicates)" \
 	"{\"query\":\"query(\$start: String!, \$depth: Int!, \$direction: String!, \$predicates: [String]) { pathSearch(start: \$start, depth: \$depth, direction: \$direction, predicates: \$predicates) { entities { id } paths { from predicate to } } }\",\"variables\":{\"start\":\"$main_entity_id\",\"depth\":1,\"direction\":\"OUTGOING\",\"predicates\":[\"code.structure.belongs\"]}}")
 for expected_fragment in \
 	"\"id\":\"$main_entity_id\"" \
@@ -478,12 +478,12 @@ for expected_fragment in \
 	"\"from\":\"$main_entity_id\"" \
 	'"predicate":"code.structure.belongs"' \
 	"\"to\":\"$main_file_id\""; do
-	if ! printf '%s' "$gql_traverse" | grep -Fq "$expected_fragment"; then
-		echo "pathSearch($main_entity_id) missing $expected_fragment: $gql_traverse" >&2
+	if ! printf '%s' "$gql_path_search" | grep -Fq "$expected_fragment"; then
+		echo "pathSearch($main_entity_id) missing $expected_fragment: $gql_path_search" >&2
 		exit 1
 	fi
 done
-echo "GraphQL gateway verified for entity, entitiesByPrefix, entitiesByPredicate, and pathSearch/traverse"
+echo "GraphQL gateway verified for entity, entitiesByPrefix, entitiesByPredicate, and pathSearch"
 
 echo "Checking code_context content for the known fixture symbol"
 context_body=$(mcp_call code_context '{"query":"main"}')
