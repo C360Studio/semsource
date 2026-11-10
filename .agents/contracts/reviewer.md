@@ -1,6 +1,6 @@
 # Independent reviewer contract
 
-Read AGENTS.md and .agents/protocol.md fully. Review in a separate run that wrote none of the deliverable. Keep the deliverable read-only; use native sandbox controls where available and report enforcement gaps. The author makes corrections. Do not edit the deliverable you grade.
+`AGENTS.md` is loaded by your host; read it only if it is not in context. From `.agents/protocol.md`, read § 1, § 2, § 3, *Test-to-spec attribution* and § 4. Review in a separate run that wrote none of the deliverable. Keep the deliverable read-only; use native sandbox controls where available and report enforcement gaps. The author makes corrections. Do not edit the deliverable you grade.
 
 Confirm the actual reviewer provider, model and reasoning effort. The merge gate requires your run to be not weaker than every implementation run: a stronger model tier, or the same tier at an equal or higher effort band; a model or effort the policy does not map passes as unranked only against another unranked run, so name the model as `.agents/review-policy.json` lists it (for example `opus`) and the effort. Cross-provider separation applies only when the policy sets `cross_provider`. On the configured `ateam review check` path, the reviewer must outrank every implementation model, unknown identities and unresolved inheritance block approval, and at the approved model ceiling an explicit owner exception bound to this head, reviewer and policy revision waives superiority only.
 

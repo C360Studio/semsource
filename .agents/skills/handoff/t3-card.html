@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- ateam T3 Code confidence card (#304). Read by the pickup and handoff skills only in a T3 thread.
+Replace every double-brace placeholder with a value read this turn, escaping & < > " ' first; write "not checked" for
+anything not read. Each *_CLASS is one of ok, wait, fail, unk. Render with html_render, height 560 (measured: 551 px at 360 wide, 378 px at 728).
+No script and no remote URL: the card neither fetches nor runs anything. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{KIND}} · {{BRANCH}}</title>
+<style>
+:root{color-scheme:dark light;--fg:#e6e6e6;--mut:#9a9a9a;--bg:#161616;--line:#2c2c2c;--ok:#3fb950;--wait:#d29922;--fail:#f85149;--unk:#8b949e}
+@media (prefers-color-scheme:light){:root{--fg:#1f2328;--mut:#59636e;--bg:#fff;--line:#d1d9e0;--ok:#1a7f37;--wait:#9a6700;--fail:#cf222e;--unk:#59636e}}
+*{box-sizing:border-box}body{margin:0;padding:12px;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,sans-serif}
+h1{font-size:15px;margin:0 0 2px}.sub{color:var(--mut);font-size:12px;margin-bottom:10px;overflow-wrap:anywhere}
+.row{display:grid;grid-template-columns:84px 1fr;gap:8px;padding:7px 0;border-top:1px solid var(--line)}
+.k{font-weight:600}.v{overflow-wrap:anywhere}.s{font-weight:600;margin-right:6px}
+.ok .s{color:var(--ok)}.wait .s{color:var(--wait)}.fail .s{color:var(--fail)}.unk .s{color:var(--unk)}
+.free{margin-top:10px;border:1px dashed var(--line);border-radius:6px;padding:8px}
+.free h2{font-size:12px;margin:0 0 4px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.free p{margin:2px 0;overflow-wrap:anywhere}
+</style></head><body>
+<h1>{{KIND}} · {{REPO}}</h1>
+<div class="sub">{{BRANCH}} @ {{HEAD}} · {{TIME}}</div>
+<div class="row {{PROPOSAL_CLASS}}"><div class="k">Proposal</div><div class="v"><span class="s">{{PROPOSAL_STATE}}</span>{{PROPOSAL}}</div></div>
+<div class="row {{CLAIM_CLASS}}"><div class="k">Claim</div><div class="v"><span class="s">{{CLAIM_STATE}}</span>{{CLAIM}}</div></div>
+<div class="row {{GATES_CLASS}}"><div class="k">Gates</div><div class="v"><span class="s">{{GATES_STATE}}</span>{{GATES}}</div></div>
+<div class="row {{REVIEW_CLASS}}"><div class="k">Review</div><div class="v"><span class="s">{{REVIEW_STATE}}</span>{{REVIEW}}</div></div>
+<div class="row {{MERGE_CLASS}}"><div class="k">Merge</div><div class="v"><span class="s">{{MERGE_STATE}}</span>{{MERGE}}</div></div>
+<div class="free"><h2>Agent-written (not verified)</h2><p><b>Goal:</b> {{GOAL}}</p><p><b>Done when:</b> {{DONE_WHEN}}</p></div>
+</body></html>
