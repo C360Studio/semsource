@@ -122,7 +122,7 @@ a `*natsclient.Client` built with `NewClient`/`Connect`, the recipe SemEngine do
   - **What is 100% on SemSource's side right now (`source/ontology/ontology.go`, `source/ast/vocabulary.go`,
     `source/vocabulary/predicates.go`):**
     1. Replace the hardcoded BFO 2.0 `http://purl.obolibrary.org/obo/BFO_0000050` (`part of`, excluded in BFO 2020) in
-       `CodeBelongsTo` and `CodeBelongs` with `bfo.ContinuantPartOf` (`BFO_0000176`) from
+       `CodeBelongsTo` and `CodeBelongs` with `bfo.Namespace + "BFO_0000176"` (`continuant part of`) from
        `github.com/c360studio/semvocab/catalog/bfo`.
     2. Map all 10 class stamps in `source/ontology/ontology.go` to existing `semvocab/catalog/cco` (CCO v2.2) constants
        so `cco.Parents(iri)` returns the full BFO 2020 + CCO v2.2 superclass chain for `fusionvocab.New(cco.Parents)`

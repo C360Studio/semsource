@@ -6,7 +6,7 @@ import (
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
 	"github.com/c360studio/semsource/source/ontology"
@@ -66,7 +66,7 @@ func TestDocsLensViaEngine(t *testing.T) {
 		source.DocFilePath:      "docs/retry.md",
 		source.DocBodyStore:     "objectstore",
 		source.DocBodyKey:       "body:retry",
-		ontology.ClassPredicate: cco.Document,
+		ontology.ClassPredicate: cco.MaterialCopyOfDocument,
 	})
 	g.SetResolve("how does retry work", id)
 
@@ -84,8 +84,8 @@ func TestDocsLensViaEngine(t *testing.T) {
 	if n.Name != "Retry Policy" || n.Kind != "document" || n.Body != body || n.Path != "docs/retry.md" {
 		t.Fatalf("doc node mismatch: %+v", n)
 	}
-	if n.Class != cco.Document {
-		t.Fatalf("expected Document class, got %q", n.Class)
+	if n.Class != cco.MaterialCopyOfDocument {
+		t.Fatalf("expected MaterialCopyOfDocument class, got %q", n.Class)
 	}
 	// NL query → semantic resolve → embedding provenance.
 	if resp.Provenance != fusion.ProvenanceEmbedding {

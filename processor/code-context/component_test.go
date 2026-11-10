@@ -13,7 +13,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/graph"
 
@@ -93,7 +93,7 @@ func TestServeDocs(t *testing.T) {
 		srcvocab.DocType: "document", srcvocab.DcTitle: "Retry Policy",
 		srcvocab.DocFilePath:  "docs/retry.md",
 		srcvocab.DocBodyStore: graph.BodyStoreInstance, srcvocab.DocBodyKey: "body:retry",
-		ontology.ClassPredicate: cco.Document,
+		ontology.ClassPredicate: cco.MaterialCopyOfDocument,
 	})
 	g.SetResolve("how to retry", id)
 	c := newTestComponent("docs", g, store)

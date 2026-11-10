@@ -1,6 +1,9 @@
 package ast
 
-import "github.com/c360studio/semstreams/vocabulary"
+import (
+	"github.com/c360studio/semstreams/vocabulary"
+	"github.com/c360studio/semvocab/catalog/bfo"
+)
 
 // CodeNamespace is the base IRI prefix for code vocabulary terms.
 const CodeNamespace = "https://semspec.dev/ontology/code/"
@@ -101,7 +104,7 @@ func registerStructurePredicates() {
 	vocabulary.Register(CodeBelongsTo,
 		vocabulary.WithDescription("Child belongs to parent (function → file)"),
 		vocabulary.WithDataType("entity_id"),
-		vocabulary.WithIRI("http://purl.obolibrary.org/obo/BFO_0000050"))
+		vocabulary.WithIRI(bfo.Namespace+"BFO_0000176")) // BFO 2020 continuant part of
 }
 
 func registerDependencyPredicates() {

@@ -1,27 +1,19 @@
-// Package ontology aligns semsource entity kinds and predicates to the BFO/CCO
-// upper ontologies for standards-aligned ("standards at work") stamping. The IRI
-// constants live in semstreams (vocabulary/bfo, vocabulary/cco); this package
-// owns only the semsource-specific class mapping and the triple that stamps it.
+// Package ontology aligns semsource entity kinds and predicates to the BFO 2020
+// and CCO v2.2 upper ontologies for standards-aligned ("standards at work")
+// stamping. The IRI constants and superclass hierarchy live in semvocab
+// (catalog/bfo, catalog/cco); this package owns only the semsource-specific
+// class mapping and the triple that stamps it.
 //
-// It carried a hand-encoded subclass table too (hierarchy.go), for ranking fused
-// results by ontology distance. That ranking converged into the semstreams
-// pkg/fusion engine — ADR-0005's own status note records the move — which
-// orphaned the table: Ancestors, Depth, and Distance had no caller outside
-// their own tests, and no requirement in the retrieval-ranking capability
-// referenced ontology distance. It was removed rather than migrated.
+// Ontology-specificity ranking lives in the pkg/fusion engine via
+// fusionvocab.New(cco.Parents). Every class stamped here is a CCO v2.2 constant
+// whose cco.Parents(iri) chain terminates at BFO 2020 Entity (BFO_0000001).
 //
-// semstreams now ships the real thing (vocabulary/bfo.SubClassOf, gh#396), and
-// how ontology distance should figure in retrieval is being settled upstream in
-// the production-GraphRAG epic (semstreams#1137). A local re-encoding would be a
-// third answer to a question two other places are already answering.
-//
-// It is alignment, not reasoning: no OWL inferencing, no SPARQL. RDF/JSON-LD
-// export is a separate, optional edge (semstreams vocabulary/export), built only
-// if a consumer needs it. See docs/adr/0005-bfo-cco-ontology-alignment.md.
+// It is alignment, not reasoning: no OWL inferencing, no SPARQL. See
+// docs/adr/0005-bfo-cco-ontology-alignment.md.
 package ontology
 
 import (
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/source/ast"
 )
@@ -29,7 +21,7 @@ import (
 // ClassPredicate carries an entity's BFO/CCO class IRI as an rdf:type assertion.
 // StampClass auto-populates it; a value already present on the entity is treated
 // as an explicit operator override and left untouched (first-writer-wins),
-// mirroring semstreams ADR-042's operator-override predicate.
+// mirroring ADR-042's operator-override predicate.
 const ClassPredicate = "entity.ontology.class"
 
 // classKey identifies an entity kind by the (domain, type) segments of its
@@ -38,21 +30,21 @@ const ClassPredicate = "entity.ontology.class"
 // media file (media) vs a container reference (config).
 type classKey struct{ domain, typ string }
 
-// sourceClasses maps non-code entity kinds (git/web/config/media) to BFO/CCO
+// sourceClasses maps non-code entity kinds (git/web/config/media) to CCO v2.2
 // class IRIs. Type strings match the handlers' entityid.Build calls.
 var sourceClasses = map[classKey]string{
 	{"git", "commit"}: cco.Act,
 	{"git", "author"}: cco.Person,
 	{"git", "branch"}: cco.DesignativeInformationContentEntity,
 
-	{"web", "page"}: cco.Document,
-	{"web", "doc"}:  cco.Document,
+	{"web", "page"}: cco.MaterialCopyOfDocument,
+	{"web", "doc"}:  cco.MaterialCopyOfDocument,
 
-	{"config", "gomod"}:      cco.Specification,
-	{"config", "project"}:    cco.Specification,
-	{"config", "package"}:    cco.Specification,
+	{"config", "gomod"}:      cco.PrescriptiveInformationContentEntity,
+	{"config", "project"}:    cco.PrescriptiveInformationContentEntity,
+	{"config", "package"}:    cco.PrescriptiveInformationContentEntity,
 	{"config", "dependency"}: cco.DesignativeInformationContentEntity,
-	{"config", "image"}:      cco.Identifier,
+	{"config", "image"}:      cco.DesignativeInformationContentEntity,
 
 	{"media", "image"}:    cco.InformationBearingArtifact,
 	{"media", "video"}:    cco.InformationBearingArtifact,
@@ -61,26 +53,28 @@ var sourceClasses = map[classKey]string{
 	{"media", "blob"}:     cco.InformationBearingArtifact,
 }
 
-// codeTypeClasses maps AST code entity types to BFO/CCO class IRIs. Keyed by the
-// ast.CodeEntityType value (domain is the language, e.g. golang/typescript).
-// Functions/methods are procedures (Algorithm); other symbols are SoftwareCode;
-// files/folders bear information; a repo is an artifact. Judgment calls per
-// ADR-0005 — documented and override-able.
+// codeTypeClasses maps AST code entity types to CCO v2.2 class IRIs. Keyed by
+// the ast.CodeEntityType value (domain is the language, e.g. golang/typescript).
+// Functions/methods are procedures (Algorithm, depth 4); non-function code
+// declarations are PrescriptiveInformationContentEntity (direct parent of
+// Algorithm at depth 3, preserving function/method specificity); files/folders
+// bear information; a repo is a MaterialArtifact. Judgment calls per ADR-0005 —
+// documented and override-able.
 var codeTypeClasses = map[ast.CodeEntityType]string{
 	ast.TypeFunction:  cco.Algorithm,
 	ast.TypeMethod:    cco.Algorithm,
-	ast.TypeStruct:    cco.SoftwareCode,
-	ast.TypeInterface: cco.SoftwareCode,
-	ast.TypeClass:     cco.SoftwareCode,
-	ast.TypeEnum:      cco.SoftwareCode,
-	ast.TypeType:      cco.SoftwareCode,
-	ast.TypeConst:     cco.SoftwareCode,
-	ast.TypeVar:       cco.SoftwareCode,
-	ast.TypeComponent: cco.SoftwareCode,
-	ast.TypePackage:   cco.SoftwareCode,
+	ast.TypeStruct:    cco.PrescriptiveInformationContentEntity,
+	ast.TypeInterface: cco.PrescriptiveInformationContentEntity,
+	ast.TypeClass:     cco.PrescriptiveInformationContentEntity,
+	ast.TypeEnum:      cco.PrescriptiveInformationContentEntity,
+	ast.TypeType:      cco.PrescriptiveInformationContentEntity,
+	ast.TypeConst:     cco.PrescriptiveInformationContentEntity,
+	ast.TypeVar:       cco.PrescriptiveInformationContentEntity,
+	ast.TypeComponent: cco.PrescriptiveInformationContentEntity,
+	ast.TypePackage:   cco.PrescriptiveInformationContentEntity,
 	ast.TypeFile:      cco.InformationBearingArtifact,
 	ast.TypeFolder:    cco.InformationBearingArtifact,
-	ast.TypeRepo:      cco.Artifact,
+	ast.TypeRepo:      cco.MaterialArtifact,
 }
 
 // ClassFor returns the BFO/CCO class IRI for an entity kind identified by the

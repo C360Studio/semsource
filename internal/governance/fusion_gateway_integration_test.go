@@ -14,7 +14,7 @@ import (
 	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 	"github.com/c360studio/semstreams/storage"
 	"github.com/c360studio/semstreams/storage/objectstore"
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -205,10 +205,11 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 		// Body handle triples: the code lens reads these into a StorageReference.
 		{Subject: caller, Predicate: ast.CodeBodyStore, Object: semsourcegraph.BodyStoreInstance},
 		{Subject: caller, Predicate: ast.CodeBodyKey, Object: bodyKey},
-		// Stamp SoftwareCode, NOT Algorithm: a `function` entity's ID-derived
-		// fallback is cco.Algorithm, so stamping Algorithm would let the class
-		// assertion pass via the fallback even if the stamped triple were dropped.
-		{Subject: caller, Predicate: ontology.ClassPredicate, Object: cco.SoftwareCode},
+		// Stamp PrescriptiveInformationContentEntity, NOT Algorithm: a `function`
+		// entity's ID-derived fallback is cco.Algorithm, so stamping Algorithm
+		// would let the class assertion pass via the fallback even if the stamped
+		// triple were dropped.
+		{Subject: caller, Predicate: ontology.ClassPredicate, Object: cco.PrescriptiveInformationContentEntity},
 	})
 	publishSemsourceEntity(t, ctx, tc.Client, callee, semsourcegraph.IndexingProfileContent, []message.Triple{
 		{Subject: callee, Predicate: ast.DcTitle, Object: "OnEvent"},
@@ -266,10 +267,10 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	if got := dispatch.Relations["callee"]; len(got) != 1 || got[0].Name != "OnEvent" {
 		t.Fatalf("expected callee OnEvent, got %+v", dispatch.Relations)
 	}
-	// SoftwareCode is the stamped class (≠ the function→Algorithm fallback), so
-	// this proves the entity.ontology.class triple flowed end to end.
-	if dispatch.Class != cco.SoftwareCode {
-		t.Fatalf("expected stamped SoftwareCode class, got %q", dispatch.Class)
+	// PrescriptiveInformationContentEntity is the stamped class (≠ the function→Algorithm fallback),
+	// so this proves the entity.ontology.class triple flowed end to end.
+	if dispatch.Class != cco.PrescriptiveInformationContentEntity {
+		t.Fatalf("expected stamped PrescriptiveInformationContentEntity class, got %q", dispatch.Class)
 	}
 	// The honesty envelope: prefix/structural fusion is deterministic — no
 	// embedding or LLM in the path. This is the core ADR-0004 claim.

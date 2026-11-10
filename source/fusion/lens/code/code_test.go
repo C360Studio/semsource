@@ -6,7 +6,7 @@ import (
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/fusiontest"

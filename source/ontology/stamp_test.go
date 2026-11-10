@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semvocab/catalog/cco"
 )
 
 func TestStampClassAppendsClass(t *testing.T) {
