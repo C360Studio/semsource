@@ -114,9 +114,40 @@ a `*natsclient.Client` built with `NewClient`/`Connect`, the recipe SemEngine do
 
 ## Open items
 
-- **semvocab & CCO v2.2 class reconciliation:** [#257](https://github.com/C360Studio/semsource/issues/257) tracks
-  adopting `semvocab` and mapping the 5 renamed/excluded CCO 1.4 constants (`Artifact`, `Document`, `SoftwareCode`,
-  `Specification`, `Identifier`) plus `BFO_0000050`.
+- **semvocab & CCO v2.2 class reconciliation ([#257](https://github.com/C360Studio/semsource/issues/257)) — consumer-side now, optional shared pack later:**
+  - **No `semvocab` issue is needed to unblock the SemSource port.** `semvocab`'s rule (`AGENTS.md` § 2) only admits
+    catalog constants that exist verbatim in a pinned external standard release (`bfo-2020`, `cco-2.2`, W3C/OGC), and
+    defers C360-local packs until consumers (`semsource`, `semteams`) finalize their shared entity/predicate schemas
+    (see `semvocab#33` Blocker 1).
+  - **What is 100% on SemSource's side right now (`source/ontology/ontology.go`, `source/ast/vocabulary.go`,
+    `source/vocabulary/predicates.go`):**
+    1. Replace the hardcoded BFO 2.0 `http://purl.obolibrary.org/obo/BFO_0000050` (`part of`, excluded in BFO 2020) in
+       `CodeBelongsTo` and `CodeBelongs` with `bfo.ContinuantPartOf` (`BFO_0000176`) from
+       `github.com/c360studio/semvocab/catalog/bfo`.
+    2. Map all 10 class stamps in `source/ontology/ontology.go` to existing `semvocab/catalog/cco` (CCO v2.2) constants
+       so `cco.Parents(iri)` returns the full BFO 2020 + CCO v2.2 superclass chain for `fusionvocab.New(cco.Parents)`
+       without requiring any `semvocab` changes:
+       - `cco.Act`, `cco.Person`, `cco.DesignativeInformationContentEntity`, `cco.InformationBearingArtifact`,
+         `cco.Algorithm`: **unchanged Go names** in `semvocab/catalog/cco`.
+       - `cco.Artifact` (`ast.TypeRepo`) → **`cco.MaterialArtifact`** (`ont00000995`, renamed in CCO v2.2).
+       - `cco.Document` (`web.page`, `web.doc`) → **`cco.MaterialCopyOfDocument`** (`ont00001298`, CCO v2.2 `altLabel`:
+         `"Document"`) or `cco.DescriptiveInformationContentEntity` (`ont00000853`).
+       - `cco.Identifier` (`config.image`) → **`cco.DesignativeInformationContentEntity`** (`ont00000686`; `Identifier`
+         was an invented SemStreams constant absent from CCO 1.x/2.2, and `config.dependency` already uses
+         `DesignativeInformationContentEntity`).
+       - `cco.Specification` (`config` `gomod`/`project`/`package`) → **`cco.PrescriptiveInformationContentEntity`**
+         (`ont00000965`; `Specification` was an invented SemStreams constant absent from CCO 1.x/2.2).
+       - `cco.SoftwareCode` (non-function code symbols: struct, interface, class, type, var, const, package) →
+         **`cco.PrescriptiveInformationContentEntity`** (`ont00000965`, direct parent of `cco.Algorithm` at depth 3 vs
+         `Algorithm`'s depth 4, preserving function/method specificity over passive declarations) or
+         `cco.InformationContentEntity` (`ont00000958`, depth 2).
+  - **When to file with `semvocab` later:**
+    1. If we want finer CCO v2.2 leaf classes that *do* exist in `semvocab`'s vendored `CommonCoreOntologiesMerged.ttl`
+       (e.g. `Code Identifier` `ont00000062` or `Non-Name Identifier` `ont00000649`), that is a small `catalog/cco`
+       admission ask with `source/ontology` as the named caller.
+    2. Once SemSource and SemTeams agree on shared software/code & agentic vocabularies (`https://semspec.dev/ontology/code/`,
+       `https://semspec.dev/ontology/agentic/`, #208), propose a C360-local pack in `semvocab` (alongside `semvocab#33`
+       `packs/agnt`) anchored via `superclasses` to `bfo-2020` and `cco-2.2`.
 - **graph-gateway:** the owner ruled (2026-11-09) to ask for re-admission:
   [semengine#567](https://github.com/C360Studio/semengine/issues/567), with SemSource's assertion in
   [#251](https://github.com/C360Studio/semsource/issues/251).
