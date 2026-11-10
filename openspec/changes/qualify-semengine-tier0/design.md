@@ -9,12 +9,15 @@ module; it is not an engine build or a qualified Tier 0 composition.
 The architect's consumer inventory and independent review approve this bounded plan for planning only.
 The reviewer found no scope or qualification-mapping blocker. Owner proposal/design approval was
 recorded on 2026-11-08. [03B contracts and port scope][engine8] landed through [PR #21][engine21]
-at `9286055e2c9a18426a73da38a60766845ab9e48e` on 2026-10-01.
-The [2026-11-08 consumer-pin ruling][consumer-pin] permits registry/import integration after change 5
-(PR #550) merges and is tagged `v0.1.0-alpha.3`. At this check PR #550 is open and only alpha.1/alpha.2
-release tags exist. Admission task 1.5 therefore remains held for the exact usable consumer pin;
-that pre-release pin will not itself establish Tier 0 qualification.
-A planning PR, compiling reference binary or elapsed time cannot satisfy this gate.
+at `9286055e2c9a18426a73da38a60766845ab9e48e` on 2026-10-01, and #17–#20 and #69 are closed with
+recorded rulings. The [2026-11-08 consumer-pin ruling][consumer-pin] (amended on #9 / #557) is
+satisfied by `v0.1.0-alpha.3` at `057bc8bfe2f737000a354fd1a38aa60d65cbf9f1` (tagged 2026-11-10 after
+change 5 PRs #550, #558, #565, #577 and composed smoke test #557 / PR #560), permitting SemEngine-only
+branch integration (#231, #232, #253, #256, #257). That pre-release pin does not itself establish
+Tier 0 qualification: full 04A qualification remains gated on the complete Slice 04A release under #9
+(`processor/graph-clustering`, #15 broker-generation marker, #16 real-NATS PubAck regression, #579
+no-embedder verb refusal, and dispositions for `output/websocket` #34, `pkg/buffer` #566, and
+`graph-gateway` #567). A planning PR, compiling reference binary or elapsed time cannot satisfy this gate.
 
 SemSource owns composition, source adapters, consumer query policy and the acceptance workload.
 SemEngine owns substrate APIs, extraction and package admission. This document supplies consumer

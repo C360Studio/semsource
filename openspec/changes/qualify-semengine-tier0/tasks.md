@@ -13,11 +13,15 @@
   Implementation still requires the separate engine admission gate below.
 - [ ] Record approved 03B contracts, package scope, relevant #15–#20 repair/decision dispositions and
   the exact admitted usable SemEngine Tier 0 commit before implementation begins.
-  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`.
+  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`; #17–#20
+  and #69 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`).
   The [2026-11-08 pin ruling](https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898)
-  permits registry/import integration on alpha.3; it grants no tier qualification. At this check,
-  PR #550 is open and the latest release tag is alpha.2; no alpha.3 SHA is available.
-  Hold: Await SemEngine change 5 / PR #550 merge and v0.1.0-alpha.3 consumer pin under #9.
+  (amended on #9 / #557) is met by `v0.1.0-alpha.3` at `057bc8bfe2f737000a354fd1a38aa60d65cbf9f1`
+  (tag object `138ae55881dbb7ced9840a872e3247f7b89d623b`, 2026-11-10), which unblocks consumer
+  integration on the qualification branch (#231, #232, #253, #256, #257) without granting Tier 0
+  qualification.
+  Hold: Full 04A Tier 0 qualification awaits the complete Slice 04A release under SemEngine #9
+  (`processor/graph-clustering`, #15, #16, #579, and #34 / #566 / #567 dispositions).
 
 ## 2. Future implementation after admission
 

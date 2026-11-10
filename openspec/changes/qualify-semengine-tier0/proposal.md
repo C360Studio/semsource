@@ -7,9 +7,11 @@ Approved-by: Coby Leuschke (2026-11-08)
 The SETUP 03A SemStreams baseline merged in #213 as
 `3604a9ce8d5aec717253d7a905389f7910efd25d`. SemSource's next substrate work is the 04A graph-foundation
 consumer qualification tracked by #221 and SemEngine #9. SemEngine 03B contracts and port admission
-were approved in SemEngine #8 / merged PR #21. The next consumer pin, `v0.1.0-alpha.3`, waits for
-change 5 (PR #550) to merge and be tagged. A consumer plan can record the work and exact prerequisites
-without inventing public APIs or treating a pre-release pin as Tier 0 qualification.
+were approved in SemEngine #8 / merged PR #21 (`9286055e2c9a18426a73da38a60766845ab9e48e`), and the
+pre-release consumer pin `v0.1.0-alpha.3` was tagged at `057bc8bfe2f737000a354fd1a38aa60d65cbf9f1`
+(2026-11-10) after change 5 (#550, #558, #565, #577) and the composed smoke test (#557 / PR #560)
+merged. A consumer plan records the work, the consumer pin now available for branch integration, and
+the remaining Slice 04A prerequisites without treating a pre-release pin as Tier 0 qualification.
 
 ## What Changes
 
@@ -19,9 +21,9 @@ without inventing public APIs or treating a pre-release pin as Tier 0 qualificat
 - Define the evidence and stop conditions for the eventual SemEngine-only qualification binary.
 - Preserve the frozen SemStreams reference, failed expectations, provider controls and baseline results.
 
-This initial planning commit changes no runtime, module pin, test expectation or fixture. The branch
-still contains the reference SemStreams module because the admitted next consumer pin is not yet
-available. It is not a Tier 0 build or an engine qualification result.
+This planning commit changes no runtime, module pin, test expectation or fixture. `v0.1.0-alpha.3`
+supplies the pre-release consumer pin for branch integration (#221, #231, #232, #253, #256, #257);
+full 04A Tier 0 qualification still awaits the remaining Slice 04A deliverables under SemEngine #9.
 
 ## Capabilities
 
