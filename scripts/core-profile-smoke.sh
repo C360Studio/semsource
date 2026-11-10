@@ -409,18 +409,29 @@ graphql_post() {
 	cat "$graphql_post_body"
 }
 
-main_entity_id="c360.semsource.golang.workspace.function.src-main-go-main"
-main_file_id="c360.semsource.golang.workspace.file.src-main-go"
+main_suffix=".workspace.golang.function.src-main-go-main"
 
 echo "Checking GraphQL entitiesByPredicate(predicate, value) and entitiesByPredicate(predicate)"
 gql_by_title=$(graphql_post "entitiesByPredicate(predicate, value)" \
 	'{"query":"query($predicate: String!, $value: String!) { entitiesByPredicate(predicate: $predicate, value: $value) }","variables":{"predicate":"dc.terms.title","value":"main"}}')
-if ! printf '%s' "$gql_by_title" | grep -Fq "\"$main_entity_id\""; then
-	echo "entitiesByPredicate(dc.terms.title, main) did not return $main_entity_id: $gql_by_title" >&2
+if ! printf '%s' "$gql_by_title" | grep -Fq '"entitiesByPredicate":{"entities":['; then
+	echo "entitiesByPredicate(dc.terms.title, main) did not return {\"entities\":[...]} shape: $gql_by_title" >&2
 	exit 1
 fi
+main_entity_id=$(printf '%s' "$gql_by_title" | sed -n 's/.*"\(c360\.[^"]*\.workspace\.golang\.function\.src-main-go-main\)".*/\1/p' | head -1)
+if [ -z "$main_entity_id" ]; then
+	echo "entitiesByPredicate(dc.terms.title, main) did not return a main function entity ID: $gql_by_title" >&2
+	exit 1
+fi
+authority=${main_entity_id%"$main_suffix"}
+main_file_id="${authority}.workspace.golang.file.src-main-go"
+
 gql_by_type=$(graphql_post "entitiesByPredicate(predicate)" \
 	'{"query":"query($predicate: String!) { entitiesByPredicate(predicate: $predicate) }","variables":{"predicate":"code.artifact.type"}}')
+if ! printf '%s' "$gql_by_type" | grep -Fq '"entitiesByPredicate":{"entities":['; then
+	echo "entitiesByPredicate(code.artifact.type) did not return {\"entities\":[...]} shape: $gql_by_type" >&2
+	exit 1
+fi
 for expected_id in "$main_entity_id" "$main_file_id"; do
 	if ! printf '%s' "$gql_by_type" | grep -Fq "\"$expected_id\""; then
 		echo "entitiesByPredicate(code.artifact.type) missing $expected_id: $gql_by_type" >&2
@@ -432,7 +443,7 @@ echo "Checking GraphQL entity(id) ID and triples"
 gql_entity=$(graphql_post "entity(id)" \
 	"{\"query\":\"query(\$id: String!) { entity(id: \$id) { entity { id triples { predicate object } } kvRevision } }\",\"variables\":{\"id\":\"$main_entity_id\"}}")
 for expected_fragment in \
-	"\"id\":\"$main_entity_id\"" \
+	"\"entity\":{\"entity\":{\"id\":\"$main_entity_id\"" \
 	'"predicate":"dc.terms.title","object":"main"' \
 	'"predicate":"code.artifact.type","object":"function"' \
 	'"predicate":"code.artifact.path","object":"src/main.go"' \
@@ -445,14 +456,15 @@ done
 
 echo "Checking GraphQL entitiesByPrefix(prefix) IDs and triples"
 gql_prefix=$(graphql_post "entitiesByPrefix(prefix)" \
-	'{"query":"query($prefix: String!) { entitiesByPrefix(prefix: $prefix) { entities { id triples { predicate object } } next_cursor } }","variables":{"prefix":"c360.semsource.golang.workspace"}}')
+	"{\"query\":\"query(\$prefix: String!) { entitiesByPrefix(prefix: \$prefix) { entities { id triples { predicate object } } next_cursor } }\",\"variables\":{\"prefix\":\"${authority}.workspace.golang\"}}")
 for expected_fragment in \
+	'"entitiesByPrefix":{"entities":[' \
 	"\"id\":\"$main_entity_id\"" \
 	"\"id\":\"$main_file_id\"" \
 	'"predicate":"dc.terms.title","object":"main"' \
 	'"predicate":"code.artifact.path","object":"src/main.go"'; do
 	if ! printf '%s' "$gql_prefix" | grep -Fq "$expected_fragment"; then
-		echo "entitiesByPrefix(c360.semsource.golang.workspace) missing $expected_fragment: $gql_prefix" >&2
+		echo "entitiesByPrefix(${authority}.workspace.golang) missing $expected_fragment: $gql_prefix" >&2
 		exit 1
 	fi
 done

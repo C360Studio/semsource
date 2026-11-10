@@ -118,11 +118,11 @@ function expectTriple(triples, predicate, expectedObject) {
 //   - entitiesByPrefix(prefix)
 //   - traverse / pathSearch(start, depth, direction[, predicates])
 async function assertGraphQLSeededOperations(request, projectKey) {
-  const alphaID = `${projectKey}.semsource.golang.workspace.function.src-workbench_fixture-go-UiProfileFixtureAlpha`;
-  const betaID = `${projectKey}.semsource.golang.workspace.function.src-workbench_fixture-go-UiProfileFixtureBeta`;
-  const fileID = `${projectKey}.semsource.golang.workspace.file.src-workbench_fixture-go`;
+  const alphaSuffix =
+    ".workspace.golang.function.src-workbench_fixture-go-UiProfileFixtureAlpha";
 
-  // 1a. entitiesByPredicate(predicate, value)
+  // 1a. entitiesByPredicate(predicate, value) — returns { entities: [String] }.
+  // Discover the minted authority (<org>.<platform>) from the alpha entity ID.
   const byTitleData = await postGraphQL(
     request,
     "entitiesByPredicate(predicate, value)",
@@ -134,9 +134,19 @@ async function assertGraphQLSeededOperations(request, projectKey) {
       value: "UiProfileFixtureAlpha",
     },
   );
-  expect(byTitleData.entitiesByPredicate).toEqual(
-    expect.arrayContaining([alphaID]),
+  const titleMatches = byTitleData.entitiesByPredicate?.entities;
+  expect(Array.isArray(titleMatches)).toBe(true);
+  const alphaCandidates = titleMatches.filter(
+    (id) =>
+      typeof id === "string" &&
+      id.startsWith(`${projectKey}.`) &&
+      id.endsWith(alphaSuffix),
   );
+  expect(alphaCandidates).toHaveLength(1);
+  const alphaID = alphaCandidates[0];
+  const authority = alphaID.slice(0, alphaID.length - alphaSuffix.length);
+  const betaID = `${authority}.workspace.golang.function.src-workbench_fixture-go-UiProfileFixtureBeta`;
+  const fileID = `${authority}.workspace.golang.file.src-workbench_fixture-go`;
 
   // 1b. entitiesByPredicate(predicate) without value filter
   const byTypeData = await postGraphQL(
@@ -149,11 +159,11 @@ async function assertGraphQLSeededOperations(request, projectKey) {
       predicate: "code.artifact.type",
     },
   );
-  expect(byTypeData.entitiesByPredicate).toEqual(
+  expect(byTypeData.entitiesByPredicate?.entities).toEqual(
     expect.arrayContaining([alphaID, betaID, fileID]),
   );
 
-  // 2. entity(id) — returns ExactEntity { entity { id triples } kvRevision }
+  // 2. entity(id) — pins ExactEntity { entity { id triples } kvRevision }
   const entityData = await postGraphQL(
     request,
     "entity(id)",
@@ -168,7 +178,8 @@ async function assertGraphQLSeededOperations(request, projectKey) {
     }`,
     { id: alphaID },
   );
-  const alphaEntity = entityData.entity?.entity || entityData.entity;
+  expect(entityData.entity?.kvRevision).toEqual(expect.any(Number));
+  const alphaEntity = entityData.entity?.entity;
   expect(alphaEntity?.id).toBe(alphaID);
   expectTriple(alphaEntity?.triples, "dc.terms.title", "UiProfileFixtureAlpha");
   expectTriple(alphaEntity?.triples, "code.artifact.type", "function");
@@ -179,8 +190,8 @@ async function assertGraphQLSeededOperations(request, projectKey) {
   );
   expectTriple(alphaEntity?.triples, "code.structure.belongs", fileID);
 
-  // 3. entitiesByPrefix(prefix) — returns EntityPage { entities { id triples } next_cursor }
-  const prefix = `${projectKey}.semsource.golang.workspace.function`;
+  // 3. entitiesByPrefix(prefix) — pins EntityPage { entities { id triples } next_cursor }
+  const prefix = `${authority}.workspace.golang.function`;
   const prefixData = await postGraphQL(
     request,
     "entitiesByPrefix(prefix)",
@@ -195,9 +206,8 @@ async function assertGraphQLSeededOperations(request, projectKey) {
     }`,
     { prefix },
   );
-  const prefixEntities = Array.isArray(prefixData.entitiesByPrefix)
-    ? prefixData.entitiesByPrefix
-    : prefixData.entitiesByPrefix?.entities;
+  expect(Array.isArray(prefixData.entitiesByPrefix)).toBe(false);
+  const prefixEntities = prefixData.entitiesByPrefix?.entities;
   expect(Array.isArray(prefixEntities)).toBe(true);
   const byId = new Map(prefixEntities.map((entity) => [entity.id, entity]));
   expect(byId.has(alphaID)).toBe(true);
