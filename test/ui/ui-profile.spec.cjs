@@ -127,7 +127,9 @@ async function assertGraphQLSeededOperations(request, projectKey) {
     request,
     "entitiesByPredicate(predicate, value)",
     `query($predicate: String!, $value: String!) {
-      entitiesByPredicate(predicate: $predicate, value: $value)
+      entitiesByPredicate(predicate: $predicate, value: $value) {
+        entities
+      }
     }`,
     {
       predicate: "dc.terms.title",
@@ -153,7 +155,9 @@ async function assertGraphQLSeededOperations(request, projectKey) {
     request,
     "entitiesByPredicate(predicate)",
     `query($predicate: String!) {
-      entitiesByPredicate(predicate: $predicate)
+      entitiesByPredicate(predicate: $predicate) {
+        entities
+      }
     }`,
     {
       predicate: "code.artifact.type",
@@ -219,20 +223,20 @@ async function assertGraphQLSeededOperations(request, projectKey) {
   );
   expectTriple(byId.get(betaID)?.triples, "code.relationship.calls", alphaID);
 
-  // 4. pathSearch(start, depth, direction[, predicates])
+  // 4. pathSearch(startEntity, maxDepth, direction[, predicates])
   // Routes to graph.query.pathSearch and returns PathSearchResult { entities, paths }.
   const pathSearchUnfiltered = await postGraphQL(
     request,
-    "pathSearch(start, depth, direction)",
-    `query($start: String!, $depth: Int!, $direction: String!) {
-      pathSearch(start: $start, depth: $depth, direction: $direction) {
+    "pathSearch(startEntity, maxDepth, direction)",
+    `query($startEntity: String!, $maxDepth: Int!, $direction: String!) {
+      pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, direction: $direction) {
         entities { id }
         paths { from predicate to }
       }
     }`,
     {
-      start: betaID,
-      depth: 1,
+      startEntity: betaID,
+      maxDepth: 1,
       direction: "OUTGOING",
     },
   );
@@ -245,16 +249,16 @@ async function assertGraphQLSeededOperations(request, projectKey) {
 
   const pathSearchCallsOnly = await postGraphQL(
     request,
-    "pathSearch(start, depth, direction, predicates)",
-    `query($start: String!, $depth: Int!, $direction: String!, $predicates: [String]) {
-      pathSearch(start: $start, depth: $depth, direction: $direction, predicates: $predicates) {
+    "pathSearch(startEntity, maxDepth, direction, predicates)",
+    `query($startEntity: String!, $maxDepth: Int!, $direction: String!, $predicates: [String]) {
+      pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, direction: $direction, predicates: $predicates) {
         entities { id }
         paths { from predicate to }
       }
     }`,
     {
-      start: betaID,
-      depth: 1,
+      startEntity: betaID,
+      maxDepth: 1,
       direction: "OUTGOING",
       predicates: ["code.relationship.calls"],
     },

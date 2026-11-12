@@ -413,7 +413,7 @@ main_suffix=".workspace.golang.function.src-main-go-main"
 
 echo "Checking GraphQL entitiesByPredicate(predicate, value) and entitiesByPredicate(predicate)"
 gql_by_title=$(graphql_post "entitiesByPredicate(predicate, value)" \
-	'{"query":"query($predicate: String!, $value: String!) { entitiesByPredicate(predicate: $predicate, value: $value) }","variables":{"predicate":"dc.terms.title","value":"main"}}')
+	'{"query":"query($predicate: String!, $value: String!) { entitiesByPredicate(predicate: $predicate, value: $value) { entities } }","variables":{"predicate":"dc.terms.title","value":"main"}}')
 if ! printf '%s' "$gql_by_title" | grep -Fq '"entitiesByPredicate":{"entities":['; then
 	echo "entitiesByPredicate(dc.terms.title, main) did not return {\"entities\":[...]} shape: $gql_by_title" >&2
 	exit 1
@@ -427,7 +427,7 @@ authority=${main_entity_id%"$main_suffix"}
 main_file_id="${authority}.workspace.golang.file.src-main-go"
 
 gql_by_type=$(graphql_post "entitiesByPredicate(predicate)" \
-	'{"query":"query($predicate: String!) { entitiesByPredicate(predicate: $predicate) }","variables":{"predicate":"code.artifact.type"}}')
+	'{"query":"query($predicate: String!) { entitiesByPredicate(predicate: $predicate) { entities } }","variables":{"predicate":"code.artifact.type"}}')
 if ! printf '%s' "$gql_by_type" | grep -Fq '"entitiesByPredicate":{"entities":['; then
 	echo "entitiesByPredicate(code.artifact.type) did not return {\"entities\":[...]} shape: $gql_by_type" >&2
 	exit 1
@@ -469,9 +469,9 @@ for expected_fragment in \
 	fi
 done
 
-echo "Checking GraphQL pathSearch(start, depth, direction[, predicates])"
-gql_path_search=$(graphql_post "pathSearch(start, depth, direction, predicates)" \
-	"{\"query\":\"query(\$start: String!, \$depth: Int!, \$direction: String!, \$predicates: [String]) { pathSearch(start: \$start, depth: \$depth, direction: \$direction, predicates: \$predicates) { entities { id } paths { from predicate to } } }\",\"variables\":{\"start\":\"$main_entity_id\",\"depth\":1,\"direction\":\"OUTGOING\",\"predicates\":[\"code.structure.belongs\"]}}")
+echo "Checking GraphQL pathSearch(startEntity, maxDepth, direction[, predicates])"
+gql_path_search=$(graphql_post "pathSearch(startEntity, maxDepth, direction, predicates)" \
+	"{\"query\":\"query(\$startEntity: String!, \$maxDepth: Int!, \$direction: String!, \$predicates: [String]) { pathSearch(startEntity: \$startEntity, maxDepth: \$maxDepth, direction: \$direction, predicates: \$predicates) { entities { id } paths { from predicate to } } }\",\"variables\":{\"startEntity\":\"$main_entity_id\",\"maxDepth\":1,\"direction\":\"OUTGOING\",\"predicates\":[\"code.structure.belongs\"]}}")
 for expected_fragment in \
 	"\"id\":\"$main_entity_id\"" \
 	"\"id\":\"$main_file_id\"" \
