@@ -29,7 +29,7 @@ type GraphConfig struct {
 	// EnablePlayground enables the GraphQL playground UI. Defaults to true.
 	EnablePlayground *bool `json:"enable_playground,omitempty"`
 
-	// EmbedderType is the embedding algorithm ("bm25" or "http"). Defaults to "bm25".
+	// EmbedderType is the embedding mode ("none", "bm25", or "http"). Defaults to "bm25".
 	EmbedderType string `json:"embedder_type,omitempty"`
 
 	// EmbeddingBatchSize is the batch size for embedding generation. Defaults to 50.
@@ -122,10 +122,11 @@ type MetricsConfig struct {
 
 // StreamOverride allows overriding JetStream stream configuration.
 type StreamOverride struct {
-	Storage  string `json:"storage,omitempty"`
-	MaxBytes *int64 `json:"max_bytes,omitempty"`
-	MaxAge   string `json:"max_age,omitempty"`
-	Replicas *int   `json:"replicas,omitempty"`
+	Subjects []string `json:"subjects,omitempty"`
+	Storage  string   `json:"storage,omitempty"`
+	MaxBytes *int64   `json:"max_bytes,omitempty"`
+	MaxAge   string   `json:"max_age,omitempty"`
+	Replicas *int     `json:"replicas,omitempty"`
 
 	// Discard is what happens when the stream reaches MaxBytes or MaxAge:
 	// "old" evicts the oldest messages (the write succeeds and the loss is
@@ -295,7 +296,15 @@ func (c *Config) Validate() error {
 // inert on a tier that runs no clustering, but a bad value there is still a
 // mistake worth reporting at load time rather than at the tier switch.
 func (c *Config) validateGraph() error {
-	if c.Graph == nil || c.Graph.EntityIDEdges == nil {
+	if c.Graph == nil {
+		return nil
+	}
+	switch c.Graph.EmbedderType {
+	case "", "none", "bm25", "http":
+	default:
+		return fmt.Errorf("config: graph.embedder_type %q is invalid (allowed: \"none\", \"bm25\", \"http\")", c.Graph.EmbedderType)
+	}
+	if c.Graph.EntityIDEdges == nil {
 		return nil
 	}
 	e := c.Graph.EntityIDEdges

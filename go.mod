@@ -7,9 +7,9 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/c360studio/semvocab v0.2.2
 	github.com/containerd/errdefs v1.0.0
-	github.com/docker/go-connections v0.8.2
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/minio/minio-go/v7 v7.3.0
+	github.com/moby/moby/api v1.56.1
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/nats-io/nats.go v1.55.0
 	github.com/prometheus/client_golang v1.25.0
@@ -22,8 +22,8 @@ require (
 
 require (
 	github.com/agnivade/levenshtein v1.2.2 // indirect
+	github.com/docker/go-connections v0.8.2 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/moby/moby/api v1.56.1 // indirect
 	github.com/moby/moby/client v0.6.2 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.64 // indirect
 )
@@ -33,7 +33,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/c360studio/semengine v0.1.0-alpha.4
+	github.com/c360studio/semengine v0.1.0-alpha.4.0.20261112145006-7bf638643b98
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	semgraph "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/nats-io/nats.go"
@@ -76,6 +77,14 @@ func classifyFusionHTTPError(origin errorOrigin, err error) fusionHTTPError {
 		}
 	}
 	if isClassified && classified.Class == errs.ErrorInvalid {
+		if classified.Code == semgraph.ErrorCodeNotEnabled {
+			return fusionHTTPError{
+				status:  http.StatusNotImplemented,
+				code:    semgraph.ErrorCodeNotEnabled,
+				class:   "invalid",
+				message: "semantic search is not enabled in this composition",
+			}
+		}
 		return fusionHTTPError{
 			status:  http.StatusBadGateway,
 			code:    "upstream_contract_error",

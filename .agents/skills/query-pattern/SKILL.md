@@ -35,6 +35,8 @@ consumer contracts; raw KV reads must not silently replace a failed public query
   `relationships`, `pathSearch`, `localSearch`, `globalSearch`, `searchGraph`, `summary`); an index behind it
   refuses transient `revision_not_reached` (never waits) so the caller retries.
 - Unavailable providers, transport errors, partial hydration, or `Deferred` are not absence findings.
+  When `graph-query`'s `embedding_enabled` is `false` (no-embedder composition), `semantic` and `similar` are
+  refused with class `invalid` and code `not_enabled`.
 - Apply source/taxonomy scope before result limits. Under ADR-102, taxonomy is segment four; a wildcard
   is not a literal prefix. Use complete admitted scopes, not broad search followed by post-limit filtering.
 - Code/doc fusion and `graph.query.searchGraph` (`localSearch`/`globalSearch` in SemEngine) are distinct

@@ -742,7 +742,11 @@ func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(data, &payload); err == nil {
 		ctx := r.Context()
 		payload["index"] = c.fetchIndexReadiness(ctx, structuralReadinessKey, "structural index")
-		payload["embedding"] = c.fetchIndexReadiness(ctx, semanticReadinessKey, "semantic index")
+		if c.config.semanticEnabled() {
+			payload["embedding"] = c.fetchIndexReadiness(ctx, semanticReadinessKey, "semantic index")
+		} else {
+			payload["embedding"] = disabledIndexReadiness("Semantic index")
+		}
 		payload["note"] = ReadinessNote
 		if merged, mErr := json.Marshal(payload); mErr == nil {
 			data = merged

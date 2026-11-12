@@ -47,9 +47,10 @@ func New() *Lens { return &Lens{} }
 // Name identifies the lens.
 func (*Lens) Name() string { return "docs" }
 
-// ResolveMode routes a path-like query (slash, or a bare doc filename) to prefix
-// and everything else to nl (semantic) — documents are found by meaning over
-// their content, not by symbol name.
+// ResolveMode routes a path-like query (slash, bare doc filename) or a valid
+// dotted entity ID / entity ID prefix to prefix, and everything else to nl
+// (semantic) — documents are found by meaning over their content or by exact
+// entity/path address, not by symbol name.
 func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	q := strings.TrimSpace(query)
 	if strings.ContainsAny(q, " \t\n") {
@@ -58,7 +59,26 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	if strings.ContainsAny(q, "/\\") || source.IsDocExtension(path.Ext(q)) {
 		return fusion.ResolveModePrefix
 	}
+	if isDottedEntityIDOrPrefix(q) {
+		return fusion.ResolveModePrefix
+	}
 	return fusion.ResolveModeNL
+}
+
+func isDottedEntityIDOrPrefix(q string) bool {
+	if !strings.Contains(q, ".") {
+		return false
+	}
+	parts := strings.Split(q, ".")
+	if len(parts) < 2 || len(parts) > 6 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // Edges declares passage containment, so a passage hit resolves to the document

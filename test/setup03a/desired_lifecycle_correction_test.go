@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -28,8 +29,12 @@ func TestDesiredSourceLifecycleWithoutRecovery(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			p := newReplayQualification(t, runtimeAdded)
-			p.h.result.Profile = "bm25-desired-lifecycle-correction"
-			p.h.save("changed-contract.json", []byte(`{"contract":"desired-only source changes; projection unavailable","boundary":"checked graceful application restart; same broker","automatic_source_removal_qualified":false,"positive_reactivation_qualified":false,"providers":"none; frozen BM25 configuration","http_auth":"trusted-network fixture; no token configured"}`))
+			profile := os.Getenv("SETUP03A_PROFILE")
+			if profile == "" {
+				profile = "bm25"
+			}
+			p.h.result.Profile = profile + "-desired-lifecycle-correction"
+			p.h.save("changed-contract.json", []byte(fmt.Sprintf(`{"contract":"desired-only source changes; projection unavailable","boundary":"checked graceful application restart; same broker","automatic_source_removal_qualified":false,"positive_reactivation_qualified":false,"providers":"none; %s configuration","http_auth":"trusted-network fixture; no token configured"}`, profile)))
 			p.correctionNoJournal("fresh_boot_has_no_private_lifecycle_bucket")
 			envelope := p.correctionDesired("initial_complete_desired_envelope_captured", true, "")
 			p.correctionCaptureTargets()

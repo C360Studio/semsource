@@ -27,6 +27,31 @@ func TestModelRegistry_Tier0_NoRegistry_OK(t *testing.T) {
 	}
 }
 
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestModelRegistry_Tier0_None_NoRegistry_OK(t *testing.T) {
+	cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"none"}}`)
+	if err != nil {
+		t.Fatalf("tier-0 none config should be valid without model_registry: %v", err)
+	}
+	if cfg.Graph == nil || cfg.Graph.EmbedderType != "none" {
+		t.Fatalf("expected Graph.EmbedderType == \"none\", got %+v", cfg.Graph)
+	}
+	if cfg.ModelRegistry != nil {
+		t.Fatalf("expected nil ModelRegistry, got %+v", cfg.ModelRegistry)
+	}
+}
+
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestModelRegistry_InvalidEmbedderType_Rejected(t *testing.T) {
+	_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"bogus"}}`)
+	if err == nil {
+		t.Fatal("unknown embedder_type should fail validation")
+	}
+	if !strings.Contains(err.Error(), "embedder_type") {
+		t.Fatalf("error should mention embedder_type, got: %v", err)
+	}
+}
+
 func TestModelRegistry_Tier1_HTTP_RequiresEmbeddingCapability(t *testing.T) {
 	_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"http"}}`)
 	if err == nil {

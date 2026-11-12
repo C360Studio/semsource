@@ -139,11 +139,17 @@ func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ 
 	// surface, so a silent "unknown" here is what makes an agent treat a
 	// still-building index as a genuine absence.
 	idxResp, idxErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphIndex)
-	embResp, embErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphEmbedding)
+	var embJSON json.RawMessage
+	if c.config.semanticEnabled() {
+		embResp, embErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphEmbedding)
+		embJSON = sourcemanifest.IndexReadinessJSON(embResp, embErr, "semantic index")
+	} else {
+		embJSON = sourcemanifest.DisabledIndexReadinessJSON("semantic index")
+	}
 	out := map[string]any{
 		"status":    json.RawMessage(statusResp),
 		"index":     sourcemanifest.IndexReadinessJSON(idxResp, idxErr, "structural index"),
-		"embedding": sourcemanifest.IndexReadinessJSON(embResp, embErr, "semantic index"),
+		"embedding": embJSON,
 		"note":      sourcemanifest.ReadinessNote,
 	}
 	data, err := json.Marshal(out)

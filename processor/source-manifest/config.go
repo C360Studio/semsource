@@ -29,6 +29,15 @@ type Config struct {
 
 	// HeartbeatInterval is how often to re-publish status. Defaults to "30s".
 	HeartbeatInterval string `json:"heartbeat_interval,omitempty" schema:"type:string,description:Status heartbeat interval,category:advanced"`
+
+	// SemanticEnabled reports whether the composition runs graph-embedding.
+	// Nil defaults to true; false reports semantic_index as disabled (not_enabled)
+	// and code_search as unsupported (not_enabled) without polling GRAPH_STATUS/graph-embedding.
+	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
+}
+
+func (c *Config) semanticEnabled() bool {
+	return c.SemanticEnabled == nil || *c.SemanticEnabled
 }
 
 // ManifestSource is the external-facing representation of a configured source.

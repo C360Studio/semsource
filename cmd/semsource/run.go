@@ -688,12 +688,16 @@ func supersessionComponentConfig() (types.ComponentConfig, error) {
 // token is NOT set here — the component reads SEMSOURCE_API_TOKEN from the
 // environment so the secret never lands in the config KV.
 func mcpGatewayComponentConfig(cfg *config.Config) (types.ComponentConfig, error) {
-	raw, err := json.Marshal(map[string]any{
+	cfgMap := map[string]any{
 		"namespace":     cfg.Namespace,
 		"mcp_path":      "/mcp",
 		"allowed_roots": cfg.SourceRoots,
 		"instance_name": "mcp-gateway",
-	})
+	}
+	if cfg != nil && cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
+		cfgMap["semantic_enabled"] = false
+	}
+	raw, err := json.Marshal(cfgMap)
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("marshal mcp-gateway config: %w", err)
 	}
@@ -711,7 +715,7 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	for _, src := range cfg.Sources {
 		manifestSources = append(manifestSources, sourcemanifest.ManifestSourceFromEntry(src))
 	}
-	raw, err := json.Marshal(map[string]any{
+	cfgMap := map[string]any{
 		"ports": map[string]any{
 			"outputs": []component.PortDefinition{
 				{
@@ -735,7 +739,11 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 		"namespace":             org,
 		"sources":               manifestSources,
 		"expected_source_count": sourceCount,
-	})
+	}
+	if cfg != nil && cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
+		cfgMap["semantic_enabled"] = false
+	}
+	raw, err := json.Marshal(cfgMap)
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("marshal source-manifest config: %w", err)
 	}
@@ -748,7 +756,7 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 }
 
 // graphSubsystemComponents returns the built-in semengine graph components:
-// ingest, index, query, and gateway.
+// ingest, index, query, and gateway (plus graph-embedding when embedder_type != "none").
 func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, error) {
 	// Resolve graph config with defaults.
 	embedderType := "bm25"
@@ -767,6 +775,27 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			indexWorkers = g.IndexWorkers
 		}
 		enableClustering = g.EnableClustering
+	}
+
+	graphQueryConfig := map[string]any{
+		"ports": map[string]any{
+			"inputs": []component.PortDefinition{
+				{
+					Name:     "graph_queries",
+					Required: true,
+					Config: component.NATSRequestPort{
+						Subject: "graph.query.*",
+						Interface: &component.InterfaceContract{
+							Type:    "graph.query",
+							Version: "v1",
+						},
+					},
+				},
+			},
+		},
+	}
+	if embedderType == "none" {
+		graphQueryConfig["embedding_enabled"] = false
 	}
 
 	configs := map[string]struct {
@@ -827,51 +856,13 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				// the entity watch and every index write itself.
 			},
 		},
-		"graph-embedding": {
-			name:     "graph-embedding",
-			compType: types.ComponentTypeProcessor,
-			configMap: map[string]any{
-				"coalesce_ms":   coalesceMs,
-				"embedder_type": embedderType,
-				// graph-embedding embeds a triple's value only when its predicate
-				// ends with a text_suffix. A non-empty list REPLACES the built-in
-				// defaults, so we restate them and add the code doc predicates
-				// (code.doc.signature, code.doc.comment) — otherwise code entities
-				// embed dc.terms.title (the symbol name) ALONE, and signatures /
-				// docstrings never enter the semantic index.
-				"text_suffixes": []string{
-					".title", ".content", ".description", ".summary", ".text",
-					".name", ".body", ".abstract", ".subject",
-					".signature", ".comment",
-				},
-				// Ports come from graph-embedding's DefaultConfig (entity watch +
-				// content_store read); its durable writes are direct bucket
-				// writes at Start, never ports.
-			},
-		},
 		"graph-query": {
 			name:     "graph-query",
 			compType: types.ComponentTypeProcessor,
 			// The ComponentManager path applies no defaults: the single
 			// graph.query.* family request port is restated exactly as
 			// graph-query's DefaultConfig declares it.
-			configMap: map[string]any{
-				"ports": map[string]any{
-					"inputs": []component.PortDefinition{
-						{
-							Name:     "graph_queries",
-							Required: true,
-							Config: component.NATSRequestPort{
-								Subject: "graph.query.*",
-								Interface: &component.InterfaceContract{
-									Type:    "graph.query",
-									Version: "v1",
-								},
-							},
-						},
-					},
-				},
-			},
+			configMap: graphQueryConfig,
 		},
 		"graph-gateway": {
 			name:     "graph-gateway",
@@ -909,6 +900,35 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				"bucket_name": "CONTENT",
 			},
 		},
+	}
+
+	if embedderType != "none" {
+		configs["graph-embedding"] = struct {
+			name      string
+			compType  types.ComponentType
+			configMap map[string]any
+		}{
+			name:     "graph-embedding",
+			compType: types.ComponentTypeProcessor,
+			configMap: map[string]any{
+				"coalesce_ms":   coalesceMs,
+				"embedder_type": embedderType,
+				// graph-embedding embeds a triple's value only when its predicate
+				// ends with a text_suffix. A non-empty list REPLACES the built-in
+				// defaults, so we restate them and add the code doc predicates
+				// (code.doc.signature, code.doc.comment) — otherwise code entities
+				// embed dc.terms.title (the symbol name) ALONE, and signatures /
+				// docstrings never enter the semantic index.
+				"text_suffixes": []string{
+					".title", ".content", ".description", ".summary", ".text",
+					".name", ".body", ".abstract", ".subject",
+					".signature", ".comment",
+				},
+				// Ports come from graph-embedding's DefaultConfig (entity watch +
+				// content_store read); its durable writes are direct bucket
+				// writes at Start, never ports.
+			},
+		}
 	}
 
 	// graph-clustering (opt-in via graph.enable_clustering): entity-ID prefix
@@ -978,6 +998,9 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 	}
 
 	if override, ok := cfg.Streams["GRAPH"]; ok {
+		if len(override.Subjects) > 0 {
+			sc.Subjects = override.Subjects
+		}
 		if override.Storage != "" {
 			sc.Storage = override.Storage
 		}

@@ -147,6 +147,19 @@ func TestFusionHTTPErrorContract_DependencyFailures(t *testing.T) {
 			}
 		})
 	}
+
+	// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+	t.Run("not enabled", func(t *testing.T) {
+		g := &errorGraph{
+			MemGraph:   fusiontest.NewMemGraph(),
+			resolveErr: errs.ClassifiedCode(errs.ErrorInvalid, semgraph.ErrorCodeNotEnabled, errors.New("embedding disabled")),
+		}
+		c := newTestComponent("code", g, fusiontest.NewMemStore())
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/code-context/search", strings.NewReader(`{"query":"cobalt lantern routing"}`))
+		c.handleHTTP(rec, req, "search")
+		assertHTTPError(t, rec, http.StatusNotImplemented, semgraph.ErrorCodeNotEnabled, "invalid", false)
+	})
 }
 
 func TestFusionHTTPErrorContract_LocalFailures(t *testing.T) {

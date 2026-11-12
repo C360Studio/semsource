@@ -14,10 +14,17 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Exact document and passage body retrieval without embeddings
 func TestResolveMode(t *testing.T) {
 	l := New()
 	if l.ResolveMode("docs/retry.md") != fusion.ResolveModePrefix {
 		t.Error("path should resolve via prefix")
+	}
+	if l.ResolveMode("setup03a.semsource-1.setup03a-docs.web") != fusion.ResolveModePrefix {
+		t.Error("governed entity ID prefix should resolve via prefix")
+	}
+	if l.ResolveMode("setup03a.semsource-1.setup03a-docs.web.doc.routing-md") != fusion.ResolveModePrefix {
+		t.Error("governed 6-part entity ID should resolve via prefix")
 	}
 	if l.ResolveMode("how does retry work") != fusion.ResolveModeNL {
 		t.Error("NL should resolve via semantic")

@@ -389,6 +389,40 @@ func TestGraphSubsystemComponents_GraphEmbeddingDefersToDefaultPorts(t *testing.
 	}
 }
 
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestGraphSubsystemComponents_EmbedderNoneOmitsGraphEmbeddingAndDisablesQueryEmbeddings(t *testing.T) {
+	cfg := &config.Config{
+		Namespace: "acme",
+		Graph:     &config.GraphConfig{EmbedderType: "none"},
+	}
+	ssCfg, err := buildSemstreamsConfig(cfg, "acme")
+	if err != nil {
+		t.Fatalf("buildSemstreamsConfig() error = %v", err)
+	}
+
+	if _, ok := ssCfg.Components["graph-embedding"]; ok {
+		t.Fatal("graph-embedding must not be instantiated when embedder_type is none")
+	}
+
+	var queryRaw map[string]any
+	if err := json.Unmarshal(ssCfg.Components["graph-query"].Config, &queryRaw); err != nil {
+		t.Fatalf("unmarshal graph-query config: %v", err)
+	}
+	if enabled, ok := queryRaw["embedding_enabled"].(bool); !ok || enabled {
+		t.Fatalf("graph-query embedding_enabled = %v, want false", queryRaw["embedding_enabled"])
+	}
+
+	for _, compName := range []string{"source-manifest", "mcp-gateway"} {
+		var raw map[string]any
+		if err := json.Unmarshal(ssCfg.Components[compName].Config, &raw); err != nil {
+			t.Fatalf("unmarshal %s config: %v", compName, err)
+		}
+		if enabled, ok := raw["semantic_enabled"].(bool); !ok || enabled {
+			t.Fatalf("%s semantic_enabled = %v, want false", compName, raw["semantic_enabled"])
+		}
+	}
+}
+
 // TestWebsocketComponentConfig_PathReachesTheComponent guards the restored
 // websocket_path wiring (semstreams beta.161 / #945): the configured path must
 // land in the component JSON, and the default must stay the documented "/ws"

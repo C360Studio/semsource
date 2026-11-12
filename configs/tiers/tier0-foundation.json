@@ -1,0 +1,12 @@
+{
+  "namespace": "acme",
+  "sources": [
+    { "type": "ast", "path": "/workspace", "languages": ["go", "typescript", "javascript", "java", "python", "svelte"], "watch": false }
+  ],
+  "source_roots": ["/workspace"],
+  "graph": {
+    "embedder_type": "none",
+    "index_workers": 4,
+    "coalesce_ms": 200
+  }
+}

@@ -28,13 +28,24 @@ func TestSourceRemovalLifecycle(t *testing.T) {
 	if binary == "" || out == "" || (activation != "runtime" && activation != "restart") {
 		t.Fatal("SETUP03A_BINARY, SETUP03A_OUT and SETUP03A_REMOVAL_ACTIVATION=runtime|restart are required")
 	}
+	profile := os.Getenv("SETUP03A_PROFILE")
+	if profile == "" {
+		profile = "bm25"
+	}
+	if profile != "foundation" && profile != "bm25" {
+		t.Fatalf("unknown removal profile %q", profile)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	h := &harness{t: t, ctx: ctx, out: out, binary: binary}
 	if err := os.MkdirAll(out, 0755); err != nil {
 		t.Fatal(err)
 	}
-	h.result = report{CorpusVersion: "1", Profile: "bm25-source-removal", SemEngineSlices: []int{0, 1}, Started: time.Now().UTC()}
+	slices := []int{0, 1}
+	if profile == "foundation" {
+		slices = []int{0}
+	}
+	h.result = report{CorpusVersion: "1", Profile: profile + "-source-removal", SemEngineSlices: slices, Started: time.Now().UTC()}
 	defer h.finish()
 	binaryBytes, err := os.ReadFile(binary)
 	if err != nil {
@@ -44,7 +55,7 @@ func TestSourceRemovalLifecycle(t *testing.T) {
 	h.result.BinarySHA256 = hex.EncodeToString(sum[:])
 	h.fixture()
 	h.broker()
-	h.configure("bm25")
+	h.configure(profile)
 	h.start()
 	var instance string
 	if !h.check("removal_initial_settled_sources", 45*time.Second, func() (any, error) {

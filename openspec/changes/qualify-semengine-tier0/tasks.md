@@ -11,58 +11,70 @@
 - [x] Obtain independent review of the bounded consumer design and its prerequisite/acceptance mapping.
   Architect and independent reviewer approve planning only; strict OpenSpec and formatting checks pass.
   Implementation still requires the separate engine admission gate below.
-- [ ] Record approved 03B contracts, package scope, relevant #15–#20 repair/decision dispositions and
+- [x] Record approved 03B contracts, package scope, relevant #15–#20 repair/decision dispositions and
   the exact admitted usable SemEngine Tier 0 commit before implementation begins.
-  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`; #15–#20
-  and #69 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`, including the
-  2026-11-12 closures of `semengine#15` for stream/bucket generation tracking and `semengine#16` for
-  boot-time refusal of stream filters overlapping reserved graph RPC subjects).
+  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`; #15–#20,
+  #69, and #579 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`, including
+  the 2026-11-12 closures of `semengine#15` for stream/bucket generation tracking, `semengine#16` for
+  boot-time refusal of stream filters overlapping reserved graph RPC subjects, and `semengine#579` in
+  PR #603 at `7bf638643b98b4346101fabb39a1d016a7a15e7b` for `graph-query` `embedding_enabled: false`
+  returning `not_enabled` class `invalid`).
   The [2026-11-08 pin ruling](https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898)
-  (amended on #9 / #557) and all 4 remaining package admissions (`pkg/buffer` #566,
-  `gateway/graph-gateway` #567, `output/websocket` #34, `processor/graph-clustering` #9) are met by
-  `v0.1.0-alpha.4` at `9f7f5adc86368a0a251e3c12960a9e59274de666`
-  (tag object `060c31ad3231401b7ec8deaca6429c4daec93a5a`, 2026-11-11). On this qualification branch,
-  the `go.mod` `semstreams -> semengine` swap and consumer port tasks #231 (`manager.StartAll(signalCtx)`),
-  #232 (`task agents:check` + decision skills re-pinned to `semengine@v0.1.0-alpha.4`),
-  #253 (Fusion contract v2 + `fusion.Resolution` + UI v2 parser), #256 (`semengine` outward identifiers),
-  and #257 (`semvocab v0.2.2` + CCO v2.2 / BFO 2020 class and relation adoption) are complete.
-  Hold: full 04A Tier 0 qualification (#221) awaits upstream `semengine#579` (in work; owner ruled
-  2026-11-12 on `embedding_enabled` defaulting to `true` and refusing `semantic`/`similar` with
-  `not_enabled` class `invalid` when `embedding_enabled: false`).
+  (amended on #9 / #557), all 4 package admissions (`pkg/buffer` #566, `gateway/graph-gateway` #567,
+  `output/websocket` #34, `processor/graph-clustering` #9), and #15/#16/#579 are met by
+  `github.com/c360studio/semengine v0.1.0-alpha.4.0.20261112145006-7bf638643b98`
+  (commit `7bf638643b98b4346101fabb39a1d016a7a15e7b`, 2026-11-12).
 
 ## 2. Future implementation after admission
 
 - [x] Migrate the separate qualification branch to SemEngine exclusively; prove no SemStreams runtime
   or mixed-substrate binary, and measure production/test closure against the admitted Tier 0 boundary.
-- [ ] Implement a true no-embedder composition and capability-appropriate readiness/public interfaces
-  using admitted contracts, with failing-first tests for changed consumer behavior.
-- [ ] Add an explicit graph-foundation corpus selection without weakening existing known answers or
-  incorrectly requiring lexical/neural APIs; retain the original BM25/neural reference workload.
-- [ ] Qualify an admitted public exact document/passage body path; the current corpus selects document
-  bodies through NL retrieval. Preserve exact bytes and bodyless-parent semantics without a private-store shortcut.
-- [ ] Prove structural readiness and authoritative absence with no embedder present; expose unsupported
-  retrieval capabilities honestly and test that no model service is required.
-- [ ] Preserve the Enabled:false envelope until the admitted SemEngine #17 contract passes its
-  removal/restart/re-add proof; record #18–#20 decisions and their consumer consequences honestly.
+- [x] Implement a true no-embedder composition and capability-appropriate readiness/public interfaces
+  using admitted contracts, with failing-first tests for changed consumer behavior (`configs/tiers/tier0-foundation.json`,
+  `embedder_type: "none"` omitting `graph-embedding` and setting `embedding_enabled: false` on `graph-query`
+  and `semantic_enabled: false` on `source-manifest` / `mcp-gateway`; HTTP 501 `not_enabled` on
+  `/code-context/search` and `/doc-context/*` NL queries).
+- [x] Add an explicit graph-foundation corpus selection without weakening existing known answers or
+  incorrectly requiring lexical/neural APIs; retain the original BM25/neural reference workload
+  (`SETUP03A_PROFILE=foundation`, `SemEngineSlices: [0]`).
+- [x] Qualify an admitted public exact document/passage body path; the current corpus selects document
+  bodies through NL retrieval. Preserve exact bytes and bodyless-parent semantics without a private-store shortcut
+  (`docs.Lens.ResolveMode` routes dotted entity IDs and entity ID prefixes to `fusion.ResolveModePrefix` over
+  `POST /doc-context/context`, preserving empty parent body + `passage` containment relations and byte-exact
+  passage hydration from `CONTENT`).
+- [x] Prove structural readiness and authoritative absence with no embedder present; expose unsupported
+  retrieval capabilities honestly and test that no model service is required (`cold_semantic_disabled_contract`,
+  `warm_semantic_disabled_contract`, `cold_exact_absence`, `warm_exact_absence`).
+- [x] Preserve the Enabled:false envelope until the admitted SemEngine #17 contract passes its
+  removal/restart/re-add proof; record #18–#20 decisions and their consumer consequences honestly
+  (`TestDesiredSourceLifecycleWithoutRecovery` passes `original` 33/33 and `runtime_added` 37/37 on
+  `SETUP03A_PROFILE=foundation SETUP03A_IDENTITY=governed`).
 
 ## 3. Qualification and handoff
 
-- [ ] Pass graph ingestion, identity, metadata/provenance, exact queries and bodies, updates,
-  deletion/recreation, application restart and broker re-ingestion through admitted public interfaces.
-- [ ] Require `broker_restart_reingested_exact_relationship` and
-  `broker_restart_reingested_exact_content` to pass; no known-at-pin waiver applies to SemEngine.
-- [ ] Qualify #16's admitted reserved-RPC/startup-refusal contract using new engine assertions; preserve
-  the historical PubAck-collision reproduction without counting hazard reproduction as an engine pass.
-- [ ] Record exact consumer/engine commits, binary/corpus/configuration hashes, commands, results and
+- [x] Pass graph ingestion, identity, metadata/provenance, exact queries and bodies, updates,
+  deletion/recreation, application restart and broker re-ingestion through admitted public interfaces
+  (`TestKnownAnswerCorpus` 64/64 observations pass on `SETUP03A_PROFILE=foundation SETUP03A_IDENTITY=governed`).
+- [x] Require `broker_restart_reingested_exact_relationship` and
+  `broker_restart_reingested_exact_content` to pass; no known-at-pin waiver applies to SemEngine
+  (both pass in `TestKnownAnswerCorpus`; `restart-guard.json` records 16-byte `applied_generation` +
+  `applied_sequence`).
+- [x] Qualify #16's admitted reserved-RPC/startup-refusal contract using new engine assertions; preserve
+  the historical PubAck-collision reproduction without counting hazard reproduction as an engine pass
+  (`rpc_wildcard_collision_reproduced` + `rpc_wildcard_startup_refused` pass in `TestKnownAnswerCorpus`).
+- [x] Record exact consumer/engine commits, binary/corpus/configuration hashes, commands, results and
   production/tagged-test closures. Reject unadmitted dependencies and distinguish captured build
-  provenance from embedded binary revision metadata.
-- [ ] Assert graceful application exit zero, intentional crash signals and exact owned broker cleanup;
-  reuse the checked-stop behavior rather than inheriting the original probe's unasserted wait result.
+  provenance from embedded binary revision metadata (`docs/upstream/semengine-port-ledger.md`).
+- [x] Assert graceful application exit zero, intentional crash signals and exact owned broker cleanup;
+  reuse the checked-stop behavior rather than inheriting the original probe's unasserted wait result
+  (`application_restart_checked_exit`, `pending_broker_restart_forced_exit`, `rpc_collision_checked_exit`,
+  `cleanup_checked_process_exit`, and zero leaked `semsource.qualification=setup03a` containers).
 - [ ] Perform the separately admitted SemConnect reference and engine dogfood workloads; code/docs
   corpus results do not establish those distinct obligations.
 - [ ] Obtain independent Go/component and graph/event sign-off on implementation and exact qualification.
 - [ ] Retain Tier 0 as a lower-profile regression obligation for 04B/04C; mainline stays on SemStreams
   until the complete semembed-backed workload and retained lower-profile gates pass.
 
-Current stop point: task 1.5, engine admission. Owner proposal approval is recorded; implementation
-awaits the admitted consumer pin and its exact SHA. Tier qualification retains every acceptance gate.
+Current stop point: task 3.6–3.8, independent sign-off on Draft PR #222 and the separately tracked
+SemConnect/dogfood and 04B/04C regression gates. Tier 0 consumer implementation and `test/setup03a`
+`foundation` qualification are complete against `semengine v0.1.0-alpha.4.0.20261112145006-7bf638643b98`.

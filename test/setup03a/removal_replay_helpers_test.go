@@ -120,8 +120,12 @@ func newReplayQualification(t *testing.T, runtimeAdded bool) *replayQualificatio
 	if binary == "" || base == "" || os.Getenv("SETUP03A_IDENTITY") != "governed" {
 		t.Fatal("SETUP03A_BINARY, SETUP03A_OUT and SETUP03A_IDENTITY=governed are required")
 	}
-	if profile := os.Getenv("SETUP03A_PROFILE"); profile != "" && profile != "bm25" {
-		t.Fatal("removal replay process proof requires BM25")
+	profile := os.Getenv("SETUP03A_PROFILE")
+	if profile == "" {
+		profile = "bm25"
+	}
+	if profile != "foundation" && profile != "bm25" {
+		t.Fatalf("removal replay process proof requires foundation or bm25, got %q", profile)
 	}
 	if err := os.MkdirAll(base, 0755); err != nil {
 		t.Fatal(err)
@@ -141,7 +145,11 @@ func newReplayQualification(t *testing.T, runtimeAdded bool) *replayQualificatio
 		}
 		h.finish()
 	})
-	h.result = report{CorpusVersion: "removal-replay-v1", Profile: "bm25-removal-replay", SemEngineSlices: []int{0, 1}, Started: time.Now().UTC()}
+	slices := []int{0, 1}
+	if profile == "foundation" {
+		slices = []int{0}
+	}
+	h.result = report{CorpusVersion: "removal-replay-v1", Profile: profile + "-removal-replay", SemEngineSlices: slices, Started: time.Now().UTC()}
 	b, err := os.ReadFile(binary)
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +163,7 @@ func newReplayQualification(t *testing.T, runtimeAdded bool) *replayQualificatio
 	p.targetPath = filepath.Join(h.source, "target")
 	h.result.CorpusSHA256 = replayTreeHash(t, h.source)
 	h.broker()
-	h.configure("bm25")
+	h.configure(profile)
 	cfg := h.result.Configuration
 	baseSources := cfg["sources"].([]map[string]any)
 	sources := []map[string]any{baseSources[0], {"type": "docs", "paths": []string{filepath.Join(h.source, "sibling")}, "project": "removal-sibling", "watch": true}}
