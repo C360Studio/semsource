@@ -34,8 +34,11 @@
 > `cco.MaterialCopyOfDocument` (`ont00001298`), `cco.Identifier` →
 > `cco.DesignativeInformationContentEntity` (`ont00000686`), and `cco.Specification`
 > / `cco.SoftwareCode` → `cco.PrescriptiveInformationContentEntity` (`ont00000965`,
-> direct parent of `cco.Algorithm` at depth 3 vs `Algorithm` depth 4, preserving
-> function/method specificity under `fusionvocab.New(cco.Parents)`).
+> direct parent of `cco.Algorithm` at depth 4 vs `Algorithm` depth 5 in CCO v2.2,
+> preserving function/method specificity under `fusionvocab.New(cco.Parents)`;
+> note also that in CCO v2.2 `cco.Person` sits at depth 7 vs 5 in CCO 1.x, and
+> `PrescriptiveInformationContentEntity` / `DesignativeInformationContentEntity`
+> sit at depth 4 vs 5 in CCO 1.x).
 
 ## Context
 

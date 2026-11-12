@@ -262,6 +262,12 @@ func setupNATS(
 		return nil, nil, errors.Join(err, nc.Close(closeCtx))
 	}
 
+	if err := checkLegacySemStreamsConfig(ctx, nc, cfg.Namespace, cfg.PlatformStem()); err != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return nil, nil, errors.Join(err, nc.Close(closeCtx))
+	}
+
 	ssCfg, err := buildSemstreamsConfig(cfg, cfg.Namespace)
 	if err != nil {
 		nc.Close(context.Background())
@@ -838,21 +844,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			configMap: map[string]any{
 				// SemEngine graph-gateway serves HTTP on the shared ServiceManager
 				// mux and requests only the required graph_queries output port.
-				"ports": map[string]any{
-					"outputs": []component.PortDefinition{
-						{
-							Name:     "graph_queries",
-							Required: true,
-							Config: component.NATSRequestPort{
-								Subject: "graph.query.*",
-								Interface: &component.InterfaceContract{
-									Type:    "graph.query",
-									Version: "v1",
-								},
-							},
-						},
-					},
-				},
+				"ports": graphgateway.DefaultConfig().Ports,
 			},
 		},
 		// objectstore backs location-independent verbatim content (code/text

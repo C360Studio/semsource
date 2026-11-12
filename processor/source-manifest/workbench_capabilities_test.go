@@ -229,9 +229,14 @@ func TestWorkbenchCapabilities_SemanticDisabledReportsNotEnabledWithoutQueryingE
 		t.Fatalf("semantic_index readiness = %+v", got.Readiness.SemanticIndex)
 	}
 	assertUnsupported(t, got.Queries["code_search"], semgraph.ErrorCodeNotEnabled)
-	if got.Queries["code_context"].Availability != capabilityReady ||
-		got.Queries["doc_context"].Availability != capabilityReady {
-		t.Fatalf("structural queries should stay ready: %+v", got.Queries)
+	if got.Queries["code_context"].Availability != capabilityReady {
+		t.Fatalf("code_context should stay ready: %+v", got.Queries["code_context"])
+	}
+	if got.Queries["doc_context"].Availability != capabilityPartial ||
+		got.Queries["doc_context"].Reason == nil ||
+		got.Queries["doc_context"].Reason.Code != semgraph.ErrorCodeNotEnabled ||
+		got.Queries["doc_context"].Reason.Retryable {
+		t.Fatalf("doc_context should report partial/not_enabled when semantic search is disabled: %+v", got.Queries["doc_context"])
 	}
 }
 

@@ -140,3 +140,31 @@ func TestRootRefusesBeforeProvisioning(t *testing.T) {
 		t.Fatalf("root changed legacy record: %v", err)
 	}
 }
+
+func TestRootRefusesLegacySemStreamsConfigBeforeProvisioning(t *testing.T) {
+	tc := natstest.New(t, natstest.WithJetStream())
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	legacyBucketName, err := legacySemStreamsConfigBucket("acme", "semsource")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := tc.Client.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{Bucket: legacyBucketName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bucket.Put(ctx, "components.doc-source-runtime", []byte(`{"name":"doc-source"}`)); err != nil {
+		t.Fatal(err)
+	}
+	nc, _, err := setupNATS(ctx, tc.URL, &config.Config{Namespace: "acme"}, slog.Default(), 0, nil)
+	if err == nil || nc != nil {
+		t.Fatal("root admitted incompatible SemStreams config bucket")
+	}
+	if _, err := tc.Client.GetStream(ctx, "GRAPH"); !errors.Is(err, jetstream.ErrStreamNotFound) {
+		t.Fatalf("root provisioned GRAPH before legacy SemStreams config guard: %v", err)
+	}
+	entry, err := bucket.Get(ctx, "components.doc-source-runtime")
+	if err != nil || string(entry.Value()) != `{"name":"doc-source"}` {
+		t.Fatalf("root changed legacy SemStreams config record: %v", err)
+	}
+}

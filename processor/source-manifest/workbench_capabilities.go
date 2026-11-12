@@ -150,8 +150,18 @@ func (c *Component) buildWorkbenchCapabilities(structural, semantic workbenchInd
 
 	codeSearch := capabilityForSignal(http.MethodPost, "/code-context/search",
 		"semantic_index", semantic.Ready, semantic.Reason)
+	docContext := capabilityForSignal(http.MethodPost, "/doc-context/context",
+		"structural_index", structural.Ready, structural.Reason)
 	if !c.config.semanticEnabled() {
 		codeSearch = unsupportedCapability("not_enabled", "Semantic search is not enabled in this composition")
+		if structural.Ready {
+			docContext.Availability = capabilityPartial
+			docContext.Reason = &workbenchCapabilityReason{
+				Code:      "not_enabled",
+				Message:   "Natural-language document queries require semantic search; only path and entity-ID prefix queries are available",
+				Retryable: false,
+			}
+		}
 	}
 
 	queries := map[string]workbenchCapability{
@@ -168,8 +178,7 @@ func (c *Component) buildWorkbenchCapabilities(structural, semantic workbenchInd
 		"code_impact": capabilityForSignal(http.MethodPost, "/code-context/impact",
 			"structural_index", structural.Ready, structural.Reason),
 		"code_search": codeSearch,
-		"doc_context": capabilityForSignal(http.MethodPost, "/doc-context/context",
-			"structural_index", structural.Ready, structural.Reason),
+		"doc_context": docContext,
 		"graph_projection": capabilityForSignal(http.MethodPost, "/code-context/context",
 			"structural_index", structural.Ready, structural.Reason),
 	}

@@ -1,9 +1,9 @@
-export type Availability = "ready" | "not_ready" | "unsupported";
+export type Availability = "ready" | "partial" | "not_ready" | "unsupported";
 import { isRFC3339 } from "./validation";
 export type OverallReadiness = "ready" | "partial";
 export type SourceReadinessState = "ready" | "seeding" | "degraded" | "unknown";
 export type IndexReadinessState =
-  "ready" | "building" | "degraded" | "reset_required" | "unknown";
+  "ready" | "building" | "degraded" | "reset_required" | "disabled" | "unknown";
 
 export class CapabilityContractError extends Error {
   constructor(
@@ -89,7 +89,9 @@ function capability(value: unknown): Capability {
   const item = record(value);
   if (
     !item ||
-    !["ready", "not_ready", "unsupported"].includes(String(item.availability))
+    !["ready", "partial", "not_ready", "unsupported"].includes(
+      String(item.availability),
+    )
   )
     fail("malformed capability");
   if (item.method !== undefined && typeof item.method !== "string")
@@ -105,7 +107,9 @@ function capability(value: unknown): Capability {
   return {
     availability: item.availability as Availability,
     method: item.method as string | undefined,
-    href: item.href as string | undefined,
+    href: item.method
+      ? (item.href as string | undefined)
+      : (item.href as string | undefined),
     readiness: item.readiness as string[] | undefined,
     reason: reason(item.reason),
   };
@@ -146,7 +150,14 @@ function readinessSignal(
   const states =
     kind === "source"
       ? ["ready", "seeding", "degraded", "unknown"]
-      : ["ready", "building", "degraded", "reset_required", "unknown"];
+      : [
+          "ready",
+          "building",
+          "degraded",
+          "reset_required",
+          "disabled",
+          "unknown",
+        ];
   if (
     !item ||
     typeof item.available !== "boolean" ||

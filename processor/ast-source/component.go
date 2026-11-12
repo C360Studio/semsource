@@ -309,13 +309,14 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
-	c.publisher.Start(ctx)
+	runCtx := context.WithoutCancel(ctx)
+	c.publisher.Start(runCtx)
 	c.initBodyStore(ctx)
 
 	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
 
-	c.startProgressReporting(ctx)
+	c.startProgressReporting(runCtx)
 
 	// Everything from here is unbounded — the path retry alone is ~30 attempts —
 	// so it runs in a supervised goroutine and Start returns. Holding the
@@ -324,7 +325,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// at all (semstreams#867): the surfaces stay dark for the whole seed, which
 	// is exactly when an operator needs them.
 	c.markRunning()
-	c.seed.Start(ctx, c.logger, c.runSeed)
+	c.seed.Start(runCtx, c.logger, c.runSeed)
 	return nil
 }
 
@@ -480,7 +481,7 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 		return nil, fmt.Errorf("failed to start watcher: %w", err)
 	}
 
-	watchCtx, cancel := context.WithCancel(ctx)
+	watchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		for {
@@ -554,7 +555,7 @@ func (c *Component) startPeriodicIndex(ctx context.Context) context.CancelFunc {
 		return nil
 	}
 
-	indexCtx, cancel := context.WithCancel(ctx)
+	indexCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		ticker := time.NewTicker(interval)
@@ -1005,7 +1006,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // component's status so the source-manifest component always has fresh data.
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
-	rCtx, cancel := context.WithCancel(ctx)
+	rCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	c.workers.Go(func() {
 		ticker := time.NewTicker(statusReportInterval)
 		defer ticker.Stop()

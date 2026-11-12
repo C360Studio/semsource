@@ -20,6 +20,9 @@ func TestResolveMode(t *testing.T) {
 	if l.ResolveMode("docs/retry.md") != fusion.ResolveModePrefix {
 		t.Error("path should resolve via prefix")
 	}
+	if l.ResolveMode("setup03a.semsource.web.setup03a-docs") != fusion.ResolveModePrefix {
+		t.Error("canonical web-domain entity ID prefix should resolve via prefix")
+	}
 	if l.ResolveMode("setup03a.semsource-1.setup03a-docs.web") != fusion.ResolveModePrefix {
 		t.Error("governed entity ID prefix should resolve via prefix")
 	}
@@ -32,7 +35,17 @@ func TestResolveMode(t *testing.T) {
 	if l.ResolveMode("retry") != fusion.ResolveModeNL {
 		t.Error("single term should resolve via semantic (doc content), not symbol")
 	}
-	for _, nlToken := range []string{"net.http", "node.js", "graph.query", "v1.2"} {
+	for _, nlToken := range []string{
+		"net.http",
+		"node.js",
+		"graph.query",
+		"v1.2",
+		"v1.2.3",
+		"v1.0.0-beta.162",
+		"10.0.0.1",
+		"org.sensorhub.impl.sensor",
+		"api.v2.example.com",
+	} {
 		if l.ResolveMode(nlToken) != fusion.ResolveModeNL {
 			t.Errorf("ordinary dotted token %q should resolve via semantic, not entity prefix", nlToken)
 		}

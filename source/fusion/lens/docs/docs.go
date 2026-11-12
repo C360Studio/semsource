@@ -70,6 +70,9 @@ func isDottedEntityIDOrPrefix(q string) bool {
 	if len(parts) < 4 || len(parts) > 6 {
 		return false
 	}
+	if parts[2] != "web" && parts[3] != "web" {
+		return false
+	}
 	return message.IsValidEntityID(q + strings.Repeat(".a", 6-len(parts)))
 }
 

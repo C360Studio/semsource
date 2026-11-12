@@ -262,8 +262,8 @@ func (c *Component) startStatusAggregation(ctx context.Context) error {
 	}
 
 	// Subscribe to internal status reports from source components.
-	sub, err := c.client.Subscribe(ctx, statusReportSubject, func(_ context.Context, msg *nats.Msg) {
-		c.handleStatusReport(ctx, msg.Data)
+	sub, err := c.client.Subscribe(ctx, statusReportSubject, func(msgCtx context.Context, msg *nats.Msg) {
+		c.handleStatusReport(msgCtx, msg.Data)
 	})
 	if err != nil {
 		return fmt.Errorf("subscribe %s: %w", statusReportSubject, err)
@@ -294,10 +294,11 @@ func (c *Component) startStatusAggregation(ctx context.Context) error {
 	c.logger.Info("listening for summary queries", "subject", summaryQuerySubject)
 
 	// Start heartbeat and seed timeout goroutines.
-	heartbeatCancel := c.startHeartbeat(ctx)
+	runCtx := context.WithoutCancel(ctx)
+	heartbeatCancel := c.startHeartbeat(runCtx)
 	c.cancelFuncs = append(c.cancelFuncs, heartbeatCancel)
 
-	timeoutCancel := c.startSeedTimeout(ctx)
+	timeoutCancel := c.startSeedTimeout(runCtx)
 	if timeoutCancel != nil {
 		c.cancelFuncs = append(c.cancelFuncs, timeoutCancel)
 	}
@@ -374,7 +375,7 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 // startHeartbeat publishes status periodically.
 func (c *Component) startHeartbeat(ctx context.Context) context.CancelFunc {
 	interval := parseDurationOrDefault(c.config.HeartbeatInterval, 30*time.Second)
-	hbCtx, cancel := context.WithCancel(ctx)
+	hbCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		ticker := time.NewTicker(interval)
@@ -412,7 +413,7 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 		return nil
 	}
 
-	toCtx, cancel := context.WithCancel(ctx)
+	toCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		timer := time.NewTimer(timeout)

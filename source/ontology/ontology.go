@@ -55,9 +55,9 @@ var sourceClasses = map[classKey]string{
 
 // codeTypeClasses maps AST code entity types to CCO v2.2 class IRIs. Keyed by
 // the ast.CodeEntityType value (domain is the language, e.g. golang/typescript).
-// Functions/methods are procedures (Algorithm, depth 4); non-function code
+// Functions/methods are procedures (Algorithm, depth 5 in CCO v2.2); non-function code
 // declarations are PrescriptiveInformationContentEntity (direct parent of
-// Algorithm at depth 3, preserving function/method specificity); files/folders
+// Algorithm at depth 4, preserving function/method specificity); files/folders
 // bear information; a repo is a MaterialArtifact. Judgment calls per ADR-0005 —
 // documented and override-able.
 var codeTypeClasses = map[ast.CodeEntityType]string{

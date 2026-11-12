@@ -841,4 +841,36 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 	if _, err := config.LoadConfigFromReader(strings.NewReader(missingEntitySubj)); err == nil {
 		t.Fatal("expected streams.GRAPH.subjects omitting graph.ingest.entity to fail validation")
 	}
+
+	entityOnlySubj := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {
+    "GRAPH": {
+      "subjects": ["graph.ingest.entity"]
+    }
+  }
+}`
+	if _, err := config.LoadConfigFromReader(strings.NewReader(entityOnlySubj)); err == nil {
+		t.Fatal("expected streams.GRAPH.subjects omitting manifest/status/predicates to fail validation")
+	}
+
+	allDefaultSubj := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {
+    "GRAPH": {
+      "subjects": [
+        "graph.ingest.entity",
+        "graph.ingest.batch",
+        "graph.ingest.manifest",
+        "graph.ingest.status",
+        "graph.ingest.predicates"
+      ]
+    }
+  }
+}`
+	if _, err := config.LoadConfigFromReader(strings.NewReader(allDefaultSubj)); err != nil {
+		t.Fatalf("expected complete default streams.GRAPH.subjects to pass validation: %v", err)
+	}
 }

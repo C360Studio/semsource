@@ -198,11 +198,16 @@ func (w *Watcher) Start(ctx context.Context) error {
 		return fmt.Errorf("watcher is one-shot: already started or stopped")
 	}
 	w.started = true
-	runCtx, cancel := context.WithCancel(ctx)
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	w.cancel = cancel
 	w.lifecycleMu.Unlock()
-	// Stop can cancel traversal without waiting for filesystem I/O under a lock.
-	if err := w.addWatchesRecursive(runCtx, w.config.RepoRoot); err != nil {
+	// Stop can cancel traversal without waiting for filesystem I/O under a lock,
+	// while Start's own ctx bounds the initial watch traversal (ADR-113).
+	startCtx, startCancel := context.WithCancel(ctx)
+	defer startCancel()
+	stopForward := context.AfterFunc(runCtx, startCancel)
+	defer stopForward()
+	if err := w.addWatchesRecursive(startCtx, w.config.RepoRoot); err != nil {
 		cancel()
 		closeErr := w.closeNative()
 		w.finish()

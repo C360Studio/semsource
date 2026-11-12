@@ -100,6 +100,7 @@ func TestRetryPressureIsDistinctFromFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
+	t.Cleanup(func() { _ = p.Stop(context.Background()) })
 	if err := p.Send(payload("e1")); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +128,7 @@ func TestBackpressureLogsOnceAndReportsRecovery(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
+	t.Cleanup(func() { _ = p.Stop(context.Background()) })
 	if err := p.Send(payload("e1")); err != nil {
 		t.Fatal(err)
 	}
@@ -163,6 +165,11 @@ func TestBackpressureStateIsObservableWhileActive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithCancel(context.Background())
+		stopCancel()
+		_ = p.Stop(stopCtx)
+	})
 	if err := p.Send(payload("e1")); err != nil {
 		t.Fatal(err)
 	}

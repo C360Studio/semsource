@@ -61,10 +61,8 @@ describe("parseFusionResponse", () => {
     [{ ...response, truncated: "no" }, "truncated"],
     [{ ...response, paths_truncated: "no" }, "paths_truncated"],
     [{ ...response, deferred: "yes" }, "deferred"],
-    [
-      { ...response, deferred: true, defer_reason: "unknown_reason" },
-      "defer_reason",
-    ],
+    [{ ...response, deferred: true, defer_reason: "" }, "defer_reason"],
+    [{ ...response, deferred: true, defer_reason: 42 }, "defer_reason"],
     [
       { ...response, deferred: false, defer_reason: "index_not_ready" },
       "defer_reason",
@@ -106,7 +104,7 @@ describe("parseFusionResponse", () => {
     expect(parsed.defer_reason).toBe("index_not_ready");
   });
 
-  it("accepts all_seeds_unhydrated defer_reason when deferred is true", () => {
+  it("accepts all_seeds_unhydrated and future non-empty defer_reason values when deferred is true", () => {
     const parsed = parseFusionResponse({
       ...response,
       deferred: true,
@@ -114,5 +112,13 @@ describe("parseFusionResponse", () => {
     });
     expect(parsed.deferred).toBe(true);
     expect(parsed.defer_reason).toBe("all_seeds_unhydrated");
+
+    const future = parseFusionResponse({
+      ...response,
+      deferred: true,
+      defer_reason: "future_defer_reason",
+    });
+    expect(future.deferred).toBe(true);
+    expect(future.defer_reason).toBe("future_defer_reason");
   });
 });

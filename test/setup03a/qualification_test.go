@@ -854,8 +854,10 @@ func (h *harness) queries(stage string) {
 				caps.Readiness.SemanticIndex.State != "disabled" ||
 				caps.Readiness.SemanticIndex.Reason == nil || caps.Readiness.SemanticIndex.Reason.Code != "not_enabled" ||
 				caps.Queries["code_search"].Availability != "unsupported" ||
-				caps.Queries["code_search"].Reason == nil || caps.Queries["code_search"].Reason.Code != "not_enabled" {
-				return json.RawMessage(capBody), errors.New("capabilities did not advertise disabled semantic_index / unsupported code_search")
+				caps.Queries["code_search"].Reason == nil || caps.Queries["code_search"].Reason.Code != "not_enabled" ||
+				caps.Queries["doc_context"].Availability != "partial" ||
+				caps.Queries["doc_context"].Reason == nil || caps.Queries["doc_context"].Reason.Code != "not_enabled" {
+				return json.RawMessage(capBody), errors.New("capabilities did not advertise disabled semantic_index / unsupported code_search / partial doc_context")
 			}
 
 			searchBody, err := json.Marshal(map[string]any{"query": "cobalt lantern routing"})

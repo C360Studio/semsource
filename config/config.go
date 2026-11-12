@@ -263,20 +263,41 @@ func (c *Config) validateGraph() error {
 	return nil
 }
 
+// defaultGraphIngestSubjects lists the five subjects SemSource's GRAPH stream
+// binds by default so entitypub, graph-ingest, and source-manifest stay connected.
+var defaultGraphIngestSubjects = []string{
+	"graph.ingest.entity",
+	"graph.ingest.batch",
+	"graph.ingest.manifest",
+	"graph.ingest.status",
+	"graph.ingest.predicates",
+}
+
 // validateStreams validates optional stream overrides. When overriding GRAPH
-// subjects, "graph.ingest.entity" (or a covering wildcard like "graph.ingest.>"
-// or "graph.>") must remain present so entitypub and graph-ingest stay connected.
+// subjects with explicit subject names, all five default graph.ingest.*
+// subjects must remain present so entitypub, graph-ingest, and source-manifest
+// stay connected. Covering wildcards ("graph.ingest.*", "graph.ingest.>",
+// "graph.>", ">") are intentionally allowed through config validation so
+// SemEngine's EnsureStreams boot check is reached and emits the canonical
+// reserved_subject_capture startup refusal.
 func (c *Config) validateStreams() error {
 	override, ok := c.Streams["GRAPH"]
 	if !ok || len(override.Subjects) == 0 {
 		return nil
 	}
+	present := make(map[string]bool, len(override.Subjects))
 	for _, subj := range override.Subjects {
-		if subj == "graph.ingest.entity" || subj == "graph.ingest.*" || subj == "graph.ingest.>" || subj == "graph.>" || subj == ">" {
+		if subj == "graph.ingest.*" || subj == "graph.ingest.>" || subj == "graph.>" || subj == ">" {
 			return nil
 		}
+		present[subj] = true
 	}
-	return fmt.Errorf("config: streams.GRAPH.subjects must include \"graph.ingest.entity\" (or a covering wildcard) so entity ingestion remains connected")
+	for _, req := range defaultGraphIngestSubjects {
+		if !present[req] {
+			return fmt.Errorf("config: streams.GRAPH.subjects is missing required subject %q (all default graph.ingest.* subjects must remain connected)", req)
+		}
+	}
+	return nil
 }
 
 // validateNamespaceSegment rejects a namespace that cannot be an entity-ID

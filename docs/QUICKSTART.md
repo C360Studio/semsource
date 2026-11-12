@@ -50,10 +50,13 @@ git clone https://github.com/C360Studio/semdev-test.git
 Two ways to start; everything after this step is identical for both.
 
 > **Upgrade note (fresh storage):** SemSource releases that adopt a breaking
-> SemStreams pin require fresh NATS storage: `docker compose down -v`, then
-> start and reseed (natively: clear the NATS server's JetStream data
-> directory). The graph re-derives entirely from your sources — nothing is
-> lost but the time to reseed. Release notes say when this applies.
+> SemEngine substrate pin (including the SemStreams → SemEngine cutover, which
+> renames `semstreams_config_<org>_<stem>` to `semengine_config_<org>_<stem>`
+> and refuses to boot if a populated `semstreams_config_*` bucket is present)
+> require fresh NATS storage: `docker compose down -v`, then start and reseed
+> (natively: clear the NATS server's JetStream data directory). The graph
+> re-derives entirely from your sources — nothing is lost but the time to
+> reseed. Release notes say when this applies.
 
 **Option A — Docker Compose (recommended).** From a semsource checkout,
 mount your repository as the ingest target:

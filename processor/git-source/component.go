@@ -181,7 +181,8 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
-	c.publisher.Start(ctx)
+	runCtx := context.WithoutCancel(ctx)
+	c.publisher.Start(runCtx)
 
 	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
@@ -190,7 +191,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// initial ingest runs. Cancel is registered immediately — the seed can
 	// return an error, and a reporter registered only on the success path would
 	// leak on that return.
-	progressCancel := c.startStatusReporter(ctx)
+	progressCancel := c.startStatusReporter(runCtx)
 	c.mu.Lock()
 	c.cancelFuncs = append(c.cancelFuncs, progressCancel)
 	c.mu.Unlock()
@@ -211,7 +212,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// component-start barrier, which prevents the HTTP status and metrics
 	// listeners from binding at all (semstreams#867).
 	c.markRunning()
-	c.seed.Start(ctx, c.logger, c.runSeed)
+	c.seed.Start(runCtx, c.logger, c.runSeed)
 	return nil
 }
 
@@ -320,7 +321,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 // on each commit. Returns the cancel func for the polling goroutine, or nil
 // if watch setup fails.
 func (c *Component) startPolling(ctx context.Context) context.CancelFunc {
-	pollCtx, cancel := context.WithCancel(ctx)
+	pollCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	changeCh, err := c.handler.Watch(pollCtx, c.sourceCfg)
 	if err != nil {
@@ -528,7 +529,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // component's status so the source-manifest component always has fresh data.
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
-	rCtx, cancel := context.WithCancel(ctx)
+	rCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()

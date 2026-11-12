@@ -1,6 +1,7 @@
 export type FusionProvenance = "deterministic" | "embedding" | "llm";
 import { parseGraphProjection, type GraphProjection } from "./graph";
-export type FusionDeferReason = "index_not_ready" | "all_seeds_unhydrated";
+export type FusionDeferReason =
+  "index_not_ready" | "all_seeds_unhydrated" | (string & {});
 
 export interface FusionRef {
   name: string;
@@ -113,7 +114,7 @@ function parseDeferral(item: Record<string, unknown>): {
     }
     return { deferred: false };
   }
-  if (rawReason !== "index_not_ready" && rawReason !== "all_seeds_unhydrated") {
+  if (typeof rawReason !== "string" || rawReason.trim().length === 0) {
     throw new Error("Invalid fusion response: malformed defer_reason");
   }
   return {

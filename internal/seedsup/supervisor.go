@@ -43,7 +43,7 @@ type Supervisor struct {
 // has returned — so the failure is recorded for the status report and logged at
 // WARN. A seed cancelled by Stop is a clean shutdown, not a failure.
 func (s *Supervisor) Start(ctx context.Context, logger *slog.Logger, seed func(context.Context) error) {
-	seedCtx, cancel := context.WithCancel(ctx)
+	seedCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 
 	s.mu.Lock()

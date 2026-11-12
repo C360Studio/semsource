@@ -1,7 +1,7 @@
 # SemSource
 
 SemSource scrapes the pile of code, docs, configs, URLs, and media in your projects and turns them
-into a live semantic knowledge graph (SKG) in [SemStreams](https://github.com/C360Studio/semstreams).
+into a live semantic knowledge graph (SKG) in [SemEngine](https://github.com/C360Studio/semengine).
 Humans and agents can ask what exists, what changed, where something is used, and
 whether the graph is ready without each tool inventing its own parser, cache, and rules.
 SemSource will not beat `find` for a filename or `grep` for a known string.
@@ -22,7 +22,7 @@ the source files.
 
 ## Prerequisites
 
-SemSource runs on SemStreams and uses NATS JetStream/KV for graph
+SemSource runs on SemEngine and uses NATS JetStream/KV for graph
 state, ownership, and query indices — so **a NATS server is always required**.
 
 - **Docker** — the recommended path; `docker compose up` bundles NATS + embeddings and
@@ -73,12 +73,15 @@ SemSource ingests heterogeneous sources and maintains a continuously updated gov
 
 Every entity gets a deterministic 6-part ID (`org.platform.system.domain.type.instance`), semantic
 triples, provenance, and an indexing profile (`content`, `control`, `signal`, or `trace`). Query
-consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. The raw WebSocket
-export is available for stream-oriented consumers such as federation, fan-out,
-or live UI updates; it is not the primary governed query contract.
+consumers wait for `phase: "ready"` and then use NATS request/reply or GraphQL. The `ENTITY_STATES`
+KV-watch WebSocket export (`put`/`delete`/`poisoned`/`synced` frames, convergent and folded per key;
+[ADR-0001](docs/adr/0001-websocket-exports-raw-entities.md), [#262](https://github.com/C360Studio/semsource/issues/262))
+is available for live-state consumers; it is not the primary governed query contract.
 
-The configured `platform_id` is a stem (default `semsource`); the framework mints and retains the
-effective deployment authority. Upgrading from beta.161 requires fresh graph storage and re-ingestion.
+The configured `platform_id` is a stem (default `semsource`); SemEngine mints and retains the
+effective deployment authority in `semengine_config_<org>_<stem>`. Upgrading from SemStreams
+(`semstreams_config_<org>_<stem>`) or beta.161 requires fresh graph storage and re-ingestion
+(startup refuses a populated `semstreams_config_*` bucket).
 See the [SETUP 03A migration contract](docs/testing/setup-03a/compatibility.md) for exact pins and evidence.
 
 ## Source Types
@@ -234,20 +237,20 @@ First trusted evidence:
 
 This is the completed successful trusted publication and release-smoke workflow evidence.
 
-| Service             | Port             | Description                                                  |
-| ------------------- | ---------------- | ------------------------------------------------------------ |
-| Caddy               | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and raw `/ws`    |
-| SemSource workbench | internal `:3000` | Source/readiness/search workbench                            |
+| Service             | Port             | Description                                                               |
+| ------------------- | ---------------- | ------------------------------------------------------------------------- |
+| Caddy               | `localhost:3000` | Reverse proxy for UI, GraphQL, status APIs, and `/ws` `ENTITY_STATES` watch |
+| SemSource workbench | internal `:3000` | Source/readiness/search workbench                                         |
 
 Useful ui-profile endpoints (via Caddy on `:3000`):
 
-| URL                                            | Description                         |
-| ---------------------------------------------- | ----------------------------------- |
-| `http://localhost:3000`                        | SemSource workbench                 |
-| `http://localhost:3000/health`                 | UI-compatible SemSource health JSON |
-| `http://localhost:3000/graphql`                | GraphQL gateway                     |
-| `http://localhost:3000/source-manifest/status` | SemSource readiness/status          |
-| `ws://localhost:3000/ws`                       | Raw GRAPH stream export             |
+| URL                                            | Description                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `http://localhost:3000`                        | SemSource workbench                                                           |
+| `http://localhost:3000/health`                 | UI-compatible SemSource health JSON                                           |
+| `http://localhost:3000/graphql`                | GraphQL gateway                                                               |
+| `http://localhost:3000/source-manifest/status` | SemSource readiness/status                                                    |
+| `ws://localhost:3000/ws`                       | `ENTITY_STATES` KV-watch stream export (`put`/`delete`/`poisoned`/`synced`)   |
 
 The release candidate adopts the governed projection shipped for
 [SemStreams #533](https://github.com/C360Studio/semstreams/issues/533) in
@@ -310,7 +313,7 @@ SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>  # Required immutable workbench release
 
 Set `SEMSOURCE_CONFIG=tiers/tier0-statistical.json` to run without semembed (BM25 keyword search only); the
 `semembed` container still starts but the embedder ignores it. NATS is required because SemSource runs on
-the SemStreams ServiceManager and uses JetStream/KV for graph state, ownership, and query indices.
+the SemEngine ServiceManager and uses JetStream/KV for graph state, ownership, and query indices.
 Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.
 
 ### Port Map
@@ -321,7 +324,7 @@ Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--
 | 8081 | semembed embeddings                   | Internal Docker network                                                                                  |
 | 4222 | NATS                                  | Internal Docker network by default                                                                       |
 | 3000 | Caddy entry point                     | ui profile: UI, GraphQL (`/graphql`), source-manifest APIs, `/ws` `ENTITY_STATES` KV-watch stream        |
-| 7890 | SemSource WebSocket                   | Internal `ENTITY_STATES` KV-watch stream export (`put`/`synced` frames, ADR-0001)                        |
+| 7890 | SemSource WebSocket                   | Internal `ENTITY_STATES` KV-watch stream export (`put`/`delete`/`poisoned`/`synced` frames, ADR-0001)     |
 | 9091 | Prometheus metrics                    | Internal, proxied at `/metrics` (ui profile)                                                             |
 | 3000 | SemSource workbench                   | Internal UI service, proxied only at `/` and `/_app/*` (ui profile)                                      |
 
@@ -417,7 +420,7 @@ Optional top-level fields:
 
 | Field                     | Default              | Description                                                                                                                                                                                         |
 | ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `platform_id` | `semsource` | Stem for the retained deployment authority; use a fresh broker/account store for beta.161 migration. |
+| `platform_id`             | `semsource`          | Stem for the retained deployment authority (`semengine_config_<org>_<stem>`); upgrading from SemStreams requires a fresh JetStream store (startup refuses retained `semstreams_config_*` state)      |
 | `http_port`               | `8080`               | ServiceManager HTTP API port (also serves `/graph-gateway/graphql`; the `ui` profile proxies it as `/graphql`)                                                                                      |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
 | `graph.embedder_type`     | `"bm25"`             | Embedding backend: `none` (Tier 0 structural only, no embedder), `bm25` (keyword, no external service), or `http` (semantic — **requires `model_registry` with an `embedding` capability**)         |
@@ -425,7 +428,7 @@ Optional top-level fields:
 | `model_registry`          | —                    | SemEngine model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"`. See [`configs/tiers/README.md`](configs/tiers/README.md)                          |
 | `source_roots`            | —                    | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007)                                                                                           |
 | `metrics.port`            | `9091`               | Prometheus metrics port                                                                                                                                                                             |
-| `websocket_bind`          | `"0.0.0.0:7890"`     | `ENTITY_STATES` KV-watch WebSocket bind address (`put`/`synced` frames, ADR-0001)                                                                                                                   |
+| `websocket_bind`          | `"0.0.0.0:7890"`     | `ENTITY_STATES` KV-watch WebSocket bind address (`put`/`delete`/`poisoned`/`synced` frames, ADR-0001)                                                                                               |
 | `websocket_path`          | `"/ws"`              | `ENTITY_STATES` KV-watch WebSocket path (`/ws` is the default and documented contract path)                                                                                                         |
 | `workspace_dir`           | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths)                                                                                                     |
 | `git_token`               | —                    | Token for authenticated remote repo cloning                                                                                                                                                         |
@@ -465,7 +468,7 @@ links. Contract version 1 permits additive fields and map entries while preservi
 
 ### GraphQL Gateway
 
-SemSource runs the graph gateway through the SemStreams ServiceManager. The live internal route is
+SemSource runs the graph gateway through the SemEngine ServiceManager. The live internal route is
 `/graph-gateway/graphql` on the ServiceManager HTTP API (`:8080`). Reach GraphQL from the host via the
 `ui` profile, where Caddy exposes the operator-facing route at `http://localhost:3000/graphql` (see
 [UI profile](#ui-profile--add-the-semsource-workbench)).
