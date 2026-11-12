@@ -103,9 +103,8 @@ func TestModelRegistry_Tier1_HTTP_RegistryMissingEmbedding_Fails(t *testing.T) {
 	}
 }
 
-func TestModelRegistry_Tier2_ClusteringLLM_RequiresCommunitySummary(t *testing.T) {
-	// clustering_llm with an embedding-only registry must fail on the missing
-	// community_summary capability.
+func TestModelRegistry_Tier2_RetiredClusteringLLM_Rejected(t *testing.T) {
+	// clustering_llm is retired in SemEngine (semengine#485 tracks LLM community summaries).
 	_, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
 		"graph":{"embedder_type":"http","enable_clustering":true,"clustering_llm":true},
@@ -115,17 +114,17 @@ func TestModelRegistry_Tier2_ClusteringLLM_RequiresCommunitySummary(t *testing.T
 		}
 	}`)
 	if err == nil {
-		t.Fatal("clustering_llm without a community_summary capability should fail")
+		t.Fatal("retired clustering_llm should fail validation")
 	}
-	if !strings.Contains(err.Error(), "community_summary") {
-		t.Fatalf("error should mention community_summary, got: %v", err)
+	if !strings.Contains(err.Error(), "graph.clustering_llm") {
+		t.Fatalf("error should mention graph.clustering_llm, got: %v", err)
 	}
 }
 
 func TestModelRegistry_Tier2_Full_OK(t *testing.T) {
 	cfg, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"http","enable_clustering":true,"clustering_llm":true},
+		"graph":{"embedder_type":"http","enable_clustering":true},
 		"model_registry":{
 			"endpoints":{
 				"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"},
@@ -142,14 +141,6 @@ func TestModelRegistry_Tier2_Full_OK(t *testing.T) {
 	}
 	if got := cfg.ModelRegistry.Resolve(model.CapabilityCommunitySummary); got != "seminstruct" {
 		t.Fatalf("community_summary should resolve to seminstruct, got %q", got)
-	}
-}
-
-func TestModelRegistry_ClusteringLLM_IgnoredWhenClusteringOff(t *testing.T) {
-	// clustering_llm is inert unless enable_clustering is set, so a bm25 tier-0
-	// config with a stray clustering_llm flag must not demand a registry.
-	if _, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"clustering_llm":true}}`); err != nil {
-		t.Fatalf("clustering_llm without enable_clustering should be inert, got: %v", err)
 	}
 }
 

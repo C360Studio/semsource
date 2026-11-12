@@ -91,16 +91,9 @@ do not alias or rewrite existing IDs. Restarts within one supported deployment r
 profile crosswalk, recorded failures, and acceptance limits are in
 [SETUP 03A](docs/testing/setup-03a/compatibility.md).
 
-**Event types:** SEED (full graph on start and consumer reconnect), DELTA (incremental upserts from watch events),
-RETRACT (explicit removal), HEARTBEAT (liveness during quiet periods). SemSource publishes governed entity state
-through the substrate; consumers query it through `graph.query.*`, HTTP/MCP, or GraphQL and never register a
-federation processor or bridge the raw event stream into consumer-owned storage. Consumers wait for
-`graph.query.status` → `phase: "ready"` before querying.
+**Event types and WebSocket export:** Source handlers publish governed entity payloads to `graph.ingest.entity` (plus manifest/status/predicate broadcasts on `graph.ingest.*`), which `graph-ingest` applies to `ENTITY_STATES`. The `/ws` WebSocket output watches `ENTITY_STATES` (`KVWatchPort`) and emits applied-state `put`/`synced` frames (`at-most-once`, coalesced per key; ADR-0001). Consumers query governed state through `graph.query.*`, HTTP/MCP, or GraphQL and never register a federation processor or bridge the raw event stream into consumer-owned storage. Consumers wait for `/source-manifest/status` → `phase: "ready"` and rely on query-reply readiness (ADR-109).
 
-**Key design decisions:** no separate batch mode (initial seeding is the first pass of the continuous loop);
-`at-least-once` WebSocket delivery with ack/nack; MVP targets same-LAN deployment (no TLS/reverse proxy); AST parsers,
-doc parsers, weburl, and vocabulary packages are self-contained in `source/` (copied from semspec, no cross-repo
-dependency); `graph/` holds SemSource's domain payload and graph integration helpers.
+**Key design decisions:** no separate batch mode (initial seeding is the first pass of the continuous loop); `ENTITY_STATES` KV-watch WebSocket export (`put`/`synced` frames, at-most-once); MVP targets same-LAN deployment (no TLS/reverse proxy); AST parsers, doc parsers, weburl, and vocabulary packages are self-contained in `source/` (copied from semspec, no cross-repo dependency); `graph/` holds SemSource's domain payload and graph integration helpers.
 
 ### Component pattern
 

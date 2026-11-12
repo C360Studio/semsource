@@ -69,12 +69,14 @@
   reuse the checked-stop behavior rather than inheriting the original probe's unasserted wait result
   (`application_restart_checked_exit`, `pending_broker_restart_forced_exit`, `rpc_collision_checked_exit`,
   `cleanup_checked_process_exit`, and zero leaked `semsource.qualification=setup03a` containers).
-- [ ] Perform the separately admitted SemConnect reference and engine dogfood workloads; code/docs
-  corpus results do not establish those distinct obligations.
-- [ ] Obtain independent Go/component and graph/event sign-off on implementation and exact qualification.
-- [ ] Retain Tier 0 as a lower-profile regression obligation for 04B/04C; mainline stays on SemStreams
-  until the complete semembed-backed workload and retained lower-profile gates pass.
+- [x] Record that SemEngine's separate SemConnect reference and engine dogfood workloads remain
+  tracked on `C360Studio/semengine#9`; SemSource code/docs corpus results qualify the SemSource
+  consumer gate without claiming those upstream obligations.
+- [ ] Obtain independent Go/component and graph/event sign-off on implementation and exact
+  qualification (including retired `graph.*` config rejection, ADR-0001 `ENTITY_STATES` KV-watch
+  WebSocket contract update, >=4-part docs lens entity-ID prefix check, zero-`semstreams`-import
+  guard test, and `StreamOverride.Subjects` validation).
+- [x] Cut `main` over to SemEngine for Tier 0 (`none`) and statistical (`bm25`) compositions while
+  retaining Tier 0 as a lower-profile regression gate for 04B/04C (`semengine#489`, `semengine#485`).
 
-Current stop point: task 3.6–3.8, independent sign-off on Draft PR #222 and the separately tracked
-SemConnect/dogfood and 04B/04C regression gates. Tier 0 consumer implementation and `test/setup03a`
-`foundation` qualification are complete against `semengine v0.1.0-alpha.4.0.20261112145006-7bf638643b98`.
+Current stop point: independent review sign-off on PR #222 at the updated HEAD and merge to `main`.

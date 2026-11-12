@@ -14,7 +14,7 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Exact document and passage body retrieval without embeddings
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Known answers retain their positive acceptance obligations
 func TestResolveMode(t *testing.T) {
 	l := New()
 	if l.ResolveMode("docs/retry.md") != fusion.ResolveModePrefix {
@@ -32,8 +32,10 @@ func TestResolveMode(t *testing.T) {
 	if l.ResolveMode("retry") != fusion.ResolveModeNL {
 		t.Error("single term should resolve via semantic (doc content), not symbol")
 	}
-	if l.ResolveMode("v1.2") != fusion.ResolveModeNL {
-		t.Error("two-part dotted token like v1.2 should resolve via semantic, not entity prefix")
+	for _, nlToken := range []string{"net.http", "node.js", "graph.query", "v1.2"} {
+		if l.ResolveMode(nlToken) != fusion.ResolveModeNL {
+			t.Errorf("ordinary dotted token %q should resolve via semantic, not entity prefix", nlToken)
+		}
 	}
 }
 

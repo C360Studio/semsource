@@ -67,7 +67,7 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 
 func isDottedEntityIDOrPrefix(q string) bool {
 	parts := strings.Split(q, ".")
-	if len(parts) < 3 || len(parts) > 6 {
+	if len(parts) < 4 || len(parts) > 6 {
 		return false
 	}
 	return message.IsValidEntityID(q + strings.Repeat(".a", 6-len(parts)))

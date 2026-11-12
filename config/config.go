@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,92 +24,30 @@ type EntityStoreConfig struct {
 
 // GraphConfig configures graph subsystem components.
 type GraphConfig struct {
-	// GatewayBind is the bind address for the GraphQL gateway. Defaults to "0.0.0.0:8082".
-	GatewayBind string `json:"gateway_bind,omitempty"`
-
-	// EnablePlayground enables the GraphQL playground UI. Defaults to true.
-	EnablePlayground *bool `json:"enable_playground,omitempty"`
-
 	// EmbedderType is the embedding mode ("none", "bm25", or "http"). Defaults to "bm25".
 	EmbedderType string `json:"embedder_type,omitempty"`
-
-	// EmbeddingBatchSize is the batch size for embedding generation. Defaults to 50.
-	EmbeddingBatchSize int `json:"embedding_batch_size,omitempty"`
 
 	// CoalesceMs is the debounce window in ms for graph-index and graph-embedding.
 	// Defaults to 200.
 	CoalesceMs int `json:"coalesce_ms,omitempty"`
 
 	// IndexWorkers is the number of graph-index worker goroutines. 0 uses the
-	// semstreams default (1), which is a throughput bottleneck for large one-shot
+	// semengine default (1), which is a throughput bottleneck for large one-shot
 	// ingests (indexing a whole dependency) — raise it to parallelize index build.
 	IndexWorkers int `json:"index_workers,omitempty"`
 
-	// EnableClustering wires the graph-clustering component (LPA community
-	// detection over ENTITY_STATES → COMMUNITY_INDEX), lighting up the
-	// already-declared local/global/summary query routes (tier 2). Off by
-	// default: without it those routes return empty. Pure-Go LPA needs no
-	// external service; LLM community summaries additionally require
-	// ClusteringLLM + a model_registry "community_summary" capability.
+	// EnableClustering wires the graph-clustering component (entity-ID prefix
+	// community grouping over ENTITY_STATES → COMMUNITY_INDEX, ADR-099), lighting
+	// up the declared local/global/summary query routes (tier 2). Off by default.
 	EnableClustering bool `json:"enable_clustering,omitempty"`
 
-	// ClusteringLLM turns on LLM-based community summarization in
-	// graph-clustering (GraphRAG summaries). Requires EnableClustering and a
-	// model_registry with a "community_summary" capability (→ seminstruct).
-	// Ignored when EnableClustering is false.
-	ClusteringLLM bool `json:"clustering_llm,omitempty"`
-
-	// EntityIDEdges overrides graph-clustering's EntityID virtual-edge
-	// synthesis. Omit it to keep the substrate's defaults (siblings and system
-	// peers both ON). Ignored when EnableClustering is false, which is not an
-	// error — a tier config may carry the block and enable clustering later.
-	EntityIDEdges *EntityIDEdgesConfig `json:"entity_id_edges,omitempty"`
-}
-
-// EntityIDEdgesConfig overrides how graph-clustering synthesizes virtual edges
-// from entity IDs before running community detection. It mirrors semstreams'
-// block of the same name field for field, including its tri-state shape: the
-// two toggles are pointers so that nil means "leave the substrate default
-// alone" and only an explicit true/false overrides. Numeric fields default when
-// zero.
-//
-// Which settings suit a deployment depends on how many distinct systems its
-// entity IDs carry. The system segment comes from the source root's base name
-// (handler/ast/handler.go's pathToSystemSlug and entityid.SystemSlug), so a
-// deployment that ingests one path — /workspace under compose, or one repo —
-// gives every entity the same system. System-peer synthesis then links across
-// the whole graph and label propagation collapses into one community; measured
-// on osh-core sensorhub-core, the largest community held 82% of the graph with
-// this ON and 93 entities with it OFF. A deployment ingesting several source
-// roots has a varying system segment, where the same edges group by repo
-// instead. See docs/testing/tier-baselines.md.
-type EntityIDEdgesConfig struct {
-	// IncludeSiblings synthesizes edges between entities sharing the 5-part
-	// type prefix of their entity ID. Substrate default true.
-	IncludeSiblings *bool `json:"include_siblings,omitempty"`
-
-	// IncludeSystemPeers synthesizes edges between entities sharing the
-	// {system} segment of their entity ID. Substrate default true. This is the
-	// knob that collapses a single-system graph — see the type comment.
-	IncludeSystemPeers *bool `json:"include_system_peers,omitempty"`
-
-	// SiblingWeight is the edge weight for synthesized sibling edges.
-	// Substrate default 0.7.
-	SiblingWeight float64 `json:"sibling_weight,omitempty"`
-
-	// MaxSiblings caps sibling neighbors synthesized per entity. Substrate
-	// default 10.
-	MaxSiblings int `json:"max_siblings,omitempty"`
-
-	// SystemPeerWeight is the edge weight for synthesized system-peer edges.
-	// Substrate default 0.3.
-	SystemPeerWeight float64 `json:"system_peer_weight,omitempty"`
-
-	// MaxSystemPeers caps system-peer neighbors synthesized per entity.
-	// Substrate default 15. The cap is not a safeguard against collapse: 15 is
-	// far more than enough to flood one connected component when every entity
-	// shares a system.
-	MaxSystemPeers int `json:"max_system_peers,omitempty"`
+	// Retired SemStreams fields decoded only so Validate() can reject them with
+	// an actionable migration message instead of silently ignoring them.
+	GatewayBind        string          `json:"gateway_bind,omitempty"`
+	EnablePlayground   *bool           `json:"enable_playground,omitempty"`
+	EmbeddingBatchSize *int            `json:"embedding_batch_size,omitempty"`
+	ClusteringLLM      *bool           `json:"clustering_llm,omitempty"`
+	EntityIDEdges      json.RawMessage `json:"entity_id_edges,omitempty"`
 }
 
 // MetricsConfig configures the Prometheus metrics endpoint.
@@ -131,7 +70,7 @@ type StreamOverride struct {
 	// Discard is what happens when the stream reaches MaxBytes or MaxAge:
 	// "old" evicts the oldest messages (the write succeeds and the loss is
 	// silent), "new" refuses the write (producers see NATS 503
-	// err_code=10077). semstreams beta.159 requires ordinary streams to
+	// err_code=10077). semengine requires ordinary streams to
 	// declare it; see graphStreamConfig for why the GRAPH default is "new".
 	Discard string `json:"discard,omitempty"`
 }
@@ -194,13 +133,12 @@ type Config struct {
 	// Graph configures graph subsystem components.
 	Graph *GraphConfig `json:"graph,omitempty"`
 
-	// ModelRegistry is the semstreams unified model-endpoint registry, passed
+	// ModelRegistry is the semengine unified model-endpoint registry, passed
 	// straight through to the ServiceManager (ssCfg.ModelRegistry) so
-	// graph-embedding's HTTP embedder (tier 1, semembed) and graph-clustering's
-	// LLM summarizer (tier 2, seminstruct) can resolve their endpoints by
-	// capability ("embedding" / "community_summary"). Reuses the semstreams
-	// model.Registry type directly — no bespoke shape. Nil = tier 0 (BM25), no
-	// external model services. See configs/tiers/ and docs.
+	// graph-embedding's HTTP embedder (tier 1, semembed) can resolve its endpoint
+	// by capability ("embedding"). Reuses the semengine model.Registry type
+	// directly — no bespoke shape. Nil = tier 0 (none / BM25), no external model
+	// services. See configs/tiers/ and docs.
 	ModelRegistry *model.Registry `json:"model_registry,omitempty"`
 
 	// Metrics configures the Prometheus metrics endpoint.
@@ -277,6 +215,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.validateStreams(); err != nil {
+		return err
+	}
+
 	// The path is honored again since semstreams beta.161 restored the
 	// websocket output's path surface (semsource#147, semstreams#945), so
 	// validation checks shape, not the beta.160-era "/ws" pin. Failing here
@@ -291,49 +233,50 @@ func (c *Config) Validate() error {
 	return c.validateModelRegistry()
 }
 
-// validateGraph checks the graph block's own numerics. Clustering edge
-// synthesis is validated whether or not clustering is enabled: the block is
-// inert on a tier that runs no clustering, but a bad value there is still a
-// mistake worth reporting at load time rather than at the tier switch.
+// validateGraph checks the graph block and rejects retired SemStreams keys
+// with explicit migration instructions so operators are never misled into
+// thinking a silently dropped key took effect.
 func (c *Config) validateGraph() error {
 	if c.Graph == nil {
 		return nil
+	}
+	if c.Graph.GatewayBind != "" {
+		return fmt.Errorf("config: graph.gateway_bind is retired in SemEngine; graph-gateway serves HTTP on the shared ServiceManager http_port (/graph-gateway/graphql) — remove graph.gateway_bind")
+	}
+	if c.Graph.EnablePlayground != nil {
+		return fmt.Errorf("config: graph.enable_playground is retired in SemEngine; remove graph.enable_playground")
+	}
+	if c.Graph.EmbeddingBatchSize != nil {
+		return fmt.Errorf("config: graph.embedding_batch_size is retired in SemEngine; remove graph.embedding_batch_size")
+	}
+	if c.Graph.ClusteringLLM != nil {
+		return fmt.Errorf("config: graph.clustering_llm is retired in SemEngine (LLM community summaries are tracked in semengine#485); remove graph.clustering_llm")
+	}
+	if len(c.Graph.EntityIDEdges) > 0 && string(c.Graph.EntityIDEdges) != "null" {
+		return fmt.Errorf("config: graph.entity_id_edges is retired in SemEngine (ADR-099 groups communities by entity-ID prefix); remove graph.entity_id_edges")
 	}
 	switch c.Graph.EmbedderType {
 	case "", "none", "bm25", "http":
 	default:
 		return fmt.Errorf("config: graph.embedder_type %q is invalid (allowed: \"none\", \"bm25\", \"http\")", c.Graph.EmbedderType)
 	}
-	if c.Graph.EntityIDEdges == nil {
+	return nil
+}
+
+// validateStreams validates optional stream overrides. When overriding GRAPH
+// subjects, "graph.ingest.entity" (or a covering wildcard like "graph.ingest.>"
+// or "graph.>") must remain present so entitypub and graph-ingest stay connected.
+func (c *Config) validateStreams() error {
+	override, ok := c.Streams["GRAPH"]
+	if !ok || len(override.Subjects) == 0 {
 		return nil
 	}
-	e := c.Graph.EntityIDEdges
-	for _, f := range []struct {
-		name string
-		val  float64
-	}{
-		{"sibling_weight", e.SiblingWeight},
-		{"system_peer_weight", e.SystemPeerWeight},
-	} {
-		if f.val < 0 {
-			return fmt.Errorf("config: graph.entity_id_edges.%s is %g, must not be negative "+
-				"(omit the field to use the substrate default)", f.name, f.val)
+	for _, subj := range override.Subjects {
+		if subj == "graph.ingest.entity" || subj == "graph.ingest.*" || subj == "graph.ingest.>" || subj == "graph.>" || subj == ">" {
+			return nil
 		}
 	}
-	for _, f := range []struct {
-		name string
-		val  int
-	}{
-		{"max_siblings", e.MaxSiblings},
-		{"max_system_peers", e.MaxSystemPeers},
-	} {
-		if f.val < 0 {
-			return fmt.Errorf("config: graph.entity_id_edges.%s is %d, must not be negative "+
-				"(omit the field to use the substrate default, or set include_%s false to disable synthesis)",
-				f.name, f.val, strings.TrimPrefix(f.name, "max_"))
-		}
-	}
-	return nil
+	return fmt.Errorf("config: streams.GRAPH.subjects must include \"graph.ingest.entity\" (or a covering wildcard) so entity ingestion remains connected")
 }
 
 // validateNamespaceSegment rejects a namespace that cannot be an entity-ID
@@ -388,9 +331,9 @@ func validateWebSocketPath(path string) error {
 
 // validateModelRegistry checks the optional model registry and the tier wiring
 // that depends on it, failing fast at load time (before any component starts)
-// rather than letting graph-embedding/graph-clustering degrade silently at
-// runtime. The registry itself is validated by semstreams; here we additionally
-// enforce that a selected tier has the capability it needs to resolve.
+// rather than letting graph-embedding degrade silently at runtime. The registry
+// itself is validated by semengine; here we additionally enforce that a selected
+// tier has the capability it needs to resolve.
 func (c *Config) validateModelRegistry() error {
 	if c.ModelRegistry != nil {
 		if err := c.ModelRegistry.Validate(); err != nil {
@@ -399,10 +342,8 @@ func (c *Config) validateModelRegistry() error {
 	}
 
 	var embedderType string
-	var clusteringLLM bool
 	if c.Graph != nil {
 		embedderType = c.Graph.EmbedderType
-		clusteringLLM = c.Graph.EnableClustering && c.Graph.ClusteringLLM
 	}
 
 	// Tier 1: the HTTP embedder resolves the "embedding" capability at startup;
@@ -415,21 +356,9 @@ func (c *Config) validateModelRegistry() error {
 	}
 
 	// Every capability that resolves at all must resolve to an endpoint that can
-	// serve it — the complement of the tier checks below, which only cover the
+	// serve it — the complement of the tier checks above, which only cover the
 	// capabilities a selected tier needs.
-	if err := validateCapabilityRoles(c.ModelRegistry); err != nil {
-		return err
-	}
-
-	// Tier 2: LLM community summaries resolve "community_summary" (→ seminstruct).
-	if clusteringLLM {
-		if err := requireCapability(c.ModelRegistry, model.CapabilityCommunitySummary,
-			`graph.clustering_llm (tier 2) needs a model_registry with a "community_summary" capability (→ seminstruct)`); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return validateCapabilityRoles(c.ModelRegistry)
 }
 
 // requireCapability fails unless the registry EXPLICITLY declares capability.

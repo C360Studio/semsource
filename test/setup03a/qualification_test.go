@@ -393,7 +393,6 @@ func (h *harness) configure(profile string) {
 	cfg["websocket_bind"] = fmt.Sprintf("127.0.0.1:%d", freePort(h.t))
 	cfg["sources"] = []map[string]any{{"type": "ast", "path": h.source, "languages": []string{"go"}, "watch": true, "project": "setup03a", "version": "corpus-v1"}, {"type": "docs", "paths": []string{filepath.Join(h.source, "docs")}, "watch": true, "project": "setup03a-docs"}}
 	cfg["source_roots"] = []string{h.source}
-	cfg["graph"].(map[string]any)["gateway_bind"] = fmt.Sprintf("127.0.0.1:%d", freePort(h.t))
 	if profile == "neural" {
 		cfg["model_registry"].(map[string]any)["endpoints"].(map[string]any)["semembed"].(map[string]any)["url"] = os.Getenv("SETUP03A_PROVIDER")
 	}

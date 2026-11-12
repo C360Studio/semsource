@@ -38,13 +38,17 @@ The disabled-component envelope SHALL remain until the admitted config contract 
   `broker_restart_reingested_exact_content` SHALL both pass
 - **AND** the reference known-at-pin disposition SHALL NOT skip or weaken either assertion
 
-### Requirement: Tier qualification does not switch mainline prematurely
+### Requirement: Mainline cutover qualifies Tier 0 and BM25 while deferring neural 04C
 
-SemSource mainline SHALL remain on SemStreams through Tier 0/1 qualification. Substrate cutover SHALL
-require the full semembed-backed 04C workload, retained lower-profile guarantees and independent review.
+SemSource mainline SHALL cut over to SemEngine once the Tier 0 graph-foundation corpus
+(`configs/tiers/tier0-foundation.json`, `embedder_type: "none"`), the BM25 statistical smoke suites
+(`semsource.json`, `embedder_type: "bm25"`), and independent review pass. Neural HTTP embedding
+qualification (`semengine#489`, 04C), Tier 2 LLM community summaries (`semengine#485`), and
+SemEngine's separate SemConnect/dogfood obligations SHALL remain tracked in their respective slices
+without being claimed by the Tier 0 cutover.
 
-#### Scenario: Tier 0 passes before neural qualification
+#### Scenario: Tier 0 and BM25 pass before neural 04C admission
 
-- **WHEN** the separate engine branch passes its admitted graph-foundation workload
-- **THEN** the exact commits and results may qualify Tier 0 only
-- **AND** mainline substrate and neural qualification status remain unchanged
+- **WHEN** the SemEngine consumer branch passes the admitted Tier 0 graph-foundation workload and BM25 smoke suites
+- **THEN** mainline cuts over to SemEngine for Tier 0 (`none`) and statistical (`bm25`) compositions
+- **AND** neural (`http`) and LLM community-summary qualification remain deferred to 04C (`semengine#489`, `semengine#485`)

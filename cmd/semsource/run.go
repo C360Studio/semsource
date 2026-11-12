@@ -694,7 +694,7 @@ func mcpGatewayComponentConfig(cfg *config.Config) (types.ComponentConfig, error
 		"allowed_roots": cfg.SourceRoots,
 		"instance_name": "mcp-gateway",
 	}
-	if cfg != nil && cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
+	if cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
 		cfgMap["semantic_enabled"] = false
 	}
 	raw, err := json.Marshal(cfgMap)
@@ -740,7 +740,7 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 		"sources":               manifestSources,
 		"expected_source_count": sourceCount,
 	}
-	if cfg != nil && cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
+	if cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
 		cfgMap["semantic_enabled"] = false
 	}
 	raw, err := json.Marshal(cfgMap)

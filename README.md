@@ -317,12 +317,11 @@ Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--
 
 | Port | Service                               | Notes                                                                                                    |
 | ---- | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile                                                                |
+| 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile (includes `/graph-gateway/graphql`)                            |
 | 8081 | semembed embeddings                   | Internal Docker network                                                                                  |
 | 4222 | NATS                                  | Internal Docker network by default                                                                       |
-| 3000 | Caddy entry point                     | ui profile: UI, GraphQL, source-manifest APIs, raw `/ws` stream                                          |
-| 7890 | SemSource WebSocket                   | Internal raw GRAPH stream export                                                                         |
-| 8082 | GraphQL gateway bind subject          | Component registration setting; UI profile proxies ServiceManager `/graph-gateway/graphql` at `/graphql` |
+| 3000 | Caddy entry point                     | ui profile: UI, GraphQL (`/graphql`), source-manifest APIs, `/ws` `ENTITY_STATES` KV-watch stream        |
+| 7890 | SemSource WebSocket                   | Internal `ENTITY_STATES` KV-watch stream export (`put`/`synced` frames, ADR-0001)                        |
 | 9091 | Prometheus metrics                    | Internal, proxied at `/metrics` (ui profile)                                                             |
 | 3000 | SemSource workbench                   | Internal UI service, proxied only at `/` and `/_app/*` (ui profile)                                      |
 
@@ -419,16 +418,15 @@ Optional top-level fields:
 | Field                     | Default              | Description                                                                                                                                                                                         |
 | ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `platform_id` | `semsource` | Stem for the retained deployment authority; use a fresh broker/account store for beta.161 migration. |
-| `http_port`               | `8080`               | ServiceManager HTTP API port                                                                                                                                                                        |
+| `http_port`               | `8080`               | ServiceManager HTTP API port (also serves `/graph-gateway/graphql`; the `ui` profile proxies it as `/graphql`)                                                                                      |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
-| `graph.gateway_bind`      | `"0.0.0.0:8082"`     | GraphQL gateway host:port subject used by SemStreams registration; in ServiceManager mode the live HTTP route is `/graph-gateway/graphql` on `:8080` and the `ui` profile exposes it as `/graphql`  |
-| `graph.embedder_type`     | `"bm25"`             | Embedding backend: `bm25` (keyword, no dependencies) or `http` (semantic — **requires `model_registry` with an `embedding` capability**)                                                            |
-| `graph.enable_clustering` | `false`              | Enable graph-clustering (tier-2 community routes); LLM summaries also need `graph.clustering_llm` + a `model_registry` `community_summary` capability                                               |
-| `model_registry`          | —                    | SemStreams model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"` or clustering LLM is on. See [`configs/tiers/README.md`](configs/tiers/README.md) |
+| `graph.embedder_type`     | `"bm25"`             | Embedding backend: `none` (Tier 0 structural only, no embedder), `bm25` (keyword, no external service), or `http` (semantic — **requires `model_registry` with an `embedding` capability**)         |
+| `graph.enable_clustering` | `false`              | Enable `graph-clustering` (entity-ID prefix community grouping over `ENTITY_STATES` → `COMMUNITY_INDEX`, ADR-099)                                                                                   |
+| `model_registry`          | —                    | SemEngine model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"`. See [`configs/tiers/README.md`](configs/tiers/README.md)                          |
 | `source_roots`            | —                    | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007)                                                                                           |
 | `metrics.port`            | `9091`               | Prometheus metrics port                                                                                                                                                                             |
-| `websocket_bind`          | `"0.0.0.0:7890"`     | Raw GRAPH stream WebSocket bind address                                                                                                                                                             |
-| `websocket_path`          | `"/ws"`              | Raw GRAPH stream WebSocket path. Configurable again since semstreams beta.161 restored the path surface (#147, semstreams#945); `/ws` remains the documented contract path                          |
+| `websocket_bind`          | `"0.0.0.0:7890"`     | `ENTITY_STATES` KV-watch WebSocket bind address (`put`/`synced` frames, ADR-0001)                                                                                                                   |
+| `websocket_path`          | `"/ws"`              | `ENTITY_STATES` KV-watch WebSocket path (`/ws` is the default and documented contract path)                                                                                                         |
 | `workspace_dir`           | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths)                                                                                                     |
 | `git_token`               | —                    | Token for authenticated remote repo cloning                                                                                                                                                         |
 | `media_store_dir`         | —                    | Local directory for media binary storage                                                                                                                                                            |

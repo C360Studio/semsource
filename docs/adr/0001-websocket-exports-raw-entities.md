@@ -1,71 +1,51 @@
 # ADR-0001: WebSocket Output Exports Raw Entities Before ENTITY_STATES
 
-> **Status:** Accepted for the raw stream export | **Date:** 2026-03-12
+> **Status:** Amended by SemEngine port (2026-11-12; originally Accepted 2026-03-12)
 >
-> **Current integration note (2026-06):** WebSocket remains a standalone-mode raw export, but query
-> consumers should use governed graph state via `graph.query.*` or GraphQL. This ADR describes why the
-> stream stays raw, not why it is obsolete. It remains suitable for federation, fan-out, and live UI
-> update paths that want source events rather than governed query results.
+> **SemEngine port amendment (2026-11-12, `#221` / `semengine#34`):** SemEngine's `output/websocket`
+> (`v0.1.0-alpha.4+`) refuses JetStream input ports (`output/websocket/config.go:161`) and removes
+> the `at-least-once` `ack`/`nack` delivery mode (`output/websocket/config.go:29`). Under SemEngine,
+> `cmd/semsource/run.go` wires `output/websocket` to watch `KVWatchPort{Bucket: "ENTITY_STATES"}`
+> instead of consuming the raw `GRAPH` stream (`graph.ingest.>`). Connected `/ws` clients now receive
+> applied-state `put`/`synced` frames from `ENTITY_STATES` (delivered at-most-once and coalesced per
+> key) rather than raw `graph.ingest.*` source envelopes (`entity`, `status`, `predicates`). Query
+> and governance consumers continue to use `graph.query.*`, HTTP/MCP, or GraphQL.
 
-## Context
+## Context (Historical SemStreams Baseline, 2026-03-12)
 
 SemSource emits graph entities from 8 source processors (ast, git, doc, cfgfile, url, image, video, audio)
-into the GRAPH JetStream stream (`graph.ingest.entity`). Two components consume this stream in parallel:
+into the GRAPH JetStream stream (`graph.ingest.entity`). Under SemStreams, two components consumed this stream in parallel:
 
-- **graph-ingest** writes entities to the `ENTITY_STATES` KV bucket, where `graph-index` builds structural indexes (OUTGOING, INCOMING, ALIAS, PREDICATE).
-- **websocket-output** broadcasts entities directly to downstream consumers (SemSpec, SemDragon) via WebSocket.
+- **graph-ingest** wrote entities to the `ENTITY_STATES` KV bucket, where `graph-index` built structural indexes (OUTGOING, INCOMING, ALIAS, PREDICATE).
+- **websocket-output** broadcast entities directly to downstream consumers (SemSpec, SemDragon) via WebSocket.
 
-Both consume the same raw stream. The WebSocket output never sees data written to or derived from ENTITY_STATES.
-
-Semstreams is moving its graph components to support a model registry with tiered processing:
+Under SemEngine (`v0.1.0-alpha.4+`), `output/websocket` watches `ENTITY_STATES` KV directly instead of subscribing to the `GRAPH` JetStream stream:
 
 | Tier | Capability |
 |------|------------|
-| 0 | Structural (current) |
-| 2 | Statistical indexes |
-| 3 | LLM embeddings, summaries, NLQ |
+| 0 | Structural (`none`) and statistical (`bm25`) |
+| 1 | Neural HTTP embeddings (`semembed`, `semengine#489`) |
+| 2 | Community detection (`graph-clustering`); LLM summaries (`semengine#485`) |
 
-If tier 2/3 enrichment processors add triples to ENTITY_STATES (e.g., vector embeddings, summaries), those enrichments will be invisible to the WebSocket export.
+## Decision (Amended 2026-11-12)
 
-## Decision
+**Watch `ENTITY_STATES` KV for the WebSocket output (`KVWatchPort{Bucket: "ENTITY_STATES"}`), matching SemEngine's admitted `output/websocket` contract.**
 
-**Keep the current architecture: WebSocket output consumes the raw GRAPH stream.**
-
-SemSource is a source component. Sources emit facts, not interpretations. Downstream consumers are responsible for their own enrichment tiers.
+Under SemStreams, WebSocket output consumed the raw `GRAPH` stream. Under SemEngine, `output/websocket` only accepts `KVWatchPort` inputs and emits applied-state `put` and initial-replay `synced` frames at-most-once (merged per entity key) with no `delivery_mode` or `ack`/`nack` framing.
 
 ## Consequences
 
 ### Positive
 
-- Simple, low-latency export path (no enrichment pipeline delay).
-- Clean separation of concerns: source emits raw data, consumers enrich as needed.
-- No coupling to semstreams tier capabilities that may change.
+- Conforms to SemEngine's single-writer `ENTITY_STATES` architecture (`graph-ingest` is the sole writer; `output/websocket` is a read-only KV watcher).
+- Reconnecting `/ws` clients receive the current applied `ENTITY_STATES` snapshot followed by `synced` and incremental `put` updates without replaying superseded raw JetStream messages.
 
-### Negative
+### Negative / Consumer Impact
 
-- If a downstream consumer expects pre-enriched entities, it cannot get them from the WebSocket export.
-- Enrichment data (embeddings, communities) is only accessible via GraphQL/MCP, not the WebSocket stream.
+- **Wire-format break from SemStreams:** `/ws` no longer emits raw `graph.ingest.*` envelopes (`SEED`/`DELTA`/`RETRACT`/`HEARTBEAT` or `ack`/`nack`). It emits SemEngine `output/websocket` KV-watch frames (`put`/`synced`, at-most-once, merged per key) for `ENTITY_STATES`.
+- Enrichment data (embeddings in `EMBEDDING_INDEX`, communities in `COMMUNITY_INDEX`) remains in separate KV buckets and is accessed via GraphQL/MCP/`graph.query.*`, not `/ws`.
 
-### Enrichment Architecture (Updated 2026-03-12)
-
-> **Correction (2026-08-12):** `EMBEDDINGS_CACHE` never stored vectors — it was created
-> and required by upstream config validation but written by nothing, a permanently empty
-> diagnostic decoy. Real vectors live in `EMBEDDING_INDEX` (entity-keyed) and
-> `EMBEDDING_DEDUP` (content-hash keyed). SemSource's port declaration for it was removed
-> in the beta.160 cutover; upstream deletion of the bucket itself is tracked in
-> [semstreams#620](https://github.com/C360Studio/semstreams/issues/620). References to
-> `EMBEDDINGS_CACHE` below are historical.
-
-Enrichment components write to **separate KV buckets**, not to ENTITY_STATES:
-
-| Component | Output KV | What It Stores |
-|-----------|----------|----------------|
-| graph-embedding | `EMBEDDINGS_CACHE` | Vector embeddings per entity |
-| graph-clustering | `COMMUNITY_INDEX` | Community detection results |
-
-ENTITY_STATES holds raw entity triples regardless of tier. The WebSocket export divergence is about missing derived data in parallel KV buckets, not about ENTITY_STATES containing different triples. Downstream consumers access enrichment via GraphQL/MCP queries, not the entity stream.
-
-## Data Flow Reference
+## Data Flow Reference (SemEngine)
 
 ```
 Source Processors (8)
@@ -74,21 +54,17 @@ Source Processors (8)
     v
 graph.ingest.entity (GRAPH JetStream)
     |
-    +---> graph-ingest ---> ENTITY_STATES KV ---> graph-index ---> KV indices
-    |                                                  |
-    |                                        [enrichment: graph-embedding (BM25, default)]
-    |
-    +---> websocket-output ---> ws://0.0.0.0:7890/graph ---> downstream
+    v
+graph-ingest ---> ENTITY_STATES KV ---> graph-index ---> KV indices
+                       |
+                       +---> [optional: graph-embedding (BM25 / HTTP)]
+                       |
+                       +---> websocket-output (KVWatchPort) ---> ws://0.0.0.0:7890/ws ---> downstream
 ```
-
-### Enrichment Architecture
-
-`graph-embedding` (BM25) is wired by default in `graphSubsystemComponents()` with
-`coalesce_ms: 200`. Embeddings are written to `EMBEDDINGS_CACHE`, not to `ENTITY_STATES`.
-The WebSocket export is unaffected — it always reflects the raw entity stream.
 
 ## Related Files
 
-- `cmd/semsource/run.go` — graph subsystem and websocket component wiring
+- `cmd/semsource/run.go` — graph subsystem and `websocketComponentConfig` (`KVWatchPort{Bucket: "ENTITY_STATES"}`)
 - `internal/entitypub/publisher.go` — buffered entity publisher
 - `graph/event_payload.go` — EntityPayload definition
+- `docs/upstream/semengine-port-ledger.md` — `output/websocket` crosswalk entry
