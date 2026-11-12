@@ -13,8 +13,10 @@
   Implementation still requires the separate engine admission gate below.
 - [ ] Record approved 03B contracts, package scope, relevant #15–#20 repair/decision dispositions and
   the exact admitted usable SemEngine Tier 0 commit before implementation begins.
-  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`; #17–#20
-  and #69 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`).
+  03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`; #15–#20
+  and #69 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`, including the
+  2026-11-12 closures of `semengine#15` for stream/bucket generation tracking and `semengine#16` for
+  boot-time refusal of stream filters overlapping reserved graph RPC subjects).
   The [2026-11-08 pin ruling](https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898)
   (amended on #9 / #557) and all 4 remaining package admissions (`pkg/buffer` #566,
   `gateway/graph-gateway` #567, `output/websocket` #34, `processor/graph-clustering` #9) are met by
@@ -24,8 +26,9 @@
   #232 (`task agents:check` + decision skills re-pinned to `semengine@v0.1.0-alpha.4`),
   #253 (Fusion contract v2 + `fusion.Resolution` + UI v2 parser), #256 (`semengine` outward identifiers),
   and #257 (`semvocab v0.2.2` + CCO v2.2 / BFO 2020 class and relation adoption) are complete.
-  Hold: full 04A Tier 0 qualification (#221) awaits upstream Slice 04A qualification repairs
-  `semengine#15`, `semengine#16`, and `semengine#579`.
+  Hold: full 04A Tier 0 qualification (#221) awaits upstream `semengine#579` (in work; owner ruled
+  2026-11-12 on `embedding_enabled` defaulting to `true` and refusing `semantic`/`similar` with
+  `not_enabled` class `invalid` when `embedding_enabled: false`).
 
 ## 2. Future implementation after admission
 
