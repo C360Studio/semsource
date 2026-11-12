@@ -994,7 +994,7 @@ func (h *harness) providerMetrics(stage string) {
 }
 
 func (h *harness) platformIdentity() (map[string]string, error) {
-	kv, err := h.js.KeyValue(h.ctx, "semstreams_config_setup03a_semsource")
+	kv, err := h.js.KeyValue(h.ctx, "semengine_config_setup03a_semsource")
 	if err != nil {
 		return nil, err
 	}

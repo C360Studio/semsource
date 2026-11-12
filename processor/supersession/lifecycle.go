@@ -11,13 +11,13 @@ import (
 
 	"errors"
 
+	gtypes "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/errs"
+	"github.com/c360studio/semengine/pkg/projection"
 	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	gtypes "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semstreams/pkg/projection"
 )
 
 // lifecycleMutationTimeout bounds each mutation-lane round trip. Generous:

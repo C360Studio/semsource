@@ -50,10 +50,11 @@ func TestClusteringEdges_OmittedWhenUnset(t *testing.T) {
 	}
 }
 
-// TestClusteringEdges_TriStatePreserved is the load-bearing one: setting a
-// single toggle must emit exactly that key. A nil *bool marshalled as false
-// would disable synthesis the operator never asked to disable — and that is
-// precisely the collapse this config exists to control.
+// TestClusteringEdges_TriStatePreserved verifies that even when an operator
+// configures entity_id_edges in semsource.json, graphSubsystemComponents does
+// not emit the retired entity_id_edges key into SemEngine's strict
+// graph-clustering component config (ADR-099: communities are entity-ID prefix
+// groups and graph-clustering refuses entity_id_edges).
 func TestClusteringEdges_TriStatePreserved(t *testing.T) {
 	cfg := &config.Config{
 		Namespace: "acme",
@@ -69,20 +70,8 @@ func TestClusteringEdges_TriStatePreserved(t *testing.T) {
 	if !ok {
 		t.Fatal("graph-clustering component not composed")
 	}
-	raw, present := got["entity_id_edges"]
-	if !present {
-		t.Fatal("entity_id_edges absent although include_system_peers was set")
-	}
-
-	var edges map[string]any
-	if err := json.Unmarshal(raw, &edges); err != nil {
-		t.Fatalf("unmarshal entity_id_edges: %v", err)
-	}
-	if v, present := edges["include_system_peers"]; !present || v != false {
-		t.Errorf("include_system_peers = %v (present %v), want false", v, present)
-	}
-	if len(edges) != 1 {
-		t.Errorf("exactly one key expected, got %v — an unset field was manufactured", edges)
+	if raw, present := got["entity_id_edges"]; present {
+		t.Fatalf("entity_id_edges must be omitted for SemEngine ADR-099 graph-clustering, got %s", raw)
 	}
 }
 

@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/types"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360studio/semsource/entityid"
@@ -121,7 +121,7 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 		booted++
 		comp, err := NewComponent(cc.Config, component.Dependencies{
 			NATSClient: tc.Client,
-			Platform:   component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+			Platform:   types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		})
 		if err != nil {
 			t.Fatalf("NewComponent from spawned config %q: %v", name, err)

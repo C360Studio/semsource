@@ -3,10 +3,10 @@ package supersession
 import (
 	"testing"
 
+	gtypes "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	gtypes "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
 )
 
 // docEntity builds an enumerated EntityState carrying the doc path predicate,

@@ -12,21 +12,22 @@ import (
 
 	"github.com/c360studio/semsource/entityid"
 
+	"github.com/c360studio/semengine/component"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
+	graphindex "github.com/c360studio/semengine/processor/graph-index"
+	graphingest "github.com/c360studio/semengine/processor/graph-ingest"
+	graphquery "github.com/c360studio/semengine/processor/graph-query"
+	"github.com/c360studio/semengine/types"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/binaryproof"
 	"github.com/c360studio/semsource/internal/natstest"
 	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semsource/storage/filestore"
-	"github.com/c360studio/semstreams/component"
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
-	graphindex "github.com/c360studio/semstreams/processor/graph-index"
-	graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
-	graphquery "github.com/c360studio/semstreams/processor/graph-query"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // spec: openspec/specs/semstreams-governance/spec.md#Requirement: Entity birth carries a semantic envelope
@@ -72,7 +73,7 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 					Config: component.NATSRequestPort{
 						Subject: "graph.mutation.>",
 						Interface: &component.InterfaceContract{
-							Type:    "semstreams.graph.mutation",
+							Type:    "semengine.graph.mutation",
 							Version: "v1",
 						},
 					},
@@ -88,7 +89,7 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 	}
 
 	discovered, err := graphingest.CreateGraphIngest(configJSON, component.Dependencies{
-		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+		Platform:        types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      tc.Client,
 		PayloadRegistry: reg,
 		MetricsRegistry: metricsRegistry,
@@ -190,11 +191,11 @@ func TestIntegration_GovernedGraphIngestStoresSemsourceEntity(t *testing.T) {
 		})
 	}
 
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_indexing_profile_default_total")
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_mutation_rejections_total")
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_foreign_edge_unclaimed_total")
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_foreign_edge_dropped_total")
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_owner_lease_mismatch_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_indexing_profile_default_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_mutation_rejections_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_foreign_edge_unclaimed_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_foreign_edge_dropped_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_owner_lease_mismatch_total")
 }
 
 // spec: openspec/specs/binary-source-service/spec.md#Requirement: Binary bytes stay out of graph triples
@@ -267,9 +268,9 @@ func TestIntegration_SyntheticBinaryProofPublishesGovernedMetadata(t *testing.T)
 	}
 	assertNoRawBinaryObjects(t, stored, fixtureBytes)
 
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_indexing_profile_default_total")
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_mutation_rejections_total")
-	assertCounterZero(t, metricsRegistry, "semstreams_graph_ingest_owner_lease_mismatch_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_indexing_profile_default_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_mutation_rejections_total")
+	assertCounterZero(t, metricsRegistry, "semengine_graph_ingest_owner_lease_mismatch_total")
 }
 
 // spec: openspec/specs/semstreams-governance/spec.md#Requirement: Current query surfaces remain available
@@ -447,7 +448,7 @@ func startGraphIngest(
 				},
 				{
 					// The typed mutation provider port (values pinned from
-					// semstreams internal/graphmutation, which is not
+					// semengine internal/graphmutation, which is not
 					// importable): a declared ports section replaces the
 					// defaults wholesale, so every required port is restated.
 					Name:     "mutations",
@@ -455,7 +456,7 @@ func startGraphIngest(
 					Config: component.NATSRequestPort{
 						Subject: "graph.mutation.>",
 						Interface: &component.InterfaceContract{
-							Type:    "semstreams.graph.mutation",
+							Type:    "semengine.graph.mutation",
 							Version: "v1",
 						},
 					},
@@ -471,7 +472,7 @@ func startGraphIngest(
 	}
 
 	discovered, err := graphingest.CreateGraphIngest(configJSON, component.Dependencies{
-		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+		Platform:        types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      client,
 		PayloadRegistry: reg,
 		MetricsRegistry: metricsRegistry,
@@ -517,7 +518,7 @@ func startGraphIndex(
 	}
 
 	discovered, err := graphindex.CreateGraphIndex(configJSON, component.Dependencies{
-		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+		Platform:        types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      client,
 		MetricsRegistry: metricsRegistry,
 	})
@@ -572,7 +573,7 @@ func startGraphQuery(
 	}
 
 	discovered, err := graphquery.CreateGraphQuery(configJSON, component.Dependencies{
-		Platform:        component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+		Platform:        types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 		NATSClient:      client,
 		MetricsRegistry: metricsRegistry,
 	})
@@ -712,16 +713,16 @@ func waitForPredicateIndexed(
 func requestPredicateList(
 	ctx context.Context,
 	client *natsclient.Client,
-) (semgraph.PredicateListQueryResponse, error) {
+) (semgraph.QueryResponse[semgraph.PredicateListData], error) {
 	// ADR-060: query failures arrive as a typed *errs.ClassifiedError on the err
 	// channel; a success reply is the body-only QueryResponse envelope (no Error field).
 	body, err := client.RequestClassified(ctx, "graph.index.query.predicateList", []byte("{}"), 5*time.Second)
 	if err != nil {
-		return semgraph.PredicateListQueryResponse{}, err
+		return semgraph.QueryResponse[semgraph.PredicateListData]{}, err
 	}
-	var resp semgraph.PredicateListQueryResponse
+	var resp semgraph.QueryResponse[semgraph.PredicateListData]
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return semgraph.PredicateListQueryResponse{}, err
+		return semgraph.QueryResponse[semgraph.PredicateListData]{}, err
 	}
 	return resp, nil
 }
@@ -757,9 +758,7 @@ func requestGraphSummary(
 	t.Helper()
 
 	reqBody, err := json.Marshal(semgraph.SummaryRequest{
-		IncludePredicates: true,
-		EntitySampleLimit: 10,
-		ExamplesPerType:   2,
+		ExamplesPerType: 2,
 	})
 	if err != nil {
 		t.Fatalf("marshal summary request: %v", err)

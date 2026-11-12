@@ -4,16 +4,17 @@ package governance
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/storage"
-	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/storage"
+	"github.com/c360studio/semengine/storage/objectstore"
 	"github.com/c360studio/semvocab/catalog/cco"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
@@ -27,7 +28,7 @@ import (
 // retrieval client's wire-format mappings against a REAL graph subsystem
 // (graph-ingest, graph-index, graph-query) — the highest-risk, can't-unit-test
 // surface. It ingests two code entities with a call edge, then asserts the
-// client correctly speaks graph.index.query.status, graph.query.batch/entity,
+// client correctly speaks graph.query.batch/entity,
 // graph.query.relationships, and graph.query.prefix end to end.
 // spec: openspec/specs/fusion-gateway/spec.md#Requirement: The fusion graph client maps onto graph query verbs
 func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
@@ -73,14 +74,10 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 	waitForEntityState(t, ctx, tc.Client, caller, 5*time.Second)
 	waitForEntityState(t, ctx, tc.Client, callee, 5*time.Second)
 
-	gc := fusionnats.New(tc.Client, 0)
-
-	t.Run("Status resolves the readiness envelope", func(t *testing.T) {
-		// graph.index.query.status must decode; readiness may still be building.
-		if _, err := gc.Status(ctx); err != nil {
-			t.Fatalf("Status: %v", err)
-		}
-	})
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
 
 	t.Run("Entities batch returns triples", func(t *testing.T) {
 		ents := retryUntilReady(t, "Entities", func() ([]*fusion.Entity, error) {
@@ -127,8 +124,8 @@ func TestIntegration_FusionNatsClientAgainstLiveGraph(t *testing.T) {
 		ids := retryUntilReady(t, "Resolve prefix", func() ([]string, error) {
 			// Prefix resolve reports no similarity (HasSimilarity false), so the
 			// seed identities are the whole payload here — project and assert those.
-			seeds, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.test-a1b2c3.gw.golang", Mode: fusion.ResolveModePrefix, Limit: 10})
-			return fusion.SeedIDs(seeds), err
+			res, err := gc.Resolve(ctx, fusion.ResolveQuery{Query: "acme.test-a1b2c3.gw.golang", Mode: fusion.ResolveModePrefix, Limit: 10})
+			return fusion.SeedIDs(res.Seeds), err
 		})
 		if !containsID(ids, caller) || !containsID(ids, callee) {
 			t.Fatalf("prefix resolve missing ingested IDs, got %v", ids)
@@ -222,10 +219,18 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 	waitForEntityState(t, ctx, tc.Client, caller, 5*time.Second)
 	waitForEntityState(t, ctx, tc.Client, callee, 5*time.Second)
 
-	engine := fusion.NewEngine(
-		fusionnats.New(tc.Client, 0),
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
 		fusion.NewBodyResolver(fusion.MapStoreResolver{semsourcegraph.BodyStoreInstance: storage.Store(store)}),
+		slog.Default(),
 	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	// Use the REAL code lens for edges/fields/hydration, but force prefix
 	// resolution so the seed resolves deterministically via graph.query.prefix
 	// (the symbol path needs graph-embedding, validated elsewhere). The query is
@@ -249,14 +254,14 @@ func TestIntegration_FusionPipelineEndToEnd(t *testing.T) {
 		}
 		resp = r
 		dispatch = findNode(resp.Nodes, "Dispatch")
-		if resp.Index.Ready && dispatch != nil && len(dispatch.Relations["callee"]) == 1 {
+		if !resp.Deferred && dispatch != nil && len(dispatch.Relations["callee"]) == 1 {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	if !resp.Index.Ready {
-		t.Fatalf("expected ready index, got %+v", resp.Index)
+	if resp.Deferred {
+		t.Fatalf("expected non-deferred response, got deferred=%v reason=%q", resp.Deferred, resp.DeferReason)
 	}
 	if dispatch == nil {
 		t.Fatalf("no Dispatch node in fused response: %+v", resp.Nodes)

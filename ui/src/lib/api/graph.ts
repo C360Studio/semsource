@@ -25,7 +25,7 @@ export async function queryGraph(
   );
   if (
     !response.graph &&
-    response.index.ready &&
+    !response.deferred &&
     response.nodes.length > 0 &&
     response.misses.length === 0
   )

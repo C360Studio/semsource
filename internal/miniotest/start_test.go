@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -22,8 +22,8 @@ func (c *fixtureContainer) Terminate(ctx context.Context, _ ...testcontainers.Te
 	return c.stop(ctx)
 }
 func (c *fixtureContainer) Host(context.Context) (string, error) { return "localhost", c.hostErr }
-func (c *fixtureContainer) MappedPort(context.Context, nat.Port) (nat.Port, error) {
-	return "9000/tcp", c.portErr
+func (c *fixtureContainer) MappedPort(context.Context, string) (network.Port, error) {
+	return network.MustParsePort("9000/tcp"), c.portErr
 }
 
 func TestFailedStartCleansContainerWithIndependentContext(t *testing.T) {
@@ -97,7 +97,7 @@ func TestStartUsesPinnedReleaseAndLiveHealthGate(t *testing.T) {
 		if !ok {
 			t.Fatalf("readiness must wait for the HTTP health endpoint: %T", req.WaitingFor)
 		}
-		if health.Path != "/minio/health/live" || health.Port != "9000/tcp" || health.Timeout() == nil || *health.Timeout() != 2*time.Minute || !health.StatusCodeMatcher(http.StatusOK) || health.StatusCodeMatcher(http.StatusServiceUnavailable) {
+		if health.Path != "/minio/health/live" || health.Port != network.MustParsePort("9000/tcp") || health.Timeout() == nil || *health.Timeout() != 2*time.Minute || !health.StatusCodeMatcher(http.StatusOK) || health.StatusCodeMatcher(http.StatusServiceUnavailable) {
 			t.Fatalf("readiness gate drifted: %+v", health)
 		}
 		return container, nil

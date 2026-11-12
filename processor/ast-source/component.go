@@ -17,11 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/retry"
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/retry"
+	"github.com/c360studio/semengine/storage"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -75,7 +76,7 @@ type Component struct {
 	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
-	platform   component.PlatformMeta
+	platform   types.PlatformMeta
 
 	// bodyStore holds verbatim code bodies offloaded at ingest so the fusion
 	// code lens can hydrate them by handle, location-independently (ADR-062 /
@@ -1064,16 +1065,6 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 // Discoverable interface implementation
-
-// Meta returns component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "ast-source",
-		Type:        "processor",
-		Description: "Multi-language AST source for semsource code entity extraction and graph ingestion",
-		Version:     "0.1.0",
-	}
-}
 
 // InputPorts returns configured input port definitions.
 // ast-source has no input ports — it generates data from the file system.

@@ -1,6 +1,6 @@
 package source
 
-import "github.com/c360studio/semstreams/vocabulary"
+import "github.com/c360studio/semengine/vocabulary"
 
 // Media predicates for image and video resources ingested by SemSource.
 // Phase 1 covers image support. Phase 2 (video + keyframe) predicates are

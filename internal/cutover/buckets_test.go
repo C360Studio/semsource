@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	semgraph "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semengine/graph/kvcatalog"
 )
 
 // TestFrameworkBucketsAreClassified is the interlock. It runs in normal CI —
@@ -18,7 +18,11 @@ import (
 // literal, which could not express a deliberate retention at all.
 func TestFrameworkBucketsAreClassified(t *testing.T) {
 	classified := append(append([]string{}, Purged...), Retained...)
-	runtime := append([]string{}, semgraph.FrameworkOwnedBuckets()...)
+	specs := kvcatalog.KVCatalog()
+	runtime := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		runtime = append(runtime, spec.Name)
+	}
 	sort.Strings(classified)
 	sort.Strings(runtime)
 

@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
+	"github.com/c360studio/semengine/message"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"

@@ -18,15 +18,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
-	"github.com/c360studio/semstreams/storage"
-	"github.com/c360studio/semstreams/storage/objectstore"
-	"github.com/c360studio/semstreams/storage/storeregistry"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semengine/storage"
+	"github.com/c360studio/semengine/storage/objectstore"
+	"github.com/c360studio/semengine/storage/storeregistry"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
@@ -133,7 +134,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	var graph fusion.RetrievalClient
 	if deps.NATSClient != nil {
-		graph = fusionnats.New(deps.NATSClient, 0)
+		g, err := fusionnats.New(deps.NATSClient, 0)
+		if err != nil {
+			return nil, fmt.Errorf("create fusionnats client: %w", err)
+		}
+		graph = g
 	}
 	return &Component{
 		name:          name,
@@ -204,18 +209,34 @@ func (c *Component) buildEngine(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	logger := c.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	// Attach the framework ranking signals (ADR-062 increment 5): ontology
 	// specificity (BFO/CCO subclass depth on our stamped entity.ontology.class)
 	// + predicate salience (vocabulary WithWeight). Without this the engine
 	// ranks on resolve-order + lexical only, ignoring the ontology class we emit
 	// on every entity. fusionvocab resolves both against the framework registries.
-	c.engine = fusion.NewEngine(c.graph, resolver).WithSignals(fusionvocab.New()).WithMetrics(c.metrics)
+	opts := []fusion.Option{
+		fusion.WithSignals(fusionvocab.New(cco.Parents)),
+		fusion.WithMetrics(c.metrics),
+	}
+	engine, err := fusion.NewEngine(c.graph, resolver, logger, opts...)
+	if err != nil {
+		return fmt.Errorf("create fusion engine: %w", err)
+	}
+	c.engine = engine
 	c.exactEngine = c.engine
 	if c.lensKind != "docs" {
 		// Code answers demand byte-exact symbol seeds (D4); search keeps the
 		// folded recall of the shared engine — discovery is where
 		// case-insensitivity is a feature, not a leak.
-		c.exactEngine = fusion.NewEngine(exactSeedClient{c.graph}, resolver).WithSignals(fusionvocab.New()).WithMetrics(c.metrics)
+		exactEngine, err := fusion.NewEngine(exactSeedClient{c.graph}, resolver, logger, opts...)
+		if err != nil {
+			return fmt.Errorf("create exact fusion engine: %w", err)
+		}
+		c.exactEngine = exactEngine
 	}
 	return nil
 }
@@ -550,16 +571,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.running = false
 	c.mu.Unlock()
 	return nil
-}
-
-// Meta implements component.Discoverable.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        c.name,
-		Type:        "processor",
-		Description: "Fused code_context/doc_context queries: verbatim body plus structure, over NATS and HTTP",
-		Version:     "0.2.0",
-	}
 }
 
 // InputPorts implements component.Discoverable (none — driven by request/reply).

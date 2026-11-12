@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/pkg/errs"
 )
 
 // The readiness-retry helpers are the reason this package's integration tests

@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/component"
 )
 
 // startedComponent builds and starts an ast-source against a real test NATS,
@@ -40,7 +41,7 @@ func startedComponent(t *testing.T, watchRoot string) (*Component, func()) {
 
 	comp, err := NewComponent(raw, component.Dependencies{
 		NATSClient: tc.Client,
-		Platform:   component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
+		Platform:   types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"},
 	})
 	if err != nil {
 		t.Fatalf("NewComponent: %v", err)

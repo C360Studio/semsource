@@ -1,14 +1,21 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/c360studio/semengine/health"
+	"github.com/c360studio/semengine/service"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semstreams/types"
 )
 
 // TestBuildSemstreamsConfig_IncludesSupersession guards that the supersession
@@ -211,13 +218,11 @@ func TestGraphSubsystemComponents_GraphGatewayDeclaresRequesterOutputs(t *testin
 	}
 	ports, _ := raw["ports"].(map[string]any)
 	outputs, _ := ports["outputs"].([]any)
-	if len(outputs) != 3 {
-		t.Fatalf("graph-gateway output count = %d, want 3 requester families", len(outputs))
+	if len(outputs) != 1 {
+		t.Fatalf("graph-gateway output count = %d, want 1 (graph_queries)", len(outputs))
 	}
-	// bind_address replaces the retired http-input-subject shape as the sole
-	// carrier of the gateway's network identity.
-	if raw["bind_address"] != "0.0.0.0:8082" {
-		t.Fatalf("graph-gateway bind_address = %v, want 0.0.0.0:8082", raw["bind_address"])
+	if _, present := raw["bind_address"]; present {
+		t.Fatalf("graph-gateway bind_address = %v, want omitted (shared ServiceManager HTTP mux)", raw["bind_address"])
 	}
 }
 
@@ -412,5 +417,79 @@ func TestWebsocketComponentConfig_PathReachesTheComponent(t *testing.T) {
 				t.Errorf("websocket config path = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+type blockingStartService struct {
+	name    string
+	started chan struct{}
+}
+
+func (b *blockingStartService) Name() string { return b.name }
+
+func (b *blockingStartService) Start(ctx context.Context) error {
+	if b.started != nil {
+		close(b.started)
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (b *blockingStartService) Stop(context.Context) error { return nil }
+func (b *blockingStartService) Status() service.Status     { return service.StatusStarting }
+func (b *blockingStartService) IsHealthy() bool            { return false }
+func (b *blockingStartService) GetStatus() service.Info {
+	return service.Info{Name: b.name, Status: service.StatusStarting}
+}
+func (b *blockingStartService) Health() health.Status {
+	return health.NewDegraded(b.name, "starting")
+}
+
+// TestServeUntilSignal_CancellingSignalContextInterruptsBlockedStart proves that
+// serveUntilSignal hands StartAll the live signalCtx (rather than wrapping it in
+// context.WithoutCancel) per SemEngine ADR-113 (#231, semengine#361): when a
+// service's Start blocks, cancelling signalCtx cuts boot short immediately.
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestServeUntilSignal_CancellingSignalContextInterruptsBlockedStart(t *testing.T) {
+	mgr := service.NewServiceManager(service.NewServiceRegistry())
+	started := make(chan struct{})
+	if err := mgr.RegisterInstance("component-manager", &blockingStartService{
+		name:    "component-manager",
+		started: started,
+	}); err != nil {
+		t.Fatalf("RegisterInstance: %v", err)
+	}
+
+	signalCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	go func() {
+		done <- serveUntilSignal(
+			signalCtx,
+			mgr,
+			nil,
+			&config.Config{},
+			&config.ExpandResult{},
+			logger,
+		)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for StartAll to invoke blocking Start")
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("serveUntilSignal err = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveUntilSignal did not return after signalCtx was canceled during StartAll")
 	}
 }

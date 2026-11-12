@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/message"
 
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // Entity is a fully-typed video entity that produces triples using

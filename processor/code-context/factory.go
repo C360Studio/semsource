@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // codeContextSchema defines the configuration schema for the code-context component.
@@ -13,7 +13,7 @@ var codeContextSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
 // RegistryInterface defines the minimal interface needed for registration.
 type RegistryInterface interface {
-	RegisterWithConfig(component.RegistrationConfig) error
+	Register(component.Registration) error
 }
 
 // Register registers the code-context component with the given registry.
@@ -21,7 +21,7 @@ func Register(registry RegistryInterface, systems ...map[string][]string) error 
 	if registry == nil {
 		return fmt.Errorf("registry cannot be nil")
 	}
-	return registry.RegisterWithConfig(component.RegistrationConfig{
+	return registry.Register(component.Registration{
 		Name: "code-context",
 		Factory: func(raw json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 			cfg := DefaultConfig()

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/message"
 )
 
 // ManifestType is the message type for source manifest payloads.

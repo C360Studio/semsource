@@ -13,8 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -71,7 +72,7 @@ type Component struct {
 	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
-	platform   component.PlatformMeta
+	platform   types.PlatformMeta
 
 	handler   *objectstore.Handler
 	sourceCfg *sourceCfg
@@ -610,16 +611,6 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 // Discoverable interface implementation
-
-// Meta returns component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "objectstore-source",
-		Type:        "processor",
-		Description: "S3-compatible object store source for semsource document artifact ingestion",
-		Version:     "0.1.0",
-	}
-}
 
 // InputPorts returns an empty slice — this source generates data from a bucket.
 func (c *Component) InputPorts() []component.Port {

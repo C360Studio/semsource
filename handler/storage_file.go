@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/storage"
 )
 
 // ReaderStore is an optional extension for stores that can write from a stream.

@@ -142,7 +142,7 @@ func (p *replayQualification) correctionChange(add bool) {
 func (p *replayQualification) correctionDesired(name string, enabled bool, expected string) string {
 	var canonical string
 	if !p.h.check(name, 5*time.Second, func() (any, error) {
-		kv, err := p.h.js.KeyValue(p.h.ctx, "semstreams_config_setup03a_semsource")
+		kv, err := p.h.js.KeyValue(p.h.ctx, "semengine_config_setup03a_semsource")
 		if err != nil {
 			return nil, err
 		}

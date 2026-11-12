@@ -6,7 +6,7 @@ package videosource
 import (
 	"fmt"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config holds configuration for the video-source processor component.
@@ -15,10 +15,10 @@ type Config struct {
 
 	// Paths is the list of filesystem directories to walk for video files.
 	// At least one path is required.
-	Paths []string `json:"paths" schema:"type:array,description:Filesystem directories to scan for video files (.mp4 .webm .mov .avi .mkv),category:basic,required:true"`
+	Paths []string `json:"paths" schema:"type:array,description:Filesystem directories to scan for video files (.mp4 .webm .mov .avi .mkv),category:basic,required"`
 
 	// Org is the organization namespace used in entity ID construction.
-	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`
+	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required"`
 
 	// WatchEnabled controls whether fsnotify watching is active after the
 	// initial ingest. When false the component exits after the initial walk.
@@ -43,7 +43,7 @@ type Config struct {
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:advanced"`
 }
 
 // Validate checks the configuration for errors.

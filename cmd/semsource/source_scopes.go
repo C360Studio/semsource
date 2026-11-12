@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
+	semconfig "github.com/c360studio/semengine/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/source/weburl"
-	semconfig "github.com/c360studio/semstreams/config"
 )
 
 // sourceScopeConfig reads only identity inputs from each producer's persisted

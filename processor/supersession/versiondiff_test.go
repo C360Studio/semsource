@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion"
 )
 
 // mkCand builds a candidate for the diff tests. hash/kind default to a bodykey so

@@ -3,11 +3,11 @@ package git
 import (
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // BuildCommitEntity constructs a RawEntity for a git commit.

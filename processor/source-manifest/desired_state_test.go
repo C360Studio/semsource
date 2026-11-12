@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"testing"
 
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/sourcespawn"
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/types"
 )
 
 type desiredStore struct {

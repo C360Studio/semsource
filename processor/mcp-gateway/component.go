@@ -14,9 +14,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/graphstatus"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 const serverVersion = "0.1.0"
@@ -219,16 +219,6 @@ func joinPath(prefix, mcpPath string) string {
 }
 
 // --- Discoverable ---------------------------------------------------------
-
-// Meta implements component.Discoverable.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        c.name,
-		Type:        "processor",
-		Description: "MCP gateway: source-registration tools over Streamable HTTP for AI agents",
-		Version:     serverVersion,
-	}
-}
 
 // InputPorts implements component.Discoverable (none — request/reply + HTTP).
 func (c *Component) InputPorts() []component.Port { return []component.Port{} }

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	semconfig "github.com/c360studio/semstreams/config"
+	semconfig "github.com/c360studio/semengine/config"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )

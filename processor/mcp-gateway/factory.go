@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // mcpGatewaySchema is the config schema derived from Config.
@@ -13,7 +13,7 @@ var mcpGatewaySchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
 // RegistryInterface is the minimal registry surface needed to register.
 type RegistryInterface interface {
-	RegisterWithConfig(component.RegistrationConfig) error
+	Register(component.Registration) error
 }
 
 // Register registers the mcp-gateway component factory.
@@ -21,7 +21,7 @@ func Register(registry RegistryInterface) error {
 	if registry == nil {
 		return fmt.Errorf("registry cannot be nil")
 	}
-	return registry.RegisterWithConfig(component.RegistrationConfig{
+	return registry.Register(component.Registration{
 		Name:        "mcp-gateway",
 		Factory:     NewComponent,
 		Ports:       DeclarePorts,

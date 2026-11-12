@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/handler"
 	cfgfile "github.com/c360studio/semsource/handler/cfgfile"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // tripleObject returns the string Object of the first triple in state matching

@@ -2,9 +2,9 @@
 # Fields: name, mode, upstream sha256. Exclusions and their reasons are in README.md.
 #Note: orchestration-check remains retained from SemStreams (sha256: 54cd290a2c5d711293754c3bcfaa273c40a3f47836b44a1d90dd460df20253c2) until SemEngine Change 6 ports processor/rule.
 upstream_module	github.com/c360studio/semengine
-upstream_version	v0.1.0-alpha.3
+upstream_version	v0.1.0-alpha.4
 entity-or-bucket	vendored	a6c804aa369694a5fcd617680eb6e841fb7c2115931174aa485415c4a6d7c2c1
 kv-or-stream	vendored	0581ac0a64f2290f24f5b8b913ca4c3d1eef94d438d1494e95f5b31af8bdb9ac
 new-payload	forked	c31c3894216305a71e1596ca8def528c67e92f372e93d5f87f9a3e90ed6abe9e
-query-pattern	forked	802190843269be7ca3b4ff34de41d0e601fb76908d9205717948a8582344df54
+query-pattern	forked	b8bb2d4aa5ea1412c04e73f1691f0907cec2450af21d4a17240ec270d5aadeeb
 semengine-status	excluded	4358cfa4581921c966f20df3f63d74305c3a14e7abf857cd505f28f56b60a1d3

@@ -15,10 +15,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/c360studio/semengine/component"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/workspace"
-	"github.com/c360studio/semstreams/component"
 )
 
 // contentHashSlug produces a deterministic 6-hex-character slug from the

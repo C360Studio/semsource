@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	semvocabulary "github.com/c360studio/semengine/vocabulary"
 	_ "github.com/c360studio/semsource/source/ast"
-	semvocabulary "github.com/c360studio/semstreams/vocabulary"
 	"gopkg.in/yaml.v3"
 )
 

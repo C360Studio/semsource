@@ -3,7 +3,7 @@ package handler
 import (
 	"time"
 
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/message"
 )
 
 // SourceType constants for supported handler kinds.

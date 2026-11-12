@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semengine/pkg/errs"
 )
 
 // response_too_large is a RESULT-SIZE failure: the responder classified the

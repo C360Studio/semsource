@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/storage"
 
 	"github.com/c360studio/semsource/internal/miniotest"
 	"github.com/c360studio/semsource/storage/s3store"

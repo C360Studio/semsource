@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/model"
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semstreams/model"
 )
 
 // loadJSON is a small helper: parse+validate a config from a JSON literal.

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/c360studio/semengine/model"
+	semtypes "github.com/c360studio/semengine/pkg/types"
 	"github.com/c360studio/semsource/entityid"
-	"github.com/c360studio/semstreams/model"
-	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // EntityStoreConfig configures persistent graph storage via NATS KV.

@@ -4,19 +4,20 @@ package governance
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/storage/objectstore"
-	"github.com/c360studio/semstreams/storage/storeregistry"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/storage/objectstore"
+	"github.com/c360studio/semengine/storage/storeregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -355,10 +356,18 @@ func assertTailRetrievableViaFusion(
 ) {
 	t.Helper()
 
-	engine := fusion.NewEngine(
-		fusionnats.New(client, 0),
+	gc, gcErr := fusionnats.New(client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
 		fusion.NewBodyResolver(storeReg),
+		slog.Default(),
 	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := docsPrefixLens{docs.New()}
 	tailLabel := labelOfState(tailPassage)
 
@@ -383,8 +392,8 @@ func assertTailRetrievableViaFusion(
 		time.Sleep(100 * time.Millisecond)
 	}
 	if node == nil {
-		t.Fatalf("tail passage node with a hydrated body never appeared — ready=%v state=%s nodes=%+v",
-			last.Index.Ready, last.Index.State, last.Nodes)
+		t.Fatalf("tail passage node with a hydrated body never appeared — deferred=%v reason=%s nodes=%+v",
+			last.Deferred, last.DeferReason, last.Nodes)
 	}
 	if node.Body != tailBody {
 		t.Fatalf("hydrated tail passage body = %q; want verbatim %q", node.Body, tailBody)

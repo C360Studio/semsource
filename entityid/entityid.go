@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	semtypes "github.com/c360studio/semstreams/pkg/types"
+	semtypes "github.com/c360studio/semengine/pkg/types"
 )
 
 // PlatformSemsource identifies SemSource in provenance, never deployment authority.

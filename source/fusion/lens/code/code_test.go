@@ -2,10 +2,11 @@ package code
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
 	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/source/ast"
@@ -99,7 +100,10 @@ func TestCodeLensViaEngine(t *testing.T) {
 	g.AddEdge(dispatch, ast.CodeCalls, onEvent)
 	g.SetResolve("Dispatch", dispatch)
 
-	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}))
+	engine, err := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := engine.Fuse(context.Background(),
 		fusion.Request{Query: "Dispatch", Want: []fusion.Want{fusion.WantBody, fusion.WantRelations}},
 		New())
@@ -149,7 +153,10 @@ func TestCodeLens_ImpactWalksTypeDependencies(t *testing.T) {
 	g.AddEdge(ref, ast.CodeReferences, base)
 	g.SetResolve("BaseClient", base)
 
-	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	engine, err := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := engine.Fuse(context.Background(),
 		fusion.Request{Query: "BaseClient", Want: []fusion.Want{fusion.WantRelations, fusion.WantImpact}},
 		New())
@@ -197,7 +204,10 @@ func TestCodeLens_ImpactExcludesContainment(t *testing.T) {
 	g.AddEdge(file, ast.CodeContains, base)
 	g.SetResolve("BaseClient", base)
 
-	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	engine, err := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := engine.Fuse(context.Background(),
 		fusion.Request{Query: "BaseClient", Want: []fusion.Want{fusion.WantRelations, fusion.WantImpact}},
 		New())

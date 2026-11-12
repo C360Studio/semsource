@@ -14,9 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/errs"
+	"github.com/c360studio/semengine/pkg/fusion"
 	"github.com/nats-io/nats.go"
 
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
@@ -24,14 +25,19 @@ import (
 
 type errorGraph struct {
 	*fusiontest.MemGraph
-	statusErr error
+	resolveErr error
 }
 
-func (g *errorGraph) Status(context.Context) (fusion.IndexStatus, error) {
-	if g.statusErr != nil {
-		return fusion.IndexStatus{}, g.statusErr
+func (g *errorGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) (fusion.Resolution, error) {
+	if g.resolveErr != nil {
+		return fusion.Resolution{}, g.resolveErr
 	}
-	return g.MemGraph.Status(context.Background())
+	return g.MemGraph.Resolve(ctx, q)
+}
+
+func indexNotReadyErr() error {
+	return errs.ClassifiedCode(errs.ErrorTransient, semgraph.ErrorCodeIndexNotReady,
+		errors.New("index not ready"))
 }
 
 type trackingResponseWriter struct {
@@ -105,7 +111,6 @@ func TestFusionHTTPErrorContract_DependencyFailures(t *testing.T) {
 	}{
 		{"no responders", nats.ErrNoResponders, 503, "dependency_unavailable", true},
 		{"not connected", natsclient.ErrNotConnected, 503, "dependency_unavailable", true},
-		{"circuit open", natsclient.ErrCircuitOpen, 503, "dependency_unavailable", true},
 		{"transient", errs.Classified(errs.ErrorTransient, errors.New(secret)), 503, "dependency_unavailable", true},
 		{"deadline", context.DeadlineExceeded, 504, "upstream_timeout", true},
 		{"nats timeout", nats.ErrTimeout, 504, "upstream_timeout", true},
@@ -119,7 +124,7 @@ func TestFusionHTTPErrorContract_DependencyFailures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var logs bytes.Buffer
-			g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), statusErr: tt.err}
+			g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), resolveErr: tt.err}
 			c := newTestComponent("code", g, fusiontest.NewMemStore())
 			c.logger = slog.New(slog.NewTextHandler(&logs, nil))
 			rec := httptest.NewRecorder()
@@ -168,26 +173,20 @@ func TestFusionHTTPErrorContract_LocalFailures(t *testing.T) {
 
 func TestFusionHTTPErrorContract_SuccessHonestyStates(t *testing.T) {
 	t.Run("not ready", func(t *testing.T) {
-		g := fusiontest.NewMemGraph()
-		g.SetStatus(fusion.IndexStatus{Ready: false, State: fusion.StateBuilding})
+		g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), resolveErr: indexNotReadyErr()}
 		c := newTestComponent("code", g, fusiontest.NewMemStore())
 		rec := httptest.NewRecorder()
 		c.handleHTTP(rec, httptest.NewRequest(http.MethodPost, "/code-context/context", strings.NewReader(`{"query":"Dispatch"}`)), "context")
 		if rec.Code != 200 {
 			t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 		}
-		if resp := decodeResp(t, rec.Body.Bytes()); resp.Index.Ready || resp.ContractVersion == "" {
+		if resp := decodeResp(t, rec.Body.Bytes()); !resp.Deferred || resp.DeferReason != semgraph.ErrorCodeIndexNotReady || resp.ContractVersion == "" {
 			t.Fatalf("unexpected response: %+v", resp)
 		}
 	})
 
 	t.Run("ready miss", func(t *testing.T) {
 		g := fusiontest.NewMemGraph()
-		// BootstrapComplete is what licenses a MISS rather than a defer (ADR-084):
-		// "readiness licenses health, not absence". Only a graph that finished
-		// building may answer "this does not exist"; an unbootstrapped one must
-		// defer, because it cannot tell absence from not-yet-indexed.
-		g.SetStatus(fusion.IndexStatus{Ready: true, State: fusion.StateReady, BootstrapComplete: true})
 		c := newTestComponent("code", g, fusiontest.NewMemStore())
 		rec := httptest.NewRecorder()
 		c.handleHTTP(rec, httptest.NewRequest(http.MethodPost, "/code-context/context", strings.NewReader(`{"query":"Missing"}`)), "context")
@@ -201,7 +200,6 @@ func TestFusionHTTPErrorContract_SuccessHonestyStates(t *testing.T) {
 
 	t.Run("unknown fields remain compatible", func(t *testing.T) {
 		g := fusiontest.NewMemGraph()
-		g.SetStatus(fusion.IndexStatus{Ready: true, State: fusion.StateReady})
 		c := newTestComponent("code", g, fusiontest.NewMemStore())
 		rec := httptest.NewRecorder()
 		body := strings.NewReader(`{"query":"Missing","future_option":{"enabled":true}}`)
@@ -213,7 +211,7 @@ func TestFusionHTTPErrorContract_SuccessHonestyStates(t *testing.T) {
 }
 
 func TestFusionHTTPErrorContract_BlankQueryStopsBeforeDependency(t *testing.T) {
-	g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), statusErr: errors.New("dependency must not run")}
+	g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), resolveErr: errors.New("dependency must not run")}
 	c := newTestComponent("code", g, fusiontest.NewMemStore())
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/code-context/context", strings.NewReader(`{"query":" "}`))
@@ -223,7 +221,7 @@ func TestFusionHTTPErrorContract_BlankQueryStopsBeforeDependency(t *testing.T) {
 
 func TestFusionHTTPErrorContract_CallerCancellationDoesNotWrite(t *testing.T) {
 	t.Run("during dependency", func(t *testing.T) {
-		g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), statusErr: context.Canceled}
+		g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), resolveErr: context.Canceled}
 		c := newTestComponent("code", g, fusiontest.NewMemStore())
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -279,8 +277,7 @@ func TestFusionHTTPErrorContract_AllRegisteredRoutes(t *testing.T) {
 func TestFusionHTTPErrorContract_PublicHandlers(t *testing.T) {
 	for _, lensKind := range []string{"code", "docs"} {
 		t.Run(lensKind, func(t *testing.T) {
-			g := &errorGraph{MemGraph: fusiontest.NewMemGraph()}
-			g.SetStatus(fusion.IndexStatus{Ready: false, State: fusion.StateBuilding})
+			g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), resolveErr: indexNotReadyErr()}
 			c := newTestComponent(lensKind, g, fusiontest.NewMemStore())
 			mux := http.NewServeMux()
 			prefix := "/" + map[string]string{"code": "code-context", "docs": "doc-context"}[lensKind]
@@ -292,7 +289,7 @@ func TestFusionHTTPErrorContract_PublicHandlers(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 			}
-			if resp := decodeResp(t, rec.Body.Bytes()); resp.Index.Ready || resp.ContractVersion == "" {
+			if resp := decodeResp(t, rec.Body.Bytes()); !resp.Deferred || resp.DeferReason != semgraph.ErrorCodeIndexNotReady || resp.ContractVersion == "" {
 				t.Fatalf("unexpected response: %+v", resp)
 			}
 
@@ -302,7 +299,7 @@ func TestFusionHTTPErrorContract_PublicHandlers(t *testing.T) {
 			assertHTTPError(t, rec, 400, "invalid_json", "invalid", false)
 
 			secret := "private public dependency failure"
-			g.statusErr = errors.New(secret)
+			g.resolveErr = errors.New(secret)
 			rec = httptest.NewRecorder()
 			req = httptest.NewRequest(http.MethodPost, prefix+"/context", strings.NewReader(`{"query":"status"}`))
 			mux.ServeHTTP(rec, req)

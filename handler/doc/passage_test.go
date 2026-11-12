@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 )
 
 // ---------------------------------------------------------------------------

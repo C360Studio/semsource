@@ -7,7 +7,7 @@ package cfgfilesource
 import (
 	"fmt"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config holds configuration for the cfgfile-source processor component.
@@ -16,10 +16,10 @@ type Config struct {
 
 	// Paths is the list of root directories to scan for config files.
 	// At least one path is required.
-	Paths []string `json:"paths" schema:"type:array,description:Root directories to scan for config files (go.mod package.json Dockerfile pom.xml build.gradle),category:basic,required:true"`
+	Paths []string `json:"paths" schema:"type:array,description:Root directories to scan for config files (go.mod package.json Dockerfile pom.xml build.gradle),category:basic,required"`
 
 	// Org is the organization namespace used in entity ID construction.
-	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`
+	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required"`
 
 	// Project, when non-empty, overrides the path-derived entity-ID system
 	// slug — submodule expansion registers the same canonical project from
@@ -34,7 +34,7 @@ type Config struct {
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:advanced"`
 }
 
 // Validate checks the configuration for errors.

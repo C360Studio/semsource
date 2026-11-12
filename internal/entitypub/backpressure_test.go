@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 
 	"github.com/c360studio/semsource/graph"
 )
@@ -30,7 +30,7 @@ func (b *breakerPublisher) PublishToStream(ctx context.Context, subject string, 
 func (b *breakerPublisher) PublishToStreamWithMsgID(context.Context, string, []byte, string) error {
 	if b.seen.Add(1) <= b.openCalls {
 		// The TYPED sentinel: classification is errors.Is, never a string.
-		return fmt.Errorf("publish: %w", natsclient.ErrCircuitOpen)
+		return fmt.Errorf("publish: %w", natsclient.ErrNotConnected)
 	}
 	return nil
 }

@@ -1,6 +1,6 @@
 package source
 
-import "github.com/c360studio/semstreams/vocabulary"
+import "github.com/c360studio/semengine/vocabulary"
 
 // EntityLifecycleStale marks a retained entity whose backing source artifact
 // no longer exists — the graph's staleness/retraction marker (ADR-0008's

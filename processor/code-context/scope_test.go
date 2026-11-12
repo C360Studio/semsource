@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
@@ -22,7 +23,7 @@ type scopeCapturingGraph struct {
 	lastScope []string
 }
 
-func (g *scopeCapturingGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
+func (g *scopeCapturingGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) (fusion.Resolution, error) {
 	g.lastScope = q.Scope
 	return g.MemGraph.Resolve(ctx, q)
 }
@@ -32,12 +33,11 @@ func (g *scopeCapturingGraph) Resolve(ctx context.Context, q fusion.ResolveQuery
 // the resolve (capturing Scope) and returns an empty response without hydrating.
 func newScopeComponent(lensKind, org string) (*Component, *scopeCapturingGraph) {
 	g := &scopeCapturingGraph{MemGraph: fusiontest.NewMemGraph()}
-	// State + BootstrapComplete are load-bearing since beta.157: the gate
-	// allow-lists State and fails closed on BootstrapComplete (ADR-084), and a
-	// deferred serve never reaches Resolve — so the Scope this test captures
-	// would never be set.
-	g.SetStatus(fusion.IndexStatus{Ready: true, State: fusion.StateReady, BootstrapComplete: true})
 	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: fusiontest.NewMemStore()})
+	eng, err := fusion.NewEngine(g, resolver, slog.Default())
+	if err != nil {
+		panic(err)
+	}
 	c := &Component{
 		name:        "code-context",
 		lensKind:    lensKind,
@@ -45,7 +45,7 @@ func newScopeComponent(lensKind, org string) (*Component, *scopeCapturingGraph) 
 		org:         org,
 		platform:    "test-a1b2c3", sourceSystems: []string{"repo"},
 		graph:     g,
-		engine:    fusion.NewEngine(g, resolver),
+		engine:    eng,
 		logger:    slog.Default(),
 		running:   true,
 		startTime: time.Now(),
@@ -142,7 +142,7 @@ func TestServeNoScopeWithoutOrg(t *testing.T) {
 
 // TestNewComponentCapturesOrg proves the org is sourced from platform identity.
 func TestNewComponentCapturesOrg(t *testing.T) {
-	deps := component.Dependencies{Platform: component.PlatformMeta{Org: "acme"}}
+	deps := component.Dependencies{Platform: types.PlatformMeta{Org: "acme"}}
 	comp, err := NewComponent(json.RawMessage(`{"lens":"docs"}`), deps)
 	if err != nil {
 		t.Fatalf("NewComponent: %v", err)

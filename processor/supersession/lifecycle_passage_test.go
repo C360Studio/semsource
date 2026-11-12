@@ -6,11 +6,11 @@ import (
 	"sort"
 	"testing"
 
+	gtypes "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	gtypes "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
 )
 
 // Passage-liveness coverage for decideLifecycleActions. A document that SHRANK

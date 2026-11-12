@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/sourcespawn"
-	"github.com/c360studio/semstreams/types"
 )
 
 func TestDesiredRemovalIndependentOfGraph(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/storage"
 
 	"github.com/c360studio/semsource/internal/garagetest"
 	"github.com/c360studio/semsource/storage/s3store"

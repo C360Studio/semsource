@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/internal/sourcestatus"
-	"github.com/c360studio/semstreams/message"
 )
 
 // StatusType is the message type for ingestion status payloads.

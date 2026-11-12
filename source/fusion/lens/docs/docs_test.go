@@ -2,10 +2,11 @@ package docs
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
 	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
@@ -70,7 +71,10 @@ func TestDocsLensViaEngine(t *testing.T) {
 	})
 	g.SetResolve("how does retry work", id)
 
-	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}))
+	engine, err := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := engine.Fuse(context.Background(),
 		fusion.Request{Query: "how does retry work", Want: []fusion.Want{fusion.WantBody}},
 		New())

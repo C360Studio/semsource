@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semstreams/message"
 )
 
 func TestEntityPayload_JSONRoundTrip(t *testing.T) {

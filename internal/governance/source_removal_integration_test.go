@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semengine/component"
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 
 	semsourceconfig "github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -106,7 +106,7 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	disc, err := sourcemanifest.NewComponent(rawCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	disc, err := sourcemanifest.NewComponent(rawCfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("NewComponent: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 		Source:     manifestSourceEntryForDocs(t),
 		Provenance: sourcemanifest.Provenance{Actor: "removal-test"},
 	})
-	addRaw, err := tc.Client.Request(ctx, "graph.ingest.add.acme", addReq, 5*time.Second)
+	addRaw, err := tc.Client.RequestClassified(ctx, "graph.ingest.add.acme", addReq, 5*time.Second)
 	if err != nil {
 		t.Fatalf("add request: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 
 	// 3. Remove desired registration; the running source remains until restart.
 	removeReq, _ := json.Marshal(sourcemanifest.RemoveRequest{InstanceName: handle})
-	removeRaw, err := tc.Client.Request(ctx, "graph.ingest.remove.acme", removeReq, 5*time.Second)
+	removeRaw, err := tc.Client.RequestClassified(ctx, "graph.ingest.remove.acme", removeReq, 5*time.Second)
 	if err != nil {
 		t.Fatalf("remove request: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestIntegration_SourceRemovalRoundTrip(t *testing.T) {
 
 	// 5. Removing an unknown handle is NOT_FOUND, never removed:true.
 	unknownReq, _ := json.Marshal(sourcemanifest.RemoveRequest{InstanceName: "no-such-source"})
-	unknownRaw, err := tc.Client.Request(ctx, "graph.ingest.remove.acme", unknownReq, 5*time.Second)
+	unknownRaw, err := tc.Client.RequestClassified(ctx, "graph.ingest.remove.acme", unknownReq, 5*time.Second)
 	if err != nil {
 		t.Fatalf("unknown remove request: %v", err)
 	}
@@ -221,7 +221,7 @@ func waitForSourceInStatus(t *testing.T, ctx context.Context, tc *natstest.Serve
 	deadline := time.Now().Add(10 * time.Second)
 	var last string
 	for time.Now().Before(deadline) {
-		raw, err := tc.Client.Request(ctx, "graph.query.status", nil, 2*time.Second)
+		raw, err := tc.Client.RequestClassified(ctx, "graph.query.status", nil, 2*time.Second)
 		if err == nil {
 			last = string(raw)
 			if strings.Contains(last, instance) == want {

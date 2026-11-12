@@ -1,7 +1,7 @@
 package source
 
 import (
-	"github.com/c360studio/semstreams/vocabulary"
+	"github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semvocab/catalog/bfo"
 )
 

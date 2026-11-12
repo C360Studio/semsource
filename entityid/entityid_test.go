@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	semtypes "github.com/c360studio/semengine/pkg/types"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/workspace"
-	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // entityIDSegmentRegex mirrors the per-segment rule enforced by

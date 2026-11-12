@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -26,9 +26,8 @@ func TestClassifyPublishError(t *testing.T) {
 		err  error
 		want publishErrClass
 	}{
-		{"circuit open", natsclient.ErrCircuitOpen, publishRetryable},
-		{"circuit open wrapped", fmt.Errorf("publish: %w", natsclient.ErrCircuitOpen), publishRetryable},
 		{"not connected", natsclient.ErrNotConnected, publishRetryable},
+		{"not connected wrapped", fmt.Errorf("publish: %w", natsclient.ErrNotConnected), publishRetryable},
 		{"nats timeout", nats.ErrTimeout, publishRetryable},
 		{"deadline exceeded", context.DeadlineExceeded, publishRetryable},
 		{"no responders", nats.ErrNoResponders, publishRetryable},

@@ -14,8 +14,8 @@ const ready: Capability = {
 
 function result(overrides: Partial<FusionResponse> = {}): FusionResponse {
   return {
-    contract_version: "1",
-    index: { ready: true, state: "ready" },
+    contract_version: "2",
+    deferred: false,
     provenance: "embedding",
     nodes: [
       {
@@ -118,7 +118,8 @@ describe("SearchPanel", () => {
       .fn()
       .mockResolvedValueOnce(
         result({
-          index: { ready: false, state: "building", lag: 7 },
+          deferred: true,
+          defer_reason: "index_not_ready",
           nodes: [],
         }),
       )
@@ -135,7 +136,7 @@ describe("SearchPanel", () => {
 
     await user.type(input, "first");
     await user.click(screen.getByRole("button", { name: "Search" }));
-    expect(await screen.findByText(/index is building/i)).toBeInTheDocument();
+    expect(await screen.findByText(/index is index not ready/i)).toBeInTheDocument();
     expect(screen.queryByText(/no code results/i)).not.toBeInTheDocument();
 
     await user.clear(input);

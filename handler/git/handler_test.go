@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 )
 
 // entityIDSegmentRegex matches one segment of a graph-ingest-valid entity ID.

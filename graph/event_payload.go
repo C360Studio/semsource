@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/projection"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/projection"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 )
 
 // RegisterPayloads registers EntityPayload with the supplied registry.

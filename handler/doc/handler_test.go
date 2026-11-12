@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/handler"
 	dochandler "github.com/c360studio/semsource/handler/doc"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // ---------------------------------------------------------------------------

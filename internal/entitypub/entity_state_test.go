@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/handler"
-	"github.com/c360studio/semstreams/message"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 func TestPayloadFromState_PreservesTraceIndexingProfile(t *testing.T) {

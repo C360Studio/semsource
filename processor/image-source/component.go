@@ -13,8 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -65,7 +66,7 @@ type Component struct {
 	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
-	platform   component.PlatformMeta
+	platform   types.PlatformMeta
 
 	handler   *imghandler.Handler
 	sourceCfg *sourceCfg
@@ -495,16 +496,6 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 // Discoverable interface implementation
-
-// Meta returns component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "image-source",
-		Type:        "processor",
-		Description: "Image source for semsource image metadata entity extraction",
-		Version:     "0.1.0",
-	}
-}
 
 // InputPorts returns an empty slice — image-source generates data from the filesystem.
 func (c *Component) InputPorts() []component.Port {

@@ -16,17 +16,20 @@
   03B contracts merged in SemEngine PR #21 at `9286055e2c9a18426a73da38a60766845ab9e48e`; #17–#20
   and #69 are closed with recorded rulings (`docs/upstream/semengine-port-ledger.md`).
   The [2026-11-08 pin ruling](https://github.com/C360Studio/semengine/issues/9#issuecomment-6724212898)
-  (amended on #9 / #557) is met by `v0.1.0-alpha.3` at `057bc8bfe2f737000a354fd1a38aa60d65cbf9f1`
-  (tag object `138ae55881dbb7ced9840a872e3247f7b89d623b`, 2026-11-10): pre-swap tasks #232
-  (`task agents:check` + decision skills re-pinned to `semengine@v0.1.0-alpha.3`) and #257
-  (`semvocab v0.2.2` + CCO v2.2 / BFO 2020 class and relation adoption) are complete on this branch.
-  Hold: `go.mod` `semstreams -> semengine` swap (#231, #253, #256) and full 04A Tier 0 qualification
-  await the remaining 4 absent packages (`pkg/buffer` #566, `gateway/graph-gateway` #567,
-  `output/websocket` #34, `processor/graph-clustering` #9) and Slice 04A qualification repairs (#15, #16, #579).
+  (amended on #9 / #557) and all 4 remaining package admissions (`pkg/buffer` #566,
+  `gateway/graph-gateway` #567, `output/websocket` #34, `processor/graph-clustering` #9) are met by
+  `v0.1.0-alpha.4` at `9f7f5adc86368a0a251e3c12960a9e59274de666`
+  (tag object `060c31ad3231401b7ec8deaca6429c4daec93a5a`, 2026-11-11). On this qualification branch,
+  the `go.mod` `semstreams -> semengine` swap and consumer port tasks #231 (`manager.StartAll(signalCtx)`),
+  #232 (`task agents:check` + decision skills re-pinned to `semengine@v0.1.0-alpha.4`),
+  #253 (Fusion contract v2 + `fusion.Resolution` + UI v2 parser), #256 (`semengine` outward identifiers),
+  and #257 (`semvocab v0.2.2` + CCO v2.2 / BFO 2020 class and relation adoption) are complete.
+  Hold: full 04A Tier 0 qualification (#221) awaits upstream Slice 04A qualification repairs
+  `semengine#15`, `semengine#16`, and `semengine#579`.
 
 ## 2. Future implementation after admission
 
-- [ ] Migrate the separate qualification branch to SemEngine exclusively; prove no SemStreams runtime
+- [x] Migrate the separate qualification branch to SemEngine exclusively; prove no SemStreams runtime
   or mixed-substrate binary, and measure production/test closure against the admitted Tier 0 boundary.
 - [ ] Implement a true no-embedder composition and capability-appropriate readiness/public interfaces
   using admitted contracts, with failing-first tests for changed consumer behavior.

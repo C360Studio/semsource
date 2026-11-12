@@ -13,9 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/retry"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -64,7 +65,7 @@ type Component struct {
 	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
-	platform   component.PlatformMeta
+	platform   types.PlatformMeta
 
 	handler   *cfghandler.ConfigHandler
 	sourceCfg *sourceCfg
@@ -495,16 +496,6 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 // Discoverable interface implementation
-
-// Meta returns component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "cfgfile-source",
-		Type:        "processor",
-		Description: "Config file source for semsource module, package, image, and dependency entity extraction",
-		Version:     "0.1.0",
-	}
-}
 
 // InputPorts returns an empty slice — cfgfile-source generates data from the filesystem.
 func (c *Component) InputPorts() []component.Port {

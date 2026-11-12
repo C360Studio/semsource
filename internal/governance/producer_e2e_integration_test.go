@@ -6,19 +6,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/storage"
-	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/storage"
+	"github.com/c360studio/semengine/storage/objectstore"
+	"github.com/c360studio/semengine/types"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -83,7 +85,7 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -104,10 +106,18 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("objectstore: %v", err)
 	}
-	engine := fusion.NewEngine(
-		fusionnats.New(tc.Client, 0),
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
 		fusion.NewBodyResolver(fusion.MapStoreResolver{semsourcegraph.BodyStoreInstance: storage.Store(store)}),
+		slog.Default(),
 	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := code.New()
 
 	// Poll until the graph is ready, byName resolves "Dispatch", and its body has
@@ -138,8 +148,8 @@ func TestIntegration_ProducerToConsumerEndToEnd(t *testing.T) {
 		for i := range last.Nodes {
 			names = append(names, fmt.Sprintf("%s(bodyLen=%d)", last.Nodes[i].Name, len(last.Nodes[i].Body)))
 		}
-		t.Fatalf("Dispatch node with a hydrated body never appeared — ready=%v state=%s nodes=%v misses=%+v",
-			last.Index.Ready, last.Index.State, names, last.Misses)
+		t.Fatalf("Dispatch node with a hydrated body never appeared — deferred=%v reason=%s nodes=%v misses=%+v",
+			last.Deferred, last.DeferReason, names, last.Misses)
 	}
 	// The body was offloaded by ast-source's producer and dereferenced by the
 	// engine over the shared store — proving the full seam. It must be the real

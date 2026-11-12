@@ -31,8 +31,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
 
 	source "github.com/c360studio/semsource/source/vocabulary"
 )

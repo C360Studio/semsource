@@ -530,26 +530,15 @@ test("workbench exposes real search evidence and keyboard detail", async ({
   expect(contentType(graphResponse)).toContain("application/json");
   const graphEnvelope = JSON.parse(graphBody);
   expect(graphEnvelope).toMatchObject({
-    contract_version: "1",
-    index: { ready: true, state: "ready" },
+    contract_version: "2",
     graph: {
       nodes: expect.any(Array),
       edges: expect.any(Array),
-      // `coherent` left this envelope in semstreams beta.157 (ViewRevision is
-      // Start/End only since); the start === end assertion below carries the
-      // coherence claim in substance. See #146.
-      view_revision: {
-        start: expect.any(Number),
-        end: expect.any(Number),
-      },
       truncated: expect.any(Boolean),
     },
   });
+  expect(graphEnvelope.deferred).not.toBe(true);
   expect(graphEnvelope.graph.nodes.length).toBeGreaterThan(0);
-  expect(graphEnvelope.graph.view_revision.start).toBeGreaterThan(0);
-  expect(graphEnvelope.graph.view_revision.end).toBe(
-    graphEnvelope.graph.view_revision.start,
-  );
 
   const graphNavigator = page.getByRole("list", { name: /graph entities/i });
   await expect(graphNavigator).toBeVisible({ timeout: pollTimeoutMs });

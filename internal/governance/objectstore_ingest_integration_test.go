@@ -11,12 +11,13 @@ import (
 
 	nats "github.com/nats-io/nats.go"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/types"
 
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	dochandler "github.com/c360studio/semsource/handler/doc"
@@ -216,7 +217,7 @@ func startObjectStoreSource(
 	}
 
 	discovered, err := objectstoresource.NewComponent(configJSON, component.Dependencies{
-		Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}, NATSClient: client,
+		Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}, NATSClient: client,
 		MetricsRegistry: metricsRegistry,
 	})
 	if err != nil {

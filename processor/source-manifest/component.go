@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semsource/internal/workerjoin"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
 )
 
@@ -597,16 +597,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.running = false
 	c.mu.Unlock()
 	return nil
-}
-
-// Meta implements component.Discoverable.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "source-manifest",
-		Type:        "processor",
-		Description: "Publishes configured source manifest, ingestion status, and predicate schema",
-		Version:     "0.2.0",
-	}
 }
 
 // InputPorts implements component.Discoverable.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	gtypes "github.com/c360studio/semstreams/graph"
+	gtypes "github.com/c360studio/semengine/graph"
 
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"

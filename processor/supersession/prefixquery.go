@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360studio/semstreams/pkg/errs"
-	semtypes "github.com/c360studio/semstreams/pkg/types"
+	"github.com/c360studio/semengine/pkg/errs"
+	semtypes "github.com/c360studio/semengine/pkg/types"
 
-	gtypes "github.com/c360studio/semstreams/graph"
+	gtypes "github.com/c360studio/semengine/graph"
 )
 
 // prefixQuerySubject is the canonical graph.query prefix operation this

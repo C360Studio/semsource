@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/c360studio/semengine/storage/objectstore"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"

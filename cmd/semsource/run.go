@@ -23,6 +23,23 @@ import (
 	// --pprof-port is set (service.MaybeStartPProf). Import does not arm it.
 	_ "net/http/pprof"
 
+	"github.com/c360studio/semengine/component"
+	semconfig "github.com/c360studio/semengine/config"
+	graphgateway "github.com/c360studio/semengine/gateway/graph-gateway"
+	"github.com/c360studio/semengine/graph/inference"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/output/websocket"
+	"github.com/c360studio/semengine/payloadregistry"
+	graphclustering "github.com/c360studio/semengine/processor/graph-clustering"
+	graphembedding "github.com/c360studio/semengine/processor/graph-embedding"
+	graphindex "github.com/c360studio/semengine/processor/graph-index"
+	graphingest "github.com/c360studio/semengine/processor/graph-ingest"
+	graphquery "github.com/c360studio/semengine/processor/graph-query"
+	"github.com/c360studio/semengine/service"
+	"github.com/c360studio/semengine/storage/objectstore"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -44,23 +61,6 @@ import (
 	videosource "github.com/c360studio/semsource/processor/video-source"
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semsource/workspace"
-	"github.com/c360studio/semstreams/component"
-	semconfig "github.com/c360studio/semstreams/config"
-	graphgateway "github.com/c360studio/semstreams/gateway/graph-gateway"
-	"github.com/c360studio/semstreams/graph/inference"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/output/websocket"
-	"github.com/c360studio/semstreams/payloadregistry"
-	graphclustering "github.com/c360studio/semstreams/processor/graph-clustering"
-	graphembedding "github.com/c360studio/semstreams/processor/graph-embedding"
-	graphindex "github.com/c360studio/semstreams/processor/graph-index"
-	graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
-	graphquery "github.com/c360studio/semstreams/processor/graph-query"
-	"github.com/c360studio/semstreams/service"
-	"github.com/c360studio/semstreams/storage/objectstore"
-	"github.com/c360studio/semstreams/types"
 )
 
 // runFlags holds the parsed `semsource run` command-line flags.
@@ -114,7 +114,7 @@ func runCmd(args []string) (runErr error) {
 
 	// Arm pprof early (before NATS) so a slow/wedged boot stays profilable. No-op
 	// unless --pprof-port > 0. Handlers come from the blank net/http/pprof import.
-	service.MaybeStartPProf(flags.pprofPort > 0, flags.pprofPort)
+	service.MaybeStartPProf(flags.pprofPort > 0, flags.pprofPort, logger)
 
 	ctx := context.Background()
 
@@ -168,7 +168,11 @@ func runCmd(args []string) (runErr error) {
 	if err := configMgr.Start(ctx); err != nil {
 		return fmt.Errorf("start config manager: %w", err)
 	}
-	defer func() { runErr = errors.Join(runErr, configMgr.Stop(5*time.Second)) }()
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		runErr = errors.Join(runErr, configMgr.Stop(stopCtx))
+	}()
 
 	registry, err := prepareComponentRegistry(ctx, semsourceCfg, configMgr, nc)
 	if err != nil {
@@ -200,9 +204,7 @@ func serveUntilSignal(
 	expandResult *config.ExpandResult,
 	logger *slog.Logger,
 ) error {
-	runtimeCtx, cancelRuntime := context.WithCancel(context.WithoutCancel(signalCtx))
-	defer cancelRuntime()
-	if err := manager.StartAll(runtimeCtx); err != nil {
+	if err := manager.StartAll(signalCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
 
@@ -223,7 +225,7 @@ func serveUntilSignal(
 	logger.Info("shutdown signal received")
 
 	// The signal is cancelled; the runtime stays live while shutdown uses bounded
-	// authority (semstreams caller-owned lifecycle contract). Background is
+	// authority (semengine ADR-113 caller-owned lifecycle contract). Background is
 	// allowed only here, at the process composition root.
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelStop()
@@ -745,31 +747,18 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	}, nil
 }
 
-// graphSubsystemComponents returns the built-in semstreams graph components:
+// graphSubsystemComponents returns the built-in semengine graph components:
 // ingest, index, query, and gateway.
 func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, error) {
 	// Resolve graph config with defaults.
-	gatewayBind := "0.0.0.0:8082"
-	enablePlayground := true
 	embedderType := "bm25"
-	batchSize := 50
 	coalesceMs := 200
-	indexWorkers := 0 // 0 → semstreams graph-index default (1)
+	indexWorkers := 0 // 0 → semengine graph-index default (1)
 	enableClustering := false
-	clusteringLLM := false
 
 	if g := cfg.Graph; g != nil {
-		if g.GatewayBind != "" {
-			gatewayBind = g.GatewayBind
-		}
-		if g.EnablePlayground != nil {
-			enablePlayground = *g.EnablePlayground
-		}
 		if g.EmbedderType != "" {
 			embedderType = g.EmbedderType
-		}
-		if g.EmbeddingBatchSize > 0 {
-			batchSize = g.EmbeddingBatchSize
 		}
 		if g.CoalesceMs > 0 {
 			coalesceMs = g.CoalesceMs
@@ -778,7 +767,6 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			indexWorkers = g.IndexWorkers
 		}
 		enableClustering = g.EnableClustering
-		clusteringLLM = g.EnableClustering && g.ClusteringLLM
 	}
 
 	configs := map[string]struct {
@@ -807,7 +795,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 						},
 						{
 							// The typed mutation provider port (values pinned from
-							// semstreams internal/graphmutation, which is not
+							// semengine internal/graphmutation, which is not
 							// importable): a declared ports section replaces the
 							// defaults wholesale, so every required port is restated.
 							Name:     "mutations",
@@ -815,7 +803,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 							Config: component.NATSRequestPort{
 								Subject: "graph.mutation.>",
 								Interface: &component.InterfaceContract{
-									Type:    "semstreams.graph.mutation",
+									Type:    "semengine.graph.mutation",
 									Version: "v1",
 								},
 							},
@@ -835,7 +823,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 				// workers=0 → graph-index applies its own default (1); raise via
 				// graph.index_workers to parallelize bulk index builds.
 				"workers": indexWorkers,
-				// Ports come from graph-index's DefaultConfig; beta.160 declares
+				// Ports come from graph-index's DefaultConfig; it declares
 				// the entity watch and every index write itself.
 			},
 		},
@@ -845,20 +833,12 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			configMap: map[string]any{
 				"coalesce_ms":   coalesceMs,
 				"embedder_type": embedderType,
-				"batch_size":    batchSize,
 				// graph-embedding embeds a triple's value only when its predicate
 				// ends with a text_suffix. A non-empty list REPLACES the built-in
 				// defaults, so we restate them and add the code doc predicates
 				// (code.doc.signature, code.doc.comment) — otherwise code entities
 				// embed dc.terms.title (the symbol name) ALONE, and signatures /
 				// docstrings never enter the semantic index.
-				//
-				// This config was silently INERT for offloaded (StorageRef) entities
-				// until semstreams beta.158 (#635, our upstream ask #601): the
-				// StorageRef lane returned before the inline-text lane ran, so title/
-				// signature/comment never reached the vector for any body-bearing
-				// entity. beta.158 embeds this identity text ahead of the fetched
-				// body, so the setting now takes effect where it was documented to.
 				"text_suffixes": []string{
 					".title", ".content", ".description", ".summary", ".text",
 					".name", ".body", ".abstract", ".subject",
@@ -874,8 +854,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			compType: types.ComponentTypeProcessor,
 			// The ComponentManager path applies no defaults: the single
 			// graph.query.* family request port is restated exactly as
-			// graph-query's DefaultConfig declares it (per-operation ports
-			// are a retired beta.159 shape).
+			// graph-query's DefaultConfig declares it.
 			configMap: map[string]any{
 				"ports": map[string]any{
 					"inputs": []component.PortDefinition{
@@ -898,11 +877,8 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			name:     "graph-gateway",
 			compType: types.ComponentTypeGateway,
 			configMap: map[string]any{
-				// The ComponentManager path applies no defaults: the gateway's
-				// requester outputs are restated exactly as its DefaultConfig
-				// declares them. Identity-free registry admission and the http
-				// input-port shape are retired; bind_address carries the
-				// network identity.
+				// SemEngine graph-gateway serves HTTP on the shared ServiceManager
+				// mux and requests only the required graph_queries output port.
 				"ports": map[string]any{
 					"outputs": []component.PortDefinition{
 						{
@@ -916,26 +892,8 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 								},
 							},
 						},
-						{
-							Name:     "graph_index_queries",
-							Required: true,
-							Config:   component.NATSRequestPort{Subject: "graph.index.query.*"},
-						},
-						{
-							Name:     "agentic_queries",
-							Required: true,
-							Config: component.NATSRequestPort{
-								Subject: "agentic.query.*",
-								Interface: &component.InterfaceContract{
-									Type:    "agentic.query",
-									Version: "v1",
-								},
-							},
-						},
 					},
 				},
-				"bind_address":      gatewayBind,
-				"enable_playground": enablePlayground,
 			},
 		},
 		// objectstore backs location-independent verbatim content (code/text
@@ -953,26 +911,12 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		},
 	}
 
-	// graph-clustering (tier 2, opt-in via graph.enable_clustering): LPA
-	// community detection over ENTITY_STATES → COMMUNITY_INDEX, feeding the
-	// already-declared local/global/summary query routes. Pure-Go LPA runs with
-	// no external service; clustering_llm adds GraphRAG summaries via the
-	// model_registry "community_summary" capability (→ seminstruct).
+	// graph-clustering (opt-in via graph.enable_clustering): entity-ID prefix
+	// community grouping over ENTITY_STATES → COMMUNITY_INDEX (ADR-099).
 	if enableClustering {
 		clusteringConfig := map[string]any{
 			"detection_interval": "30s",
-			"enable_llm":         clusteringLLM,
-			// Ports come from graph-clustering's DefaultConfig (entity watch,
-			// index reads, mutation requester, community write).
-		}
-		// Edge synthesis is passed through only when the operator configured it.
-		// The key is omitted entirely when unset — not sent as an empty object —
-		// because the substrate's block is tri-state and reads absence as "keep
-		// the defaults". The struct's own omitempty tags preserve that per field,
-		// so a nil *bool never marshals as false and never silently disables
-		// synthesis the operator did not ask to disable.
-		if cfg.Graph != nil && cfg.Graph.EntityIDEdges != nil {
-			clusteringConfig["entity_id_edges"] = cfg.Graph.EntityIDEdges
+			// Ports come from graph-clustering's DefaultConfig (entity watch).
 		}
 		configs["graph-clustering"] = struct {
 			name      string
@@ -1015,7 +959,7 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		MaxBytes: 256 * 1024 * 1024,
 		MaxAge:   "1h",
 		Replicas: 1,
-		// semstreams beta.159 requires an ordinary stream to declare its
+		// semengine requires an ordinary stream to declare its
 		// discard policy — it was hardcoded to "old" before, so the policy was
 		// never anyone's choice.
 		//
@@ -1069,9 +1013,6 @@ func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error)
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("parse websocket port %q: %w", wsPortStr, err)
 	}
-	// semstreams beta.161 restored the component's top-level "path" config
-	// (semsource#147, semstreams#945), so cfg.WebSocketPath reaches the
-	// server again. "/ws" stays the default and documented contract path.
 	wsPath := cfg.WebSocketPath
 	if wsPath == "" {
 		// Mirrors config.applyDefaults for callers holding a bare Config.
@@ -1082,10 +1023,9 @@ func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error)
 		"ports": map[string]any{
 			"inputs": []component.PortDefinition{
 				{
-					Name:        "graph_entities",
-					Required:    true,
-					Description: "Entity, status, and predicate payloads from source components",
-					Config:      component.JetStreamPort{StreamName: "GRAPH", Subjects: []string{"graph.ingest.>"}},
+					Name:        "entity_watch",
+					Description: "Applied entity state from ENTITY_STATES",
+					Config:      component.KVWatchPort{Bucket: "ENTITY_STATES"},
 				},
 			},
 			"outputs": []component.PortDefinition{
@@ -1096,7 +1036,6 @@ func websocketComponentConfig(cfg *config.Config) (types.ComponentConfig, error)
 				},
 			},
 		},
-		"delivery_mode": "at-most-once",
 	})
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("marshal websocket config: %w", err)

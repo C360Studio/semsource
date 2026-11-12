@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourcespawn"

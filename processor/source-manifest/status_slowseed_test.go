@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 func slowSeedComponent(t *testing.T) *Component {

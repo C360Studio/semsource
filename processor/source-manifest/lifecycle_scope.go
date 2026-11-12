@@ -3,9 +3,9 @@ package sourcemanifest
 import (
 	"encoding/json"
 
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourcespawn"
-	"github.com/c360studio/semstreams/types"
 )
 
 // systemsForRemovedInstance derives the stored component's entity-ID systems.

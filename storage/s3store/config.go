@@ -21,7 +21,7 @@ const DefaultEndpoint = "https://s3.amazonaws.com"
 // New.
 type Config struct {
 	// Bucket is the bucket every key resolves under. Required.
-	Bucket string `json:"bucket" schema:"type:string,description:Bucket holding the objects,category:basic,required:true"`
+	Bucket string `json:"bucket" schema:"type:string,description:Bucket holding the objects,category:basic,required"`
 
 	// Endpoint is the store's base URL, scheme included — the scheme selects
 	// transport security, so https:// connects with TLS and http:// does not.

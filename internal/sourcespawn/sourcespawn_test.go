@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/types"
 )
 
 // fakeStore wraps an in-memory SafeConfig and mirrors targeted component writes

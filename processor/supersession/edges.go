@@ -1,8 +1,8 @@
 package supersession
 
 import (
+	"github.com/c360studio/semengine/message"
 	semsourceast "github.com/c360studio/semsource/source/ast"
-	"github.com/c360studio/semstreams/message"
 )
 
 // edgeSource tags emitted lineage triples with their provenance.

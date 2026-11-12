@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config holds configuration for the url-source processor component.
@@ -16,10 +16,10 @@ type Config struct {
 
 	// URLs is the list of HTTP/S URLs to ingest and poll.
 	// At least one URL is required.
-	URLs []string `json:"urls" schema:"type:array,description:HTTP/S URLs to ingest and poll,category:basic,required:true"`
+	URLs []string `json:"urls" schema:"type:array,description:HTTP/S URLs to ingest and poll,category:basic,required"`
 
 	// Org is the organization namespace used in entity ID construction.
-	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`
+	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required"`
 
 	// PollInterval controls how often each URL is re-fetched to detect content
 	// changes. Accepts Go duration strings (e.g. "60s", "5m"). Default: "300s".
@@ -27,7 +27,7 @@ type Config struct {
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:advanced"`
 }
 
 // Validate checks the configuration for errors.

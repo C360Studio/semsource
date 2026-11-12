@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	semgraph "github.com/c360studio/semstreams/graph"
+	semgraph "github.com/c360studio/semengine/graph"
 )
 
 func TestWorkbenchCapabilities_ReadyHeadlessContract(t *testing.T) {

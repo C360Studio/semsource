@@ -3,12 +3,12 @@ package sourceauthority
 
 import (
 	"fmt"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/entityid"
-	"github.com/c360studio/semstreams/component"
 )
 
 // Resolve refuses per-source organization overrides outside the boot deployment.
-func Resolve(platform component.PlatformMeta, org string) (entityid.Authority, error) {
+func Resolve(platform types.PlatformMeta, org string) (entityid.Authority, error) {
 	authority := entityid.Authority{Org: platform.Org, Platform: platform.Platform}
 	if err := authority.Validate(); err != nil {
 		return entityid.Authority{}, fmt.Errorf("source deployment authority: %w", err)

@@ -11,11 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/graph/readiness"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
 )
 
 // TestIntegration_DomainScopedRetrieval_OnTheWire proves ask #16 end to end over
@@ -33,52 +31,10 @@ import (
 // spec: openspec/specs/fusion-gateway/spec.md#Requirement: Domain-scoped NL retrieval per lens
 func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 	ctx := context.Background()
-	// WithKV: readiness moved from a request subject to GRAPH_STATUS KV state
-	// (ADR-083), so this test needs JetStream where it previously did not.
-	tc := natstest.New(t, natstest.WithJetStream())
+	tc := natstest.New(t)
 
-	// Readiness is KV STATE, not a request subject (ADR-083, beta.157): the client
-	// watches GRAPH_STATUS/graph-index rather than asking graph.index.query.status,
-	// so stubbing that subject is now dead code. Seed the bucket instead.
-	//
-	// Two fields are load-bearing beyond Ready. State is allow-listed, and
-	// BootstrapComplete fails CLOSED (ADR-084) — omit either and the gate defers,
-	// resolve never fires, and this test reads an empty scope for a reason that has
-	// nothing to do with scope selection.
 	var mu sync.Mutex
 	var lastScope []string
-	statusBucket, err := readiness.EnsureBucket(ctx, tc.Client)
-	if err != nil {
-		t.Fatalf("ensure %s: %v", readiness.BucketGraphStatus, err)
-	}
-	publisher := readiness.NewPublisher(statusBucket, readiness.KeyGraphIndex)
-	publishReady := func() {
-		if err := publisher.Publish(ctx, graph.IndexStatusResponse{
-			Ready: true, State: string(fusion.StateReady), BootstrapComplete: true,
-		}); err != nil {
-			t.Fatalf("publish readiness: %v", err)
-		}
-	}
-	publishReady()
-	// The watcher requires FRESHNESS, not merely presence: a value that stops
-	// arriving reads as unknown and fails closed, exactly so a dead producer cannot
-	// serve its final Ready=true forever. Keep the heartbeat alive for the run.
-	heartbeat, stopHeartbeat := context.WithCancel(ctx)
-	t.Cleanup(stopHeartbeat)
-	go func() {
-		tick := time.NewTicker(500 * time.Millisecond)
-		defer tick.Stop()
-		for {
-			select {
-			case <-heartbeat.Done():
-				return
-			case <-tick.C:
-				_ = publisher.Publish(heartbeat, graph.IndexStatusResponse{
-					Ready: true, State: string(fusion.StateReady), BootstrapComplete: true,
-				})
-			}
-		}
-	}()
 	semanticSub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.semantic",
 		func(_ context.Context, body []byte) ([]byte, error) {
 			var req struct {
@@ -99,7 +55,14 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 	// engine is injected and running set, skipping Start's ObjectStore attach —
 	// bodies never hydrate here (the stub returns no results).
 	newComp := func(lens string) *Component {
-		g := fusionnats.New(tc.Client, 0)
+		g, err := fusionnats.New(tc.Client, 0)
+		if err != nil {
+			t.Fatalf("fusionnats.New: %v", err)
+		}
+		eng, err := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{}), slog.Default())
+		if err != nil {
+			t.Fatalf("fusion.NewEngine: %v", err)
+		}
 		return &Component{
 			name:          "code-context",
 			lensKind:      lens,
@@ -108,7 +71,7 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 			platform:      "test-a1b2c3",
 			sourceSystems: []string{"fixture"},
 			graph:         g,
-			engine:        fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{})),
+			engine:        eng,
 			logger:        slog.Default(),
 			running:       true,
 			startTime:     time.Now(),

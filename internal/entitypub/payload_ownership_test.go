@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/graph"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
 )
 
 type wirePublisher struct{ messages chan []byte }

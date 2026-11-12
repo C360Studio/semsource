@@ -38,30 +38,34 @@ describe("queryGraph", () => {
   it.each([
     {
       label: "not-ready",
-      index: { ready: false, state: "building" },
+      deferred: true,
+      defer_reason: "index_not_ready" as const,
       nodes: [],
       misses: [],
     },
     {
       label: "ready miss",
-      index: { ready: true, state: "ready" },
+      deferred: false,
+      defer_reason: undefined,
       nodes: [],
       misses: [{ query: "Alpha", did_you_mean: ["Alfa"] }],
     },
     {
       label: "ready empty",
-      index: { ready: true, state: "ready" },
+      deferred: false,
+      defer_reason: undefined,
       nodes: [],
       misses: [],
     },
   ])(
     "accepts a valid no-graph $label envelope",
-    async ({ index, nodes, misses }) => {
+    async ({ deferred, defer_reason, nodes, misses }) => {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
         new Response(
           JSON.stringify({
-            contract_version: "1",
-            index,
+            contract_version: "2",
+            deferred,
+            ...(defer_reason ? { defer_reason } : {}),
             provenance: "deterministic",
             nodes,
             misses,
@@ -72,7 +76,13 @@ describe("queryGraph", () => {
       );
       await expect(
         queryGraph(fetcher, "/code-context/context", "Alpha", "1"),
-      ).resolves.toMatchObject({ index, nodes, misses, graph: undefined });
+      ).resolves.toMatchObject({
+        deferred,
+        defer_reason,
+        nodes,
+        misses,
+        graph: undefined,
+      });
     },
   );
 

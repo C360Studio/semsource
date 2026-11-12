@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	gtypes "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semsource/internal/natstest"
-	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 // spec: openspec/specs/source-lifecycle/spec.md#Requirement: Retired projection surfaces are explicitly unavailable

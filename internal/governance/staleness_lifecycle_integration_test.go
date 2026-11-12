@@ -5,20 +5,23 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semengine/component"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semengine/types"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/entityid"
 	semsourcegraph "github.com/c360studio/semsource/graph"
@@ -92,7 +95,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -106,7 +109,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -154,8 +157,19 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 	// WithSignals attaches predicate-salience ranking (matching production
 	// code-context wiring); without it, ranking is pure resolve-order +
 	// lexical and never reflects the entity.lifecycle.stale weight at all.
-	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{})).
-		WithSignals(fusionvocab.New())
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
+		fusion.NewBodyResolver(fusion.MapStoreResolver{}),
+		slog.Default(),
+		fusion.WithSignals(fusionvocab.New(cco.Parents)),
+	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := prefixLens{code.New()}
 	var liveRank, deletedRank int
 	rankDeadline := time.Now().Add(20 * time.Second)
@@ -169,7 +183,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 		}
 		liveRank = rankByHandle(resp.Nodes, liveEntity.ID)
 		deletedRank = rankByHandle(resp.Nodes, deletedEntity.ID)
-		if resp.Index.Ready && liveRank >= 0 && deletedRank >= 0 {
+		if !resp.Deferred && liveRank >= 0 && deletedRank >= 0 {
 			break
 		}
 		time.Sleep(150 * time.Millisecond)

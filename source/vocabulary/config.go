@@ -5,7 +5,7 @@
 // build.gradle), and image (Dockerfile).
 package source
 
-import "github.com/c360studio/semstreams/vocabulary"
+import "github.com/c360studio/semengine/vocabulary"
 
 // Config file predicates shared across all entity types.
 const (

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/storage"
 )
 
 // MemStore is an in-memory storage.Store for exercising the fusion body

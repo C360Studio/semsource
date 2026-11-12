@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/c360studio/semengine/pkg/projection"
 	semsourcegraph "github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semstreams/pkg/projection"
 )
 
 // Bootstrap records the locally declared, validated projection intent for the

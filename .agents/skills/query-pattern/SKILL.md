@@ -17,7 +17,7 @@ capability from protocol choice, a registry import, or an advertised operation n
 | Agent | SemSource MCP tools | `processor/mcp-gateway` and `openspec/specs/mcp-gateway-contract` |
 | Local HTTP consumer | SemSource code/doc context, source/status routes | Owning processor and its tests |
 | Internal graph consumer | Named typed adapter or declared `graph.query.*` operation | Exact pinned operation request/response and readiness contract |
-| UI | Configured graph HTTP gateway | Its implemented operation tests; do not assume a conformant GraphQL executor |
+| UI | Configured graph HTTP gateway (`/graph-gateway/graphql`) | Declared GraphQL schema (`entity`, `entitiesByPrefix`, `entitiesByPredicate`, `pathSearch`; unknown fields/introspection refused with HTTP 400) |
 | Operator diagnosing state | Explicitly declared bucket or broker inspection | Owner's diagnostic contract; not a new application fallback |
 
 For every caller, identify the operation's owner, source of answers, scope, result limit, hydration
@@ -31,7 +31,9 @@ consumer contracts; raw KV reads must not silently replace a failed public query
   `SPATIAL_INDEX`, `TEMPORAL_INDEX`), and neural/lexical search (`EMBEDDING_INDEX`, `KEYWORD_INDEX`) have
   different freshness signals. A source being ready does not establish that its indexes are ready. When a
   caller has a write revision (`ENTITY_STATES` KV revision from `entity.create`/`entity.patch`), pass
-  `min_revision` on `graph.query.*` requests so the coordinator waits for index catch-up (`WaitForRevision`).
+  `min_revision` on enveloped `graph.query.*` requests (`byName`, `predicate`, `entityByAlias`,
+  `relationships`, `pathSearch`, `localSearch`, `globalSearch`, `searchGraph`, `summary`); an index behind it
+  refuses transient `revision_not_reached` (never waits) so the caller retries.
 - Unavailable providers, transport errors, partial hydration, or `Deferred` are not absence findings.
 - Apply source/taxonomy scope before result limits. Under ADR-102, taxonomy is segment four; a wildcard
   is not a literal prefix. Use complete admitted scopes, not broad search followed by post-limit filtering.

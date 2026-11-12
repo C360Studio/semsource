@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
+	gtypes "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/projection"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	gtypes "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/projection"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 type replayRequester struct {
@@ -63,7 +63,7 @@ func (m *replayMutator) ReadAuthoritative(_ context.Context, id string) (*gtypes
 }
 func (m *replayMutator) Reconcile(_ context.Context, r projection.ReconcileMutation) (projection.MutationReceipt, error) {
 	if r.EntityID == m.fail {
-		return projection.MutationReceipt{Commit: projection.CommitNotCommitted}, &projection.MutationError{Kind: projection.MutationRevisionConflict, Code: gtypes.ErrorCodeRevisionMismatch, Commit: projection.CommitNotCommitted, Err: errors.New("revision conflict")}
+		return projection.MutationReceipt{}, &projection.MutationError{Kind: projection.MutationRevisionConflict, Code: gtypes.ErrorCodeRevisionMismatch, Commit: projection.CommitNotCommitted, Err: errors.New("revision conflict")}
 	}
 	e := m.entities[r.EntityID]
 	out := []message.Triple{}
@@ -75,7 +75,7 @@ func (m *replayMutator) Reconcile(_ context.Context, r projection.ReconcileMutat
 	e.Triples = append(out, r.Desired...)
 	m.entities[e.ID] = e
 	m.writes = append(m.writes, e.ID)
-	return projection.MutationReceipt{Entity: &e, KVRevision: 2, Commit: projection.CommitVerified}, nil
+	return projection.MutationReceipt{Entity: &e, KVRevision: 2}, nil
 }
 func replayEntity(id, reason string) gtypes.EntityState {
 	e := gtypes.EntityState{ID: id, Triples: []message.Triple{{Subject: id, Predicate: source.DocFilePath, Object: "guide.md"}, {Subject: id, Predicate: semvocab.EntityIndexingProfile, Object: graph.IndexingProfileContent}}}

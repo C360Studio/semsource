@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/entityid"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 func TestNewCodeEntity(t *testing.T) {

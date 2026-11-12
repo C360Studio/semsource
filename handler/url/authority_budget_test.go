@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	semtypes "github.com/c360studio/semengine/pkg/types"
 	"github.com/c360studio/semsource/entityid"
-	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 func TestURLWithAdmittedAuthorityFitsIDBudget(t *testing.T) {

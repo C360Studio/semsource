@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 // spec: openspec/specs/source-workbench/spec.md#Requirement: SemSource workbench capability contract
@@ -57,10 +57,10 @@ func TestIntegration_WorkbenchMissingReadinessRespondersDoNotOpenCircuit(t *test
 		}
 	}
 
-	if tc.Client.Status() == natsclient.StatusCircuitOpen {
-		t.Fatal("optional readiness probes opened the shared NATS circuit")
+	if tc.Client.Status() != natsclient.StatusConnected {
+		t.Fatalf("optional readiness probes degraded shared NATS client status: %v", tc.Client.Status())
 	}
-	reply, err := tc.Client.Request(ctx, "semsource.test.unrelated", []byte("ok"), time.Second)
+	reply, err := tc.Client.RequestClassified(ctx, "semsource.test.unrelated", []byte("ok"), time.Second)
 	if err != nil {
 		t.Fatalf("unrelated request failed after optional probes: %v", err)
 	}

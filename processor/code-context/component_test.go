@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
 	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/graph"
@@ -27,12 +27,16 @@ import (
 // (no NATS). The engine is injected directly, bypassing Start's store attach.
 func newTestComponent(lensKind string, g fusion.RetrievalClient, store *fusiontest.MemStore) *Component {
 	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: store})
+	eng, err := fusion.NewEngine(g, resolver, slog.Default())
+	if err != nil {
+		panic(err)
+	}
 	return &Component{
 		name:        "code-context",
 		lensKind:    lensKind,
 		subjectRoot: lensKind + ".v1.",
 		graph:       g,
-		engine:      fusion.NewEngine(g, resolver),
+		engine:      eng,
 		logger:      slog.Default(),
 		running:     true,
 		startTime:   time.Now(),
@@ -73,14 +77,13 @@ func TestServeCodeReadyHit(t *testing.T) {
 }
 
 func TestServeNotReady(t *testing.T) {
-	g := fusiontest.NewMemGraph()
-	g.SetStatus(fusion.IndexStatus{Ready: false, State: fusion.StateBuilding})
+	g := &errorGraph{MemGraph: fusiontest.NewMemGraph(), resolveErr: indexNotReadyErr()}
 	c := newTestComponent("code", g, fusiontest.NewMemStore())
 
 	body, _ := json.Marshal(fusion.Request{Query: "Dispatch"})
 	resp := decodeResp(t, mustServe(t, c, "context", body))
-	if resp.Index.Ready || len(resp.Nodes) != 0 || len(resp.Misses) != 0 {
-		t.Fatalf("not-ready must be empty + no misses, got %+v", resp)
+	if !resp.Deferred || resp.DeferReason != "index_not_ready" || len(resp.Nodes) != 0 || len(resp.Misses) != 0 {
+		t.Fatalf("not-ready must be deferred + empty + no misses, got %+v", resp)
 	}
 }
 
@@ -150,7 +153,7 @@ func TestHTTPMethodAndReadiness(t *testing.T) {
 }
 
 // TestHTTPGraphProjectionCompatibility proves the SemSource-owned HTTP route
-// passes the beta.153 graph facet through unchanged. This is intentionally an
+// passes the graph facet through unchanged. This is intentionally an
 // end-to-end compatibility test over the real fusion engine rather than a
 // locally reconstructed projection contract.
 func TestHTTPGraphProjectionCompatibility(t *testing.T) {
@@ -175,15 +178,6 @@ func TestHTTPGraphProjectionCompatibility(t *testing.T) {
 	resp := decodeResp(t, rec.Body.Bytes())
 	if resp.Graph == nil {
 		t.Fatalf("graph projection omitted: %s", rec.Body.String())
-	}
-	// Both bounds are OBSERVATIONS, not a consistency claim. semstreams beta.157
-	// deleted the former Coherent bool (ADR-083): the projection is assembled from
-	// N independent reads with no snapshot, and two equal samples cannot establish
-	// the absence of motion between them. Assert the sampled revisions and nothing
-	// more — re-adding a coherence assertion here would re-assert exactly the claim
-	// the substrate retracted.
-	if got := resp.Graph.ViewRevision; got.Start != 153 || got.End != 153 {
-		t.Fatalf("view_revision = %+v, want both bounds sampled at revision 153", got)
 	}
 	if len(resp.Graph.Nodes) != 1 || resp.Graph.Nodes[0].Handle != seed {
 		t.Fatalf("graph nodes = %+v, want seed %q", resp.Graph.Nodes, seed)
@@ -229,16 +223,6 @@ func TestHTTPGraphProjectionCompatibility(t *testing.T) {
 
 func newGraphProjectionCompatibilityComponent(seed, target, idLikeFact string, when time.Time) *Component {
 	g := fusiontest.NewMemGraph()
-	g.SetStatus(fusion.IndexStatus{
-		Ready:           true,
-		State:           fusion.StateReady,
-		IndexedRevision: 153,
-		TargetRevision:  153,
-		// Required since beta.157: the readiness gate defers without it (ADR-084
-		// D2, fail-closed), and a deferred response carries no graph facet at all.
-		// This fixture is a fully-built graph, so the flag states that.
-		BootstrapComplete: true,
-	})
 	g.AddEntity(seed, map[string]any{
 		ast.DcTitle:  "Dispatch",
 		ast.CodeType: "function",

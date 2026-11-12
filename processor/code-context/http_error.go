@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/nats-io/nats.go"
 )
 
@@ -66,7 +66,6 @@ func classifyFusionHTTPError(origin errorOrigin, err error) fusionHTTPError {
 	var classified *errs.ClassifiedError
 	isClassified := errors.As(err, &classified)
 	if natsclient.IsNoResponders(err) || errors.Is(err, natsclient.ErrNotConnected) ||
-		errors.Is(err, natsclient.ErrCircuitOpen) ||
 		(isClassified && classified.Class == errs.ErrorTransient) {
 		return fusionHTTPError{
 			status:    http.StatusServiceUnavailable,

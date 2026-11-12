@@ -3,10 +3,10 @@ package supersession
 import (
 	"time"
 
+	gtypes "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
-	gtypes "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
 )
 
 // candidate is the version-independent projection of a versioned code entity
