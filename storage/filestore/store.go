@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/storage"
 )
 
 // Compile-time assertion that Store satisfies the storage.Store interface.

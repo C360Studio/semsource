@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/c360studio/semengine/component"
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/graph/kvcatalog"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semstreams/component"
-	semconfig "github.com/c360studio/semstreams/config"
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/types"
 	"strings"
 )
 
@@ -38,11 +38,12 @@ func prepareComponentRegistry(ctx context.Context, cfg *config.Config, manager *
 // and skips it, so without this check a dropped registration boots a service
 // that silently lacks the component.
 func requireRegisteredFactories(registry *component.Registry, components semconfig.ComponentConfigs) error {
+	factories := registry.ListFactories()
 	for instance, cc := range components {
 		if !cc.Enabled {
 			continue
 		}
-		if _, ok := registry.GetFactory(cc.Name); !ok {
+		if _, ok := factories[cc.Name]; !ok {
 			return fmt.Errorf("component %q names unregistered factory %q", instance, cc.Name)
 		}
 	}
@@ -55,7 +56,7 @@ func readDesiredConfig(ctx context.Context, client *natsclient.Client, org, stem
 	if err != nil {
 		return nil, err
 	}
-	reader, err := semgraph.OpenCatalogReader(ctx, client, bucket)
+	reader, err := kvcatalog.OpenCatalogReader(ctx, client, bucket)
 	if err != nil {
 		return nil, err
 	}

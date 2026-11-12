@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/storage"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	"github.com/c360studio/semsource/internal/gitboundary"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/storage"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // Entity is the parent document: the stable navigational node carrying

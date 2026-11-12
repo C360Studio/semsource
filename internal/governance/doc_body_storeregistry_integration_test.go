@@ -4,18 +4,19 @@ package governance
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/storage/objectstore"
-	"github.com/c360studio/semstreams/storage/storeregistry"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/storage/objectstore"
+	"github.com/c360studio/semengine/storage/storeregistry"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -163,10 +164,18 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 	passageLabel := labelOfState(state)
 
 	// ---- Assertion B: the fusion docs lens hydrates via the registry resolver. ----
-	engine := fusion.NewEngine(
-		fusionnats.New(tc.Client, 0),
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
 		fusion.NewBodyResolver(storeReg), // the shared registry, not a MapStoreResolver
+		slog.Default(),
 	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := docsPrefixLens{docs.New()}
 
 	var node *fusion.Node
@@ -190,8 +199,8 @@ func TestIntegration_DocBodyOffload_ResolvesViaStoreRegistry(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if node == nil {
-		t.Fatalf("doc node with a hydrated body never appeared — ready=%v state=%s nodes=%+v",
-			last.Index.Ready, last.Index.State, last.Nodes)
+		t.Fatalf("doc node with a hydrated body never appeared — deferred=%v reason=%s nodes=%+v",
+			last.Deferred, last.DeferReason, last.Nodes)
 	}
 	wantBody, gErr := store.Get(ctx, state.StorageRef.Key)
 	if gErr != nil {

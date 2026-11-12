@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/message"
 )
 
 func TestValidateSelfSubjectState(t *testing.T) {

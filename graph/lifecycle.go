@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 )
 
 // LifecycleTriggerSubject is the NATS request/reply subject that runs the

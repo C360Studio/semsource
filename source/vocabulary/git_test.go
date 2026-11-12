@@ -3,7 +3,7 @@ package source
 import (
 	"testing"
 
-	"github.com/c360studio/semstreams/vocabulary"
+	"github.com/c360studio/semengine/vocabulary"
 )
 
 func TestGitDecisionPredicatesRegistered(t *testing.T) {

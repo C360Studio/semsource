@@ -127,7 +127,9 @@ async function assertGraphQLSeededOperations(request, projectKey) {
     request,
     "entitiesByPredicate(predicate, value)",
     `query($predicate: String!, $value: String!) {
-      entitiesByPredicate(predicate: $predicate, value: $value)
+      entitiesByPredicate(predicate: $predicate, value: $value) {
+        entities
+      }
     }`,
     {
       predicate: "dc.terms.title",
@@ -153,7 +155,9 @@ async function assertGraphQLSeededOperations(request, projectKey) {
     request,
     "entitiesByPredicate(predicate)",
     `query($predicate: String!) {
-      entitiesByPredicate(predicate: $predicate)
+      entitiesByPredicate(predicate: $predicate) {
+        entities
+      }
     }`,
     {
       predicate: "code.artifact.type",
@@ -219,20 +223,20 @@ async function assertGraphQLSeededOperations(request, projectKey) {
   );
   expectTriple(byId.get(betaID)?.triples, "code.relationship.calls", alphaID);
 
-  // 4. pathSearch(start, depth, direction[, predicates])
+  // 4. pathSearch(startEntity, maxDepth, direction[, predicates])
   // Routes to graph.query.pathSearch and returns PathSearchResult { entities, paths }.
   const pathSearchUnfiltered = await postGraphQL(
     request,
-    "pathSearch(start, depth, direction)",
-    `query($start: String!, $depth: Int!, $direction: String!) {
-      pathSearch(start: $start, depth: $depth, direction: $direction) {
+    "pathSearch(startEntity, maxDepth, direction)",
+    `query($startEntity: String!, $maxDepth: Int!, $direction: String!) {
+      pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, direction: $direction) {
         entities { id }
         paths { from predicate to }
       }
     }`,
     {
-      start: betaID,
-      depth: 1,
+      startEntity: betaID,
+      maxDepth: 1,
       direction: "OUTGOING",
     },
   );
@@ -245,16 +249,16 @@ async function assertGraphQLSeededOperations(request, projectKey) {
 
   const pathSearchCallsOnly = await postGraphQL(
     request,
-    "pathSearch(start, depth, direction, predicates)",
-    `query($start: String!, $depth: Int!, $direction: String!, $predicates: [String]) {
-      pathSearch(start: $start, depth: $depth, direction: $direction, predicates: $predicates) {
+    "pathSearch(startEntity, maxDepth, direction, predicates)",
+    `query($startEntity: String!, $maxDepth: Int!, $direction: String!, $predicates: [String]) {
+      pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, direction: $direction, predicates: $predicates) {
         entities { id }
         paths { from predicate to }
       }
     }`,
     {
-      start: betaID,
-      depth: 1,
+      startEntity: betaID,
+      maxDepth: 1,
       direction: "OUTGOING",
       predicates: ["code.relationship.calls"],
     },
@@ -530,26 +534,15 @@ test("workbench exposes real search evidence and keyboard detail", async ({
   expect(contentType(graphResponse)).toContain("application/json");
   const graphEnvelope = JSON.parse(graphBody);
   expect(graphEnvelope).toMatchObject({
-    contract_version: "1",
-    index: { ready: true, state: "ready" },
+    contract_version: "2",
     graph: {
       nodes: expect.any(Array),
       edges: expect.any(Array),
-      // `coherent` left this envelope in semstreams beta.157 (ViewRevision is
-      // Start/End only since); the start === end assertion below carries the
-      // coherence claim in substance. See #146.
-      view_revision: {
-        start: expect.any(Number),
-        end: expect.any(Number),
-      },
       truncated: expect.any(Boolean),
     },
   });
+  expect(graphEnvelope.deferred).not.toBe(true);
   expect(graphEnvelope.graph.nodes.length).toBeGreaterThan(0);
-  expect(graphEnvelope.graph.view_revision.start).toBeGreaterThan(0);
-  expect(graphEnvelope.graph.view_revision.end).toBe(
-    graphEnvelope.graph.view_revision.start,
-  );
 
   const graphNavigator = page.getByRole("list", { name: /graph entities/i });
   await expect(graphNavigator).toBeVisible({ timeout: pollTimeoutMs });

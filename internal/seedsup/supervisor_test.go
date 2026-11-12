@@ -146,3 +146,34 @@ func TestStopTimesOutRatherThanHanging(t *testing.T) {
 		t.Fatal("Stop() hung on a seed that ignores cancellation")
 	}
 }
+
+func TestStartContextCancellationDoesNotCancelSeed(t *testing.T) {
+	var s Supervisor
+	started := make(chan struct{})
+	release := make(chan struct{})
+	observed := make(chan struct{})
+	var seedCtxErr error
+
+	startCtx, startCancel := context.WithCancel(context.Background())
+	s.Start(startCtx, nil, func(ctx context.Context) error {
+		close(started)
+		<-release
+		seedCtxErr = ctx.Err()
+		close(observed)
+		return seedCtxErr
+	})
+	<-started
+	startCancel()
+	close(release)
+	<-observed
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopCancel()
+	s.Stop(stopCtx, nil)
+	if seedCtxErr != nil {
+		t.Fatalf("seed ctx was cancelled by startCtx cancellation: %v", seedCtxErr)
+	}
+	if err := s.LastError(); err != nil {
+		t.Fatalf("LastError() = %+v, want nil", err)
+	}
+}

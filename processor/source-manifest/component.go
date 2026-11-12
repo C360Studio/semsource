@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/degraded"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semsource/internal/workerjoin"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
 )
 
@@ -262,8 +262,8 @@ func (c *Component) startStatusAggregation(ctx context.Context) error {
 	}
 
 	// Subscribe to internal status reports from source components.
-	sub, err := c.client.Subscribe(ctx, statusReportSubject, func(_ context.Context, msg *nats.Msg) {
-		c.handleStatusReport(ctx, msg.Data)
+	sub, err := c.client.Subscribe(ctx, statusReportSubject, func(msgCtx context.Context, msg *nats.Msg) {
+		c.handleStatusReport(msgCtx, msg.Data)
 	})
 	if err != nil {
 		return fmt.Errorf("subscribe %s: %w", statusReportSubject, err)
@@ -294,10 +294,11 @@ func (c *Component) startStatusAggregation(ctx context.Context) error {
 	c.logger.Info("listening for summary queries", "subject", summaryQuerySubject)
 
 	// Start heartbeat and seed timeout goroutines.
-	heartbeatCancel := c.startHeartbeat(ctx)
+	runCtx := context.WithoutCancel(ctx)
+	heartbeatCancel := c.startHeartbeat(runCtx)
 	c.cancelFuncs = append(c.cancelFuncs, heartbeatCancel)
 
-	timeoutCancel := c.startSeedTimeout(ctx)
+	timeoutCancel := c.startSeedTimeout(runCtx)
 	if timeoutCancel != nil {
 		c.cancelFuncs = append(c.cancelFuncs, timeoutCancel)
 	}
@@ -374,7 +375,7 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 // startHeartbeat publishes status periodically.
 func (c *Component) startHeartbeat(ctx context.Context) context.CancelFunc {
 	interval := parseDurationOrDefault(c.config.HeartbeatInterval, 30*time.Second)
-	hbCtx, cancel := context.WithCancel(ctx)
+	hbCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		ticker := time.NewTicker(interval)
@@ -412,7 +413,7 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 		return nil
 	}
 
-	toCtx, cancel := context.WithCancel(ctx)
+	toCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		timer := time.NewTimer(timeout)
@@ -599,16 +600,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Meta implements component.Discoverable.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "source-manifest",
-		Type:        "processor",
-		Description: "Publishes configured source manifest, ingestion status, and predicate schema",
-		Version:     "0.2.0",
-	}
-}
-
 // InputPorts implements component.Discoverable.
 func (c *Component) InputPorts() []component.Port {
 	return []component.Port{}
@@ -752,7 +743,11 @@ func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(data, &payload); err == nil {
 		ctx := r.Context()
 		payload["index"] = c.fetchIndexReadiness(ctx, structuralReadinessKey, "structural index")
-		payload["embedding"] = c.fetchIndexReadiness(ctx, semanticReadinessKey, "semantic index")
+		if c.config.semanticEnabled() {
+			payload["embedding"] = c.fetchIndexReadiness(ctx, semanticReadinessKey, "semantic index")
+		} else {
+			payload["embedding"] = disabledIndexReadiness("Semantic index")
+		}
 		payload["note"] = ReadinessNote
 		if merged, mErr := json.Marshal(payload); mErr == nil {
 			data = merged

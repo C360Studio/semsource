@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semstreams/message"
 )
 
 // AddRequestType is the message type for ingest add requests.

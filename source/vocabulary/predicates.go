@@ -1,6 +1,9 @@
 package source
 
-import "github.com/c360studio/semstreams/vocabulary"
+import (
+	"github.com/c360studio/semengine/vocabulary"
+	"github.com/c360studio/semvocab/catalog/bfo"
+)
 
 // DcTitle is the Dublin Core title predicate — the canonical human name of an
 // entity, shared across domains (code uses the same IRI). Documents emit it so a
@@ -119,7 +122,7 @@ func registerStructurePredicates() {
 	vocabulary.Register(CodeBelongs,
 		vocabulary.WithDescription("Links child entity to parent (chunk to document, code to module)"),
 		vocabulary.WithDataType("entity_id"),
-		vocabulary.WithIRI("http://purl.obolibrary.org/obo/BFO_0000050")) // BFO part_of
+		vocabulary.WithIRI(bfo.Namespace+"BFO_0000176")) // BFO 2020 continuant part of
 
 }
 

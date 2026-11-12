@@ -12,7 +12,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -51,8 +51,7 @@ func classifyPublishError(ctx context.Context, err error) publishErrClass {
 	if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, ctx.Err())) {
 		return publishCanceled
 	}
-	if errors.Is(err, natsclient.ErrCircuitOpen) ||
-		errors.Is(err, natsclient.ErrNotConnected) ||
+	if errors.Is(err, natsclient.ErrNotConnected) ||
 		errors.Is(err, nats.ErrTimeout) ||
 		errors.Is(err, context.DeadlineExceeded) ||
 		errors.Is(err, nats.ErrNoResponders) {

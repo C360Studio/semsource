@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/config"
 	semsourcegraph "github.com/c360studio/semsource/graph"
@@ -93,7 +94,7 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 		}
 		for name, compCfg := range built {
 			instanceNames = append(instanceNames, name)
-			discovered, err := astsource.NewComponent(compCfg.Config, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+			discovered, err := astsource.NewComponent(compCfg.Config, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 			if err != nil {
 				t.Fatalf("ast-source NewComponent from registration config: %v", err)
 			}
@@ -113,7 +114,7 @@ func TestIntegration_VersionRegistrationToDiff(t *testing.T) {
 
 	// Supersession component serves graph.query.versionDiff and the pass.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}

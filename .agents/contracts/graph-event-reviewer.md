@@ -42,7 +42,7 @@ You are a specialized reviewer for SemSource graph event handling — entity ide
 - [ ] Messages carry the registered `semsource.entity.v1` payload and required semantic envelope
 - [ ] Removal matches retained stale-history contract; do not infer physical deletion from a watch event
 - [ ] Export events preserve the declared wire contract; do not infer retired GraphEvent/SEED/DELTA envelopes
-- [ ] `at-least-once` delivery mode used
+- [ ] Buffered `entitypub` drain on `graph.ingest.entity` and convergent `ENTITY_STATES` KV-watch delivery on `/ws` (`put`/`delete`/`poisoned`/`synced` frames folded per key; no `ack`/`nack`)
 
 ### Authority / Merge Policy
 - [ ] Local writes cannot cross effective org/platform authority

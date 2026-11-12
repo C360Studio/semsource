@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/storage/objectstore"
 
 	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"

@@ -689,11 +689,10 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
   "namespace": "acme",
   "sources": [{"type": "ast", "path": "./", "language": "go"}],
   "graph": {
-    "gateway_bind": "127.0.0.1:9000",
-    "enable_playground": false,
     "embedder_type": "http",
-    "embedding_batch_size": 100,
-    "coalesce_ms": 500
+    "coalesce_ms": 500,
+    "index_workers": 4,
+    "enable_clustering": true
   },
   "model_registry": {
     "endpoints": {"semembed": {"provider": "openai", "url": "http://localhost:8081/v1", "model": "arctic-s"}},
@@ -707,20 +706,65 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
 	if cfg.Graph == nil {
 		t.Fatal("graph config is nil")
 	}
-	if cfg.Graph.GatewayBind != "127.0.0.1:9000" {
-		t.Errorf("gateway_bind: got %q, want %q", cfg.Graph.GatewayBind, "127.0.0.1:9000")
-	}
-	if cfg.Graph.EnablePlayground == nil || *cfg.Graph.EnablePlayground {
-		t.Error("enable_playground: want false")
-	}
 	if cfg.Graph.EmbedderType != "http" {
 		t.Errorf("embedder_type: got %q, want %q", cfg.Graph.EmbedderType, "http")
 	}
-	if cfg.Graph.EmbeddingBatchSize != 100 {
-		t.Errorf("embedding_batch_size: got %d, want 100", cfg.Graph.EmbeddingBatchSize)
-	}
 	if cfg.Graph.CoalesceMs != 500 {
 		t.Errorf("coalesce_ms: got %d, want 500", cfg.Graph.CoalesceMs)
+	}
+	if cfg.Graph.IndexWorkers != 4 {
+		t.Errorf("index_workers: got %d, want 4", cfg.Graph.IndexWorkers)
+	}
+	if !cfg.Graph.EnableClustering {
+		t.Error("enable_clustering: want true")
+	}
+}
+
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestLoadConfigFromReader_RetiredGraphKeysRejected(t *testing.T) {
+	cases := []struct {
+		name      string
+		graphJSON string
+		wantField string
+	}{
+		{
+			name:      "gateway_bind",
+			graphJSON: `{"gateway_bind": "127.0.0.1:9000"}`,
+			wantField: "graph.gateway_bind",
+		},
+		{
+			name:      "enable_playground",
+			graphJSON: `{"enable_playground": false}`,
+			wantField: "graph.enable_playground",
+		},
+		{
+			name:      "embedding_batch_size",
+			graphJSON: `{"embedding_batch_size": 100}`,
+			wantField: "graph.embedding_batch_size",
+		},
+		{
+			name:      "clustering_llm",
+			graphJSON: `{"clustering_llm": true}`,
+			wantField: "graph.clustering_llm",
+		},
+		{
+			name:      "entity_id_edges",
+			graphJSON: `{"entity_id_edges": {"include_system_peers": false}}`,
+			wantField: "graph.entity_id_edges",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := `{"namespace": "acme", "sources": [{"type": "ast", "path": "./", "language": "go"}], "graph": ` + tc.graphJSON + `}`
+			_, err := config.LoadConfigFromReader(strings.NewReader(input))
+			if err == nil {
+				t.Fatalf("expected retired key %s to fail validation", tc.wantField)
+			}
+			if !strings.Contains(err.Error(), tc.wantField) {
+				t.Fatalf("expected error to mention %q, got: %v", tc.wantField, err)
+			}
+		})
 	}
 }
 
@@ -783,5 +827,50 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 	}
 	if graph.Replicas == nil || *graph.Replicas != 3 {
 		t.Errorf("replicas: got %v, want 3", graph.Replicas)
+	}
+
+	missingEntitySubj := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {
+    "GRAPH": {
+      "subjects": ["graph.ingest.manifest"]
+    }
+  }
+}`
+	if _, err := config.LoadConfigFromReader(strings.NewReader(missingEntitySubj)); err == nil {
+		t.Fatal("expected streams.GRAPH.subjects omitting graph.ingest.entity to fail validation")
+	}
+
+	entityOnlySubj := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {
+    "GRAPH": {
+      "subjects": ["graph.ingest.entity"]
+    }
+  }
+}`
+	if _, err := config.LoadConfigFromReader(strings.NewReader(entityOnlySubj)); err == nil {
+		t.Fatal("expected streams.GRAPH.subjects omitting manifest/status/predicates to fail validation")
+	}
+
+	allDefaultSubj := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {
+    "GRAPH": {
+      "subjects": [
+        "graph.ingest.entity",
+        "graph.ingest.batch",
+        "graph.ingest.manifest",
+        "graph.ingest.status",
+        "graph.ingest.predicates"
+      ]
+    }
+  }
+}`
+	if _, err := config.LoadConfigFromReader(strings.NewReader(allDefaultSubj)); err != nil {
+		t.Fatalf("expected complete default streams.GRAPH.subjects to pass validation: %v", err)
 	}
 }

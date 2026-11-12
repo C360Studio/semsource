@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/handler"
 	videohandler "github.com/c360studio/semsource/handler/video"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // ---------------------------------------------------------------------------

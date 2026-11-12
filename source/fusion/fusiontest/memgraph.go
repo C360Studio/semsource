@@ -6,8 +6,8 @@ import (
 	"context"
 	"slices"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
 )
 
 // MemGraph is an in-memory fusion.RetrievalClient. Build it with AddEntity /
@@ -19,7 +19,6 @@ import (
 // querying would race silently. (Unlike MemStore, which is mutex-guarded because
 // producers Put into it during a run.)
 type MemGraph struct {
-	status   fusion.IndexStatus
 	entities map[string]*fusion.Entity
 	out      map[string][]fusion.Edge // id → outgoing edges
 	resolve  map[string][]string
@@ -29,22 +28,11 @@ type MemGraph struct {
 // NewMemGraph returns a ready in-memory graph.
 func NewMemGraph() *MemGraph {
 	return &MemGraph{
-		status: fusion.IndexStatus{
-			Ready: true, State: fusion.StateReady, Revision: "test",
-			// BootstrapComplete is load-bearing since beta.157: the readiness gate
-			// fails CLOSED without it (ADR-084 D2), so a fake that omits it makes
-			// every query return zero nodes for a reason unrelated to the test.
-			// This fake stands in for a healthy, fully-built graph.
-			BootstrapComplete: true,
-		},
 		entities: map[string]*fusion.Entity{},
 		out:      map[string][]fusion.Edge{},
 		resolve:  map[string][]string{},
 	}
 }
-
-// SetStatus overrides the reported readiness.
-func (m *MemGraph) SetStatus(s fusion.IndexStatus) { m.status = s }
 
 // SetResolve registers the seed IDs a query resolves to.
 func (m *MemGraph) SetResolve(query string, ids ...string) { m.resolve[query] = ids }
@@ -85,12 +73,9 @@ func (m *MemGraph) AddEdge(from, predicate, to string) {
 	m.out[from] = append(m.out[from], fusion.Edge{Predicate: predicate, Target: to})
 }
 
-// Status implements fusion.RetrievalClient.
-func (m *MemGraph) Status(context.Context) (fusion.IndexStatus, error) { return m.status, nil }
-
 // Resolve implements fusion.RetrievalClient. Keys on the query text only (Mode,
 // Scope, and Limit are ignored — the fake returns the pre-seeded IDs verbatim).
-func (m *MemGraph) Resolve(_ context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
+func (m *MemGraph) Resolve(_ context.Context, q fusion.ResolveQuery) (fusion.Resolution, error) {
 	ids := m.resolve[q.Query]
 	seeds := make([]fusion.Seed, 0, len(ids))
 	for _, id := range ids {
@@ -100,7 +85,7 @@ func (m *MemGraph) Resolve(_ context.Context, q fusion.ResolveQuery) ([]fusion.S
 		// never makes.
 		seeds = append(seeds, fusion.Seed{ID: id})
 	}
-	return seeds, nil
+	return fusion.Resolution{Seeds: seeds}, nil
 }
 
 // Entity implements fusion.RetrievalClient.

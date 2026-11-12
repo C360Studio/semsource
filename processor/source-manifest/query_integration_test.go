@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 // spec: openspec/specs/semstreams-governance/spec.md#Requirement: A request subject has exactly one handler
@@ -115,7 +115,7 @@ func TestIntegration_QuerySubjects(t *testing.T) {
 
 func requestJSON(t *testing.T, ctx context.Context, client *natsclient.Client, subject string, out any) {
 	t.Helper()
-	raw, err := client.Request(ctx, subject, []byte("{}"), 3*time.Second)
+	raw, err := client.RequestClassified(ctx, subject, []byte("{}"), 3*time.Second)
 	if err != nil {
 		t.Fatalf("%s request: %v", subject, err)
 	}

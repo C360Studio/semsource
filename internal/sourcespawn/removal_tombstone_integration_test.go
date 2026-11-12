@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/natstest"
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/types"
 )
 
 // spec: openspec/specs/runtime-configuration/spec.md#Requirement: Component configuration changes explicitly require restart
@@ -34,7 +34,9 @@ func TestIntegrationRemovedFileSourceStaysDisabledAfterConfigRestart(t *testing.
 			t.Fatal(err)
 		}
 		t.Cleanup(func() {
-			if err := mgr.Stop(time.Second); err != nil {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), time.Second)
+			defer stopCancel()
+			if err := mgr.Stop(stopCtx); err != nil {
 				t.Error(err)
 			}
 		})
@@ -44,7 +46,7 @@ func TestIntegrationRemovedFileSourceStaysDisabledAfterConfigRestart(t *testing.
 	if err := Remove(ctx, handle, first); err != nil {
 		t.Fatal(err)
 	}
-	if err := first.Stop(time.Second); err != nil {
+	if err := first.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
 	second := start() // The original file still declares this source enabled.
@@ -55,7 +57,7 @@ func TestIntegrationRemovedFileSourceStaysDisabledAfterConfigRestart(t *testing.
 	if err != nil || len(added) != 1 || !added[0].Created {
 		t.Fatalf("re-add=%+v err=%v", added, err)
 	}
-	if err := second.Stop(time.Second); err != nil {
+	if err := second.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
 	third := start()

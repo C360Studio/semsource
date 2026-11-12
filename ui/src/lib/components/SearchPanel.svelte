@@ -231,19 +231,20 @@
               onclick={() => void submit()}>Retry search</button
             >{/if}
         </div>
-      {:else if response && !response.index.ready}
+      {:else if response && response.deferred}
         <div class="truth-state" data-state="not_ready">
-          <strong>Index is {response.index.state}</strong>
+          <strong
+            >Index is {response.defer_reason
+              ? response.defer_reason.replaceAll("_", " ")
+              : "deferred"}</strong
+          >
           <p>
             Code search has not reported a ready index, so this response is not
             treated as empty.
-            {#if response.index.lag !== undefined}
-              Revision lag: {response.index.lag}.
-            {/if}
           </p>
         </div>
       {:else if response}
-        {#if response.truncated}
+        {#if response.truncated || response.paths_truncated}
           <p class="warning" role="status">
             Results were truncated by the server; the list is not complete.
           </p>

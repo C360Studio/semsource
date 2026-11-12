@@ -118,9 +118,8 @@ for name, host in (("semembed", "semembed"), ("seminstruct", "seminstruct")):
 # Clustering is the whole point of tier 2; a config that silently leaves it off
 # would smoke green while proving nothing about the community-summary path.
 graph = cfg.get("graph", {})
-for key in ("enable_clustering", "clustering_llm"):
-    if graph.get(key) is not True:
-        errors.append(f"graph.{key} must be true in the tier-2 dev config")
+if graph.get("enable_clustering") is not True:
+    errors.append("graph.enable_clustering must be true in the tier-2 dev config")
 
 for cap in ("embedding", "community_summary", "query_classification", "answer_synthesis"):
     preferred = capabilities.get(cap, {}).get("preferred", [])

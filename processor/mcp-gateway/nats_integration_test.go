@@ -14,9 +14,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/graph/kvcatalog"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semsource/internal/natstest"
-	semgraph "github.com/c360studio/semstreams/graph"
 
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
@@ -97,7 +98,7 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	// two signals are deliberately DIFFERENT: a still-building structural index
 	// alongside a ready semantic one is exactly the state an agent must be able to
 	// tell apart.
-	statusKV, err := semgraph.EnsureCatalogBucket(ctx, tc.Client, semgraph.BucketGraphStatus)
+	statusKV, err := kvcatalog.EnsureCatalogBucket(ctx, tc.Client, semgraph.BucketGraphStatus)
 	if err != nil {
 		t.Fatalf("ensure %s: %v", semgraph.BucketGraphStatus, err)
 	}

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/model"
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semstreams/model"
 )
 
 // loadJSON is a small helper: parse+validate a config from a JSON literal.
@@ -24,6 +24,31 @@ func TestModelRegistry_Tier0_NoRegistry_OK(t *testing.T) {
 	}
 	if cfg.ModelRegistry != nil {
 		t.Fatalf("expected nil ModelRegistry, got %+v", cfg.ModelRegistry)
+	}
+}
+
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestModelRegistry_Tier0_None_NoRegistry_OK(t *testing.T) {
+	cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"none"}}`)
+	if err != nil {
+		t.Fatalf("tier-0 none config should be valid without model_registry: %v", err)
+	}
+	if cfg.Graph == nil || cfg.Graph.EmbedderType != "none" {
+		t.Fatalf("expected Graph.EmbedderType == \"none\", got %+v", cfg.Graph)
+	}
+	if cfg.ModelRegistry != nil {
+		t.Fatalf("expected nil ModelRegistry, got %+v", cfg.ModelRegistry)
+	}
+}
+
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestModelRegistry_InvalidEmbedderType_Rejected(t *testing.T) {
+	_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"bogus"}}`)
+	if err == nil {
+		t.Fatal("unknown embedder_type should fail validation")
+	}
+	if !strings.Contains(err.Error(), "embedder_type") {
+		t.Fatalf("error should mention embedder_type, got: %v", err)
 	}
 }
 
@@ -78,9 +103,8 @@ func TestModelRegistry_Tier1_HTTP_RegistryMissingEmbedding_Fails(t *testing.T) {
 	}
 }
 
-func TestModelRegistry_Tier2_ClusteringLLM_RequiresCommunitySummary(t *testing.T) {
-	// clustering_llm with an embedding-only registry must fail on the missing
-	// community_summary capability.
+func TestModelRegistry_Tier2_RetiredClusteringLLM_Rejected(t *testing.T) {
+	// clustering_llm is retired in SemEngine (semengine#485 tracks LLM community summaries).
 	_, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
 		"graph":{"embedder_type":"http","enable_clustering":true,"clustering_llm":true},
@@ -90,17 +114,17 @@ func TestModelRegistry_Tier2_ClusteringLLM_RequiresCommunitySummary(t *testing.T
 		}
 	}`)
 	if err == nil {
-		t.Fatal("clustering_llm without a community_summary capability should fail")
+		t.Fatal("retired clustering_llm should fail validation")
 	}
-	if !strings.Contains(err.Error(), "community_summary") {
-		t.Fatalf("error should mention community_summary, got: %v", err)
+	if !strings.Contains(err.Error(), "graph.clustering_llm") {
+		t.Fatalf("error should mention graph.clustering_llm, got: %v", err)
 	}
 }
 
 func TestModelRegistry_Tier2_Full_OK(t *testing.T) {
 	cfg, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"http","enable_clustering":true,"clustering_llm":true},
+		"graph":{"embedder_type":"http","enable_clustering":true},
 		"model_registry":{
 			"endpoints":{
 				"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"},
@@ -117,14 +141,6 @@ func TestModelRegistry_Tier2_Full_OK(t *testing.T) {
 	}
 	if got := cfg.ModelRegistry.Resolve(model.CapabilityCommunitySummary); got != "seminstruct" {
 		t.Fatalf("community_summary should resolve to seminstruct, got %q", got)
-	}
-}
-
-func TestModelRegistry_ClusteringLLM_IgnoredWhenClusteringOff(t *testing.T) {
-	// clustering_llm is inert unless enable_clustering is set, so a bm25 tier-0
-	// config with a stray clustering_llm flag must not demand a registry.
-	if _, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"clustering_llm":true}}`); err != nil {
-		t.Fatalf("clustering_llm without enable_clustering should be inert, got: %v", err)
 	}
 }
 

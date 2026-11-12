@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -124,7 +124,7 @@ func New(t testing.TB, opts ...Option) *Server {
 // setup and cleanup paths can be tested without Docker.
 type broker interface {
 	Host(ctx context.Context) (string, error)
-	MappedPort(ctx context.Context, port nat.Port) (nat.Port, error)
+	MappedPort(ctx context.Context, port string) (network.Port, error)
 	Terminate(ctx context.Context, opts ...testcontainers.TerminateOption) error
 }
 
@@ -214,7 +214,7 @@ func attemptStart(ctx context.Context, launch launcher, window time.Duration) (b
 // ends. absent is true only when the port was seen unpublished and the window
 // itself ran out; an error from the attempt's own context (startTimeout or the
 // test ending) carries that cause and is never treated as absence.
-func observePort(ctx context.Context, container broker, window time.Duration) (nat.Port, bool, error) {
+func observePort(ctx context.Context, container broker, window time.Duration) (network.Port, bool, error) {
 	observe, stop := context.WithTimeout(ctx, window)
 	defer stop()
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -227,11 +227,11 @@ func observePort(ctx context.Context, container broker, window time.Duration) (n
 		case err == nil:
 			return port, false, nil
 		case ctx.Err() != nil:
-			return "", false, fmt.Errorf("mapped port %s: %w", clientPort, errors.Join(context.Cause(ctx), err))
+			return network.Port{}, false, fmt.Errorf("mapped port %s: %w", clientPort, errors.Join(context.Cause(ctx), err))
 		case cerrdefs.IsNotFound(err):
 			lastAbsent = err
 		case observe.Err() == nil:
-			return "", false, fmt.Errorf("mapped port %s: %w", clientPort, err)
+			return network.Port{}, false, fmt.Errorf("mapped port %s: %w", clientPort, err)
 		}
 		// A call cut short by the window's own deadline falls through here.
 
@@ -243,22 +243,21 @@ func observePort(ctx context.Context, container broker, window time.Duration) (n
 			}
 		}
 		if ctx.Err() != nil {
-			return "", false, fmt.Errorf("mapped port %s: %w", clientPort, errors.Join(context.Cause(ctx), lastAbsent))
+			return network.Port{}, false, fmt.Errorf("mapped port %s: %w", clientPort, errors.Join(context.Cause(ctx), lastAbsent))
 		}
 		if lastAbsent == nil {
-			return "", false, fmt.Errorf("mapped port %s: no observation within %s", clientPort, window)
+			return network.Port{}, false, fmt.Errorf("mapped port %s: no observation within %s", clientPort, window)
 		}
-		return "", true, fmt.Errorf("mapped port %s not published within %s: %w", clientPort, window, lastAbsent)
+		return network.Port{}, true, fmt.Errorf("mapped port %s not published within %s: %w", clientPort, window, lastAbsent)
 	}
 }
 
 // connect builds the client the way production does (NewClient, Connect),
-// with no reconnects and no health ticker so a dead broker fails fast.
+// with no reconnects so a dead broker fails fast.
 func connect(ctx context.Context, url string) (*natsclient.Client, error) {
 	client, err := natsclient.NewClient(url,
 		natsclient.WithTimeout(clientTimeout),
 		natsclient.WithMaxReconnects(0),
-		natsclient.WithHealthInterval(0),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create client: %w", err)
@@ -267,9 +266,6 @@ func connect(ctx context.Context, url string) (*natsclient.Client, error) {
 	defer cancel()
 	if err := client.Connect(connectCtx); err != nil {
 		return nil, errors.Join(fmt.Errorf("connect: %w", err), closeClient(client))
-	}
-	if err := client.WaitForConnection(connectCtx); err != nil {
-		return nil, errors.Join(fmt.Errorf("connection not ready: %w", err), closeClient(client))
 	}
 	return client, nil
 }

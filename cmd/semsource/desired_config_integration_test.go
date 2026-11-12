@@ -13,10 +13,10 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/internal/natstest"
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/types"
 )
 
 // spec: openspec/specs/source-lifecycle/spec.md#Requirement: Removal is real and observable
@@ -168,7 +168,9 @@ func desiredReadFixture(ctx context.Context, t *testing.T, client *natsclient.Cl
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := manager.Stop(3 * time.Second); err != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer stopCancel()
+		if err := manager.Stop(stopCtx); err != nil {
 			t.Error(err)
 		}
 	})
@@ -178,7 +180,7 @@ func desiredReadFixture(ctx context.Context, t *testing.T, client *natsclient.Cl
 	if err := manager.PutComponentToKV(ctx, handle, cc); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.Stop(3 * time.Second); err != nil {
+	if err := manager.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
 	name, err := semconfig.BucketName(org, stem)

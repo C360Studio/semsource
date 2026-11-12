@@ -107,8 +107,11 @@
         request.signal,
       );
       if (request.signal.aborted || current !== generation) return;
-      if (!response.index.ready) {
-        queryNotice = `Graph index is ${response.index.state.replaceAll("_", " ")}; existing graph state was retained. Retry when the index is ready.`;
+      if (response.deferred) {
+        const reason = response.defer_reason
+          ? response.defer_reason.replaceAll("_", " ")
+          : "deferred";
+        queryNotice = `Graph index is ${reason}; existing graph state was retained. Retry when the index is ready.`;
         return;
       }
       if (!response.graph) {

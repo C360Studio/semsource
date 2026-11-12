@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"

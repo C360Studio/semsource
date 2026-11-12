@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	semgraph "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semsource/internal/cutover"
-	semgraph "github.com/c360studio/semstreams/graph"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -31,7 +31,7 @@ const (
 	upgradeUnrelatedStream  = "UNRELATED_EVENTS"
 	upgradeUnrelatedSubject = "unrelated.cutover.sentinel"
 	upgradeUnrelatedMessage = "preserve-unrelated-stream-upgrade"
-	upgradeConfigBucket     = "semstreams_config_upgradecutover_semsource"
+	upgradeConfigBucket     = "semengine_config_upgradecutover_semsource"
 )
 
 var upgradePreservedKVBuckets = []string{
@@ -167,7 +167,7 @@ func TestE2E_UpgradePathRehearsal(t *testing.T) {
 	kvSet := upgradeStringSet(inventory.KV)
 	objectSet := upgradeStringSet(inventory.Objects)
 	if !streamSet["GRAPH"] || !kvSet[upgradeConfigBucket] || !kvSet["PREDICATE_CATALOG"] {
-		t.Fatalf("required observed cutover resources missing: GRAPH=%t semstreams_config=%t PREDICATE_CATALOG=%t",
+		t.Fatalf("required observed cutover resources missing: GRAPH=%t semengine_config=%t PREDICATE_CATALOG=%t",
 			streamSet["GRAPH"], kvSet[upgradeConfigBucket], kvSet["PREDICATE_CATALOG"])
 	}
 	if !objectSet[upgradeObjectBucket] {
@@ -322,7 +322,7 @@ func upgradeAssertKnownAnswer(t *testing.T, nc *nats.Conn, timeout time.Duration
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		var predicateResponse semgraph.PredicateQueryResponse
+		var predicateResponse semgraph.QueryResponse[semgraph.PredicateData]
 		if err := json.Unmarshal(response.Data, &predicateResponse); err != nil {
 			lastErr = err
 			time.Sleep(500 * time.Millisecond)

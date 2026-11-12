@@ -3,7 +3,7 @@
 // through git commit history - the "git-as-memory" pattern.
 package source
 
-import "github.com/c360studio/semstreams/vocabulary"
+import "github.com/c360studio/semengine/vocabulary"
 
 // Git decision predicates track agent decisions at the file level.
 // Each file changed in a commit creates a decision entity that records

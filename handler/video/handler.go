@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semengine/storage"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
-	"github.com/c360studio/semstreams/storage"
 )
 
 // sourceTypeKey is the config source type key for video sources.

@@ -8,7 +8,7 @@ Mirror of `AGENTS.md` § Rules and what enforces them, section for section and r
 | --- | --- | --- |
 | `verify+review` | Entity IDs are 6-part, purely intrinsic (no timestamps, instance IDs, or insertion order), valid NATS KV keys, built only via `entityid.*` with authority passed from component dependencies | `entityid` tests; `graph-event-reviewer` |
 | `review` | Raw binary bytes never enter triples; store by reference | `graph-event-reviewer` |
-| `review` | Every graph write carries a semantic envelope (semstreams ADR-055) | `graph-event-reviewer`, `go-component-reviewer` |
+| `review` | Every graph write carries a semantic envelope (ADR-055) | `graph-event-reviewer`, `go-component-reviewer` |
 | `review` | The live graph is retention-first — never NATS TTL/MaxBytes for graph lifecycle | `graph-event-reviewer` |
 | `review` | An identity-breaking change is a clean storage break plus reseed; existing IDs are never aliased or rewritten | `graph-event-reviewer`; SETUP 03A |
 
@@ -18,8 +18,8 @@ Mirror of `AGENTS.md` § Rules and what enforces them, section for section and r
 | --- | --- | --- |
 | `review` | New components carry config.go, component.go, factory.go, and payload_registry.go per the component pattern above | `go-component-reviewer` |
 | `review` | Payload registration is explicit at bootstrap via `buildPayloadRegistry()`; no `init()` side effects, no blank imports | `go-component-reviewer`; `/new-payload` |
-| `review` | SemSource owns ingestion and projection; SemStreams owns governed graph state and mutation/query contracts | `openspec/config.yaml` |
-| `review` | Framework gaps are filed as GitHub issues against `C360Studio/semstreams` (or `semengine`) with mechanism, file:line evidence, a reproduction, and our workaround; never a PR, commit, branch, or issue comment there | review |
+| `review` | SemSource owns ingestion and projection; SemEngine owns governed graph state and mutation/query contracts | `openspec/config.yaml` |
+| `review` | Framework gaps are filed as GitHub issues against `C360Studio/semengine` (or `semstreams`) with mechanism, file:line evidence, a reproduction, and our workaround; never a PR, commit, branch, or issue comment there | review |
 | `verify` | Vendored decision skills match the pinned upstream byte for byte; forks record the upstream digest last reconciled | `task agents:check` |
 
 ## 3. Go quality and verification

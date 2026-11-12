@@ -31,8 +31,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
 
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -47,9 +47,10 @@ func New() *Lens { return &Lens{} }
 // Name identifies the lens.
 func (*Lens) Name() string { return "docs" }
 
-// ResolveMode routes a path-like query (slash, or a bare doc filename) to prefix
-// and everything else to nl (semantic) — documents are found by meaning over
-// their content, not by symbol name.
+// ResolveMode routes a path-like query (slash, bare doc filename) or a valid
+// dotted entity ID / entity ID prefix to prefix, and everything else to nl
+// (semantic) — documents are found by meaning over their content or by exact
+// entity/path address, not by symbol name.
 func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	q := strings.TrimSpace(query)
 	if strings.ContainsAny(q, " \t\n") {
@@ -58,7 +59,21 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	if strings.ContainsAny(q, "/\\") || source.IsDocExtension(path.Ext(q)) {
 		return fusion.ResolveModePrefix
 	}
+	if isDottedEntityIDOrPrefix(q) {
+		return fusion.ResolveModePrefix
+	}
 	return fusion.ResolveModeNL
+}
+
+func isDottedEntityIDOrPrefix(q string) bool {
+	parts := strings.Split(q, ".")
+	if len(parts) < 4 || len(parts) > 6 {
+		return false
+	}
+	if parts[2] != "web" && parts[3] != "web" {
+		return false
+	}
+	return message.IsValidEntityID(q + strings.Repeat(".a", 6-len(parts)))
 }
 
 // Edges declares passage containment, so a passage hit resolves to the document

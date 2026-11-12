@@ -46,7 +46,7 @@ export interface ViewRevision {
 export interface GraphProjection {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  view_revision: ViewRevision;
+  view_revision?: ViewRevision;
   truncated: boolean;
 }
 
@@ -240,7 +240,10 @@ export function parseGraphProjection(value: unknown): GraphProjection {
   return {
     nodes,
     edges,
-    view_revision: parseRevision(item.view_revision),
+    view_revision:
+      item.view_revision === undefined
+        ? undefined
+        : parseRevision(item.view_revision),
     truncated: item.truncated,
   };
 }

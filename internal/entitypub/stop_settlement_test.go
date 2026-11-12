@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/pkg/buffer"
 	"github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semstreams/pkg/buffer"
 )
 
 type notifyingBuffer struct {
@@ -103,5 +103,29 @@ func TestStopDeadlineReportsIncompleteSettlement(t *testing.T) {
 	}
 	if p.Failed() != 1 {
 		t.Fatalf("canceled delivery not counted: %d", p.Failed())
+	}
+}
+
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Desired-source lifecycle and non-recovery semantics hold in Tier 0
+func TestStartContextCancellationDoesNotLoseQueuedEntities(t *testing.T) {
+	transport := &settlementPublisher{entered: make(chan context.Context, 4), release: make(chan struct{})}
+	close(transport.release)
+	p, _ := newTestPublisher(t, transport)
+
+	startCtx, startCancel := context.WithCancel(context.Background())
+	p.Start(startCtx)
+	// Simulate SIGTERM cancelling the StartAll signalCtx before StopAll runs.
+	startCancel()
+
+	if err := p.Send(payloadN("after-start-cancel")); err != nil {
+		t.Fatalf("Send after startCtx cancel: %v", err)
+	}
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopCancel()
+	if err := p.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop after startCtx cancel: %v", err)
+	}
+	if p.Published() != 1 || p.Lost() != 0 {
+		t.Fatalf("Published()=%d Lost()=%d, want 1 and 0", p.Published(), p.Lost())
 	}
 }

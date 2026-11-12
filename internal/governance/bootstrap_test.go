@@ -3,8 +3,8 @@ package governance
 import (
 	"testing"
 
+	semtypes "github.com/c360studio/semengine/pkg/types"
 	semsourcegraph "github.com/c360studio/semsource/graph"
-	semtypes "github.com/c360studio/semstreams/pkg/types"
 )
 
 // The beta.160 bootstrap is a pure local declaration: no registry, no

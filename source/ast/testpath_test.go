@@ -3,7 +3,7 @@ package ast_test
 import (
 	"testing"
 
-	"github.com/c360studio/semstreams/vocabulary"
+	"github.com/c360studio/semengine/vocabulary"
 
 	"github.com/c360studio/semsource/source/ast"
 )

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Import language parsers to trigger init() registration.
@@ -23,13 +23,13 @@ import (
 // WatchPathConfig configures a single watch path with its parsing options.
 type WatchPathConfig struct {
 	// Path supports glob patterns: "./services/*", "./libs/**"
-	Path string `json:"path" schema:"type:string,description:Path or glob pattern to watch,required:true"`
+	Path string `json:"path" schema:"type:string,description:Path or glob pattern to watch,required"`
 
 	// Org is the organization for entity IDs
-	Org string `json:"org" schema:"type:string,description:Organization for entity IDs,required:true"`
+	Org string `json:"org" schema:"type:string,description:Organization for entity IDs,required"`
 
 	// Project is the project name for entity IDs
-	Project string `json:"project" schema:"type:string,description:Project name for entity IDs,required:true"`
+	Project string `json:"project" schema:"type:string,description:Project name for entity IDs,required"`
 
 	// Version is an optional version/ref qualifier for entity-ID scoping (e.g. a
 	// dependency version such as "v1.9.0"). When empty the system segment is
@@ -98,7 +98,7 @@ type Config struct {
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:advanced"`
 
 	// Global settings
 	WatchEnabled  bool   `json:"watch_enabled"  schema:"type:bool,description:Enable file watcher for real-time updates,category:basic,default:true"`

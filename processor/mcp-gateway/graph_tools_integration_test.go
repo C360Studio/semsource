@@ -12,8 +12,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 // graphToolComponent wires a gateway to a live test NATS client.

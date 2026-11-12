@@ -25,7 +25,7 @@ func TestIntegrationStopRetainsActiveSubscriptionOnDeadline(t *testing.T) {
 	requested := make(chan struct{})
 	go func() {
 		defer close(requested)
-		_, _ = tc.Client.Request(ctx, "semsource.test.drain", nil, 10*time.Second)
+		_, _ = tc.Client.RequestClassified(ctx, "semsource.test.drain", nil, 10*time.Second)
 	}()
 	select {
 	case <-entered:

@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/graph"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/types"
 )
 
 func TestPinFactoryRegistration(t *testing.T) {
@@ -60,7 +60,7 @@ func TestSourcePayloadBindsRegistryContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	floor, ok := reg.IndexingProfileFor(graph.EntityType.Key())
+	floor, ok := reg.IndexingProfileFor(graph.EntityType)
 	if !ok || floor != graph.IndexingProfileControl {
 		t.Fatalf("floor=%q registered=%v", floor, ok)
 	}

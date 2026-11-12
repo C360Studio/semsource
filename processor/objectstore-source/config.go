@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 
 	"github.com/c360studio/semsource/storage/s3store"
 )
@@ -28,7 +28,7 @@ type Config struct {
 	Ports *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
 
 	// Bucket is the object store bucket to ingest from. Required.
-	Bucket string `json:"bucket" schema:"type:string,description:Bucket holding the document artifacts,category:basic,required:true"`
+	Bucket string `json:"bucket" schema:"type:string,description:Bucket holding the document artifacts,category:basic,required"`
 
 	// Prefix scopes ingestion to part of the bucket. Empty means the whole
 	// bucket, which is only safe where the bucket holds documents and nothing
@@ -46,7 +46,7 @@ type Config struct {
 	PathStyle bool `json:"path_style,omitempty" schema:"type:bool,description:Use path-style bucket addressing,category:basic"`
 
 	// Org is the organization namespace used in entity ID construction.
-	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`
+	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required"`
 
 	// Project, when non-empty, overrides the bucket-derived entity-ID system
 	// slug. Two prefixes of one bucket meant to be separate projects say so
@@ -71,7 +71,7 @@ type Config struct {
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:advanced"`
 }
 
 // Validate checks the configuration for errors.

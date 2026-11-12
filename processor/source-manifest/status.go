@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/vocabulary"
 )
 
 const (

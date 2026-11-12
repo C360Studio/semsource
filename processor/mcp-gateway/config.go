@@ -9,7 +9,7 @@ package mcpgateway
 import (
 	"fmt"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config configures the MCP gateway. The API token is NOT here — it is read from
@@ -19,7 +19,7 @@ type Config struct {
 	Ports *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration,category:basic"`
 
 	// Namespace routes registration tool calls to graph.ingest.add/remove.{namespace}.
-	Namespace string `json:"namespace" schema:"type:string,description:Organization namespace for registration subjects,category:basic,required:true"`
+	Namespace string `json:"namespace" schema:"type:string,description:Organization namespace for registration subjects,category:basic,required"`
 
 	// MCPPath is the HTTP path the Streamable-HTTP MCP endpoint mounts at,
 	// relative to the component's instance prefix (e.g. /mcp-gateway + /mcp).
@@ -33,7 +33,16 @@ type Config struct {
 	RequestTimeoutMs int `json:"request_timeout_ms,omitempty" schema:"type:int,description:NATS request timeout in ms,category:advanced,default:10000"`
 
 	// InstanceName is the unique component instance name.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name,category:advanced"`
+
+	// SemanticEnabled reports whether the composition runs graph-embedding.
+	// Nil defaults to true; false reports embedding as disabled (not_enabled)
+	// in source_status without polling GRAPH_STATUS/graph-embedding.
+	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
+}
+
+func (c *Config) semanticEnabled() bool {
+	return c.SemanticEnabled == nil || *c.SemanticEnabled
 }
 
 // Validate checks required fields.

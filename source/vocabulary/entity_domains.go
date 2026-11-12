@@ -1,6 +1,6 @@
 package source
 
-import semtypes "github.com/c360studio/semstreams/pkg/types"
+import semtypes "github.com/c360studio/semengine/pkg/types"
 
 // EntityDomainDelegations declares the source taxonomies minted by SemSource.
 // This offline audit declaration grants no runtime subject authority.

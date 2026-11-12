@@ -13,15 +13,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/projection"
+	"github.com/c360studio/semengine/storage/storeregistry"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/graphstatus"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/projection"
-	"github.com/c360studio/semstreams/storage/storeregistry"
 )
 
 // Component runs the versioned-source correspondence and supersession pass.
@@ -109,7 +109,8 @@ func (c *Component) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create entity publisher: %w", err)
 	}
-	pub.Start(ctx)
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	pub.Start(runCtx)
 	c.mu.Lock()
 	c.publisher = pub
 	c.mu.Unlock()
@@ -121,20 +122,21 @@ func (c *Component) Start(ctx context.Context) error {
 		Timeout:   lifecycleMutationTimeout,
 	})
 	if err != nil {
+		cancel()
 		return fmt.Errorf("create mutation client: %w", err)
 	}
 
 	resolver, err := c.buildBodyResolver(ctx)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("build body resolver: %w", err)
 	}
 
 	sub, diffSub, lifecycleSub, err := c.subscribeHandlers(ctx)
 	if err != nil {
+		cancel()
 		return err
 	}
-
-	runCtx, cancel := context.WithCancel(ctx)
 
 	c.mu.Lock()
 	c.publisher = pub
@@ -375,16 +377,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.running = false
 	c.mu.Unlock()
 	return nil
-}
-
-// Meta implements component.Discoverable.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "supersession",
-		Type:        "processor",
-		Description: "Relates code entities across versions with directional supersession lineage edges",
-		Version:     "0.1.0",
-	}
 }
 
 // InputPorts implements component.Discoverable.

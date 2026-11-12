@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/types"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -69,7 +70,7 @@ func TestIntegration_WorkbenchRoutesIngest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}

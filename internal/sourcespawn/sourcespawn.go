@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/types"
 )
 
 // ErrorCode is a typed error code for source-spawn operations. Codes flow

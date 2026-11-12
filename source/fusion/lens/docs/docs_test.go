@@ -2,27 +2,53 @@ package docs
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/vocabulary/cco"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semvocab/catalog/cco"
 
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
 	"github.com/c360studio/semsource/source/ontology"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Known answers retain their positive acceptance obligations
 func TestResolveMode(t *testing.T) {
 	l := New()
 	if l.ResolveMode("docs/retry.md") != fusion.ResolveModePrefix {
 		t.Error("path should resolve via prefix")
+	}
+	if l.ResolveMode("setup03a.semsource.web.setup03a-docs") != fusion.ResolveModePrefix {
+		t.Error("canonical web-domain entity ID prefix should resolve via prefix")
+	}
+	if l.ResolveMode("setup03a.semsource-1.setup03a-docs.web") != fusion.ResolveModePrefix {
+		t.Error("governed entity ID prefix should resolve via prefix")
+	}
+	if l.ResolveMode("setup03a.semsource-1.setup03a-docs.web.doc.routing-md") != fusion.ResolveModePrefix {
+		t.Error("governed 6-part entity ID should resolve via prefix")
 	}
 	if l.ResolveMode("how does retry work") != fusion.ResolveModeNL {
 		t.Error("NL should resolve via semantic")
 	}
 	if l.ResolveMode("retry") != fusion.ResolveModeNL {
 		t.Error("single term should resolve via semantic (doc content), not symbol")
+	}
+	for _, nlToken := range []string{
+		"net.http",
+		"node.js",
+		"graph.query",
+		"v1.2",
+		"v1.2.3",
+		"v1.0.0-beta.162",
+		"10.0.0.1",
+		"org.sensorhub.impl.sensor",
+		"api.v2.example.com",
+	} {
+		if l.ResolveMode(nlToken) != fusion.ResolveModeNL {
+			t.Errorf("ordinary dotted token %q should resolve via semantic, not entity prefix", nlToken)
+		}
 	}
 }
 
@@ -66,11 +92,14 @@ func TestDocsLensViaEngine(t *testing.T) {
 		source.DocFilePath:      "docs/retry.md",
 		source.DocBodyStore:     "objectstore",
 		source.DocBodyKey:       "body:retry",
-		ontology.ClassPredicate: cco.Document,
+		ontology.ClassPredicate: cco.MaterialCopyOfDocument,
 	})
 	g.SetResolve("how does retry work", id)
 
-	engine := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}))
+	engine, err := fusion.NewEngine(g, fusion.NewBodyResolver(fusion.MapStoreResolver{"objectstore": store}), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := engine.Fuse(context.Background(),
 		fusion.Request{Query: "how does retry work", Want: []fusion.Want{fusion.WantBody}},
 		New())
@@ -84,8 +113,8 @@ func TestDocsLensViaEngine(t *testing.T) {
 	if n.Name != "Retry Policy" || n.Kind != "document" || n.Body != body || n.Path != "docs/retry.md" {
 		t.Fatalf("doc node mismatch: %+v", n)
 	}
-	if n.Class != cco.Document {
-		t.Fatalf("expected Document class, got %q", n.Class)
+	if n.Class != cco.MaterialCopyOfDocument {
+		t.Fatalf("expected MaterialCopyOfDocument class, got %q", n.Class)
 	}
 	// NL query → semantic resolve → embedding provenance.
 	if resp.Provenance != fusion.ProvenanceEmbedding {

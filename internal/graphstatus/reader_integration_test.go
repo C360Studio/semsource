@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/graph/kvcatalog"
+	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semsource/internal/natstest"
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // TestReader_UnprovisionedBucketIsClassifiedNotReady is the beta.159
@@ -70,7 +70,7 @@ func TestReader_UnprovisionedBucketIsClassifiedNotReady(t *testing.T) {
 // would make an operator typo look like something worth retrying forever.
 // spec: openspec/specs/semstreams-governance/spec.md#Requirement: KV port declarations conform to the framework bucket catalog
 func TestReader_OffCatalogKeyIsInvalidNotNotReady(t *testing.T) {
-	if _, ok := semgraph.SpecFor("GRAPH_STATUS_TYPO"); ok {
+	if _, ok := kvcatalog.SpecFor("GRAPH_STATUS_TYPO"); ok {
 		t.Fatal("GRAPH_STATUS_TYPO unexpectedly resolves in the framework catalog")
 	}
 
@@ -78,7 +78,7 @@ func TestReader_OffCatalogKeyIsInvalidNotNotReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err := semgraph.OpenCatalogReader(ctx, tc.Client, "GRAPH_STATUS_TYPO")
+	_, err := kvcatalog.OpenCatalogReader(ctx, tc.Client, "GRAPH_STATUS_TYPO")
 	if err == nil {
 		t.Fatal("opening an off-catalog bucket succeeded; a typo must not silently create a stray unguarded bucket")
 	}

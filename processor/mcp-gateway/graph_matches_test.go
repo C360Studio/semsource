@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/message"
 
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"

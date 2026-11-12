@@ -12,9 +12,11 @@ import (
 
 type stopTransport struct{}
 
-func (stopTransport) PublishToStream(context.Context, string, []byte) error { return nil }
-func (stopTransport) PublishToStreamWithMsgID(context.Context, string, []byte, string) error {
-	return nil
+func (stopTransport) PublishToStream(ctx context.Context, _ string, _ []byte) error {
+	return ctx.Err()
+}
+func (stopTransport) PublishToStreamWithMsgID(ctx context.Context, _ string, _ []byte, _ string) error {
+	return ctx.Err()
 }
 
 func TestStopJoinsProducerBeforePublisherSettlement(t *testing.T) {
@@ -53,5 +55,45 @@ func TestStopJoinsProducerBeforePublisherSettlement(t *testing.T) {
 	}
 	if pub.Published() != 1 || pub.Lost() != 0 {
 		t.Fatalf("delivered=%d lost=%d", pub.Published(), pub.Lost())
+	}
+}
+
+func TestStartContextCancelDoesNotDropEntitiesBeforeStop(t *testing.T) {
+	pub, err := entitypub.New(stopTransport{}, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	startCtx, startCancel := context.WithCancel(context.Background())
+	runCtx := context.WithoutCancel(startCtx)
+	pub.Start(runCtx)
+	c := &Component{running: true, logger: slog.Default(), publisher: pub}
+	c.startProgressReporting(runCtx)
+	seedEntered := make(chan struct{})
+	seedRelease := make(chan struct{})
+	c.seed.Start(runCtx, slog.Default(), func(ctx context.Context) error {
+		close(seedEntered)
+		<-seedRelease
+		return ctx.Err()
+	})
+	<-seedEntered
+
+	// Cancel startCtx (simulating SIGTERM cancelling StartAll's signalCtx before StopAll).
+	startCancel()
+
+	if err := pub.Send(&graph.EntityPayload{
+		ID:                  "acme.test.docs.web.doc.after-sigterm",
+		IndexingProfileHint: graph.IndexingProfileContent,
+	}); err != nil {
+		t.Fatalf("Send after startCtx cancel: %v", err)
+	}
+	close(seedRelease)
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopCancel()
+	if err := c.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop failed after startCtx cancel: %v", err)
+	}
+	if pub.Published() != 1 || pub.Lost() != 0 {
+		t.Fatalf("delivered=%d lost=%d, want 1 and 0", pub.Published(), pub.Lost())
 	}
 }

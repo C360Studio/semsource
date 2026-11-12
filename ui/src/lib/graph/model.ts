@@ -85,6 +85,7 @@ function partialReason(
   projection: GraphProjection,
 ): string | undefined {
   if (projection.truncated) return "Graph projection is truncated";
+  if (!projection.view_revision) return undefined;
   if (!projection.view_revision.coherent)
     return `Graph projection is incoherent at revisions ${projection.view_revision.start}-${projection.view_revision.end}`;
   if (
@@ -104,6 +105,7 @@ export function syncGraph(
 ): GraphSyncResult {
   const reason = partialReason(previous, projection);
   if (
+    projection.view_revision &&
     projection.view_revision.end > 0 &&
     projection.view_revision.end < revisionValue(previous.revision)
   ) {
@@ -128,16 +130,15 @@ export function syncGraph(
     : new Map<string, GraphEdge>();
   for (const edge of projection.edges) edges.set(edge.id, edge);
 
+  const nextRevision = projection.view_revision ?? null;
   return {
     graph: {
       nodes: sorted(nodes.values(), (node) => node.handle),
       edges: sorted(edges.values(), (edge) => edge.id),
       revision:
-        reason &&
-        revisionValue(previous.revision) >
-          revisionValue(projection.view_revision)
+        reason && revisionValue(previous.revision) > revisionValue(nextRevision)
           ? previous.revision
-          : projection.view_revision,
+          : nextRevision,
     },
     mode: reason ? "partial" : "complete",
     reason,

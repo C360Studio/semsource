@@ -15,9 +15,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semengine/storage"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
-	"github.com/c360studio/semstreams/storage"
 )
 
 // sourceTypeKey is the config source type key for image sources.

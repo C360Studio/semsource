@@ -5,21 +5,24 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semengine/types"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
 	"github.com/c360studio/semsource/internal/natstest"
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semvocab/catalog/cco"
 )
 
 // TestIntegration_Supersession_DemotesHistoricalInRanking proves ADR-0008 #3:
@@ -74,7 +77,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 
 	// Run the supersession pass so runOld carries superseded_by (the demote input).
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -94,8 +97,19 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 	// code-context wiring); without it, ranking is pure resolve-order +
 	// lexical and never actually exercises the code.lineage.superseded_by
 	// weight this test claims to prove (ci-proof-chain D5).
-	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{})).
-		WithSignals(fusionvocab.New())
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
+		fusion.NewBodyResolver(fusion.MapStoreResolver{}),
+		slog.Default(),
+		fusion.WithSignals(fusionvocab.New(cco.Parents)),
+	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := prefixLens{code.New()}
 	// graph.query.prefix matches on dot-delimited segment boundaries, and the two
 	// versions differ in their `system` segment (semstreams-v1-9-0 vs -v1-10-0),
@@ -119,7 +133,7 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 		last = resp
 		newRank = rankByHandle(resp.Nodes, runNew)
 		oldRank = rankByHandle(resp.Nodes, runOld)
-		if resp.Index.Ready && newRank >= 0 && oldRank >= 0 {
+		if !resp.Deferred && newRank >= 0 && oldRank >= 0 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -131,8 +145,8 @@ func TestIntegration_Supersession_DemotesHistoricalInRanking(t *testing.T) {
 		for i := range last.Nodes {
 			handles = append(handles, last.Nodes[i].Name+"="+last.Nodes[i].Handle)
 		}
-		t.Fatalf("both versions must appear in ranked results (retention): newRank=%d oldRank=%d\n ready=%v state=%s nodes=%v misses=%+v\n runNew=%s runOld=%s",
-			newRank, oldRank, last.Index.Ready, last.Index.State, handles, last.Misses, runNew, runOld)
+		t.Fatalf("both versions must appear in ranked results (retention): newRank=%d oldRank=%d\n deferred=%v reason=%s nodes=%v misses=%+v\n runNew=%s runOld=%s",
+			newRank, oldRank, last.Deferred, last.DeferReason, handles, last.Misses, runNew, runOld)
 	}
 	// Current above historical.
 	if newRank >= oldRank {

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/pkg/types"
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/pkg/types"
+	"github.com/c360studio/semengine/storage"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // TestIntegration_RequestSurfacesClassifiedHandlerErrors pins the audit's

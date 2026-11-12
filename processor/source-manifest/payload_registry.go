@@ -3,7 +3,7 @@ package sourcemanifest
 import (
 	"errors"
 
-	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semengine/payloadregistry"
 )
 
 // RegisterPayloads registers the source-manifest payload types with the

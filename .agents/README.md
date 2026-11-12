@@ -50,29 +50,30 @@ have no `.claude/agents/` or `.codex/agents/` adapter; do not edit their generat
 
 ## Shared decision skills
 
-Five decision heuristics live in `skills/`; every upstream skill has a disposition recorded in
-`upstream.manifest`. The distinction matters, and getting it backwards is how a false fact spreads:
+Five decision heuristics live in `skills/`; every upstream skill in `github.com/c360studio/semengine` has a
+disposition recorded in `upstream.manifest`. The distinction matters, and getting it backwards is how a
+false fact spreads:
 
 | Skill | Mode | Why |
 | --- | --- | --- |
-| `kv-or-stream` | **vendored** | KV vs Stream is framework truth semstreams owns. Our old fork still claimed KV history was an audit trail long after upstream corrected it — bounded per-bucket history is not a ledger. |
-| `entity-or-bucket` | **vendored** | Framework storage-placement and operational-state ownership rules. |
-| `orchestration-check` | **vendored** | Also framework truth. Our old fork still named "reactive workflows", a model upstream retired in favor of lifecycle-managed entities. |
-| `new-payload` | **forked** | Both repos now register explicitly (ADR-103); this recipe preserves SemSource package paths and bootstrap while adopting registry floors/contracts and production decoder tests. |
-| `query-pattern` | **forked** | Upstream's copy says there is no canonical graph MCP surface yet, which is true of the framework. We ship one (`processor/mcp-gateway`), so MCP is a real option here. |
+| `kv-or-stream` | **vendored** | KV vs Stream is framework truth SemEngine owns (`KV_<bucket>`, `ENTITY_STATES` history=1, `pkg/graphview`). |
+| `entity-or-bucket` | **vendored** | Framework storage-placement and operational-state ownership rules (`GRAPH_STATUS` info-only per ADR-109, `COMMUNITY_INDEX` prefix grouping, `graph/kvcatalog`). |
+| `new-payload` | **forked** | Both repos register explicitly at bootstrap (ADR-103); this recipe preserves SemSource package paths and bootstrap while adopting registry floors/contracts and production decoder tests. |
+| `query-pattern` | **forked** | Upstream's copy says there is no canonical graph MCP surface yet, which is true of the framework. We ship one (`processor/mcp-gateway`), so MCP is a real option here alongside `graph.QueryVerbs()` and `min_revision`. |
+| `orchestration-check` | **local (retained)** | Retained from SemStreams (`54cd290a`) until SemEngine Change 6 ports `processor/rule` and re-publishes upstream rule/lifecycle guidance. |
 
-**vendored** — our copy must match the pinned upstream byte for byte. Do not edit it; if it is wrong,
-it is wrong upstream, and the fix is a GitHub issue against semstreams.
+**vendored** — our copy must match the pinned upstream (`github.com/c360studio/semengine`) byte for byte. Do not edit it; if it is wrong,
+it is wrong upstream, and the fix is a GitHub issue against `C360Studio/semengine`.
 
 **forked** — ours by right. The manifest records the upstream digest we last reconciled against, so an
 upstream edit fails the check and forces a conscious re-read rather than silent divergence.
 
-**excluded** — `semstreams-dev`, `semstreams-handoff`, `semstreams-pickup`, and
-`semstreams-preflight` depend on SemStreams' own protocol, roles, landing gates, and Task targets.
-They do not define SemSource's workflow. Each exclusion records the exact digest and fails on upstream
-change, requiring another scope review. An excluded workflow must not also exist as a local skill.
-Generic vendored skills reference framework docs: resolve those references in the pinned module from
-`go list -m -f '{{.Dir}}' github.com/c360studio/semstreams`, not as SemSource-owned policies.
+**excluded** — `semengine-status` tracks SemEngine's internal package-port backlog and does not define
+SemSource's workflow. Its exclusion records the exact digest and fails on upstream change, requiring
+another scope review. An excluded workflow must not also exist as a local skill. (`design`, `handoff`,
+`pickup`, `ponytail`, `preflight`, and `review-pr` are `ateam`-managed across both repos and checked by
+`task ateam:doctor`.) Generic vendored skills reference framework docs: resolve those references in the
+pinned module from `go mod download -json github.com/c360studio/semengine@<version>`, not as SemSource-owned policies.
 
 The remaining `.claude/skills/` entries (the `openspec-*` workflow) are Claude-workflow tooling and
 are platform-specific by design — do not mirror them.
@@ -84,7 +85,7 @@ task agents:check     # or: ./scripts/check-agent-sync.sh
 task ateam:doctor     # pinned ateam doctor --check: AGENTS.md size, rules-index parity, hooks, skill adapters
 ```
 
-This is the scripted form of what semstreams documents as a manual read-only procedure. It fails, with
+This is the scripted form of what SemEngine documents as a manual read-only procedure. It fails, with
 a named reason, when:
 
 1. a **vendored** skill drifts from the pinned upstream;
@@ -95,12 +96,12 @@ a named reason, when:
    shipped in before this check existed, while CLAUDE.md advertised them;
 6. a specialist contract stops opening with a pointer to its ateam base contract, or `CLAUDE.md`
    stops being an `@AGENTS.md` import;
-7. `upstream.manifest` records a semstreams version other than the one `go.mod` pins, which would mean
+7. `upstream.manifest` records a SemEngine version other than the one `go.mod` pins (once `semengine` is a direct `go.mod` requirement), which would mean
    the check was comparing against the wrong source.
 
-## When the semstreams pin moves
+## When the semengine pin moves
 
-Bumping `github.com/c360studio/semstreams` will fail `task agents:check` until the shared skills are
+Bumping `github.com/c360studio/semengine` will fail `task agents:check` until the shared skills are
 reconciled — that is the point. For each skill the check names: re-copy the vendored ones, read the
 upstream diff for the forked or excluded ones and decide what carries over, then record the new digests and the
 new `upstream_version` in `upstream.manifest`.

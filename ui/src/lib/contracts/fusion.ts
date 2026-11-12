@@ -1,18 +1,7 @@
 export type FusionProvenance = "deterministic" | "embedding" | "llm";
 import { parseGraphProjection, type GraphProjection } from "./graph";
-export type FusionIndexState =
-  "building" | "ready" | "degraded" | "reset_required";
-
-export interface FusionIndexStatus {
-  ready: boolean;
-  state: FusionIndexState;
-  indexed_revision?: number;
-  target_revision?: number;
-  lag?: number;
-  phase?: string;
-  revision?: string;
-  last_synced?: string;
-}
+export type FusionDeferReason =
+  "index_not_ready" | "all_seeds_unhydrated" | (string & {});
 
 export interface FusionRef {
   name: string;
@@ -29,6 +18,7 @@ export interface FusionNode {
   lines?: [number, number];
   body?: string;
   relations?: Record<string, FusionRef[]>;
+  relations_truncated?: boolean;
   class?: string;
   handle?: string;
 }
@@ -50,12 +40,16 @@ export interface FusionImpact {
 }
 
 export interface FusionResponse {
-  contract_version: "1";
-  index: FusionIndexStatus;
+  contract_version: "2";
   provenance: FusionProvenance;
+  deferred: boolean;
+  defer_reason?: FusionDeferReason;
+  unreadable_records?: number;
+  failed_records?: number;
   nodes: FusionNode[];
   misses: FusionMiss[];
   paths?: FusionPath[];
+  paths_truncated?: boolean;
   impact?: FusionImpact;
   graph?: GraphProjection;
   truncated: boolean;
@@ -94,66 +88,39 @@ function optionalInteger(
   return value as number | undefined;
 }
 
-function parseIndex(value: unknown): FusionIndexStatus {
-  const item = record(value);
-  if (
-    !item ||
-    typeof item.ready !== "boolean" ||
-    !["building", "ready", "degraded", "reset_required"].includes(
-      String(item.state),
-    )
-  ) {
-    throw new Error("Invalid fusion response: malformed index");
+function optionalBooleanField(
+  item: Record<string, unknown>,
+  field: string,
+  context: string,
+): boolean | undefined {
+  const value = item[field];
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error(`Invalid fusion response: malformed ${context} ${field}`);
   }
-  const result: FusionIndexStatus = {
-    ready: item.ready,
-    state: item.state as FusionIndexState,
-    indexed_revision: optionalInteger(item, "indexed_revision", "index"),
-    target_revision: optionalInteger(item, "target_revision", "index"),
-    lag: optionalInteger(item, "lag", "index"),
-    phase: optionalString(item, "phase", "index"),
-    revision: optionalString(item, "revision", "index"),
-    last_synced: optionalString(item, "last_synced", "index"),
+  return value as boolean | undefined;
+}
+
+function parseDeferral(item: Record<string, unknown>): {
+  deferred: boolean;
+  defer_reason?: FusionDeferReason;
+} {
+  const deferred = optionalBooleanField(item, "deferred", "response") ?? false;
+  const rawReason = item.defer_reason;
+  if (!deferred) {
+    if (rawReason !== undefined) {
+      throw new Error(
+        "Invalid fusion response: defer_reason present on non-deferred response",
+      );
+    }
+    return { deferred: false };
+  }
+  if (typeof rawReason !== "string" || rawReason.trim().length === 0) {
+    throw new Error("Invalid fusion response: malformed defer_reason");
+  }
+  return {
+    deferred: true,
+    defer_reason: rawReason,
   };
-  if (result.ready !== (result.state === "ready")) {
-    throw new Error("Invalid fusion response: inconsistent index readiness");
-  }
-  if (result.ready && result.lag !== undefined && result.lag !== 0) {
-    throw new Error("Invalid fusion response: ready index must have zero lag");
-  }
-  if (
-    result.indexed_revision !== undefined &&
-    result.target_revision !== undefined
-  ) {
-    if (result.indexed_revision > result.target_revision) {
-      throw new Error(
-        "Invalid fusion response: indexed revision exceeds target",
-      );
-    }
-    if (result.ready && result.indexed_revision < result.target_revision) {
-      throw new Error("Invalid fusion response: ready index is not caught up");
-    }
-    if (
-      result.lag !== undefined &&
-      result.lag !==
-        Math.max(result.target_revision - result.indexed_revision, 0)
-    ) {
-      throw new Error(
-        "Invalid fusion response: index lag does not match revisions",
-      );
-    }
-  }
-  if (
-    result.indexed_revision !== undefined &&
-    result.revision !== undefined &&
-    /^\d+$/.test(result.revision) &&
-    BigInt(result.revision) !== BigInt(result.indexed_revision)
-  ) {
-    throw new Error(
-      "Invalid fusion response: numeric revision does not match indexed revision",
-    );
-  }
-  return result;
 }
 
 function parseRef(value: unknown): FusionRef {
@@ -214,6 +181,11 @@ function parseNode(value: unknown): FusionNode {
     lines,
     body: optionalString(item, "body", "node"),
     relations: parseRelations(item.relations),
+    relations_truncated: optionalBooleanField(
+      item,
+      "relations_truncated",
+      "node",
+    ),
     class: optionalString(item, "class", "node"),
     handle: optionalString(item, "handle", "node"),
   };
@@ -290,7 +262,7 @@ function optionalArray<T>(
 export function parseFusionResponse(value: unknown): FusionResponse {
   const item = record(value);
   if (!item) throw new Error("Invalid fusion response: expected an object");
-  if (item.contract_version !== "1") {
+  if (item.contract_version !== "2") {
     throw new Error(
       `Invalid fusion response: unsupported contract version ${String(item.contract_version)}`,
     );
@@ -303,16 +275,21 @@ export function parseFusionResponse(value: unknown): FusionResponse {
   if (typeof item.truncated !== "boolean") {
     throw new Error("Invalid fusion response: malformed truncated flag");
   }
+  const { deferred, defer_reason } = parseDeferral(item);
   return {
-    contract_version: "1",
-    index: parseIndex(item.index),
+    contract_version: "2",
     provenance: item.provenance as FusionProvenance,
+    deferred,
+    defer_reason,
+    unreadable_records: optionalInteger(item, "unreadable_records", "response"),
+    failed_records: optionalInteger(item, "failed_records", "response"),
     nodes: optionalArray(item.nodes, "nodes", parseNode),
     misses: optionalArray(item.misses, "misses", parseMiss),
     paths:
       item.paths === undefined
         ? undefined
         : optionalArray(item.paths, "paths", parsePath),
+    paths_truncated: optionalBooleanField(item, "paths_truncated", "response"),
     impact: parseImpact(item.impact),
     graph:
       item.graph === undefined ? undefined : parseGraphProjection(item.graph),

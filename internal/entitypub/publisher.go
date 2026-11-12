@@ -22,9 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/pkg/buffer"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/pkg/buffer"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/degraded"
@@ -217,8 +217,10 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 }
 
 // Start begins the background drain loop. Call Stop to shut down.
+// Continuing drain work runs on a context detached from ctx's cancellation
+// (ADR-113: Start's ctx bounds Start; Stop owns shutdown and settlement).
 func (p *Publisher) Start(ctx context.Context) {
-	drainCtx, cancel := context.WithCancel(ctx)
+	drainCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	p.cancel = cancel
 	p.started = true
 	go p.drainLoop(drainCtx)

@@ -148,6 +148,22 @@ func (c *Component) buildWorkbenchCapabilities(structural, semantic workbenchInd
 		overall = capabilityReady
 	}
 
+	codeSearch := capabilityForSignal(http.MethodPost, "/code-context/search",
+		"semantic_index", semantic.Ready, semantic.Reason)
+	docContext := capabilityForSignal(http.MethodPost, "/doc-context/context",
+		"structural_index", structural.Ready, structural.Reason)
+	if !c.config.semanticEnabled() {
+		codeSearch = unsupportedCapability("not_enabled", "Semantic search is not enabled in this composition")
+		if structural.Ready {
+			docContext.Availability = capabilityPartial
+			docContext.Reason = &workbenchCapabilityReason{
+				Code:      "not_enabled",
+				Message:   "Natural-language document queries require semantic search; only path and entity-ID prefix queries are available",
+				Retryable: false,
+			}
+		}
+	}
+
 	queries := map[string]workbenchCapability{
 		"source_inventory": capabilityForSignal(http.MethodGet, "/source-manifest/sources", "source",
 			source.Ready, source.Reason),
@@ -161,10 +177,8 @@ func (c *Component) buildWorkbenchCapabilities(structural, semantic workbenchInd
 			"structural_index", structural.Ready, structural.Reason),
 		"code_impact": capabilityForSignal(http.MethodPost, "/code-context/impact",
 			"structural_index", structural.Ready, structural.Reason),
-		"code_search": capabilityForSignal(http.MethodPost, "/code-context/search",
-			"semantic_index", semantic.Ready, semantic.Reason),
-		"doc_context": capabilityForSignal(http.MethodPost, "/doc-context/context",
-			"structural_index", structural.Ready, structural.Reason),
+		"code_search": codeSearch,
+		"doc_context": docContext,
 		"graph_projection": capabilityForSignal(http.MethodPost, "/code-context/context",
 			"structural_index", structural.Ready, structural.Reason),
 	}
@@ -263,6 +277,11 @@ func (c *Component) sourceReadiness() workbenchSourceReadiness {
 func (c *Component) collectIndexReadiness(parent context.Context) (workbenchIndexReadiness, workbenchIndexReadiness) {
 	ctx, cancel := context.WithTimeout(parent, c.workbenchReadinessTimeout())
 	defer cancel()
+
+	if !c.config.semanticEnabled() {
+		return c.fetchIndexReadiness(ctx, structuralReadinessKey, "Structural index"),
+			disabledIndexReadiness("Semantic index")
+	}
 
 	results := make(chan namedReadinessSignal, 2)
 	for _, query := range []struct {

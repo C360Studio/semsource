@@ -1,12 +1,5 @@
 export const completeGraphResponse = {
-  contract_version: "1",
-  index: {
-    ready: true,
-    state: "ready",
-    indexed_revision: 41,
-    target_revision: 41,
-    lag: 0,
-  },
+  contract_version: "2",
   provenance: "deterministic",
   nodes: [
     { name: "Alpha", kind: "function", path: "alpha.go", handle: "handle-a" },

@@ -22,8 +22,7 @@
     "embedder_type": "http",
     "index_workers": 4,
     "coalesce_ms": 200,
-    "enable_clustering": false,
-    "clustering_llm": false
+    "enable_clustering": false
   },
   "model_registry": {
     "endpoints": {

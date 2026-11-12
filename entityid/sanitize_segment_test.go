@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	semtypes "github.com/c360studio/semstreams/pkg/types"
+	semtypes "github.com/c360studio/semengine/pkg/types"
 
 	"github.com/c360studio/semsource/entityid"
 )

@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/storage"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/storage"
 )
 
 const (

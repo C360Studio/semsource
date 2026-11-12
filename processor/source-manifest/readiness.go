@@ -52,3 +52,29 @@ func IndexReadinessJSON(raw []byte, err error, label string) json.RawMessage {
 	}
 	return data
 }
+
+// disabledIndexReadiness returns the canonical readiness object for an index
+// producer that is intentionally omitted from the composition (e.g.
+// embedder_type: "none").
+func disabledIndexReadiness(label string) workbenchIndexReadiness {
+	return workbenchIndexReadiness{
+		Available: false,
+		Ready:     false,
+		State:     "disabled",
+		Reason: &workbenchCapabilityReason{
+			Code:      "not_enabled",
+			Message:   label + " is not enabled in this composition",
+			Retryable: false,
+		},
+	}
+}
+
+// DisabledIndexReadinessJSON is the exported JSON form of disabledIndexReadiness
+// for status surfaces such as the MCP gateway.
+func DisabledIndexReadinessJSON(label string) json.RawMessage {
+	data, err := json.Marshal(disabledIndexReadiness(label))
+	if err != nil {
+		return json.RawMessage(`{"available":false,"state":"disabled","reason":{"code":"not_enabled","message":"not enabled","retryable":false}}`)
+	}
+	return data
+}

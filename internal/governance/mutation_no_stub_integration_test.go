@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/errs"
+	"github.com/c360studio/semengine/pkg/projection"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semstreams/pkg/projection"
 
-	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semengine/metric"
 )
 
 // Beta.160 invariant (task 4.1 of semstreams-beta160-migration): mutating a

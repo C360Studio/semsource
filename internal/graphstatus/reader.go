@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"sync"
 
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/natsclient"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/graph/kvcatalog"
+	"github.com/c360studio/semengine/natsclient"
 )
 
 // Producer keys are the publishing components' names. They are string literals
@@ -48,7 +49,7 @@ type Reader struct {
 	client *natsclient.Client
 
 	mu     sync.Mutex
-	bucket semgraph.CatalogReader
+	bucket kvcatalog.CatalogReader
 }
 
 // New returns a Reader over the given NATS client.
@@ -78,7 +79,7 @@ func (r *Reader) Raw(ctx context.Context, key string) ([]byte, error) {
 	return entry.Value(), nil
 }
 
-func (r *Reader) resolveBucket(ctx context.Context) (semgraph.CatalogReader, error) {
+func (r *Reader) resolveBucket(ctx context.Context) (kvcatalog.CatalogReader, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -91,7 +92,7 @@ func (r *Reader) resolveBucket(ctx context.Context) (semgraph.CatalogReader, err
 	// OpenCatalogReader binds must-exist through the reader seam: it never
 	// creates, and an absent bucket yields a classified not-ready error naming
 	// the catalog owner.
-	bucket, err := semgraph.OpenCatalogReader(ctx, r.client, semgraph.BucketGraphStatus)
+	bucket, err := kvcatalog.OpenCatalogReader(ctx, r.client, semgraph.BucketGraphStatus)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", semgraph.BucketGraphStatus, err)
 	}

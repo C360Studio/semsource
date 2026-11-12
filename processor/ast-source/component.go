@@ -17,11 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/retry"
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/retry"
+	"github.com/c360studio/semengine/storage"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
@@ -75,7 +76,7 @@ type Component struct {
 	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
-	platform   component.PlatformMeta
+	platform   types.PlatformMeta
 
 	// bodyStore holds verbatim code bodies offloaded at ingest so the fusion
 	// code lens can hydrate them by handle, location-independently (ADR-062 /
@@ -308,13 +309,14 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
-	c.publisher.Start(ctx)
+	runCtx := context.WithoutCancel(ctx)
+	c.publisher.Start(runCtx)
 	c.initBodyStore(ctx)
 
 	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
 
-	c.startProgressReporting(ctx)
+	c.startProgressReporting(runCtx)
 
 	// Everything from here is unbounded — the path retry alone is ~30 attempts —
 	// so it runs in a supervised goroutine and Start returns. Holding the
@@ -323,7 +325,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// at all (semstreams#867): the surfaces stay dark for the whole seed, which
 	// is exactly when an operator needs them.
 	c.markRunning()
-	c.seed.Start(ctx, c.logger, c.runSeed)
+	c.seed.Start(runCtx, c.logger, c.runSeed)
 	return nil
 }
 
@@ -479,7 +481,7 @@ func (c *Component) startWatcher(ctx context.Context, pw *pathWatcher) (context.
 		return nil, fmt.Errorf("failed to start watcher: %w", err)
 	}
 
-	watchCtx, cancel := context.WithCancel(ctx)
+	watchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		for {
@@ -553,7 +555,7 @@ func (c *Component) startPeriodicIndex(ctx context.Context) context.CancelFunc {
 		return nil
 	}
 
-	indexCtx, cancel := context.WithCancel(ctx)
+	indexCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	c.workers.Go(func() {
 		ticker := time.NewTicker(interval)
@@ -1004,7 +1006,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // component's status so the source-manifest component always has fresh data.
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
-	rCtx, cancel := context.WithCancel(ctx)
+	rCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	c.workers.Go(func() {
 		ticker := time.NewTicker(statusReportInterval)
 		defer ticker.Stop()
@@ -1064,16 +1066,6 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 // Discoverable interface implementation
-
-// Meta returns component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "ast-source",
-		Type:        "processor",
-		Description: "Multi-language AST source for semsource code entity extraction and graph ingestion",
-		Version:     "0.1.0",
-	}
-}
 
 // InputPorts returns configured input port definitions.
 // ast-source has no input ports — it generates data from the file system.

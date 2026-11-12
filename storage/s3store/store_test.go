@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/c360studio/semstreams/storage"
+	"github.com/c360studio/semengine/storage"
 
 	"github.com/c360studio/semsource/storage/s3store"
 )

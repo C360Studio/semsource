@@ -5,25 +5,28 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semengine/types"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
-	"github.com/c360studio/semstreams/component"
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionvocab"
+	"github.com/c360studio/semvocab/catalog/cco"
 )
 
 // TestIntegration_MultiSourceVersionedLineage is the Tier-B multi-source live
@@ -99,7 +102,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -145,7 +148,7 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 
 	// Start supersession and run a pass over the REAL parsed entities.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -196,8 +199,19 @@ func TestIntegration_MultiSourceVersionedLineage(t *testing.T) {
 	// code-context wiring); without it, ranking is pure resolve-order +
 	// lexical and never actually exercises the code.lineage.superseded_by
 	// weight this test claims to prove (ci-proof-chain D5).
-	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{})).
-		WithSignals(fusionvocab.New())
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(
+		gc,
+		fusion.NewBodyResolver(fusion.MapStoreResolver{}),
+		slog.Default(),
+		fusion.WithSignals(fusionvocab.New(cco.Parents)),
+	)
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := prefixLens{code.New()}
 	prefix := commonPrefix(runOld.ID, runNew.ID)
 	var newRank, oldRank int

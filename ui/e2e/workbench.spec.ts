@@ -104,14 +104,7 @@ const capabilities = {
 };
 
 const graphResponse = {
-  contract_version: "1",
-  index: {
-    ready: true,
-    state: "ready",
-    indexed_revision: 153,
-    target_revision: 153,
-    lag: 0,
-  },
+  contract_version: "2",
   provenance: "deterministic",
   nodes: [
     {
@@ -242,8 +235,7 @@ test("renders the owned SemSource shell truthfully", async ({ page }) => {
     searchBody = route.request().postDataJSON();
     await route.fulfill({
       json: {
-        contract_version: "1",
-        index: { ready: true, state: "ready", lag: 0 },
+        contract_version: "2",
         provenance: "embedding",
         nodes: [
           {
@@ -481,8 +473,7 @@ test("@a11y has no axe violations and follows keyboard result focus", async ({
     }
     await route.fulfill({
       json: {
-        contract_version: "1",
-        index: { ready: true, state: "ready" },
+        contract_version: "2",
         provenance: "embedding",
         nodes: [
           { name: "First result", path: "first.go" },

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
 )
 
 func TestNewComponent_ValidConfig(t *testing.T) {
@@ -145,15 +145,16 @@ func TestManifestPayload_Schema(t *testing.T) {
 	}
 }
 
-func TestComponent_Meta(t *testing.T) {
-	cfg := Config{Namespace: "acme", Ports: DefaultConfig().Ports}
-	rawCfg, _ := json.Marshal(cfg)
-	comp, err := NewComponent(rawCfg, component.Dependencies{})
-	if err != nil {
-		t.Fatal(err)
+func TestComponent_Registration(t *testing.T) {
+	reg := component.NewRegistry()
+	if err := Register(reg); err != nil {
+		t.Fatalf("Register: %v", err)
 	}
-
-	meta := comp.Meta()
+	factories := reg.ListFactories()
+	meta, ok := factories["source-manifest"]
+	if !ok {
+		t.Fatal("source-manifest factory not registered")
+	}
 	if meta.Name != "source-manifest" {
 		t.Errorf("meta.Name = %q, want %q", meta.Name, "source-manifest")
 	}

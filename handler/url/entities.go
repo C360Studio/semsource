@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	source "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/message"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 // PageEntity is a fully-typed URL page entity that builds triples directly

@@ -1,6 +1,6 @@
 package ontology
 
-import "github.com/c360studio/semstreams/vocabulary"
+import "github.com/c360studio/semengine/vocabulary"
 
 // rdfType is the RDF type predicate IRI. The entity.ontology.class triple is an
 // rdf:type assertion (entity → its BFO/CCO class), so it exports cleanly when an

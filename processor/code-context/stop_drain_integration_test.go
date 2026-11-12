@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/internal/natstest"
-	"github.com/c360studio/semstreams/natsclient"
 )
 
 // spec: openspec/specs/semstreams-governance/spec.md#Requirement: Component Stop keeps a subscription until its callbacks drain
@@ -26,7 +26,7 @@ func TestIntegrationStopRetainsActiveSubscriptionOnDeadline(t *testing.T) {
 	requested := make(chan struct{})
 	go func() {
 		defer close(requested)
-		_, _ = tc.Client.Request(ctx, "semsource.test.drain", nil, 10*time.Second)
+		_, _ = tc.Client.RequestClassified(ctx, "semsource.test.drain", nil, 10*time.Second)
 	}()
 	select {
 	case <-entered:

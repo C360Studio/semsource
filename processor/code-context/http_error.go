@@ -6,8 +6,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/pkg/errs"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/nats-io/nats.go"
 )
 
@@ -66,7 +67,6 @@ func classifyFusionHTTPError(origin errorOrigin, err error) fusionHTTPError {
 	var classified *errs.ClassifiedError
 	isClassified := errors.As(err, &classified)
 	if natsclient.IsNoResponders(err) || errors.Is(err, natsclient.ErrNotConnected) ||
-		errors.Is(err, natsclient.ErrCircuitOpen) ||
 		(isClassified && classified.Class == errs.ErrorTransient) {
 		return fusionHTTPError{
 			status:    http.StatusServiceUnavailable,
@@ -77,6 +77,14 @@ func classifyFusionHTTPError(origin errorOrigin, err error) fusionHTTPError {
 		}
 	}
 	if isClassified && classified.Class == errs.ErrorInvalid {
+		if classified.Code == semgraph.ErrorCodeNotEnabled {
+			return fusionHTTPError{
+				status:  http.StatusNotImplemented,
+				code:    semgraph.ErrorCodeNotEnabled,
+				class:   "invalid",
+				message: "semantic search is not enabled in this composition",
+			}
+		}
 		return fusionHTTPError{
 			status:  http.StatusBadGateway,
 			code:    "upstream_contract_error",

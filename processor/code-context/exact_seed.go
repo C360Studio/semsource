@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/c360studio/semstreams/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion"
 
 	"github.com/c360studio/semsource/source/ast"
 )
@@ -31,17 +31,17 @@ type exactSeedClient struct {
 // Seeds are carried through whole rather than reduced to IDs and rebuilt: since
 // beta.157 a Seed carries Similarity/HasSimilarity, and projecting to IDs here
 // would discard the resolve mode's own scoring before the engine ever saw it.
-func (c exactSeedClient) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
-	seeds, err := c.RetrievalClient.Resolve(ctx, q)
-	if err != nil || q.Mode != fusion.ResolveModeSymbol || len(seeds) == 0 {
-		return seeds, err
+func (c exactSeedClient) Resolve(ctx context.Context, q fusion.ResolveQuery) (fusion.Resolution, error) {
+	res, err := c.RetrievalClient.Resolve(ctx, q)
+	if err != nil || q.Mode != fusion.ResolveModeSymbol || len(res.Seeds) == 0 {
+		return res, err
 	}
-	hydration, err := c.RetrievalClient.Entities(ctx, fusion.SeedIDs(seeds))
+	hydration, err := c.RetrievalClient.Entities(ctx, fusion.SeedIDs(res.Seeds))
 	if err != nil {
 		// A backend failure must stay a failure (ready ≠ not-found): silently
 		// returning the unfiltered seeds would defeat the filter exactly when
 		// the graph is degraded.
-		return nil, err
+		return fusion.Resolution{}, err
 	}
 	want := strings.TrimSpace(q.Query)
 	keep := make(map[string]bool, len(hydration.Entities))
@@ -56,11 +56,12 @@ func (c exactSeedClient) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]
 	// prevent. Since beta.157 that drop is at least KNOWABLE: hydration.Unhydrated
 	// names every such ID with a reason (gh#597), where before it was
 	// indistinguishable from a shorter slice.
-	exact := make([]fusion.Seed, 0, len(seeds))
-	for _, s := range seeds {
+	exact := make([]fusion.Seed, 0, len(res.Seeds))
+	for _, s := range res.Seeds {
 		if keep[s.ID] {
 			exact = append(exact, s)
 		}
 	}
-	return exact, nil
+	res.Seeds = exact
+	return res, nil
 }

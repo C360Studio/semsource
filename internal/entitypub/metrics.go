@@ -6,7 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semengine/metric"
 )
 
 // Publish-boundary metrics (runtime-telemetry). The publisher already kept
@@ -98,12 +98,22 @@ func newPubMetrics(registry *metric.MetricsRegistry, subsystem string) *pubMetri
 	}
 	// Registration errors are non-fatal: losing telemetry must never stop
 	// ingest. They are idempotent by key, so a restart or a duplicate instance
-	// name is not an error either.
-	_ = registry.RegisterCounter(subsystem, "entities_published_total", m.published)
-	_ = registry.RegisterCounter(subsystem, "entities_failed_total", m.failed)
-	_ = registry.RegisterCounter(subsystem, "entities_dropped_total", m.dropped)
-	_ = registry.RegisterCounter(subsystem, "publish_retries_total", m.retries)
-	_ = registry.RegisterGauge(subsystem, "publish_backpressure", m.backpressure)
+	// name is not an error either; RegisterOrGet returns the canonical collector.
+	if c, err := metric.RegisterOrGet(registry, subsystem, "entities_published_total", m.published); err == nil {
+		m.published = c
+	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "entities_failed_total", m.failed); err == nil {
+		m.failed = c
+	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "entities_dropped_total", m.dropped); err == nil {
+		m.dropped = c
+	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "publish_retries_total", m.retries); err == nil {
+		m.retries = c
+	}
+	if g, err := metric.RegisterOrGet(registry, subsystem, "publish_backpressure", m.backpressure); err == nil {
+		m.backpressure = g
+	}
 	return m
 }
 

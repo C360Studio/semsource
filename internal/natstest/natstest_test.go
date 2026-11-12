@@ -9,7 +9,7 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 )
 
@@ -29,21 +29,21 @@ type fakeBroker struct {
 
 func (f *fakeBroker) Host(context.Context) (string, error) { return "127.0.0.1", f.hostErr }
 
-func (f *fakeBroker) MappedPort(ctx context.Context, _ nat.Port) (nat.Port, error) {
+func (f *fakeBroker) MappedPort(ctx context.Context, _ string) (network.Port, error) {
 	f.portCalls++
 	if f.blockAfter > 0 && f.portCalls > f.blockAfter {
 		<-ctx.Done()
-		return "", ctx.Err()
+		return network.Port{}, ctx.Err()
 	}
 	if f.keepAbsent {
-		return "", errAbsent
+		return network.Port{}, errAbsent
 	}
 	if len(f.portErrs) > 0 {
 		err := f.portErrs[0]
 		f.portErrs = f.portErrs[1:]
-		return "", err
+		return network.Port{}, err
 	}
-	return "4222", nil
+	return network.MustParsePort("4222/tcp"), nil
 }
 
 func (f *fakeBroker) Terminate(context.Context, ...testcontainers.TerminateOption) error {

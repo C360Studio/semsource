@@ -8,6 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	semgraph "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/entityid"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
@@ -15,12 +22,6 @@ import (
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
-	"github.com/c360studio/semstreams/component"
-	semgraph "github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
 )
 
 // TestIntegration_Supersession_CrossVersionLineage drives the supersession pass
@@ -81,7 +82,7 @@ func TestIntegration_Supersession_CrossVersionLineage(t *testing.T) {
 
 	// Start the supersession component and trigger a pass over NATS.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	sdiscovered, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -179,7 +180,7 @@ type runSummary struct {
 // decoded run summary.
 func runPassAndSummary(t *testing.T, ctx context.Context, client *natsclient.Client) runSummary {
 	t.Helper()
-	resp, err := client.Request(ctx, supersession.DefaultTriggerSubject, nil, 20*time.Second)
+	resp, err := client.RequestClassified(ctx, supersession.DefaultTriggerSubject, nil, 20*time.Second)
 	if err != nil {
 		t.Fatalf("trigger supersession pass: %v", err)
 	}

@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/storage"
+	"github.com/c360studio/semengine/storage/objectstore"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/graphstatus"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/storage"
-	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
 // versionDiffSubject is the NATS request/reply subject for the version-diff query

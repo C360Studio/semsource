@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // manifestSchema defines the configuration schema for the source-manifest component.
@@ -13,7 +13,7 @@ var manifestSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
 // RegistryInterface defines the minimal interface needed for registration.
 type RegistryInterface interface {
-	RegisterWithConfig(component.RegistrationConfig) error
+	Register(component.Registration) error
 }
 
 // Register registers the source-manifest component with the given registry.
@@ -21,7 +21,7 @@ func Register(registry RegistryInterface, ingest ...IngestHandlerConfig) error {
 	if registry == nil {
 		return fmt.Errorf("registry cannot be nil")
 	}
-	return registry.RegisterWithConfig(component.RegistrationConfig{
+	return registry.Register(component.Registration{
 		Name: "source-manifest",
 		Factory: func(raw json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 			built, err := NewComponent(raw, deps)

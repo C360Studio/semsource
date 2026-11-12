@@ -3,7 +3,7 @@ package filestore
 import (
 	"errors"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config holds configuration for the filestore storage component.
@@ -13,7 +13,7 @@ type Config struct {
 	// RootDir is the root directory under which all keys are stored as file paths.
 	// Required when the component is used; may be empty when the store is created
 	// directly via New rather than through the component system.
-	RootDir string `json:"root_dir" schema:"type:string,description:Root directory for stored files,category:basic,required:true"`
+	RootDir string `json:"root_dir" schema:"type:string,description:Root directory for stored files,category:basic,required"`
 
 	// CreateIfMissing controls whether the root directory is created when it
 	// does not exist. When false an error is returned if RootDir is missing.

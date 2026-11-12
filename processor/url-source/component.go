@@ -13,8 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -66,7 +67,7 @@ type Component struct {
 	seedLoss   seedloss.Tracker
 	natsClient *natsclient.Client
 	logger     *slog.Logger
-	platform   component.PlatformMeta
+	platform   types.PlatformMeta
 
 	handler *urlhandler.URLHandler
 
@@ -157,7 +158,8 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
-	c.publisher.Start(ctx)
+	runCtx := context.WithoutCancel(ctx)
+	c.publisher.Start(runCtx)
 
 	c.seedLoss.Begin(c.publisher.Lost())
 	c.publishStatusReport(ctx, "ingesting")
@@ -166,7 +168,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// initial ingest runs. Cancel is registered immediately — the seed can
 	// return an error, and a reporter registered only on the success path would
 	// leak on that return.
-	progressCancel := c.startStatusReporter(ctx)
+	progressCancel := c.startStatusReporter(runCtx)
 	c.mu.Lock()
 	c.cancelFuncs = append(c.cancelFuncs, progressCancel)
 	c.mu.Unlock()
@@ -176,7 +178,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// framework's component-start barrier, which prevents the HTTP status and
 	// metrics listeners from binding at all (semstreams#867).
 	c.markRunning()
-	c.seed.Start(ctx, c.logger, c.runSeed)
+	c.seed.Start(runCtx, c.logger, c.runSeed)
 	return nil
 }
 
@@ -267,7 +269,7 @@ func (c *Component) ingestAll(ctx context.Context) error {
 // startPolling starts a watcher goroutine for a single URL and returns its
 // cancel func. Returns nil if watch setup fails.
 func (c *Component) startPolling(ctx context.Context, rawURL string) context.CancelFunc {
-	pollCtx, cancel := context.WithCancel(ctx)
+	pollCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	sc := &sourceCfg{
 		rawURL:       rawURL,
@@ -447,7 +449,7 @@ func (c *Component) publishStatusReport(ctx context.Context, phase string) {
 // component's status so the source-manifest component always has fresh data.
 // Returns a cancel func that stops the goroutine.
 func (c *Component) startStatusReporter(ctx context.Context) context.CancelFunc {
-	rCtx, cancel := context.WithCancel(ctx)
+	rCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	c.workers.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -499,16 +501,6 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 // Discoverable interface implementation
-
-// Meta returns component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "url-source",
-		Type:        "processor",
-		Description: "HTTP/S URL source for semsource web page entity extraction and change detection",
-		Version:     "0.1.0",
-	}
-}
 
 // InputPorts returns an empty slice — url-source generates data from remote URLs.
 func (c *Component) InputPorts() []component.Port {

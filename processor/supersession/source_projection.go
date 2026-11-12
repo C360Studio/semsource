@@ -3,7 +3,7 @@ package supersession
 import (
 	"context"
 	"encoding/json"
-	"github.com/c360studio/semstreams/pkg/projection"
+	"github.com/c360studio/semengine/pkg/projection"
 )
 
 const sourceProjectionSubject = "graph.lifecycle.source"

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/graph"
-	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/pkg/errs"
 )
 
 // readReadyTimeout bounds how long a graph read may keep hitting the readiness

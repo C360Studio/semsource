@@ -23,6 +23,22 @@
 > also covers, remain in place and in use. Sections below describing the subtree
 > and hierarchy-distance ranking are kept as the record of what was decided, not
 > as a description of the code.
+>
+> **Update (2026-11-10, [#257](https://github.com/C360Studio/semsource/issues/257)):**
+> Domain and upper ontologies moved out of the substrate into
+> `github.com/c360studio/semvocab` (`v0.2.2`, pinning BFO 2020 `catalog/bfo` and
+> CCO v2.2 `catalog/cco` opaque IRIs `https://www.commoncoreontologies.org/ont0000xxxx`).
+> `source/ontology/` and `source/ast`/`source/vocabulary` now import `semvocab`:
+> `CodeBelongsTo`/`CodeBelongs` align to `bfo.Namespace + "BFO_0000176"` (`continuant part of`),
+> `cco.Artifact` → `cco.MaterialArtifact` (`ont00000995`), `cco.Document` →
+> `cco.MaterialCopyOfDocument` (`ont00001298`), `cco.Identifier` →
+> `cco.DesignativeInformationContentEntity` (`ont00000686`), and `cco.Specification`
+> / `cco.SoftwareCode` → `cco.PrescriptiveInformationContentEntity` (`ont00000965`,
+> direct parent of `cco.Algorithm` at depth 4 vs `Algorithm` depth 5 in CCO v2.2,
+> preserving function/method specificity under `fusionvocab.New(cco.Parents)`;
+> note also that in CCO v2.2 `cco.Person` sits at depth 7 vs 5 in CCO 1.x, and
+> `PrescriptiveInformationContentEntity` / `DesignativeInformationContentEntity`
+> sit at depth 4 vs 5 in CCO 1.x).
 
 ## Context
 

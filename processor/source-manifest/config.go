@@ -6,7 +6,7 @@ package sourcemanifest
 import (
 	"fmt"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config holds configuration for the source-manifest component.
@@ -14,21 +14,30 @@ type Config struct {
 	Ports *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
 
 	// Namespace is the organization namespace (e.g. "acme").
-	Namespace string `json:"namespace" schema:"type:string,description:Organization namespace,category:basic,required:true"`
+	Namespace string `json:"namespace" schema:"type:string,description:Organization namespace,category:basic,required"`
 
 	// Sources is the resolved list of configured source entries.
-	Sources []ManifestSource `json:"sources" schema:"type:array,description:Configured source entries,category:basic,required:true"`
+	Sources []ManifestSource `json:"sources" schema:"type:array,description:Configured source entries,category:basic,required"`
 
 	// ExpectedSourceCount is the number of source components to wait for
 	// before declaring seed-complete. Set by run.go during config construction.
-	ExpectedSourceCount int `json:"expected_source_count" schema:"type:int,description:Number of source components to expect,category:status"`
+	ExpectedSourceCount int `json:"expected_source_count" schema:"type:int,description:Number of source components to expect,category:advanced"`
 
 	// SeedTimeout is how long to wait for all sources to report before
 	// marking status as degraded. Defaults to "120s".
-	SeedTimeout string `json:"seed_timeout,omitempty" schema:"type:string,description:Timeout waiting for all sources to report,category:status"`
+	SeedTimeout string `json:"seed_timeout,omitempty" schema:"type:string,description:Timeout waiting for all sources to report,category:advanced"`
 
 	// HeartbeatInterval is how often to re-publish status. Defaults to "30s".
-	HeartbeatInterval string `json:"heartbeat_interval,omitempty" schema:"type:string,description:Status heartbeat interval,category:status"`
+	HeartbeatInterval string `json:"heartbeat_interval,omitempty" schema:"type:string,description:Status heartbeat interval,category:advanced"`
+
+	// SemanticEnabled reports whether the composition runs graph-embedding.
+	// Nil defaults to true; false reports semantic_index as disabled (not_enabled)
+	// and code_search as unsupported (not_enabled) without polling GRAPH_STATUS/graph-embedding.
+	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
+}
+
+func (c *Config) semanticEnabled() bool {
+	return c.SemanticEnabled == nil || *c.SemanticEnabled
 }
 
 // ManifestSource is the external-facing representation of a configured source.

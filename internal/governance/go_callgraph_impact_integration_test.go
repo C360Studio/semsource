@@ -4,6 +4,7 @@ package governance
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -31,14 +32,14 @@ type exactByTitle struct {
 	fusion.RetrievalClient
 }
 
-func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fusion.Seed, error) {
-	seeds, err := c.RetrievalClient.Resolve(ctx, q)
-	if err != nil || q.Mode != fusion.ResolveModeSymbol || len(seeds) == 0 {
-		return seeds, err
+func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) (fusion.Resolution, error) {
+	res, err := c.RetrievalClient.Resolve(ctx, q)
+	if err != nil || q.Mode != fusion.ResolveModeSymbol || len(res.Seeds) == 0 {
+		return res, err
 	}
-	hydration, err := c.RetrievalClient.Entities(ctx, fusion.SeedIDs(seeds))
+	hydration, err := c.RetrievalClient.Entities(ctx, fusion.SeedIDs(res.Seeds))
 	if err != nil {
-		return nil, err
+		return fusion.Resolution{}, err
 	}
 	want := strings.TrimSpace(q.Query)
 	keep := make(map[string]bool, len(hydration.Entities))
@@ -50,13 +51,14 @@ func (c exactByTitle) Resolve(ctx context.Context, q fusion.ResolveQuery) ([]fus
 	// Mirrors processor/code-context/exact_seed.go, including carrying seeds
 	// through whole so Similarity survives — the two must not drift, since this
 	// exists to prove that policy against the real stack.
-	exact := make([]fusion.Seed, 0, len(seeds))
-	for _, s := range seeds {
+	exact := make([]fusion.Seed, 0, len(res.Seeds))
+	for _, s := range res.Seeds {
 		if keep[s.ID] {
 			exact = append(exact, s)
 		}
 	}
-	return exact, nil
+	res.Seeds = exact
+	return res, nil
 }
 
 // TestIntegration_GoCallGraphImpact is the go-callgraph-recall acceptance
@@ -150,7 +152,14 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 		waitForEntityState(t, ctx, tc.Client, e.ID, 5*time.Second)
 	}
 
-	engine := fusion.NewEngine(exactByTitle{fusionnats.New(tc.Client, 0)}, nil)
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(exactByTitle{gc}, nil, slog.Default())
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := code.New()
 
 	var resp fusion.Response
@@ -167,14 +176,14 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 			}
 		}
 		resp = r
-		if resp.Index.Ready && len(resp.Nodes) > 0 && resp.Impact != nil && resp.Impact.Nodes > 0 {
+		if !resp.Deferred && len(resp.Nodes) > 0 && resp.Impact != nil && resp.Impact.Nodes > 0 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if !resp.Index.Ready {
-		t.Fatalf("index never ready: %+v", resp.Index)
+	if resp.Deferred {
+		t.Fatalf("response still deferred: reason=%s", resp.DeferReason)
 	}
 	if len(resp.Nodes) != 1 || resp.Nodes[0].Name != "SanitizeInstance" {
 		t.Fatalf("seeds = %+v, want only the byte-exact SanitizeInstance", resp.Nodes)

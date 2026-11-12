@@ -3,7 +3,7 @@ package entitypub
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semengine/metric"
 )
 
 // Seed-progress metrics (ingest-observability, async-source-seed 5.7 residual).
@@ -52,8 +52,12 @@ func NewSeedMetrics(registry *metric.MetricsRegistry, instanceName string) *Seed
 	}
 	// Non-fatal and idempotent, same contract as the publish counters: losing
 	// telemetry must never stop ingest.
-	_ = registry.RegisterCounter(subsystem, "files_parsed_total", m.filesParsed)
-	_ = registry.RegisterCounter(subsystem, "bodies_offloaded_total", m.bodiesOffloaded)
+	if c, err := metric.RegisterOrGet(registry, subsystem, "files_parsed_total", m.filesParsed); err == nil {
+		m.filesParsed = c
+	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "bodies_offloaded_total", m.bodiesOffloaded); err == nil {
+		m.bodiesOffloaded = c
+	}
 	return m
 }
 

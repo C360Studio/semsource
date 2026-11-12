@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 func TestConfigValidateRequiresWatchPaths(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 	semast "github.com/c360studio/semsource/source/ast"
 	// Also registers the source predicate vocabulary via its init() so the
 	// predicate-schema projection below sees a fully-seeded registry.
+	"github.com/c360studio/semengine/pkg/projection"
+	semvocab "github.com/c360studio/semengine/vocabulary"
 	sourcevocab "github.com/c360studio/semsource/source/vocabulary"
-	"github.com/c360studio/semstreams/pkg/projection"
-	semvocab "github.com/c360studio/semstreams/vocabulary"
 )
 
 const (

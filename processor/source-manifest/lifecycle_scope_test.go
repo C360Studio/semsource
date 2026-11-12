@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semengine/types"
 )
 
 func mustComponentConfig(t *testing.T, name string, cfg map[string]any) types.ComponentConfig {

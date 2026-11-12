@@ -12,7 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
@@ -32,7 +33,7 @@ func discardLogger() *slog.Logger {
 // entity publisher only dials when it starts.
 func testDependencies(t *testing.T) component.Dependencies {
 	t.Helper()
-	return component.Dependencies{Logger: discardLogger(), Platform: component.PlatformMeta{Org: "acme", Platform: "test"}}
+	return component.Dependencies{Logger: discardLogger(), Platform: types.PlatformMeta{Org: "acme", Platform: "test"}}
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -128,13 +129,6 @@ func newTestComponent(t *testing.T) *Component {
 func TestNewComponent_IsDiscoverable(t *testing.T) {
 	c := newTestComponent(t)
 
-	meta := c.Meta()
-	if meta.Name != "objectstore-source" {
-		t.Errorf("Meta().Name = %q", meta.Name)
-	}
-	if meta.Type != "processor" {
-		t.Errorf("Meta().Type = %q", meta.Type)
-	}
 	if len(c.InputPorts()) != 0 {
 		t.Error("an object-store source consumes no input ports")
 	}

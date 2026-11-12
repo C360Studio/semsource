@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semengine/storage"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
-	"github.com/c360studio/semstreams/storage"
 )
 
 // Handler handles document sources (markdown, plain text).

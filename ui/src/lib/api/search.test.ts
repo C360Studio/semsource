@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FusionSearchError, searchCode } from "./search";
 
 const ok = {
-  contract_version: "1",
-  index: { ready: true, state: "ready" },
+  contract_version: "2",
   provenance: "embedding",
   nodes: [],
   truncated: false,

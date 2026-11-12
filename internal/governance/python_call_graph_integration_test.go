@@ -5,16 +5,18 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/pkg/fusion"
-	"github.com/c360studio/semstreams/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/pkg/fusion"
+	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
+	"github.com/c360studio/semengine/types"
 
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -79,7 +81,7 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal ast-source config: %v", err)
 	}
-	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	discovered, err := astsource.NewComponent(astCfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("ast-source NewComponent: %v", err)
 	}
@@ -92,7 +94,14 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, astComp.Stop) })
 
-	engine := fusion.NewEngine(fusionnats.New(tc.Client, 0), fusion.NewBodyResolver(fusion.MapStoreResolver{}))
+	gc, gcErr := fusionnats.New(tc.Client, 0)
+	if gcErr != nil {
+		t.Fatalf("fusionnats.New() error = %v", gcErr)
+	}
+	engine, engErr := fusion.NewEngine(gc, fusion.NewBodyResolver(fusion.MapStoreResolver{}), slog.Default())
+	if engErr != nil {
+		t.Fatalf("fusion.NewEngine() error = %v", engErr)
+	}
 	lens := prefixLens{code.New()}
 
 	var callers []fusion.Ref
@@ -108,7 +117,7 @@ func TestIntegration_PythonCallGraphCrossFile(t *testing.T) {
 				continue
 			}
 		}
-		if resp.Index.Ready {
+		if !resp.Deferred {
 			if helper := findNode(resp.Nodes, "helper"); helper != nil {
 				if got := helper.Relations["caller"]; len(got) > 0 {
 					callers = got

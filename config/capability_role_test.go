@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360studio/semstreams/model"
+	"github.com/c360studio/semengine/model"
 )
 
 // TestShippedConfigsRouteCapabilitiesToCompatibleEndpoints is the check that makes

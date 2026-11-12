@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -28,14 +31,8 @@ func clusteringConfigFor(t *testing.T, cfg *config.Config) (map[string]json.RawM
 	return got, true
 }
 
-func boolPtr(b bool) *bool { return &b }
-
-// TestClusteringEdges_OmittedWhenUnset pins the no-op guarantee: a config that
-// says nothing about edge synthesis must produce a clustering config carrying
-// no synthesis key at all. The substrate reads absence as "keep the defaults",
-// so emitting an empty object here would be a behavior change disguised as a
-// passthrough.
-func TestClusteringEdges_OmittedWhenUnset(t *testing.T) {
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestClusteringConfig_NoEntityIDEdgesEmitted(t *testing.T) {
 	cfg := &config.Config{
 		Namespace: "acme",
 		Graph:     &config.GraphConfig{EnableClustering: true},
@@ -46,91 +43,44 @@ func TestClusteringEdges_OmittedWhenUnset(t *testing.T) {
 		t.Fatal("graph-clustering component not composed with EnableClustering: true")
 	}
 	if raw, present := got["entity_id_edges"]; present {
-		t.Errorf("entity_id_edges must be absent when unset, got %s", raw)
+		t.Errorf("entity_id_edges must be absent, got %s", raw)
 	}
 }
 
-// TestClusteringEdges_TriStatePreserved is the load-bearing one: setting a
-// single toggle must emit exactly that key. A nil *bool marshalled as false
-// would disable synthesis the operator never asked to disable — and that is
-// precisely the collapse this config exists to control.
-func TestClusteringEdges_TriStatePreserved(t *testing.T) {
-	cfg := &config.Config{
-		Namespace: "acme",
-		Graph: &config.GraphConfig{
-			EnableClustering: true,
-			EntityIDEdges: &config.EntityIDEdgesConfig{
-				IncludeSystemPeers: boolPtr(false),
-			},
-		},
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestNoSemStreamsImports(t *testing.T) {
+	repoRoot := filepath.Join("..", "..")
+	cmd := exec.Command(
+		"go", "list",
+		"-tags=integration,e2e,garage",
+		"-f", "{{.ImportPath}}: {{join .Imports \",\"}} {{join .TestImports \",\"}} {{join .XTestImports \",\"}}",
+		"./...",
+	)
+	cmd.Dir = repoRoot
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list ./...: %v\n%s", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) < 20 {
+		t.Fatalf("expected module-wide go list to inspect at least 20 packages, got %d", len(lines))
+	}
+	for _, line := range lines {
+		if strings.Contains(line, "/ui/node_modules/") {
+			continue
+		}
+		if strings.Contains(line, "github.com/c360studio/semstreams") {
+			t.Errorf("forbidden semstreams import detected: %s", line)
+		}
 	}
 
-	got, ok := clusteringConfigFor(t, cfg)
-	if !ok {
-		t.Fatal("graph-clustering component not composed")
-	}
-	raw, present := got["entity_id_edges"]
-	if !present {
-		t.Fatal("entity_id_edges absent although include_system_peers was set")
-	}
-
-	var edges map[string]any
-	if err := json.Unmarshal(raw, &edges); err != nil {
-		t.Fatalf("unmarshal entity_id_edges: %v", err)
-	}
-	if v, present := edges["include_system_peers"]; !present || v != false {
-		t.Errorf("include_system_peers = %v (present %v), want false", v, present)
-	}
-	if len(edges) != 1 {
-		t.Errorf("exactly one key expected, got %v — an unset field was manufactured", edges)
-	}
-}
-
-// TestClusteringEdges_InertWithoutClustering covers the tier-0/1 case: the
-// block is accepted but composes nothing, because those tiers run no
-// clustering. Carrying it must not be an error, so one config file can serve a
-// deployment that turns clustering on later.
-func TestClusteringEdges_InertWithoutClustering(t *testing.T) {
-	cfg := &config.Config{
-		Namespace: "acme",
-		Sources:   []config.SourceEntry{{Type: "docs", Paths: []string{"."}}},
-		Graph: &config.GraphConfig{
-			EntityIDEdges: &config.EntityIDEdgesConfig{IncludeSystemPeers: boolPtr(false)},
-		},
-	}
-
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("config carrying entity_id_edges without clustering must validate, got %v", err)
-	}
-	if _, ok := clusteringConfigFor(t, cfg); ok {
-		t.Error("graph-clustering composed although EnableClustering is false")
-	}
-}
-
-// TestClusteringEdges_RejectsNegativeNumerics keeps a nonsensical value from
-// reaching the substrate, where a negative cap or weight has no defined
-// meaning. Omission, not a negative number, is how an operator asks for the
-// default.
-func TestClusteringEdges_RejectsNegativeNumerics(t *testing.T) {
-	for name, edges := range map[string]*config.EntityIDEdgesConfig{
-		"sibling_weight":     {SiblingWeight: -0.5},
-		"system_peer_weight": {SystemPeerWeight: -1},
-		"max_siblings":       {MaxSiblings: -1},
-		"max_system_peers":   {MaxSystemPeers: -3},
-	} {
-		t.Run(name, func(t *testing.T) {
-			cfg := &config.Config{
-				Namespace: "acme",
-				Sources:   []config.SourceEntry{{Type: "docs", Paths: []string{"."}}},
-				Graph:     &config.GraphConfig{EnableClustering: true, EntityIDEdges: edges},
-			}
-			err := cfg.Validate()
-			if err == nil {
-				t.Fatalf("negative %s must be rejected", name)
-			}
-			if !strings.Contains(err.Error(), name) {
-				t.Errorf("error must name the offending field %q, got %v", name, err)
-			}
-		})
+	for _, modFile := range []string{"go.mod", "go.sum"} {
+		data, err := os.ReadFile(filepath.Join(repoRoot, modFile))
+		if err != nil {
+			t.Fatalf("read %s: %v", modFile, err)
+		}
+		if strings.Contains(string(data), "github.com/c360studio/semstreams") {
+			t.Errorf("%s still references github.com/c360studio/semstreams", modFile)
+		}
 	}
 }

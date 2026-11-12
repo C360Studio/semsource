@@ -305,18 +305,18 @@ describe("GraphPanel", () => {
   it.each([
     [
       {
-        contract_version: "1",
-        index: { ready: false, state: "building" },
+        contract_version: "2",
+        deferred: true,
+        defer_reason: "index_not_ready",
         provenance: "deterministic",
         nodes: [],
         truncated: false,
       },
-      /index is building.*retained.*retry/i,
+      /index is index not ready.*retained.*retry/i,
     ],
     [
       {
-        contract_version: "1",
-        index: { ready: true, state: "ready" },
+        contract_version: "2",
         provenance: "deterministic",
         nodes: [],
         misses: [{ query: "Alpha", did_you_mean: ["Alfa"] }],
@@ -468,8 +468,7 @@ describe("GraphPanel", () => {
 
   it("never auto-selects an unresolved endpoint when no resolved node is present", async () => {
     const value = {
-      contract_version: "1",
-      index: { ready: true, state: "ready" },
+      contract_version: "2",
       provenance: "deterministic",
       nodes: [],
       graph: {

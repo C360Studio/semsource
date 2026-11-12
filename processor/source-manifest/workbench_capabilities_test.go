@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	semgraph "github.com/c360studio/semstreams/graph"
+	semgraph "github.com/c360studio/semengine/graph"
 )
 
 func TestWorkbenchCapabilities_ReadyHeadlessContract(t *testing.T) {
@@ -196,6 +196,47 @@ func TestWorkbenchCapabilities_MalformedStatusAndUnavailableActions(t *testing.T
 		if got.Actions[action].Availability != capabilityNotReady || got.Actions[action].Reason == nil {
 			t.Fatalf("%s = %+v", action, got.Actions[action])
 		}
+	}
+}
+
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestWorkbenchCapabilities_SemanticDisabledReportsNotEnabledWithoutQueryingEmbeddingStatus(t *testing.T) {
+	disabled := false
+	c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
+		"graph-index": {status: readyIndexStatus(42)},
+	})
+	c.config.SemanticEnabled = &disabled
+
+	rec := httptest.NewRecorder()
+	c.handleWorkbenchCapabilities(rec,
+		httptest.NewRequest(http.MethodGet, "/source-manifest/capabilities", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var got workbenchCapabilitiesResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Readiness.Overall != capabilityReady {
+		t.Fatalf("overall = %q, want %q", got.Readiness.Overall, capabilityReady)
+	}
+	if got.Readiness.SemanticIndex.Available || got.Readiness.SemanticIndex.Ready ||
+		got.Readiness.SemanticIndex.State != "disabled" ||
+		got.Readiness.SemanticIndex.Reason == nil ||
+		got.Readiness.SemanticIndex.Reason.Code != semgraph.ErrorCodeNotEnabled ||
+		got.Readiness.SemanticIndex.Reason.Retryable {
+		t.Fatalf("semantic_index readiness = %+v", got.Readiness.SemanticIndex)
+	}
+	assertUnsupported(t, got.Queries["code_search"], semgraph.ErrorCodeNotEnabled)
+	if got.Queries["code_context"].Availability != capabilityReady {
+		t.Fatalf("code_context should stay ready: %+v", got.Queries["code_context"])
+	}
+	if got.Queries["doc_context"].Availability != capabilityPartial ||
+		got.Queries["doc_context"].Reason == nil ||
+		got.Queries["doc_context"].Reason.Code != semgraph.ErrorCodeNotEnabled ||
+		got.Queries["doc_context"].Reason.Retryable {
+		t.Fatalf("doc_context should report partial/not_enabled when semantic search is disabled: %+v", got.Queries["doc_context"])
 	}
 }
 

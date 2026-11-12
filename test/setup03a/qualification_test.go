@@ -70,7 +70,8 @@ type exact struct {
 			Object    any    `json:"object"`
 		} `json:"triples"`
 	} `json:"entity"`
-	Revision uint64 `json:"kvRevision"`
+	Revision       uint64 `json:"kv_revision"`
+	LegacyRevision uint64 `json:"kvRevision"`
 }
 type node struct {
 	Name, Path, Body, Handle string
@@ -82,11 +83,14 @@ type fused struct {
 	Deferred   bool   `json:"deferred"`
 	Unhydrated []any  `json:"unhydrated"`
 	Misses     []any  `json:"misses"`
-	Index      struct {
-		Ready     bool   `json:"ready"`
-		State     string `json:"state"`
-		Bootstrap bool   `json:"bootstrap_complete"`
-	} `json:"index"`
+}
+
+type processExit struct {
+	PID      int    `json:"pid"`
+	Forced   bool   `json:"forced"`
+	Observed bool   `json:"observed"`
+	ExitCode int    `json:"exit_code"`
+	Signal   string `json:"signal,omitempty"`
 }
 
 func TestKnownAnswerCorpus(t *testing.T) {
@@ -98,7 +102,7 @@ func TestKnownAnswerCorpus(t *testing.T) {
 	if profile == "" {
 		profile = "bm25"
 	}
-	if profile != "bm25" && profile != "neural" {
+	if profile != "foundation" && profile != "bm25" && profile != "neural" {
 		t.Fatalf("unknown profile %q", profile)
 	}
 	if profile == "neural" && os.Getenv("SETUP03A_PROVIDER") == "" {
@@ -111,7 +115,10 @@ func TestKnownAnswerCorpus(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.result = report{CorpusVersion: "1", Profile: profile, SemEngineSlices: []int{0, 1}, Started: time.Now().UTC()}
-	if profile == "neural" {
+	switch profile {
+	case "foundation":
+		h.result.SemEngineSlices = []int{0}
+	case "neural":
 		h.result.SemEngineSlices = []int{0, 2}
 	}
 	defer h.finish()
@@ -180,20 +187,22 @@ func TestKnownAnswerCorpus(t *testing.T) {
 			return f, errors.New("paraphrase did not retrieve north-depot passage")
 		})
 	}
-	h.check("graph_search_public_query", 30*time.Second, func() (any, error) {
-		raw, err := h.rpc("graph.query.searchGraph", map[string]any{"query": "cobalt lantern routing", "include_sources": true, "include_summaries": false})
-		if err != nil {
-			return nil, err
-		}
-		var v map[string]any
-		if err = json.Unmarshal(raw, &v); err != nil {
-			return nil, err
-		}
-		if entities, ok := v["entities"].([]any); !ok || len(entities) == 0 {
-			return json.RawMessage(raw), errors.New("searchGraph returned no corpus entities")
-		}
-		return json.RawMessage(raw), nil
-	})
+	if profile != "foundation" {
+		h.check("graph_search_public_query", 30*time.Second, func() (any, error) {
+			raw, err := h.rpc("graph.query.searchGraph", map[string]any{"query": "cobalt lantern routing", "include_sources": true, "include_summaries": false})
+			if err != nil {
+				return nil, err
+			}
+			var v map[string]any
+			if err = json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			if entities, ok := v["entities"].([]any); !ok || len(entities) == 0 {
+				return json.RawMessage(raw), errors.New("searchGraph returned no corpus entities")
+			}
+			return json.RawMessage(raw), nil
+		})
+	}
 	alphaPath := filepath.Join(h.source, "alpha/greet.go")
 	original, err := os.ReadFile(alphaPath)
 	if err != nil {
@@ -243,7 +252,7 @@ func TestKnownAnswerCorpus(t *testing.T) {
 		return e, nil
 	})
 	h.structural("recreated", true)
-	h.stop(false)
+	h.checkedStop("application_restart_checked_exit", false)
 	h.start()
 	h.structural("application_restart", true)
 	h.pendingBrokerRestart(edited)
@@ -362,7 +371,10 @@ func freePort(t *testing.T) int {
 }
 func (h *harness) configure(profile string) {
 	cfgPath := "../../configs/tiers/tier0-statistical.json"
-	if profile == "neural" {
+	switch profile {
+	case "foundation":
+		cfgPath = "../../configs/tiers/tier0-foundation.json"
+	case "neural":
 		cfgPath = "../../configs/tiers/tier1-semantic.json"
 	}
 	raw, err := os.ReadFile(cfgPath)
@@ -381,7 +393,6 @@ func (h *harness) configure(profile string) {
 	cfg["websocket_bind"] = fmt.Sprintf("127.0.0.1:%d", freePort(h.t))
 	cfg["sources"] = []map[string]any{{"type": "ast", "path": h.source, "languages": []string{"go"}, "watch": true, "project": "setup03a", "version": "corpus-v1"}, {"type": "docs", "paths": []string{filepath.Join(h.source, "docs")}, "watch": true, "project": "setup03a-docs"}}
 	cfg["source_roots"] = []string{h.source}
-	cfg["graph"].(map[string]any)["gateway_bind"] = fmt.Sprintf("127.0.0.1:%d", freePort(h.t))
 	if profile == "neural" {
 		cfg["model_registry"].(map[string]any)["endpoints"].(map[string]any)["semembed"].(map[string]any)["url"] = os.Getenv("SETUP03A_PROVIDER")
 	}
@@ -457,8 +468,57 @@ func (h *harness) stop(force bool) {
 		h.log = nil
 	}
 }
+func (h *harness) checkedStop(name string, force bool) {
+	h.t.Helper()
+	if h.cmd == nil {
+		h.check(name, time.Nanosecond, func() (any, error) {
+			return nil, errors.New("no admitted child process to retire")
+		})
+		return
+	}
+	cmd := h.cmd
+	result := processExit{PID: cmd.Process.Pid, Forced: force}
+	h.stop(force)
+	var stopErr error
+	select {
+	case <-h.exited:
+		result.Observed = true
+	default:
+		stopErr = errors.New("child exit was not observed")
+	}
+	if stopErr == nil {
+		if cmd.ProcessState == nil {
+			stopErr = errors.New("child process state absent")
+		} else {
+			result.ExitCode = cmd.ProcessState.ExitCode()
+			if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+				result.Signal = status.Signal().String()
+			}
+			if force {
+				if result.Signal != syscall.SIGKILL.String() {
+					stopErr = fmt.Errorf("expected SIGKILL retirement, got %+v", result)
+				}
+			} else if h.exitErr != nil || result.ExitCode != 0 {
+				stopErr = fmt.Errorf("graceful child retirement failed: %v (exit=%d)", h.exitErr, result.ExitCode)
+			}
+		}
+	}
+	o := observation{Name: name, Passed: stopErr == nil, Detail: result}
+	if stopErr != nil {
+		o.Error = stopErr.Error()
+		h.t.Errorf("%s: %v", name, stopErr)
+	} else {
+		h.t.Logf("PASS %s", name)
+	}
+	h.result.Observations = append(h.result.Observations, o)
+	if raw, err := json.MarshalIndent(h.result, "", "  "); err == nil {
+		h.save("report.json", raw)
+	}
+}
 func (h *harness) finish() {
-	h.stop(false)
+	if h.cmd != nil {
+		h.checkedStop("cleanup_checked_process_exit", false)
+	}
 	if h.nc != nil {
 		h.nc.Close()
 	}
@@ -559,6 +619,9 @@ func (h *harness) entity(id string) (exact, error) {
 	if err = json.Unmarshal(raw, &e); err != nil {
 		return e, err
 	}
+	if e.Revision == 0 && e.LegacyRevision != 0 {
+		e.Revision = e.LegacyRevision
+	}
 	if e.Entity == nil || e.Entity.ID != id || e.Revision == 0 {
 		return e, fmt.Errorf("missing exact entity/revision: %s", raw)
 	}
@@ -616,9 +679,6 @@ func (h *harness) fuse(lens, verb, query string, limit int) (fused, error) {
 	}
 	if result.Deferred || len(result.Unhydrated) > 0 {
 		return result, errors.New("query deferred or partially hydrated")
-	}
-	if !result.Index.Bootstrap {
-		return result, errors.New("index bootstrap incomplete")
 	}
 	return result, nil
 }
@@ -742,37 +802,147 @@ func (h *harness) queries(stage string) {
 		if err != nil {
 			return f, err
 		}
-		if len(f.Nodes) != 0 || len(f.Misses) == 0 || !f.Index.Ready {
+		if len(f.Nodes) != 0 || len(f.Misses) == 0 || f.Deferred {
 			return f, errors.New("absent fixture needs caught-up empty lookup with miss")
 		}
 		return f, nil
 	})
-	for _, lens := range []string{"code", "doc"} {
-		lens := lens
-		h.check(stage+"_"+lens+"_scope_before_limit", 45*time.Second, func() (any, error) {
-			f, err := h.fuse(lens, "context", "cobalt lantern routing", 1)
+	if h.result.Profile == "foundation" {
+		h.check(stage+"_semantic_disabled_contract", 20*time.Second, func() (any, error) {
+			ctx, cancel := context.WithTimeout(h.ctx, 5*time.Second)
+			defer cancel()
+			capReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.httpURL+"/source-manifest/capabilities", nil)
 			if err != nil {
-				return f, err
+				return nil, err
 			}
-			if len(f.Nodes) != 1 {
-				return f, fmt.Errorf("nodes=%d want 1", len(f.Nodes))
+			capResp, err := http.DefaultClient.Do(capReq)
+			if err != nil {
+				return nil, err
 			}
-			n := f.Nodes[0]
-			if lens == "code" && (n.Body == "" || n.BodyReason != "") {
-				return f, errors.New("missing body")
+			defer capResp.Body.Close()
+			capBody, err := io.ReadAll(io.LimitReader(capResp.Body, 1<<20))
+			if err != nil {
+				return nil, err
 			}
-			domain := ".golang."
-			if lens == "doc" {
-				domain = ".web."
+			var caps struct {
+				Readiness struct {
+					Overall         string `json:"overall"`
+					StructuralIndex struct {
+						Ready bool `json:"ready"`
+					} `json:"structural_index"`
+					SemanticIndex struct {
+						Available bool   `json:"available"`
+						Ready     bool   `json:"ready"`
+						State     string `json:"state"`
+						Reason    *struct {
+							Code string `json:"code"`
+						} `json:"reason"`
+					} `json:"semantic_index"`
+				} `json:"readiness"`
+				Queries map[string]struct {
+					Availability string `json:"availability"`
+					Reason       *struct {
+						Code string `json:"code"`
+					} `json:"reason"`
+				} `json:"queries"`
 			}
-			if !strings.Contains(n.Handle, domain) {
-				return f, fmt.Errorf("scope leak: %s", n.Handle)
+			if err := json.Unmarshal(capBody, &caps); err != nil {
+				return string(capBody), err
 			}
-			return f, nil
+			if caps.Readiness.Overall != "ready" || !caps.Readiness.StructuralIndex.Ready ||
+				caps.Readiness.SemanticIndex.Available || caps.Readiness.SemanticIndex.Ready ||
+				caps.Readiness.SemanticIndex.State != "disabled" ||
+				caps.Readiness.SemanticIndex.Reason == nil || caps.Readiness.SemanticIndex.Reason.Code != "not_enabled" ||
+				caps.Queries["code_search"].Availability != "unsupported" ||
+				caps.Queries["code_search"].Reason == nil || caps.Queries["code_search"].Reason.Code != "not_enabled" ||
+				caps.Queries["doc_context"].Availability != "partial" ||
+				caps.Queries["doc_context"].Reason == nil || caps.Queries["doc_context"].Reason.Code != "not_enabled" {
+				return json.RawMessage(capBody), errors.New("capabilities did not advertise disabled semantic_index / unsupported code_search / partial doc_context")
+			}
+
+			searchBody, err := json.Marshal(map[string]any{"query": "cobalt lantern routing"})
+			if err != nil {
+				return nil, err
+			}
+			searchReq, err := http.NewRequestWithContext(ctx, http.MethodPost, h.httpURL+"/code-context/search", bytes.NewReader(searchBody))
+			if err != nil {
+				return nil, err
+			}
+			searchReq.Header.Set("Content-Type", "application/json")
+			searchResp, err := http.DefaultClient.Do(searchReq)
+			if err != nil {
+				return nil, err
+			}
+			defer searchResp.Body.Close()
+			searchRaw, err := io.ReadAll(io.LimitReader(searchResp.Body, 1<<20))
+			if err != nil {
+				return nil, err
+			}
+			var errEnv struct {
+				Error struct {
+					Code      string `json:"code"`
+					Class     string `json:"class"`
+					Retryable bool   `json:"retryable"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(searchRaw, &errEnv); err != nil {
+				return string(searchRaw), err
+			}
+			if searchResp.StatusCode != http.StatusNotImplemented || errEnv.Error.Code != "not_enabled" || errEnv.Error.Class != "invalid" || errEnv.Error.Retryable {
+				return string(searchRaw), fmt.Errorf("expected 501 not_enabled invalid non-retryable, got status=%d body=%s", searchResp.StatusCode, searchRaw)
+			}
+			return map[string]any{
+				"capabilities":  json.RawMessage(capBody),
+				"search_status": searchResp.StatusCode,
+				"search_error":  json.RawMessage(searchRaw),
+			}, nil
 		})
+	} else {
+		for _, lens := range []string{"code", "doc"} {
+			lens := lens
+			h.check(stage+"_"+lens+"_scope_before_limit", 45*time.Second, func() (any, error) {
+				f, err := h.fuse(lens, "context", "cobalt lantern routing", 1)
+				if err != nil {
+					return f, err
+				}
+				if len(f.Nodes) != 1 {
+					return f, fmt.Errorf("nodes=%d want 1", len(f.Nodes))
+				}
+				n := f.Nodes[0]
+				if lens == "code" && (n.Body == "" || n.BodyReason != "") {
+					return f, errors.New("missing body")
+				}
+				domain := ".golang."
+				if lens == "doc" {
+					domain = ".web."
+				}
+				if !strings.Contains(n.Handle, domain) {
+					return f, fmt.Errorf("scope leak: %s", n.Handle)
+				}
+				return f, nil
+			})
+		}
 	}
 	h.check(stage+"_doc_exact_passage_content", 30*time.Second, func() (any, error) {
-		f, err := h.fuse("doc", "context", "cobalt lantern routing", 10)
+		docQuery := "cobalt lantern routing"
+		parentQuery := ""
+		if h.result.Profile == "foundation" {
+			docQuery = "setup03a.semsource.web.setup03a-docs"
+			parentQuery = "setup03a.semsource.web.setup03a-docs.doc.routing-md"
+			if os.Getenv("SETUP03A_IDENTITY") == "governed" {
+				platform := strings.Split(h.ids["run"], ".")[1]
+				docQuery = "setup03a." + platform + ".setup03a-docs.web"
+				parentQuery = docQuery + ".doc.routing-md"
+			}
+			parentFused, parentErr := h.fuse("doc", "context", parentQuery, 10)
+			if parentErr != nil {
+				return parentFused, parentErr
+			}
+			if len(parentFused.Nodes) != 1 || parentFused.Nodes[0].Handle != parentQuery || parentFused.Nodes[0].Body != "" || len(parentFused.Nodes[0].Relations["passage"]) != 1 {
+				return parentFused, errors.New("parent document must have empty body and passage containment relation")
+			}
+		}
+		f, err := h.fuse("doc", "context", docQuery, 10)
 		if err != nil {
 			return f, err
 		}
@@ -836,13 +1006,13 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 	pending := bytes.Replace(edited, []byte("return Farewell()"), []byte("return Greet()"), 1)
 	if err = os.WriteFile(filepath.Join(h.source, "alpha/greet.go"), pending, 0644); err != nil {
 		h.t.Error(err)
-		h.stop(true)
+		h.checkedStop("pending_broker_restart_forced_exit", true)
 		return
 	}
 	ack, err := h.js.Publish(h.ctx, captured.Subject, captured.Data)
 	if err != nil {
 		h.t.Error(err)
-		h.stop(true)
+		h.checkedStop("pending_broker_restart_forced_exit", true)
 		return
 	}
 	kv, err := h.js.KeyValue(h.ctx, "ENTITY_STATES")
@@ -876,7 +1046,7 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 	if err != nil || actualRevision != e.Revision {
 		h.t.Errorf("cannot prove pending unindexed work: %v before=%d after=%d", err, e.Revision, actualRevision)
 	}
-	h.stop(true)
+	h.checkedStop("pending_broker_restart_forced_exit", true)
 	out, err := h.command("docker", "restart", "--time", "5", h.container)
 	if err != nil {
 		h.t.Errorf("persistent broker restart: %v: %s", err, out)
@@ -939,7 +1109,7 @@ func (h *harness) rpcCollision() {
 		h.t.Error(err)
 		return
 	}
-	h.stop(false)
+	h.checkedStop("rpc_collision_checked_exit", false)
 	info.Config.Subjects = []string{"graph.ingest.>"}
 	if _, err = h.js.UpdateStream(h.ctx, info.Config); err != nil {
 		h.t.Error(err)
@@ -961,6 +1131,46 @@ func (h *harness) rpcCollision() {
 			return json.RawMessage(raw), errors.New("wildcard did not return conflicting PubAck")
 		}
 		return json.RawMessage(raw), nil
+	})
+	h.check("rpc_wildcard_startup_refused", 15*time.Second, func() (any, error) {
+		badCfg := make(map[string]any, len(h.result.Configuration)+1)
+		for k, v := range h.result.Configuration {
+			badCfg[k] = v
+		}
+		badCfg["streams"] = map[string]any{
+			"GRAPH": map[string]any{
+				"subjects": []string{"graph.ingest.>"},
+			},
+		}
+		rawCfg, err := json.MarshalIndent(badCfg, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		badCfgPath := filepath.Join(h.out, "semsource-rpc-wildcard.json")
+		if err := os.WriteFile(badCfgPath, rawCfg, 0644); err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, h.binary, "run", "--config", badCfgPath, "--log-level", "debug", "--nats-url", h.natsURL)
+		cmd.Dir = h.out
+		out, runErr := cmd.CombinedOutput()
+		h.save("application-rpc-wildcard-refused.log", out)
+		if runErr == nil {
+			return string(out), errors.New("expected startup refusal for reserved RPC wildcard capture, but process exited 0")
+		}
+		if !bytes.Contains(out, []byte("reserved_subject_capture")) && !bytes.Contains(out, []byte("captures reserved request subject")) {
+			return string(out), fmt.Errorf("process exited (%v) without reserved_subject_capture refusal: %s", runErr, out)
+		}
+		exitCode := -1
+		if cmd.ProcessState != nil {
+			exitCode = cmd.ProcessState.ExitCode()
+		}
+		return map[string]any{
+			"exit_code": exitCode,
+			"error":     runErr.Error(),
+			"log":       string(out),
+		}, nil
 	})
 }
 
@@ -994,7 +1204,7 @@ func (h *harness) providerMetrics(stage string) {
 }
 
 func (h *harness) platformIdentity() (map[string]string, error) {
-	kv, err := h.js.KeyValue(h.ctx, "semstreams_config_setup03a_semsource")
+	kv, err := h.js.KeyValue(h.ctx, "semengine_config_setup03a_semsource")
 	if err != nil {
 		return nil, err
 	}
@@ -1012,7 +1222,7 @@ func (h *harness) captureRestartGuard() {
 		return
 	}
 	entry, err := bucket.Get(h.ctx, h.ids["run"]+"/GRAPH")
-	if err != nil || len(entry.Value()) != 8 {
+	if err != nil || (len(entry.Value()) != 8 && len(entry.Value()) != 16) {
 		return
 	}
 	stream, err := h.js.Stream(h.ctx, "GRAPH")
@@ -1030,7 +1240,20 @@ func (h *harness) captureRestartGuard() {
 			sequences = append(sequences, seq)
 		}
 	}
-	raw, err := json.MarshalIndent(map[string]any{"guard_key": entry.Key(), "applied_sequence": binary.BigEndian.Uint64(entry.Value()), "restarted_stream_last_sequence": info.State.LastSeq, "run_payload_sequences": sequences}, "", "  ")
+	var appliedGeneration, appliedSeq uint64
+	if len(entry.Value()) == 16 {
+		appliedGeneration = binary.BigEndian.Uint64(entry.Value()[:8])
+		appliedSeq = binary.BigEndian.Uint64(entry.Value()[8:16])
+	} else {
+		appliedSeq = binary.BigEndian.Uint64(entry.Value())
+	}
+	raw, err := json.MarshalIndent(map[string]any{
+		"guard_key":                      entry.Key(),
+		"applied_generation":             appliedGeneration,
+		"applied_sequence":               appliedSeq,
+		"restarted_stream_last_sequence": info.State.LastSeq,
+		"run_payload_sequences":          sequences,
+	}, "", "  ")
 	if err == nil {
 		h.save("restart-guard.json", raw)
 	}

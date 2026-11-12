@@ -1,6 +1,6 @@
 package source
 
-import "github.com/c360studio/semstreams/vocabulary"
+import "github.com/c360studio/semengine/vocabulary"
 
 // Convention predicates for patterns learned from approved code.
 // Conventions are extracted by the reviewer and stored in the graph

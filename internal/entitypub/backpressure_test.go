@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semengine/natsclient"
 
 	"github.com/c360studio/semsource/graph"
 )
@@ -30,7 +30,7 @@ func (b *breakerPublisher) PublishToStream(ctx context.Context, subject string, 
 func (b *breakerPublisher) PublishToStreamWithMsgID(context.Context, string, []byte, string) error {
 	if b.seen.Add(1) <= b.openCalls {
 		// The TYPED sentinel: classification is errors.Is, never a string.
-		return fmt.Errorf("publish: %w", natsclient.ErrCircuitOpen)
+		return fmt.Errorf("publish: %w", natsclient.ErrNotConnected)
 	}
 	return nil
 }
@@ -100,6 +100,7 @@ func TestRetryPressureIsDistinctFromFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
+	t.Cleanup(func() { _ = p.Stop(context.Background()) })
 	if err := p.Send(payload("e1")); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +128,7 @@ func TestBackpressureLogsOnceAndReportsRecovery(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
+	t.Cleanup(func() { _ = p.Stop(context.Background()) })
 	if err := p.Send(payload("e1")); err != nil {
 		t.Fatal(err)
 	}
@@ -163,6 +165,11 @@ func TestBackpressureStateIsObservableWhileActive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithCancel(context.Background())
+		stopCancel()
+		_ = p.Stop(stopCtx)
+	})
 	if err := p.Send(payload("e1")); err != nil {
 		t.Fatal(err)
 	}

@@ -1,22 +1,22 @@
 package sourceauthority
 
 import (
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/types"
 	"testing"
 )
 
 func TestResolveRequiresInjectedLocalAuthority(t *testing.T) {
-	local := component.PlatformMeta{Org: "acme", Platform: "deployment-a1b2c3"}
+	local := types.PlatformMeta{Org: "acme", Platform: "deployment-a1b2c3"}
 	for _, tc := range []struct {
 		name     string
-		platform component.PlatformMeta
+		platform types.PlatformMeta
 		org      string
 		wantErr  bool
 	}{
 		{"inherits local", local, "", false},
 		{"matching configured org", local, "acme", false},
 		{"foreign org cannot override", local, "foreign", true},
-		{"missing injected platform", component.PlatformMeta{Org: "acme"}, "acme", true},
+		{"missing injected platform", types.PlatformMeta{Org: "acme"}, "acme", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := Resolve(tc.platform, tc.org)

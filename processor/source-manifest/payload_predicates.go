@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semengine/message"
 )
 
 // PredicatesType is the message type for predicate schema payloads.

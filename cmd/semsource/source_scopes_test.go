@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	semconfig "github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/types"
+	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 )
 
 func scopeComponent(factory, raw string) types.ComponentConfig {

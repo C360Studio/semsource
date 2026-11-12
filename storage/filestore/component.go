@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/types"
 )
 
 // filestoreSchema is the generated configuration schema for the filestore component.
@@ -28,7 +29,7 @@ type Component struct {
 		PublishToStream(ctx context.Context, subject string, data []byte) error
 	}
 	logger   *slog.Logger
-	platform component.PlatformMeta
+	platform types.PlatformMeta
 
 	running bool
 	mu      sync.RWMutex
@@ -106,16 +107,6 @@ func (c *Component) Stop(_ context.Context) error {
 
 	c.logger.Info("filestore component stopped", "root_dir", c.config.RootDir)
 	return nil
-}
-
-// Meta returns static component metadata.
-func (c *Component) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        "filestore",
-		Type:        "storage",
-		Description: "Local filesystem storage backend for semsource binary content",
-		Version:     "0.1.0",
-	}
 }
 
 // InputPorts returns an empty slice — filestore is a storage backend, not a

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Config holds configuration for the git-source processor component.
@@ -24,7 +24,7 @@ type Config struct {
 	RepoURL string `json:"repo_url" schema:"type:string,description:Remote git repository URL to clone (https/git/ssh),category:basic"`
 
 	// Org is the organization namespace used in entity ID construction.
-	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required:true"`
+	Org string `json:"org" schema:"type:string,description:Organization namespace for entity IDs (e.g. acme),category:basic,required"`
 
 	// Branch is the branch to track. Used only for display/metadata; HEAD
 	// is determined by the actual state of the repository.
@@ -61,7 +61,7 @@ type Config struct {
 
 	// InstanceName is the unique component instance name for status tracking.
 	// Set automatically by run.go to match the component map key.
-	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:internal"`
+	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name for status tracking,category:advanced"`
 }
 
 // Validate checks the configuration for errors.

@@ -11,6 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semengine/metric"
+	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/payloadregistry"
+	"github.com/c360studio/semengine/storage/objectstore"
+	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/entityid"
 	semsourcegraph "github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
@@ -18,12 +25,6 @@ import (
 	"github.com/c360studio/semsource/processor/supersession"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/ontology"
-	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/metric"
-	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadregistry"
-	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
 // TestIntegration_VersionDiff drives the version-diff query end to end over a real
@@ -104,7 +105,7 @@ func TestIntegration_VersionDiff(t *testing.T) {
 	// StoreRegistry in deps, so the diff's body resolver falls back to attaching
 	// the CONTENT objectstore — the store we offloaded bodies to above.
 	scfg, _ := json.Marshal(map[string]any{"max_entities": 1000})
-	sdisc, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: component.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	sdisc, err := supersession.NewComponent(scfg, component.Dependencies{NATSClient: tc.Client, Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
 	if err != nil {
 		t.Fatalf("supersession NewComponent: %v", err)
 	}
@@ -190,7 +191,7 @@ func publishVersionedBody(t *testing.T, ctx context.Context, pub *entitypub.Publ
 func requestDiff(t *testing.T, ctx context.Context, client *natsclient.Client, project, from, to string) supersession.VersionDiffResponse {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"project": project, "from": from, "to": to})
-	raw, err := client.Request(ctx, "graph.query.versionDiff", body, 20*time.Second)
+	raw, err := client.RequestClassified(ctx, "graph.query.versionDiff", body, 20*time.Second)
 	if err != nil {
 		t.Fatalf("versionDiff request: %v", err)
 	}

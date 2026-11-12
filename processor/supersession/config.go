@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semengine/component"
 )
 
 // Default subjects and bounds.
