@@ -44,7 +44,7 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 			mu.Lock()
 			lastScope = req.Scope
 			mu.Unlock()
-			return []byte(`{"results":[]}`), nil
+			return []byte(`{"producer":"graph-embedding","data":{"results":[]}}`), nil
 		})
 	if err != nil {
 		t.Fatalf("subscribe semantic: %v", err)

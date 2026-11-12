@@ -233,7 +233,11 @@
         </div>
       {:else if response && response.deferred}
         <div class="truth-state" data-state="not_ready">
-          <strong>Index is {response.defer_reason ? response.defer_reason.replaceAll("_", " ") : "deferred"}</strong>
+          <strong
+            >Index is {response.defer_reason
+              ? response.defer_reason.replaceAll("_", " ")
+              : "deferred"}</strong
+          >
           <p>
             Code search has not reported a ready index, so this response is not
             treated as empty.

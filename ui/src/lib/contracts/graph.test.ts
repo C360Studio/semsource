@@ -45,9 +45,13 @@ describe("parseGraphProjection", () => {
     });
     expect(drifting.view_revision?.coherent).toBe(false);
 
-    const withoutViewRevision = structuredClone(completeGraphResponse.graph) as Record<string, unknown>;
+    const withoutViewRevision = structuredClone(
+      completeGraphResponse.graph,
+    ) as Record<string, unknown>;
     delete withoutViewRevision.view_revision;
-    expect(parseGraphProjection(withoutViewRevision).view_revision).toBeUndefined();
+    expect(
+      parseGraphProjection(withoutViewRevision).view_revision,
+    ).toBeUndefined();
   });
 
   it("preserves every level of positive truncation evidence", () => {

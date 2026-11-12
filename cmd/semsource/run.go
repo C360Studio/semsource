@@ -778,24 +778,21 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 	}
 
 	graphQueryConfig := map[string]any{
-		"ports": map[string]any{
-			"inputs": []component.PortDefinition{
-				{
-					Name:     "graph_queries",
-					Required: true,
-					Config: component.NATSRequestPort{
-						Subject: "graph.query.*",
-						Interface: &component.InterfaceContract{
-							Type:    "graph.query",
-							Version: "v1",
-						},
-					},
-				},
-			},
-		},
+		"ports": graphquery.DefaultConfig().Ports,
 	}
 	if embedderType == "none" {
 		graphQueryConfig["embedding_enabled"] = false
+	}
+
+	graphIngestPorts := graphingest.DefaultConfig().Ports
+	for i := range graphIngestPorts.Inputs {
+		if graphIngestPorts.Inputs[i].Name == "entity_stream" {
+			graphIngestPorts.Inputs[i].Config = component.JetStreamPort{
+				StreamName:    "GRAPH",
+				Subjects:      []string{"graph.ingest.entity"},
+				DeliverPolicy: "all",
+			}
+		}
 	}
 
 	configs := map[string]struct {
@@ -809,39 +806,10 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 			configMap: map[string]any{
 				// Our entity_stream differs from graph-ingest's DefaultConfig
 				// (entities arrive on the GRAPH stream's graph.ingest.*
-				// subjects, not the default ENTITY stream). A declared ports
-				// section replaces the defaults wholesale, so the mutation
-				// provider input and entity_states output are restated.
-				"ports": map[string]any{
-					"inputs": []component.PortDefinition{
-						{
-							Name: "entity_stream",
-							Config: component.JetStreamPort{
-								StreamName:    "GRAPH",
-								Subjects:      []string{"graph.ingest.entity"},
-								DeliverPolicy: "all",
-							},
-						},
-						{
-							// The typed mutation provider port (values pinned from
-							// semengine internal/graphmutation, which is not
-							// importable): a declared ports section replaces the
-							// defaults wholesale, so every required port is restated.
-							Name:     "mutations",
-							Required: true,
-							Config: component.NATSRequestPort{
-								Subject: "graph.mutation.>",
-								Interface: &component.InterfaceContract{
-									Type:    "semengine.graph.mutation",
-									Version: "v1",
-								},
-							},
-						},
-					},
-					"outputs": []component.PortDefinition{
-						{Name: "entity_states", Config: component.KVWritePort{Bucket: "ENTITY_STATES"}},
-					},
-				},
+				// subjects, not the default ENTITY stream). Starting from
+				// graphingest.DefaultConfig().Ports preserves the canonical
+				// mutations and entity_states port definitions without hand-copying.
+				"ports": graphIngestPorts,
 			},
 		},
 		"graph-index": {

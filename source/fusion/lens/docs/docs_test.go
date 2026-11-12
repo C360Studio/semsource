@@ -32,6 +32,9 @@ func TestResolveMode(t *testing.T) {
 	if l.ResolveMode("retry") != fusion.ResolveModeNL {
 		t.Error("single term should resolve via semantic (doc content), not symbol")
 	}
+	if l.ResolveMode("v1.2") != fusion.ResolveModeNL {
+		t.Error("two-part dotted token like v1.2 should resolve via semantic, not entity prefix")
+	}
 }
 
 func TestFieldExtractionAndHydrate(t *testing.T) {

@@ -544,29 +544,8 @@ func startGraphQuery(
 	t.Helper()
 
 	configJSON, err := json.Marshal(map[string]any{
-		"query_timeout":    5 * time.Second,
-		"startup_attempts": 1,
-		"startup_interval": time.Millisecond,
-		"recheck_interval": time.Second,
-		// The direct factory path applies no defaults: restate the family
-		// request port exactly as graph-query's DefaultConfig declares it
-		// (values pinned from the beta.160 source; per-operation ports are
-		// retired).
-		"ports": map[string]any{
-			"inputs": []component.PortDefinition{
-				{
-					Name:     "graph_queries",
-					Required: true,
-					Config: component.NATSRequestPort{
-						Subject: "graph.query.*",
-						Interface: &component.InterfaceContract{
-							Type:    "graph.query",
-							Version: "v1",
-						},
-					},
-				},
-			},
-		},
+		"query_timeout_ms": 5000,
+		"ports":            graphquery.DefaultConfig().Ports,
 	})
 	if err != nil {
 		t.Fatalf("marshal graph-query config: %v", err)

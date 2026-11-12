@@ -113,10 +113,7 @@ function parseDeferral(item: Record<string, unknown>): {
     }
     return { deferred: false };
   }
-  if (
-    rawReason !== "index_not_ready" &&
-    rawReason !== "all_seeds_unhydrated"
-  ) {
+  if (rawReason !== "index_not_ready" && rawReason !== "all_seeds_unhydrated") {
     throw new Error("Invalid fusion response: malformed defer_reason");
   }
   return {
@@ -291,11 +288,7 @@ export function parseFusionResponse(value: unknown): FusionResponse {
       item.paths === undefined
         ? undefined
         : optionalArray(item.paths, "paths", parsePath),
-    paths_truncated: optionalBooleanField(
-      item,
-      "paths_truncated",
-      "response",
-    ),
+    paths_truncated: optionalBooleanField(item, "paths_truncated", "response"),
     impact: parseImpact(item.impact),
     graph:
       item.graph === undefined ? undefined : parseGraphProjection(item.graph),

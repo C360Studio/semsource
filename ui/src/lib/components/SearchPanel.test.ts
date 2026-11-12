@@ -136,7 +136,9 @@ describe("SearchPanel", () => {
 
     await user.type(input, "first");
     await user.click(screen.getByRole("button", { name: "Search" }));
-    expect(await screen.findByText(/index is index not ready/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/index is index not ready/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/no code results/i)).not.toBeInTheDocument();
 
     await user.clear(input);

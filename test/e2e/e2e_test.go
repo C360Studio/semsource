@@ -1797,14 +1797,15 @@ func waitForRuntimeContext(t *testing.T, nc *nats.Conn, answer string, want bool
 		if err == nil {
 			last = string(reply.Data)
 			var result struct {
-				Index struct {
-					Ready bool `json:"ready"`
-				} `json:"index"`
+				ContractVersion string `json:"contract_version"`
+				Error           *struct {
+					Code string `json:"code"`
+				} `json:"error"`
 				Nodes []struct {
 					Body string `json:"body"`
 				} `json:"nodes"`
 			}
-			if json.Unmarshal(reply.Data, &result) == nil && result.Index.Ready {
+			if json.Unmarshal(reply.Data, &result) == nil && result.Error == nil && result.ContractVersion == "2" {
 				found := false
 				for _, node := range result.Nodes {
 					if strings.Contains(node.Body, answer) {

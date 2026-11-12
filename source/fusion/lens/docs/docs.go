@@ -66,19 +66,11 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 }
 
 func isDottedEntityIDOrPrefix(q string) bool {
-	if !strings.Contains(q, ".") {
-		return false
-	}
 	parts := strings.Split(q, ".")
-	if len(parts) < 2 || len(parts) > 6 {
+	if len(parts) < 3 || len(parts) > 6 {
 		return false
 	}
-	for _, p := range parts {
-		if p == "" {
-			return false
-		}
-	}
-	return true
+	return message.IsValidEntityID(q + strings.Repeat(".a", 6-len(parts)))
 }
 
 // Edges declares passage containment, so a passage hit resolves to the document
