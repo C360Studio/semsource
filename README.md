@@ -421,6 +421,7 @@ Optional top-level fields:
 | Field                     | Default              | Description                                                                                                                                                                                         |
 | ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `platform_id`             | `semsource`          | Stem for the retained deployment authority (`semengine_config_<org>_<stem>`); upgrading from SemStreams requires a fresh JetStream store (startup refuses retained `semstreams_config_*` state)      |
+| `config_revision`         | `0`                  | Revision of this file; a booted deployment keeps its retained configuration until this is higher. `semsource add`/`remove` bump it ([details](#changing-configuration-on-an-existing-deployment))   |
 | `http_port`               | `8080`               | ServiceManager HTTP API port (also serves `/graph-gateway/graphql`; the `ui` profile proxies it as `/graphql`)                                                                                      |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
 | `graph.embedder_type`     | `"bm25"`             | Embedding backend: `none` (Tier 0 structural only, no embedder), `bm25` (keyword, no external service), or `http` (semantic — **requires `model_registry` with an `embedding` capability**)         |
@@ -440,6 +441,24 @@ Validate without starting the engine:
 ```bash
 semsource validate
 ```
+
+### Changing configuration on an existing deployment
+
+A deployment keeps the configuration it booted with in its config bucket
+(`semengine_config_<org>_<stem>`) and runs it again on every restart until
+`semsource.json` is newer. The file is newer when its `config_revision` is
+higher than on the boot that last wrote the bucket.
+
+- After editing `semsource.json` by hand, increase `config_revision` by one,
+  then restart.
+- `semsource add` and `semsource remove` increase it for you.
+- When the file differs from the retained configuration and is not newer, the
+  boot logs a warning naming the differing entries (for example
+  `components.source-manifest`) and runs the retained configuration.
+- A newer file replaces the retained configuration, and so does an upgrade
+  that changes the generated composition. Sources added at runtime
+  (`add_source`) that are not in `semsource.json` are dropped; if the warning
+  names one, add it to the file before you bump the revision.
 
 ## Graph Query & Status API
 
