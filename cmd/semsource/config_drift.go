@@ -61,7 +61,7 @@ func startConfigManager(ctx context.Context, generated *semconfig.Config, nc *na
 // bucket until the next bump. It assumes one writer per config bucket; a
 // second application booting on the same store at the same time can delete a
 // component the other just added. Remove this when SemEngine's push replaces
-// the key set (SemEngine issue not yet filed).
+// the key set: https://github.com/C360Studio/semengine/issues/646
 func pruneRetainedComponents(ctx context.Context, configMgr *semconfig.Manager, nc *natsclient.Client, declared semconfig.PlatformConfig, logger *slog.Logger) error {
 	// The bucket is named by the declared pair, as the manager names it; the
 	// effective platform id is the minted one.
