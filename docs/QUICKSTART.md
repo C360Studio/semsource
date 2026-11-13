@@ -18,8 +18,8 @@ networks.
 
 ## Prerequisites
 
-- **Docker** — the recommended path. Docker Compose brings up NATS,
-  embeddings, and SemSource together; nothing else is installed on the host.
+- **Docker** — the recommended path. Docker Compose brings up NATS and
+  SemSource together; nothing else is installed on the host.
 - **Without Docker** you need:
   - the `semsource` binary — `go install github.com/c360studio/semsource/cmd/semsource@latest`
     (Go 1.26.3+), and
@@ -69,8 +69,9 @@ SEMSOURCE_TARGET=../semdev-test docker compose up -d --build --wait
 
 No config file is needed: the default [`configs/mvp.json`](../configs/mvp.json)
 indexes whatever `SEMSOURCE_TARGET` mounts (code, docs, and config files,
-namespace `c360`) and wires `code_search` to the bundled semembed service, so
-search is semantic from the first index.
+namespace `c360`) with in-process Tier 0 BM25 search (`embedder_type: "bm25"`).
+(Neural HTTP embeddings via the opt-in `semantic` profile are tracked for Slice
+04C in [#234](https://github.com/C360Studio/semsource/issues/234).)
 
 **Option B — native binary ("without Docker").** From inside the repository,
 generate a config and run the engine:
@@ -92,8 +93,8 @@ semsource run
 ```
 
 `semsource run` stays in the foreground — leave it running and continue in a
-second terminal. Natively the search index defaults to BM25 keyword ranking
-(no extra services); the compose stack upgrades it to semantic embeddings.
+second terminal. Both native and default Compose runs use Tier 0 BM25 keyword
+ranking with no external embedding service.
 
 ### Step 3 — watch it become ready
 

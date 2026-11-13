@@ -4,7 +4,7 @@
 The SemSource workbench is the project-owned, opt-in operator UI for the ingestion service: a
 SvelteKit app committed under `ui/`, built and released from this repository, and wired into the
 Docker Compose stack only under the opt-in `ui` profile (`docker-compose.yml`), sitting behind
-Caddy alongside the always-on `semsource` and `semembed` core services. It may port audited
+Caddy alongside the always-on `nats` and `semsource` core services. It may port audited
 behavior from sibling sem* UIs but owns it locally rather than depending on their source trees,
 packages, or release process — `docker-compose.ui-dev.yml` and a pinned `SEMSOURCE_UI_IMAGE`
 release digest are the only two ways to run it. `processor/source-manifest` serves the workbench's

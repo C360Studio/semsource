@@ -2,8 +2,8 @@
 #
 # Two ways to run:
 #
-#   docker compose up                 # MVP CORE — NATS + semsource + semembed (tier-1
-#                                     #   semantic search out of the box). No sibling repo
+#   docker compose up                 # MVP CORE — NATS + semsource (tier-0 BM25
+#                                     #   search out of the box). No sibling repo
 #                                     #   needed. semsource HTTP/MCP published on :8080.
 #   SEMSOURCE_UI_IMAGE=<immutable-ref> docker compose --profile ui up
 #                                     # + released SemSource workbench + Caddy.
@@ -17,7 +17,7 @@
 #   8080  — semsource ServiceManager HTTP API + MCP gateway + /graph-gateway/graphql
 #           (PUBLISHED in core profile; proxied by Caddy in ui profile)
 #   4222  — NATS JetStream/KV (internal Docker network)
-#   8081  — semembed OpenAI-compatible embeddings (internal Docker network)
+#   8081  — semembed OpenAI-compatible embeddings (semantic profile, reserved for 04C)
 #   7890  — semsource raw graph WebSocket (internal; proxied via Caddy in ui profile)
 #   9091  — semsource Prometheus metrics (internal; proxied via Caddy in ui profile)
 #   3000  — SemSource workbench (internal Docker network)
@@ -79,17 +79,16 @@ services:
     depends_on:
       nats:
         condition: service_healthy
-      semembed:
-        condition: service_healthy
     networks:
       - c360
     restart: unless-stopped
 
-  # semembed — OpenAI-compatible embeddings (tier-1 semantic search).
-  # Default config (configs/mvp.json) points graph.embedder_type=http at this service.
-  # First-index embedding is CPU-heavy (arctic-embed-s / ONNX fans out across cores);
-  # SEMEMBED_CPUS caps it for local dev — see configs/tiers/README.md.
+  # semembed — OpenAI-compatible embeddings (tier-1 semantic search, 04C).
+  # Gated behind the `semantic` profile while the default config (configs/mvp.json)
+  # uses tier-0 BM25. First-index embedding is CPU-heavy (arctic-embed-s / ONNX fans
+  # out across cores); SEMEMBED_CPUS caps it for local dev — see configs/tiers/README.md.
   semembed:
+    profiles: ["semantic"]
     # Pinned by immutable index digest (compose-packaging-hardening D6): a moved
     # `latest` must never silently change what an install runs. Refresh with:
     #   docker buildx imagetools inspect ghcr.io/c360studio/semembed:latest
