@@ -49,9 +49,10 @@ file it overwrites.
 
 ### Requirement: A newer file replaces the retained components
 
-When the file's version is newer than the retained store's, SemSource SHALL leave no component in the
-retained store that the file's composition lacks, so that a component the file dropped does not return on
-a later boot.
+When the file's version is newer than the retained store's, SemSource SHALL delete from the retained
+store, once the configuration manager has started, every component the file's composition lacks, so that
+a component the file dropped does not return on a later boot. A failure of that deletion SHALL be logged
+and SHALL NOT fail the boot; a component it leaves behind is reported as retained-only on later boots.
 
 #### Scenario: A source removed with the CLI stays removed
 
@@ -66,13 +67,23 @@ a later boot.
 - **WHEN** the operator changes that source's path, bumps `config_revision`, and restarts twice
 - **THEN** only the component for the new path is present on both boots
 
+#### Scenario: The deletion is interrupted
+
+- **GIVEN** a boot that pushed a newer file and stopped before deleting a component the file dropped
+- **WHEN** the application boots again with the same file
+- **THEN** the leftover component is in effect
+- **AND** the configuration-difference warning names it as retained-only
+
 ### Requirement: A retained configuration that differs from the file is reported
 
 When the retained store's configuration is in effect after boot arbitration and its services, components,
 model registry, or NATS settings differ from those the file generates, SemSource SHALL log a warning
 that names the differing entries, never their values, and states that the file's values were not applied.
-Entries that exist only in the retained configuration SHALL be named separately, and the warning SHALL
-then say that making the file newest would drop them. It SHALL NOT warn when nothing differs.
+Components that exist only in the retained configuration SHALL be named separately, and the warning SHALL
+then say that making the file newest would drop them. Components the file enables and the retained
+configuration holds disabled SHALL be named separately, and the warning SHALL then say that making the
+file newest would re-enable them. The warning SHALL NOT state that a newer file removes a model registry
+or service that only the retained configuration holds. It SHALL NOT warn when nothing differs.
 
 #### Scenario: An edit without a revision bump is reported
 
@@ -94,6 +105,13 @@ then say that making the file newest would drop them. It SHALL NOT warn when not
 - **WHEN** the application boots at an equal version
 - **THEN** the warning names that component as retained-only
 - **AND** it does not advise bumping `config_revision` without saying the component would be dropped
+
+#### Scenario: A source removed at runtime is named as retained-disabled
+
+- **GIVEN** a file-defined source whose removal was accepted at runtime
+- **WHEN** the application boots with the same file at an equal version
+- **THEN** the warning names that component as retained-disabled
+- **AND** it says a higher `config_revision` would re-enable it
 
 #### Scenario: An unchanged file is silent
 
