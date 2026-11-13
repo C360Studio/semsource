@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves this proposal. Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approves this proposal.
 
 ## 2. Version
 

@@ -1,6 +1,6 @@
 # Operator config revision
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-12) sha256:4288aff98a78
 
 ## Why
 
