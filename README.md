@@ -421,6 +421,7 @@ Optional top-level fields:
 | Field                     | Default              | Description                                                                                                                                                                                         |
 | ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `platform_id`             | `semsource`          | Stem for the retained deployment authority (`semengine_config_<org>_<stem>`); upgrading from SemStreams requires a fresh JetStream store (startup refuses retained `semstreams_config_*` state)      |
+| `config_revision`         | `0`                  | Revision of this file; a booted deployment keeps its retained configuration until this exceeds the retained one. `semsource add`, `remove` and `init` raise it (see below)                          |
 | `http_port`               | `8080`               | ServiceManager HTTP API port (also serves `/graph-gateway/graphql`; the `ui` profile proxies it as `/graphql`)                                                                                      |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
 | `graph.embedder_type`     | `"bm25"`             | Embedding backend: `none` (Tier 0 structural only, no embedder), `bm25` (keyword, no external service), or `http` (semantic — **requires `model_registry` with an `embedding` capability**)         |
@@ -440,6 +441,45 @@ Validate without starting the engine:
 ```bash
 semsource validate
 ```
+
+### Changing configuration on an existing deployment
+
+A deployment keeps the configuration it booted with in its config bucket
+(`semengine_config_<org>_<stem>`) and runs it again on every restart until
+`semsource.json` is newer. The file is newer when its `config_revision` is
+higher than that of the file the bucket was last written from, or when an
+upgrade changes the generated composition. Environment overrides that feed the
+configuration (`SEMSOURCE_HTTP_PORT`, `SEMSOURCE_WS_BIND`, `SEMSOURCE_WS_PATH`,
+`SEMSOURCE_GIT_TOKEN`) are retained the same way.
+
+- After editing `semsource.json` by hand, or changing one of those environment
+  variables, set `config_revision` higher than the retained one, then restart.
+  One more than the file's usually is; a restored or older copy of the file can
+  need more.
+- `semsource add`, `semsource remove`, and `semsource init` over an existing
+  file raise it for you.
+- When the file differs from the retained configuration and is not newer, the
+  boot logs a warning naming the differing entries (for example
+  `components.source-manifest` or `model_registry`) and runs the retained
+  configuration. Entries only the retained configuration has, such as a source
+  added at runtime with `add_source`, are listed separately as `retained_only`.
+  Sources the file defines and a runtime `remove_source` turned off are listed
+  as `retained_disabled`.
+- A newer file replaces the retained configuration and deletes the retained
+  components it does not define: a source removed from the file, or added at
+  runtime and never written to it, is dropped. Add a runtime source to the file
+  before you raise the revision to keep it.
+- A newer file also re-enables every source it defines, including one removed
+  at runtime with `remove_source`. Remove that source from the file before you
+  raise the revision to keep it off.
+- A boot that stops after applying a newer file but before deleting the
+  components it dropped leaves them behind. They run again on the next restart
+  and the warning names them as `retained_only`; raising the revision once more
+  removes them.
+- A model registry or service that only the retained configuration has cannot
+  be removed at this SemEngine version: it comes back from the config bucket
+  even after a newer file, and the warning keeps naming it.
+- SemSource releases from before `config_revision` refuse a file that sets it.
 
 ## Graph Query & Status API
 

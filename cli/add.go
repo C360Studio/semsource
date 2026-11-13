@@ -76,6 +76,9 @@ func Add(term *Term, configPath string, args []string) error {
 	}
 
 	cfg.Sources = append(cfg.Sources, *entry)
+	// A deployment that has booted keeps its retained configuration until the
+	// file's revision is higher, so the added source applies on the next boot.
+	cfg.ConfigRevision++
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

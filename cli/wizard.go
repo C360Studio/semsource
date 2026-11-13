@@ -2,7 +2,9 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -298,6 +300,17 @@ func buildConfig(namespace string, sources []config.SourceEntry) *config.Config 
 }
 
 func writeAndSummarize(term *Term, configPath string, cfg *config.Config) error {
+	// A deployment that booted from the file being replaced keeps its retained
+	// configuration until the file's revision is higher, so the new file
+	// starts one above the old one.
+	previous, found, err := existingRevision(configPath)
+	if err != nil {
+		return err
+	}
+	if found {
+		cfg.ConfigRevision = previous + 1
+	}
+
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
@@ -310,6 +323,26 @@ func writeAndSummarize(term *Term, configPath string, cfg *config.Config) error 
 	term.Success(fmt.Sprintf("Config written to %s", configPath))
 	printSummary(term, cfg)
 	return nil
+}
+
+// existingRevision reads the config_revision of the file at path. found is
+// false when there is no file, or when it does not parse as a configuration
+// object with a valid revision: there is then no revision to carry forward.
+func existingRevision(path string) (revision int, found bool, err error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read existing %s: %w", path, err)
+	}
+	var doc struct {
+		ConfigRevision int `json:"config_revision"`
+	}
+	if json.Unmarshal(raw, &doc) != nil || doc.ConfigRevision < 0 {
+		return 0, false, nil
+	}
+	return doc.ConfigRevision, true, nil
 }
 
 func printSummary(term *Term, cfg *config.Config) {

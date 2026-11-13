@@ -161,12 +161,9 @@ func runCmd(args []string) (runErr error) {
 		return err
 	}
 
-	configMgr, err := semconfig.NewConfigManager(ssCfg, nc, logger)
+	configMgr, err := startConfigManager(ctx, ssCfg, nc, logger)
 	if err != nil {
-		return fmt.Errorf("create config manager: %w", err)
-	}
-	if err := configMgr.Start(ctx); err != nil {
-		return fmt.Errorf("start config manager: %w", err)
+		return err
 	}
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -533,6 +530,14 @@ func wrapNATSConnError(err error, url string) error {
 	return fmt.Errorf("NATS connection failed: %w", err)
 }
 
+// compositionGeneration is the major position of the composition version. A
+// retained store keeps its configuration until the file's version is newer,
+// so a release that changes what buildSemstreamsConfig generates must bump
+// this, or deployments keep running the previous wiring; the fingerprint test
+// fails until it does. 2 was the beta.160 foundation cutover (typed ports,
+// defaults-deferral, no ownership), 3 the SETUP 03A lifecycle baseline.
+const compositionGeneration = 3
+
 // buildSemstreamsConfig constructs a semstreams config.Config from the semsource
 // config: source components, the manifest, the full graph subsystem, the
 // WebSocket output, and the fusion gateways.
@@ -601,10 +606,10 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 
 	ssCfg := &semconfig.Config{
 		// KV sync control: an equal-or-older version never replaces the
-		// configuration already selected from KV (beta.160 rule). Bump this on
-		// EVERY change to the generated composition — 2.0.0 is the beta.160
-		// foundation cutover (typed ports, defaults-deferral, no ownership).
-		Version: "3.0.0",
+		// configuration a retained store already holds. The binary and the
+		// operator each own one position, so either can make the file newest:
+		// the generation for the generated wiring, config_revision for edits.
+		Version: fmt.Sprintf("%d.%d.0", compositionGeneration, cfg.ConfigRevision),
 		Platform: semconfig.PlatformConfig{
 			Org:         org,
 			ID:          cfg.PlatformStem(),
