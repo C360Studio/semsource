@@ -24,6 +24,16 @@
 - [x] 4.2 Integration test on a real broker: same file twice is silent; an edit without a revision bump
   warns and is not applied; the same edit with a bump is applied.
 
+## 4a. Review round 1
+
+- [x] 4a.1 After a file-newer boot, delete retained component keys the composition lacks; integration
+  cases for remove and for a path change across three boots.
+- [x] 4a.2 Extend the comparison to the model registry and NATS settings.
+- [x] 4a.3 Name retained-only entries separately and make the hint non-destructive.
+- [x] 4a.4 `semsource init` over an existing file carries the revision forward.
+- [x] 4a.5 README: the retained revision must be exceeded; environment overrides are retained too; older
+  binaries refuse the field.
+
 ## 5. Documentation
 
 - [x] 5.1 README: `config_revision` in the configuration table and a short "changing configuration on an

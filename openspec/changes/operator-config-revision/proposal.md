@@ -22,16 +22,21 @@ operator can never make their file newest. Nothing warns when the file and the s
   `config_revision` absent the version is `3.0.0`, identical to today, so retained stores see no change.
 - `semsource add` and `semsource remove` increment `config_revision` when they write the file, so a
   CLI change takes effect on the next boot of a retained store.
-- At boot, when the retained store is in effect and its services or components differ from what the file
-  generates, SemSource logs a warning naming the differing entries and the remedy.
+- After a boot where the file is newest, SemSource deletes retained component keys the file's composition
+  lacks. SemEngine's push overlays and deletes nothing, so a removed source otherwise returns one boot later.
+- At boot, when the retained store is in effect and its services, components, model registry or NATS
+  settings differ from what the file generates, SemSource logs a warning naming the entries. Entries that
+  exist only in the retained store are named separately, with the note that a newer file would drop them.
+- `semsource init` over an existing file writes that file's revision plus one.
 - A test fingerprints the composition generated from a fixed configuration and fails when it changes
   without a generation bump.
 - README documents the field and how to change configuration on an existing deployment.
 
 ## Non-goals
 
-- Bumping the store's version when a runtime change is accepted, and making a newer-file push replace the
-  store's key set. Both are SemEngine asks recorded on #266.
+- Bumping the store's version when a runtime change is accepted (SemEngine ask recorded on #266).
+- A generation bump for #222. Every generation-3 `semengine_config_*` store was written by #222's
+  composition, because #222 renamed the bucket.
 - Writing runtime-accepted sources back to `semsource.json`. Open owner question on #266: a file that
   becomes newest replaces the store, so runtime-added sources absent from the file are dropped.
 - An environment override for the revision.

@@ -102,3 +102,46 @@ func TestSourceCommandsAdvanceConfigRevision(t *testing.T) {
 }
 
 func intPtr(v int) *int { return &v }
+
+// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
+func TestInitCarriesConfigRevisionForward(t *testing.T) {
+	detected := &ProjectInfo{Namespace: "acme", HasDocs: true, DocPaths: []string{"docs/"}}
+	tests := []struct {
+		name         string
+		existing     string // the file init overwrites, or "" for none
+		wantRevision *int   // nil: the member stays absent
+	}{
+		{name: "existing file at revision 4", existing: `{"namespace": "old", "config_revision": 4, "sources": []}`, wantRevision: intPtr(5)},
+		{name: "existing file without a revision", existing: `{"namespace": "old", "sources": []}`, wantRevision: intPtr(1)},
+		{name: "no existing file"},
+		{name: "existing file that does not parse", existing: `not json`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "semsource.json")
+			input := ""
+			if tc.existing != "" {
+				if err := os.WriteFile(path, []byte(tc.existing), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				input = "y\n" // confirm the overwrite
+			}
+			term, _ := newTestTerm(input)
+			if err := InitQuick(term, path, detected); err != nil {
+				t.Fatalf("InitQuick: %v", err)
+			}
+			gotRevision, gotSources := writtenRevision(t, path)
+			if gotSources != 1 {
+				t.Fatalf("sources = %d, want the 1 detected: init did not write the file", gotSources)
+			}
+			switch {
+			case tc.wantRevision == nil && gotRevision != nil:
+				t.Errorf("config_revision = %d, want absent", *gotRevision)
+			case tc.wantRevision != nil && gotRevision == nil:
+				t.Errorf("config_revision absent, want %d", *tc.wantRevision)
+			case tc.wantRevision != nil && *gotRevision != *tc.wantRevision:
+				t.Errorf("config_revision = %d, want %d", *gotRevision, *tc.wantRevision)
+			}
+		})
+	}
+}
