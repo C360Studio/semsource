@@ -34,18 +34,18 @@ grep -q 'SEMSOURCE_TARGET' "$quickstart_doc" ||
 # before any paid or long-running stack work begins.
 export SEMSOURCE_UI_IMAGE="${SEMSOURCE_UI_IMAGE:-registry.invalid/c360/semsource-ui:unavailable@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff}"
 core_services=$(docker compose config --services | sort)
-expected_core_services=$(printf '%s\n' nats semembed semsource | sort)
+expected_core_services=$(printf '%s\n' nats semsource | sort)
 if [ "$core_services" != "$expected_core_services" ]; then
 	echo "Default Compose resolved unexpected services:" >&2
 	printf '%s\n' "$core_services" >&2
 	exit 1
 fi
-if docker compose config --images | grep -Eq 'semsource-ui|registry\.invalid|caddy'; then
-	echo "Default Compose unexpectedly resolved a UI or proxy image" >&2
+if docker compose config --images | grep -Eq 'semsource-ui|registry\.invalid|caddy|semembed'; then
+	echo "Default Compose unexpectedly resolved a UI, proxy, or semembed image" >&2
 	docker compose config --images >&2
 	exit 1
 fi
-echo "Default Compose resolves exactly nats, semembed, and semsource; UI image and Caddy are absent"
+echo "Default Compose resolves exactly nats and semsource; UI image, Caddy, and semembed are absent"
 
 created_workspace=0
 smoke_workspace=${SEMSOURCE_SMOKE_WORKSPACE:-}
@@ -105,7 +105,6 @@ print_diagnostics() {
 	echo "Recent Docker Compose state:" >&2
 	docker compose ps >&2 || true
 	docker compose logs --tail=120 semsource >&2 || true
-	docker compose logs --tail=80 semembed >&2 || true
 }
 
 cleanup() {

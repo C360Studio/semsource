@@ -8,8 +8,14 @@
 #
 # This is a DEV overlay, deliberately not a profile on the core stack: tier 2 is
 # a ~1GB image running real LLM inference, and the shippable MVP must stay
-# nats+semembed+semsource (scripts/core-profile-smoke.sh asserts that exact set).
+# nats+semsource (scripts/core-profile-smoke.sh asserts that exact set).
 services:
+  # Tier 2 needs both semembed (semantic embeddings) and seminstruct (LLM).
+  # Clear the core stack's `semantic` profile so the tier-2 overlay brings up
+  # semembed automatically without needing `--profile semantic`.
+  semembed:
+    profiles: !reset []
+
   # seminstruct — OpenAI-compatible inference proxy (llama-server, qwen3-0.6b).
   # The GGUF is baked into the image at /models/model.gguf, so there is no
   # runtime model download and no volume to provision.

@@ -71,3 +71,30 @@ func TestSourcePayloadBindsRegistryContract(t *testing.T) {
 	}
 	t.Fatal("source entity contract missing from payload authority")
 }
+
+// spec: openspec/specs/compose-deployment/spec.md#Requirement: Every documented config path boots
+func TestDefaultComposeConfigDeclaresComponents(t *testing.T) {
+	cfg, err := config.LoadConfig("../../configs/mvp.json")
+	if err != nil {
+		t.Fatalf("LoadConfig(configs/mvp.json): %v", err)
+	}
+	if cfg.Graph == nil || cfg.Graph.EmbedderType != "bm25" {
+		t.Fatalf("configs/mvp.json graph.embedder_type = %v, want \"bm25\"", cfg.Graph)
+	}
+	ssCfg, err := buildSemstreamsConfig(cfg, cfg.Namespace)
+	if err != nil {
+		t.Fatalf("buildSemstreamsConfig(configs/mvp.json): %v", err)
+	}
+	registry := component.NewRegistry()
+	if err := registerComponentFactories(registry); err != nil {
+		t.Fatal(err)
+	}
+	if err := requireRegisteredFactories(registry, ssCfg.Components); err != nil {
+		t.Fatalf("requireRegisteredFactories: %v", err)
+	}
+	for instance, cc := range ssCfg.Components {
+		if _, err := registry.Declare(instance, cc); err != nil {
+			t.Errorf("Declare(%s, factory %s): %v", instance, cc.Name, err)
+		}
+	}
+}

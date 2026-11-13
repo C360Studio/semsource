@@ -78,11 +78,6 @@ esac
 [ -d "$smoke_workspace" ] || fail "SEMSOURCE_SMOKE_WORKSPACE '$smoke_workspace' does not exist"
 
 export SEMSOURCE_TARGET="$smoke_workspace"
-# SemEngine Tier 0 / 04B admits only embedder_type="bm25" on graph-embedding
-# until semengine#489 (04C HTTP embedder) lands. Default the UI profile smoke
-# to configs/semsource.json (namespace "c360", default bm25 embedder) while
-# keeping mvp.json untouched for the 04C cutover.
-export SEMSOURCE_CONFIG="${SEMSOURCE_CONFIG:-semsource.json}"
 export SEMSOURCE_HTTP_PORT="${SEMSOURCE_HTTP_PORT:-18080}"
 export NATS_HOST_PORT="${NATS_HOST_PORT:-14222}"
 export NATS_MONITOR_HOST_PORT="${NATS_MONITOR_HOST_PORT:-18222}"

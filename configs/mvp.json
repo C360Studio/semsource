@@ -33,25 +33,8 @@
     "/workspace"
   ],
   "graph": {
-    "embedder_type": "http",
+    "embedder_type": "bm25",
     "index_workers": 4,
     "coalesce_ms": 200
-  },
-  "model_registry": {
-    "endpoints": {
-      "semembed": {
-        "provider": "openai",
-        "url": "http://semembed:8081/v1",
-        "model": "Snowflake/snowflake-arctic-embed-s",
-        "query_prefix": "Represent this sentence for searching relevant passages: "
-      }
-    },
-    "capabilities": {
-      "embedding": {
-        "preferred": [
-          "semembed"
-        ]
-      }
-    }
   }
 }
