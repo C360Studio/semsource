@@ -54,10 +54,11 @@ func driftFixture(t *testing.T) *semconfig.Config {
 // spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
 func TestRetainedConfigDrift(t *testing.T) {
 	tests := []struct {
-		name             string
-		mutate           func(effective *semconfig.Config)
-		wantDiffering    []string
-		wantRetainedOnly []string
+		name                 string
+		mutate               func(effective *semconfig.Config)
+		wantDiffering        []string
+		wantRetainedOnly     []string
+		wantRetainedDisabled []string
 	}{
 		{name: "identical", mutate: func(*semconfig.Config) {}},
 		{
@@ -80,13 +81,23 @@ func TestRetainedConfigDrift(t *testing.T) {
 			wantDiffering: []string{"components.doc-source-guide"},
 		},
 		{
-			name: "component disabled",
+			name: "component the file enables held disabled",
 			mutate: func(c *semconfig.Config) {
 				guide := c.Components["doc-source-guide"]
 				guide.Enabled = false
 				c.Components["doc-source-guide"] = guide
 			},
-			wantDiffering: []string{"components.doc-source-guide"},
+			wantRetainedDisabled: []string{"components.doc-source-guide"},
+		},
+		{
+			name: "component held disabled with its config edited too",
+			mutate: func(c *semconfig.Config) {
+				guide := c.Components["doc-source-guide"]
+				guide.Enabled = false
+				guide.Config = json.RawMessage(`{"paths":["./other"]}`)
+				c.Components["doc-source-guide"] = guide
+			},
+			wantRetainedDisabled: []string{"components.doc-source-guide"},
 		},
 		{
 			name: "component only in the retained configuration",
@@ -153,6 +164,9 @@ func TestRetainedConfigDrift(t *testing.T) {
 			if !sameNames(got.retainedOnly, tc.wantRetainedOnly) {
 				t.Errorf("retainedOnly = %v, want %v", got.retainedOnly, tc.wantRetainedOnly)
 			}
+			if !sameNames(got.retainedDisabled, tc.wantRetainedDisabled) {
+				t.Errorf("retainedDisabled = %v, want %v", got.retainedDisabled, tc.wantRetainedDisabled)
+			}
 		})
 	}
 }
@@ -166,13 +180,13 @@ func TestWarnRetainedConfigDrift(t *testing.T) {
 			t.Fatalf("logged %d drift warnings for equal configurations", len(got))
 		}
 	})
-	t.Run("differing only: capped, with the bump hint", func(t *testing.T) {
+	t.Run("differing only: capped, with the plain hint", func(t *testing.T) {
 		fromFile, effective := driftFixture(t), driftFixture(t)
 		var want []string
 		for i := range 12 {
 			name := fmt.Sprintf("edited-%02d", i)
-			fromFile.Components[name] = types.ComponentConfig{Name: "doc-source", Enabled: true}
-			effective.Components[name] = types.ComponentConfig{Name: "doc-source"}
+			fromFile.Components[name] = types.ComponentConfig{Name: "doc-source", Enabled: true, Config: json.RawMessage(`{"paths":["./a"]}`)}
+			effective.Components[name] = types.ComponentConfig{Name: "doc-source", Enabled: true, Config: json.RawMessage(`{"paths":["./b"]}`)}
 			if i < 10 {
 				want = append(want, "components."+name)
 			}
@@ -188,8 +202,16 @@ func TestWarnRetainedConfigDrift(t *testing.T) {
 			t.Errorf("retained_only_count = %v, want 0", n)
 		}
 		hint, _ := recordAttr(rec, "hint").(string)
-		if !strings.Contains(hint, "higher than the retained one") || strings.Contains(hint, "drops") {
-			t.Errorf("hint %q: want the bump remedy, worded against the retained revision, with nothing dropped", hint)
+		if hint != retainedHint {
+			t.Errorf("hint = %q, want the plain hint", hint)
+		}
+		for _, promise := range []string{"for the file to apply", "drops", "re-enables"} {
+			if strings.Contains(hint, promise) {
+				t.Errorf("plain hint %q says %q", hint, promise)
+			}
+		}
+		if !strings.Contains(hint, "retained configuration stays in effect until") || !strings.Contains(hint, "README") {
+			t.Errorf("plain hint %q does not say the retained configuration wins until the revision is higher and point at the README", hint)
 		}
 	})
 	t.Run("retained-only entries are named separately and the hint warns they drop", func(t *testing.T) {
@@ -213,8 +235,39 @@ func TestWarnRetainedConfigDrift(t *testing.T) {
 			t.Errorf("retained_only_count = %v, want 11", n)
 		}
 		hint, _ := recordAttr(rec, "hint").(string)
-		if !strings.Contains(hint, "drops the retained_only entries") || !strings.Contains(hint, "add them to the file first") {
-			t.Errorf("hint %q does not warn that making the file newest drops the retained-only entries", hint)
+		if !strings.Contains(hint, "drops the retained_only components") || !strings.Contains(hint, "add them to the file first") {
+			t.Errorf("hint %q does not warn that making the file newest drops the retained-only components", hint)
+		}
+	})
+	t.Run("a retained-only service gets the plain hint: a newer file does not remove it", func(t *testing.T) {
+		effective := driftFixture(t)
+		effective.Services["extra"] = types.ServiceConfig{Enabled: true}
+		rec := oneDriftWarning(t, driftFixture(t), effective)
+		if got := recordAttr(rec, "retained_only"); !reflect.DeepEqual(got, []string{"services.extra"}) {
+			t.Errorf("retained_only = %v, want [services.extra]", got)
+		}
+		if hint := recordAttr(rec, "hint"); hint != retainedHint {
+			t.Errorf("hint = %q, want the plain hint", hint)
+		}
+	})
+	t.Run("retained-disabled components are named separately and the hint warns they re-enable", func(t *testing.T) {
+		effective := driftFixture(t)
+		guide := effective.Components["doc-source-guide"]
+		guide.Enabled = false
+		effective.Components["doc-source-guide"] = guide
+		rec := oneDriftWarning(t, driftFixture(t), effective)
+		if entries := recordAttr(rec, "entries"); len(entries.([]string)) != 0 {
+			t.Errorf("entries = %v, want none: retained-disabled names belong to retained_disabled", entries)
+		}
+		if got := recordAttr(rec, "retained_disabled"); !reflect.DeepEqual(got, []string{"components.doc-source-guide"}) {
+			t.Errorf("retained_disabled = %v, want [components.doc-source-guide]", got)
+		}
+		if n := recordAttr(rec, "retained_disabled_count"); n != int64(1) {
+			t.Errorf("retained_disabled_count = %v, want 1", n)
+		}
+		hint, _ := recordAttr(rec, "hint").(string)
+		if !strings.Contains(hint, "re-enables the retained_disabled components") || strings.Contains(hint, "drops") {
+			t.Errorf("hint %q does not warn that making the file newest re-enables the retained-disabled component, and only that", hint)
 		}
 	})
 	t.Run("names entries, never values", func(t *testing.T) {

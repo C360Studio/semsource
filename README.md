@@ -463,12 +463,22 @@ configuration (`SEMSOURCE_HTTP_PORT`, `SEMSOURCE_WS_BIND`, `SEMSOURCE_WS_PATH`,
   `components.source-manifest` or `model_registry`) and runs the retained
   configuration. Entries only the retained configuration has, such as a source
   added at runtime with `add_source`, are listed separately as `retained_only`.
+  Sources the file defines and a runtime `remove_source` turned off are listed
+  as `retained_disabled`.
 - A newer file replaces the retained configuration and deletes the retained
   components it does not define: a source removed from the file, or added at
   runtime and never written to it, is dropped. Add a runtime source to the file
-  before you raise the revision to keep it. A retained model registry or
-  service that the file no longer defines is not deleted; the warning keeps
-  naming it.
+  before you raise the revision to keep it.
+- A newer file also re-enables every source it defines, including one removed
+  at runtime with `remove_source`. Remove that source from the file before you
+  raise the revision to keep it off.
+- A boot that stops after applying a newer file but before deleting the
+  components it dropped leaves them behind. They run again on the next restart
+  and the warning names them as `retained_only`; raising the revision once more
+  removes them.
+- A model registry or service that only the retained configuration has cannot
+  be removed at this SemEngine version: it comes back from the config bucket
+  even after a newer file, and the warning keeps naming it.
 - SemSource releases from before `config_revision` refuse a file that sets it.
 
 ## Graph Query & Status API

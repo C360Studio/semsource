@@ -36,14 +36,14 @@
 
 ## 4b. Review round 2 (rulings on PR #271)
 
-- [ ] 4b.1 A prune failure is logged at Warn and does not fail the boot; add a test for that path.
-- [ ] 4b.2 Extend the prune's `// shortcut:` comment: components only, the window between the push and
+- [x] 4b.1 A prune failure is logged at Warn and does not fail the boot; add a test for that path.
+- [x] 4b.2 Extend the prune's `// shortcut:` comment: components only, the window between the push and
   the deletion, the single-writer assumption, and the SemEngine issue once it is filed.
-- [ ] 4b.3 Name components the file enables and the store holds disabled under `retained_disabled`, with
+- [x] 4b.3 Name components the file enables and the store holds disabled under `retained_disabled`, with
   the re-enable consequence in the hint; unit and integration cases.
-- [ ] 4b.4 The plain hint stops promising that the file's values persist: it says the retained
+- [x] 4b.4 The plain hint stops promising that the file's values persist: it says the retained
   configuration wins until the file's revision is higher and points at the README section.
-- [ ] 4b.5 README: a newer file re-enables sources removed at runtime; an interrupted boot can leave a
+- [x] 4b.5 README: a newer file re-enables sources removed at runtime; an interrupted boot can leave a
   dropped component behind until the next bump; a model registry or service the file no longer has is
   not removable at this SemEngine version.
 

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semsource/cli"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/internal/natstest"
@@ -406,11 +408,117 @@ func TestIntegrationRetainedOnlyComponentIsNamedSeparately(t *testing.T) {
 	if only := recordAttr(drift[0], "retained_only"); !reflect.DeepEqual(only, []string{"components.doc-source-runtime"}) {
 		t.Errorf("retained_only = %v, want [components.doc-source-runtime]", only)
 	}
-	if hint, _ := recordAttr(drift[0], "hint").(string); !strings.Contains(hint, "drops the retained_only entries") {
+	if hint, _ := recordAttr(drift[0], "hint").(string); !strings.Contains(hint, "drops the retained_only components") {
 		t.Errorf("hint %q does not say that making the file newest drops the retained-only entry", hint)
 	}
 	if _, ok := got.effective.Components["doc-source-runtime"]; !ok {
 		t.Error("the retained runtime source is not in effect at an equal version")
+	}
+}
+
+// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A newer file replaces the retained components
+func TestIntegrationPruneFailureDoesNotFailTheBoot(t *testing.T) {
+	broker := natstest.New(t, natstest.WithJetStream())
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	writeFile(t, path, revisionFile("", `[{"type": "docs", "paths": ["./guide"]}, {"type": "docs", "paths": ["./other"]}]`))
+	bootConfigFile(ctx, t, broker.URL, path)
+	if err := cli.Remove(cli.NewTerm(strings.NewReader(""), io.Discard), path, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	// The boot that pushes the newer file stops short of the deletion.
+	pruneFailure := errors.New("injected prune failure")
+	t.Cleanup(func() { pruneComponents = pruneRetainedComponents })
+	pruneComponents = func(context.Context, *semconfig.Manager, *natsclient.Client, semconfig.PlatformConfig, *slog.Logger) error {
+		return pruneFailure
+	}
+	pushed := bootConfigFile(ctx, t, broker.URL, path)
+	pruneComponents = pruneRetainedComponents
+	warned := pushed.logs.withMessage(pruneFailedMessage)
+	if len(warned) != 1 || warned[0].Level != slog.LevelWarn {
+		t.Fatalf("prune-failure warnings = %d, want one at WARN", len(warned))
+	}
+	if err, _ := recordAttr(warned[0], "error").(error); !errors.Is(err, pruneFailure) {
+		t.Errorf("warning error = %v, want the prune failure", recordAttr(warned[0], "error"))
+	}
+	if _, ok := pushed.revisions["components.doc-source-other"]; !ok {
+		t.Fatal("the failed prune removed components.doc-source-other anyway; the fixture does not exercise the leftover")
+	}
+
+	// The next boot at the same version loads the leftover and names it.
+	next := bootConfigFile(ctx, t, broker.URL, path)
+	if _, ok := next.effective.Components["doc-source-other"]; !ok {
+		t.Error("the leftover component is not in effect after the interrupted deletion")
+	}
+	drift := next.drift()
+	if len(drift) != 1 {
+		t.Fatalf("logged %d drift warnings, want 1", len(drift))
+	}
+	if only := recordAttr(drift[0], "retained_only"); !reflect.DeepEqual(only, []string{"components.doc-source-other"}) {
+		t.Errorf("retained_only = %v, want [components.doc-source-other]", only)
+	}
+}
+
+// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
+func TestIntegrationRuntimeRemovedSourceIsNamedRetainedDisabled(t *testing.T) {
+	broker := natstest.New(t, natstest.WithJetStream())
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	writeFile(t, path, revisionFile("", guideSource))
+	bootConfigFile(ctx, t, broker.URL, path)
+
+	// A runtime removal of a file-defined source holds it disabled in the
+	// bucket, the way the remove handler records it for the next boot.
+	nc, ssCfg, err := setupNATS(ctx, broker.URL, mustLoad(ctx, t, path), slog.New(&recordedLogs{}), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := nc.Close(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+	configMgr, err := startConfigManager(ctx, ssCfg, nc, slog.New(&recordedLogs{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := configMgr.GetConfig().Get().Components["doc-source-guide"]
+	removed.Enabled = false
+	if err := configMgr.PutComponentToKV(ctx, "doc-source-guide", removed); err != nil {
+		t.Fatal(err)
+	}
+	if err := configMgr.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	got := bootConfigFile(ctx, t, broker.URL, path)
+	drift := got.drift()
+	if len(drift) != 1 {
+		t.Fatalf("logged %d drift warnings, want 1", len(drift))
+	}
+	if entries := recordAttr(drift[0], "entries"); len(entries.([]string)) != 0 {
+		t.Errorf("entries = %v, want none", entries)
+	}
+	if disabled := recordAttr(drift[0], "retained_disabled"); !reflect.DeepEqual(disabled, []string{"components.doc-source-guide"}) {
+		t.Errorf("retained_disabled = %v, want [components.doc-source-guide]", disabled)
+	}
+	if hint, _ := recordAttr(drift[0], "hint").(string); !strings.Contains(hint, "re-enables the retained_disabled components") {
+		t.Errorf("hint %q does not say that making the file newest re-enables the component", hint)
+	}
+	if got.effective.Components["doc-source-guide"].Enabled {
+		t.Error("the runtime removal is not in effect at an equal version")
+	}
+
+	writeFile(t, path, revisionFile(`"config_revision": 1,`, guideSource))
+	bumped := bootConfigFile(ctx, t, broker.URL, path)
+	if !bumped.effective.Components["doc-source-guide"].Enabled {
+		t.Error("a higher config_revision did not re-enable the source, as the hint says it would")
+	}
+	if n := len(bumped.drift()); n != 0 {
+		t.Errorf("logged %d drift warnings after the bump, want none", n)
 	}
 }
 

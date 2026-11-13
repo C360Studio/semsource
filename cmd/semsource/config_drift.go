@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	semconfig "github.com/c360studio/semengine/config"
 	"github.com/c360studio/semengine/graph/kvcatalog"
@@ -39,10 +37,11 @@ func startConfigManager(ctx context.Context, generated *semconfig.Config, nc *na
 	if err := configMgr.Start(ctx); err != nil {
 		return nil, fmt.Errorf("start config manager: %w", err)
 	}
-	if err := pruneRetainedComponents(ctx, configMgr, nc, fromFile.Platform, logger); err != nil {
-		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		return nil, errors.Join(err, configMgr.Stop(stopCtx))
+	// A component the prune leaves behind is named as retained-only by the
+	// drift warning below and on every later boot, and the next bump clears
+	// it, so a failure here does not stop the boot.
+	if err := pruneComponents(ctx, configMgr, nc, fromFile.Platform, logger); err != nil {
+		logger.Warn(pruneFailedMessage, "error", err)
 	}
 	warnRetainedConfigDrift(logger, fromFile, configMgr.GetConfig().Get())
 	return configMgr, nil
@@ -55,8 +54,13 @@ func startConfigManager(ctx context.Context, generated *semconfig.Config, nc *na
 // add left behind, which the next equal-version boot would load back.
 //
 // shortcut: SemEngine's push overlays the bucket instead of replacing its key
-// set, and only components have a public delete; remove this when its push
-// replaces the key set.
+// set, and only components have a public delete, so a model registry or
+// service the file dropped stays retained. The prune runs after the push, not
+// with it: a boot stopped between the two leaves the dropped component in the
+// bucket until the next bump. It assumes one writer per config bucket; a
+// second application booting on the same store at the same time can delete a
+// component the other just added. Remove this when SemEngine's push replaces
+// the key set (SemEngine issue not yet filed).
 func pruneRetainedComponents(ctx context.Context, configMgr *semconfig.Manager, nc *natsclient.Client, declared semconfig.PlatformConfig, logger *slog.Logger) error {
 	// The bucket is named by the declared pair, as the manager names it; the
 	// effective platform id is the minted one.
@@ -93,22 +97,35 @@ func pruneRetainedComponents(ctx context.Context, configMgr *semconfig.Manager, 
 	return nil
 }
 
+// pruneComponents is pruneRetainedComponents; integration tests replace it to
+// fail the prune.
+var pruneComponents = pruneRetainedComponents
+
 // prunedComponentsMessage is the record pruneRetainedComponents logs.
 const prunedComponentsMessage = "removed retained components the configuration file no longer defines"
+
+// pruneFailedMessage is the warning startConfigManager logs when the prune fails.
+const pruneFailedMessage = "could not remove retained components the configuration file no longer defines; " +
+	"they stay in effect and are named as retained_only until the next config_revision bump"
 
 // retainedConfigDriftMessage is the warning warnRetainedConfigDrift logs.
 const retainedConfigDriftMessage = "configuration file differs from the retained configuration; " +
 	"the retained configuration is in effect and the file's values were not applied"
 
 const (
-	// bumpHint is the remedy when nothing would be lost. The retained revision
-	// can be above the file's (a restored file, an older binary), so "+1" is
-	// not always enough.
-	bumpHint = "set config_revision in the configuration file higher than the retained one for the file to apply on the next boot"
-	// retainedOnlyHint replaces it when making the file newest would drop
-	// entries, such as a source added at runtime.
-	retainedOnlyHint = "a config_revision higher than the retained one makes the configuration file apply on the next boot " +
-		"and drops the retained_only entries; add them to the file first to keep them"
+	// retainedHint is the remedy every warning gives. It does not promise that
+	// a newer file's values persist: a model registry or service the file no
+	// longer defines comes back from the bucket. The retained revision can be
+	// above the file's (a restored file, an older binary), so "+1" is not
+	// always enough.
+	retainedHint = "the retained configuration stays in effect until config_revision in the configuration file is higher than the retained one; " +
+		"see \"Changing configuration on an existing deployment\" in the README"
+	// retainedOnlyHint is added when a newer file would drop components, such
+	// as a source added at runtime.
+	retainedOnlyHint = "; a higher config_revision drops the retained_only components, so add them to the file first to keep them"
+	// retainedDisabledHint is added when a newer file would re-enable
+	// components, such as a file-defined source removed at runtime.
+	retainedDisabledHint = "; a higher config_revision re-enables the retained_disabled components, so remove them from the file first to keep them off"
 )
 
 // warnRetainedConfigDrift logs one warning naming the entries that differ
@@ -116,20 +133,36 @@ const (
 // are equal. It names entries, never their values.
 func warnRetainedConfigDrift(logger *slog.Logger, fromFile, effective *semconfig.Config) {
 	drift := retainedConfigDrift(fromFile, effective)
-	if len(drift.differing) == 0 && len(drift.retainedOnly) == 0 {
+	if len(drift.differing) == 0 && len(drift.retainedOnly) == 0 && len(drift.retainedDisabled) == 0 {
 		return
 	}
-	hint := bumpHint
-	if len(drift.retainedOnly) > 0 {
-		hint = retainedOnlyHint
+	hint := retainedHint
+	if hasComponent(drift.retainedOnly) {
+		hint += retainedOnlyHint
+	}
+	if len(drift.retainedDisabled) > 0 {
+		hint += retainedDisabledHint
 	}
 	logger.Warn(retainedConfigDriftMessage,
 		"entries", capNames(drift.differing),
 		"differing", len(drift.differing),
 		"retained_only", capNames(drift.retainedOnly),
 		"retained_only_count", len(drift.retainedOnly),
+		"retained_disabled", capNames(drift.retainedDisabled),
+		"retained_disabled_count", len(drift.retainedDisabled),
 		"file_version", fromFile.Version,
 		"hint", hint)
+}
+
+// hasComponent reports whether names holds a component; a newer file deletes
+// only retained components, not services.
+func hasComponent(names []string) bool {
+	for _, name := range names {
+		if strings.HasPrefix(name, "components.") {
+			return true
+		}
+	}
+	return false
 }
 
 func capNames(names []string) []string {
@@ -145,11 +178,14 @@ func capNames(names []string) []string {
 type configDrift struct {
 	// differing holds the services and components the file defines whose
 	// effective value differs or is absent, and "model_registry" and "nats"
-	// when those values differ.
+	// when those values differ, except those in retainedDisabled.
 	differing []string
 	// retainedOnly holds the services and components only the effective
 	// configuration defines.
 	retainedOnly []string
+	// retainedDisabled holds the components the file enables and the
+	// effective configuration holds disabled, as a runtime removal leaves them.
+	retainedDisabled []string
 }
 
 // retainedConfigDrift compares the sections the config bucket retains and a
@@ -158,8 +194,15 @@ type configDrift struct {
 // re-encoding through the bucket is not a difference.
 func retainedConfigDrift(fromFile, effective *semconfig.Config) configDrift {
 	var drift configDrift
-	appendDrift(&drift, "services", fromFile.Services, effective.Services)
-	appendDrift(&drift, "components", fromFile.Components, effective.Components)
+	appendDrift(&drift, "services", fromFile.Services, effective.Services, nil)
+	disabled := map[string]bool{}
+	for name, want := range fromFile.Components {
+		if got, ok := effective.Components[name]; ok && want.Enabled && !got.Enabled {
+			disabled[name] = true
+			drift.retainedDisabled = append(drift.retainedDisabled, "components."+name)
+		}
+	}
+	appendDrift(&drift, "components", fromFile.Components, effective.Components, disabled)
 	if !sameDecodedJSON(fromFile.ModelRegistry, effective.ModelRegistry) {
 		drift.differing = append(drift.differing, "model_registry")
 	}
@@ -168,11 +211,16 @@ func retainedConfigDrift(fromFile, effective *semconfig.Config) configDrift {
 	}
 	sort.Strings(drift.differing)
 	sort.Strings(drift.retainedOnly)
+	sort.Strings(drift.retainedDisabled)
 	return drift
 }
 
-func appendDrift[T any](drift *configDrift, section string, fromFile, effective map[string]T) {
+// appendDrift skips the file's entries named in skip.
+func appendDrift[T any](drift *configDrift, section string, fromFile, effective map[string]T, skip map[string]bool) {
 	for name, want := range fromFile {
+		if skip[name] {
+			continue
+		}
 		if got, ok := effective[name]; !ok || !sameDecodedJSON(want, got) {
 			drift.differing = append(drift.differing, section+"."+name)
 		}
