@@ -145,31 +145,31 @@ semsource remove --index 2
 ## Docker Compose
 
 The compose file ships a UI-free **MVP core** by default and an optional `ui` profile. The core is
-everything needed for a working, semantically-searchable graph in one command, with no browser,
-proxy, UI image, sibling repo, or Node.js requirement.
+everything needed for a working, searchable graph in one command, with no browser, proxy, UI image,
+sibling repo, or Node.js requirement.
 
 Here, **UI-free** (or **headless deployment**) means that no workbench profile is enabled. It does
 not select a SemSource runtime mode. Remove the old `mode` key from `semsource.json`; strict loading
 rejects it as an unknown field, and `SEMSOURCE_MODE` is ignored. SemSource has one external-service
 runtime.
 
-### MVP core (default) — tier-1 semantic search out of the box
+### MVP core (default) — Tier 0 BM25 search out of the box
 
 ```bash
 docker compose up
 ```
 
-Brings up three services and indexes the current directory (`SEMSOURCE_TARGET`, default `.`):
+Brings up two services and indexes the current directory (`SEMSOURCE_TARGET`, default `.`):
 
 | Service   | Port             | Description                                                            |
 | --------- | ---------------- | ---------------------------------------------------------------------- |
 | SemSource | `localhost:8080` | Ingest + ServiceManager HTTP API **+ MCP gateway** (published to host) |
-| semembed  | internal `:8081` | OpenAI-compatible embeddings (tier-1 semantic search)                  |
 | NATS      | internal `:4222` | JetStream and KV substrate                                             |
 
-SemSource runs on [`configs/mvp.json`](configs/mvp.json) — `embedder_type: http` wired to semembed, so
-`code_search` is true semantic (paraphrase-robust) from the first index, not just BM25. Point an agent at
-the MCP gateway:
+SemSource runs on [`configs/mvp.json`](configs/mvp.json) with `embedder_type: bm25` (Tier 0 statistical
+search, no external embedding service). The `semembed` service (`:8081`) is gated behind the opt-in
+`semantic` profile, reserved for Slice 04C ([#234](https://github.com/C360Studio/semsource/issues/234) /
+`semengine#489`). Point an agent at the MCP gateway:
 
 | URL                                             | Description                                        |
 | ----------------------------------------------- | -------------------------------------------------- |
@@ -177,11 +177,9 @@ the MCP gateway:
 | `http://localhost:8080/source-manifest/status`  | Readiness/status (poll until `phase: ready`)       |
 | `http://localhost:8080/source-manifest/sources` | Configured source manifest                         |
 
-> **First-index note:** semembed embedding is CPU-heavy on the initial pass (arctic-embed-s / ONNX). The
-> compose caps it at `SEMEMBED_CPUS` (default `2`) for local dev — raise it on a server. Structural
-> queries (`code_context`/`callers`/`impact`/`byName`) are ready before embeddings finish; poll
-> `source-manifest/status` for `index.ready` / `embedding.ready`. See
-> [`configs/tiers/README.md`](configs/tiers/README.md).
+> **Readiness note:** Structural queries (`code_context`/`callers`/`impact`/`byName`) are ready once
+> `index.ready` is `true`; `code_search` tracks `embedding.ready`. Poll `source-manifest/status` for both.
+> See [`configs/tiers/README.md`](configs/tiers/README.md).
 
 ### UI profile — add the SemSource workbench
 
@@ -298,11 +296,11 @@ unchanged. For a workbench-specific rollback, pin an earlier published tag and i
 Set these in `.env` or pass as environment variables:
 
 ```bash
-SEMSOURCE_CONFIG=mvp.json         # Config file in configs/ (default: mvp.json — tier-1)
+SEMSOURCE_CONFIG=mvp.json         # Config file in configs/ (default: mvp.json — Tier 0 BM25)
 SEMSOURCE_TARGET=.                # Directory to mount as /workspace for ingestion
 SEMSOURCE_HTTP_PORT=8080          # Host port for the SemSource HTTP API + MCP gateway
-SEMEMBED_MODEL=Snowflake/snowflake-arctic-embed-s   # Embedding model
-SEMEMBED_CPUS=2                   # CPU cap for semembed (raise on a server)
+SEMEMBED_MODEL=Snowflake/snowflake-arctic-embed-s   # Embedding model (semantic profile, 04C)
+SEMEMBED_CPUS=2                   # CPU cap for semembed (semantic profile, 04C)
 NATS_URL=nats://nats:4222         # NATS URL seen by the SemSource container
 NATS_HOST_PORT=4222               # Host NATS client port for compose
 NATS_MONITOR_HOST_PORT=8222       # Host NATS monitor port for compose
@@ -311,17 +309,20 @@ C360_PORT=3000                    # External port for Caddy (ui profile)
 SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>  # Required immutable workbench release image
 ```
 
-Set `SEMSOURCE_CONFIG=tiers/tier0-statistical.json` to run without semembed (BM25 keyword search only); the
-`semembed` container still starts but the embedder ignores it. NATS is required because SemSource runs on
-the SemEngine ServiceManager and uses JetStream/KV for graph state, ownership, and query indices.
-Outside Docker, SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.
+The default `SEMSOURCE_CONFIG=mvp.json` runs Tier 0 BM25 keyword-statistical search with no external
+embedding container; `semembed` stays off unless `--profile semantic` is enabled (reserved for 04C,
+[#234](https://github.com/C360Studio/semsource/issues/234)). Set
+`SEMSOURCE_CONFIG=tiers/tier0-foundation.json` (`embedder_type: "none"`) to run the structural-only
+profile without `graph-embedding`. NATS is required because SemSource runs on the SemEngine
+ServiceManager and uses JetStream/KV for graph state, ownership, and query indices. Outside Docker,
+SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.
 
 ### Port Map
 
 | Port | Service                               | Notes                                                                                                    |
 | ---- | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile (includes `/graph-gateway/graphql`)                            |
-| 8081 | semembed embeddings                   | Internal Docker network                                                                                  |
+| 8081 | semembed embeddings                   | `semantic` profile (reserved for 04C); internal Docker network                                           |
 | 4222 | NATS                                  | Internal Docker network by default                                                                       |
 | 3000 | Caddy entry point                     | ui profile: UI, GraphQL (`/graphql`), source-manifest APIs, `/ws` `ENTITY_STATES` KV-watch stream        |
 | 7890 | SemSource WebSocket                   | Internal `ENTITY_STATES` KV-watch stream export (`put`/`delete`/`poisoned`/`synced` frames, ADR-0001)     |

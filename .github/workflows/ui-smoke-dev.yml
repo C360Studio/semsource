@@ -41,7 +41,7 @@ jobs:
   ui-smoke-dev:
     runs-on: ubuntu-latest
     # Cold runner pays two uncached docker builds (Go image + npm ci UI build),
-    # a semembed pull, seeding to ready, and the Playwright suite.
+    # seeding to ready, and the Playwright suite.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6

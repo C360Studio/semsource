@@ -146,7 +146,7 @@ would invent coverage.
 > If you want a tier-2 stack that actually comes up, use the **dev overlay** below
 > (`docker-compose.tier2-dev.yml` + `tier2-compose-dev.json`) rather than editing this file. The
 > overlay is an opt-in `-f` overlay, deliberately **not** a profile on the core stack — the shippable
-> MVP stays nats+semembed+semsource, and `task core:smoke` asserts exactly that set.
+> MVP stays nats+semsource, and `task core:smoke` asserts that exact default set.
 >
 > It previously shipped with both flags `true`, which meant selecting this config would have driven
 > community summaries at `localhost:8083` with nothing listening. Flipped off rather than deleted so
@@ -186,7 +186,7 @@ Two things the overlay is deliberate about:
 
 - **Not a profile.** Tier 2 is a ~1GB image running real inference. Keeping it an opt-in `-f`
   overlay is what lets `task core:smoke` keep asserting that the default Compose resolves exactly
-  nats, semembed, and semsource.
+  nats and semsource.
 - **A size-free model alias.** The config asks for model `seminstruct`, not `qwen3-0.6b`, and the
   overlay sets `MODEL_ALIAS` to match. llama-server ignores the requested model name and serves
   whatever GGUF it loaded, so a size-specific name would *not* error after you swapped images — it
@@ -275,8 +275,8 @@ not currently expose, so it is off in every deployment.
 
 ## Current state / enablement
 
-- **Tier 0 works now** (BM25, no external service).
-- **Tier 1 is the MVP default** (`configs/mvp.json`) and is what the shipped compose runs.
+- **Tier 0 is the MVP default** (`configs/mvp.json`, BM25 with no external service) and is what the
+  shipped compose runs until Slice 04C (`semengine#489`, [#234](https://github.com/C360Studio/semsource/issues/234)) lands.
 > **Measured baselines:** [`docs/testing/tier-baselines.md`](../../docs/testing/tier-baselines.md)
 > records boot-to-ready timings and answer-quality observations from a real 6,685-entity Java corpus
 > — including the finding that LPA clustering put 82% of entities in one community, which makes

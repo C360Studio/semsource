@@ -5,8 +5,6 @@
 #   docker compose up                 # MVP CORE — NATS + semsource (tier-0 BM25
 #                                     #   search out of the box). No sibling repo
 #                                     #   needed. semsource HTTP/MCP published on :8080.
-#   SEMSOURCE_CONFIG=tiers/tier1-semantic.json docker compose --profile semantic up
-#                                     # + semembed (tier-1 semantic embeddings, 04C).
 #   SEMSOURCE_UI_IMAGE=<immutable-ref> docker compose --profile ui up
 #                                     # + released SemSource workbench + Caddy.
 #   docker compose -f docker-compose.yml -f docker-compose.ui-dev.yml --profile ui up --build
@@ -19,7 +17,7 @@
 #   8080  — semsource ServiceManager HTTP API + MCP gateway + /graph-gateway/graphql
 #           (PUBLISHED in core profile; proxied by Caddy in ui profile)
 #   4222  — NATS JetStream/KV (internal Docker network)
-#   8081  — semembed OpenAI-compatible embeddings (semantic profile; internal Docker network)
+#   8081  — semembed OpenAI-compatible embeddings (semantic profile, reserved for 04C)
 #   7890  — semsource raw graph WebSocket (internal; proxied via Caddy in ui profile)
 #   9091  — semsource Prometheus metrics (internal; proxied via Caddy in ui profile)
 #   3000  — SemSource workbench (internal Docker network)

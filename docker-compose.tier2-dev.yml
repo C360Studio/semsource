@@ -1,5 +1,5 @@
-# Tier-2 local development overlay: adds seminstruct (LLM) on top of the core
-# profile's nats + semembed + semsource.
+# Tier-2 local development overlay: adds semembed + seminstruct (LLM) on top of
+# the core profile's nats + semsource.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.tier2-dev.yml up -d
 #
