@@ -83,6 +83,12 @@ type Config struct {
 	// PlatformID is the declared deployment stem. The framework persists its effective unique authority at first boot.
 	PlatformID string `json:"platform_id,omitempty"`
 
+	// ConfigRevision orders edits of this file against the configuration a
+	// deployment retains from its last boot: the retained configuration stays
+	// in effect until the file carries a higher revision. Bump it after every
+	// edit; `semsource add` and `semsource remove` bump it for you. Defaults to 0.
+	ConfigRevision int `json:"config_revision,omitempty"`
+
 	// Sources lists all ingestion sources.
 	Sources []SourceEntry `json:"sources"`
 
@@ -201,6 +207,9 @@ func (c *Config) Validate() error {
 	}
 	if len(c.Namespace)+len(stem)+7 > entityid.MaxAuthorityPairLen {
 		return fmt.Errorf("config: namespace and platform_id must leave seven bytes for the persisted authority suffix (maximum combined length %d)", entityid.MaxAuthorityPairLen-7)
+	}
+	if c.ConfigRevision < 0 {
+		return fmt.Errorf("config: config_revision must be zero or greater, got %d", c.ConfigRevision)
 	}
 	if len(c.Sources) == 0 {
 		return fmt.Errorf("config: sources must contain at least one source")

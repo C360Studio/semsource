@@ -48,6 +48,9 @@ func Remove(term *Term, configPath string, index int) error {
 
 	removed := cfg.Sources[index]
 	cfg.Sources = append(cfg.Sources[:index], cfg.Sources[index+1:]...)
+	// A deployment that has booted keeps its retained configuration until the
+	// file's revision is higher, so the removal applies on the next boot.
+	cfg.ConfigRevision++
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
