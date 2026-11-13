@@ -75,7 +75,7 @@ func compositionFingerprint(t *testing.T, ssCfg *semconfig.Config) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A change to the generated composition requires a new generation
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A change to the generated composition requires a new generation
 func TestCompositionFingerprintMatchesGeneration(t *testing.T) {
 	ssCfg, err := buildSemstreamsConfig(fingerprintFixture(), "acme")
 	if err != nil {
@@ -95,7 +95,7 @@ func TestCompositionFingerprintMatchesGeneration(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
 func TestBuildSemstreamsConfigVersion(t *testing.T) {
 	// Generation 3. A generation bump updates these expectations with it.
 	tests := []struct {

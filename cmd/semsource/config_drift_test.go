@@ -51,7 +51,7 @@ func driftFixture(t *testing.T) *semconfig.Config {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
 func TestRetainedConfigDrift(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -171,7 +171,7 @@ func TestRetainedConfigDrift(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
 func TestWarnRetainedConfigDrift(t *testing.T) {
 	t.Run("equal is silent", func(t *testing.T) {
 		logs := &recordedLogs{}

@@ -155,9 +155,9 @@ func addWithCLI(t *testing.T, path string, args ...string) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
 func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -295,7 +295,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A newer file replaces the retained components
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A newer file replaces the retained components
 func TestIntegrationNewerFileReplacesRetainedComponents(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -364,7 +364,7 @@ func TestIntegrationNewerFileReplacesRetainedComponents(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
 func TestIntegrationRetainedOnlyComponentIsNamedSeparately(t *testing.T) {
 	broker := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -416,7 +416,7 @@ func TestIntegrationRetainedOnlyComponentIsNamedSeparately(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A newer file replaces the retained components
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A newer file replaces the retained components
 func TestIntegrationPruneFailureDoesNotFailTheBoot(t *testing.T) {
 	broker := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -461,7 +461,7 @@ func TestIntegrationPruneFailureDoesNotFailTheBoot(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: A retained configuration that differs from the file is reported
 func TestIntegrationRuntimeRemovedSourceIsNamedRetainedDisabled(t *testing.T) {
 	broker := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

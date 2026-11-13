@@ -7,7 +7,7 @@ import (
 	"github.com/c360studio/semsource/config"
 )
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
 func TestLoadConfigFromReader_ConfigRevision(t *testing.T) {
 	const sources = `"sources": [{"type": "docs", "paths": ["docs/"]}]`
 	tests := []struct {

@@ -25,7 +25,7 @@ func writtenRevision(t *testing.T, path string) (*int, int) {
 	return doc.ConfigRevision, len(doc.Sources)
 }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
 func TestSourceCommandsAdvanceConfigRevision(t *testing.T) {
 	const twoSources = `[{"type": "ast", "path": "./wsA", "language": "go"}, {"type": "docs", "paths": ["docs/"]}]`
 	tests := []struct {
@@ -103,7 +103,7 @@ func TestSourceCommandsAdvanceConfigRevision(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
-// spec: openspec/changes/operator-config-revision/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Source commands that write the configuration file advance its revision
 func TestInitCarriesConfigRevisionForward(t *testing.T) {
 	detected := &ProjectInfo{Namespace: "acme", HasDocs: true, DocPaths: []string{"docs/"}}
 	tests := []struct {
