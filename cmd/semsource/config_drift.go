@@ -37,9 +37,10 @@ func startConfigManager(ctx context.Context, generated *semconfig.Config, nc *na
 	if err := configMgr.Start(ctx); err != nil {
 		return nil, fmt.Errorf("start config manager: %w", err)
 	}
-	// A component the prune leaves behind is named as retained-only by the
-	// drift warning below and on every later boot, and the next bump clears
-	// it, so a failure here does not stop the boot.
+	// A component the prune leaves behind stays in the bucket: this boot runs
+	// the newer file without it, the next equal-version boot runs it again and
+	// names it as retained-only, and the next bump clears it, so a failure here
+	// does not stop the boot.
 	if err := pruneComponents(ctx, configMgr, nc, fromFile.Platform, logger); err != nil {
 		logger.Warn(pruneFailedMessage, "error", err)
 	}
@@ -106,7 +107,7 @@ const prunedComponentsMessage = "removed retained components the configuration f
 
 // pruneFailedMessage is the warning startConfigManager logs when the prune fails.
 const pruneFailedMessage = "could not remove retained components the configuration file no longer defines; " +
-	"they stay in effect and are named as retained_only until the next config_revision bump"
+	"they remain in the config bucket, return on the next boot named as retained_only, and are removed by the next config_revision bump"
 
 // retainedConfigDriftMessage is the warning warnRetainedConfigDrift logs.
 const retainedConfigDriftMessage = "configuration file differs from the retained configuration; " +
