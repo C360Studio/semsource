@@ -268,9 +268,9 @@ func (c *Component) dropSourceStatus(ctx context.Context, instanceName string) {
 		return
 	}
 	status := c.aggregator.buildStatus(c.config.Namespace)
+	c.storeStatusLocked(status)
 	c.statusMu.Unlock()
 
-	c.updateStatusData(status)
 	if err := c.publishPayload(ctx, StatusType, status, statusSubject); err != nil {
 		c.logger.Warn("failed to publish status after source removal", "error", err)
 	}
