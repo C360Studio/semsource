@@ -106,7 +106,7 @@ func TestStopDeadlineReportsIncompleteSettlement(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Desired-source lifecycle and non-recovery semantics hold in Tier 0
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The publisher never drops silently
 func TestStartContextCancellationDoesNotLoseQueuedEntities(t *testing.T) {
 	transport := &settlementPublisher{entered: make(chan context.Context, 4), release: make(chan struct{})}
 	close(transport.release)
