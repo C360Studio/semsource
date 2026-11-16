@@ -166,7 +166,7 @@ Brings up two services and indexes the current directory (`SEMSOURCE_TARGET`, de
 | SemSource | `localhost:8080` | Ingest + ServiceManager HTTP API **+ MCP gateway** (published to host) |
 | NATS      | internal `:4222` | JetStream and KV substrate                                             |
 
-SemSource runs on [`configs/mvp.json`](configs/mvp.json) with `embedder_type: bm25` (Tier 0 statistical
+SemSource runs on [`configs/mvp.json`](configs/mvp.json) with `graph-lexical` (Tier 0 statistical
 search, no external embedding service). The `semembed` service (`:8081`) is gated behind the opt-in
 `semantic` profile, reserved for Slice 04C ([#234](https://github.com/C360Studio/semsource/issues/234) /
 `semengine#489`). Point an agent at the MCP gateway:
@@ -312,7 +312,7 @@ SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>  # Required immutable workbench release
 The default `SEMSOURCE_CONFIG=mvp.json` runs Tier 0 BM25 keyword-statistical search with no external
 embedding container; `semembed` stays off unless `--profile semantic` is enabled (reserved for 04C,
 [#234](https://github.com/C360Studio/semsource/issues/234)). Set
-`SEMSOURCE_CONFIG=tiers/tier0-foundation.json` (`embedder_type: "none"`) to run the structural-only
+`SEMSOURCE_CONFIG=tiers/tier0-foundation.json` (`graph.lexical_search: false`) to run the structural-only
 profile without `graph-embedding`. NATS is required because SemSource runs on the SemEngine
 ServiceManager and uses JetStream/KV for graph state, ownership, and query indices. Outside Docker,
 SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.
@@ -425,9 +425,9 @@ Optional top-level fields:
 | `config_revision`         | `0`                  | Revision of this file; a booted deployment keeps its retained configuration until this exceeds the retained one. `semsource add`, `remove` and `init` raise it (see below)                          |
 | `http_port`               | `8080`               | ServiceManager HTTP API port (also serves `/graph-gateway/graphql`; the `ui` profile proxies it as `/graphql`)                                                                                      |
 | `entity_store.nats_url`   | —                    | Optional NATS URL reused when no `NATS_URL` or `--nats-url` is set                                                                                                                                  |
-| `graph.embedder_type`     | `"bm25"`             | Embedding backend: `none` (Tier 0 structural only, no embedder), `bm25` (keyword, no external service), or `http` (semantic — **requires `model_registry` with an `embedding` capability**)         |
+| `graph.lexical_search`    | `true`               | Run `graph-lexical` (Tier 0 BM25 word index); `false` is structural only. `graph.embedder_type` is refused |
 | `graph.enable_clustering` | `false`              | Enable `graph-clustering` (entity-ID prefix community grouping over `ENTITY_STATES` → `COMMUNITY_INDEX`, ADR-099)                                                                                   |
-| `model_registry`          | —                    | SemEngine model-endpoint registry, passed to the ServiceManager. **Required** when `graph.embedder_type: "http"`. See [`configs/tiers/README.md`](configs/tiers/README.md)                          |
+| `model_registry`          | —                    | SemEngine model-endpoint registry, passed to the ServiceManager. Nothing at Tier 0 resolves from it; the tier 1 embedder returns with 04C (#234). See [`configs/tiers/README.md`](configs/tiers/README.md)                          |
 | `source_roots`            | —                    | Allowlist of filesystem roots under which path-based HTTP/MCP source registration is permitted (ADR-0007)                                                                                           |
 | `metrics.port`            | `9091`               | Prometheus metrics port                                                                                                                                                                             |
 | `websocket_bind`          | `"0.0.0.0:7890"`     | `ENTITY_STATES` KV-watch WebSocket bind address (`put`/`delete`/`poisoned`/`synced` frames, ADR-0001)                                                                                               |
