@@ -149,3 +149,19 @@ The gate for milestones 3 and 4 has three conditions:
 
 OSH I01 and P02 grade the file names of related symbols (`grade_relation_files`). In Java the
 expected class names reach the answer only as callers' files.
+
+### Tier 0 graded run on SemEngine alpha.5 ([#233](https://github.com/C360Studio/semsource/issues/233))
+
+Main `e5d90d3` was graded against the floor above with the same corpora, sets, sources,
+grader and machine. The full record is in
+[`SUMMARY-alpha5-tier0.md`](../../scripts/scorecard/results/SUMMARY-alpha5-tier0.md).
+Every tier 0 condition holds:
+
+- dogfood 23/36 → **32/36**
+- OSH 10/13 → **12/13**
+- no band regresses
+- lexical 1/3 → **3/3**
+- R1 10/36 → **36/36 RANK-STABLE**
+- setup03a BM25 lane **65/65**
+
+The tier 1 floor carries to 04C (#234).
