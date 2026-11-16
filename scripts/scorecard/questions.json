@@ -1,5 +1,5 @@
 {
- "version": 6,
+ "version": 7,
  "corpus": "the semsource repository itself",
  "grading": "deterministic substring matching, case-insensitive; see README.md",
  "composition": "composition-band questions are gated by check-composition.py: their expect_all facts must not co-occur in any single ingested passage or code file, so single-shot retrieval cannot answer them from one chunk; see README.md",
@@ -456,6 +456,47 @@
     "exclude"
    ],
    "why": "The one twin-less member: a single-hop verified fact — handler/excludes.go's shared exclusion set (node_modules et al.; the file itself documents the 36-junk-entity-IDs incident that motivated it) — phrased by effect ('swallowed during a scan'), no 'exclude', no 'node_modules' in the query. No precise twin exists in v4; the fact is simple enough that a miss here is a phrasing miss, not a depth miss."
+  },
+  {
+   "id": "LX01",
+   "band": "lexical",
+   "tool": "doc_context",
+   "args": {
+    "query": "\"docker compose down -v\""
+   },
+   "expect_all": [
+    "down -v",
+    "reseed"
+   ],
+   "why": "R2 exact phrase, posted on semengine#10 as P01. The literal upgrade command and its reseed instruction share a passage (QUICKSTART, ROADMAP); a tokenizer that drops the flag ranks every compose passage as a near tie. Expected red on SemStreams 8b99efe9 and on any bag-of-words tier; goes green only when SemEngine 04B delivers the lexical contract (semengine#10, #233)."
+  },
+  {
+   "id": "LX02",
+   "band": "lexical",
+   "tool": "doc_context",
+   "args": {
+    "query": "\"entity.lifecycle.stale\""
+   },
+   "expect_all": [
+    "entity.lifecycle.stale"
+   ],
+   "why": "R2 exact phrase over a dotted predicate, posted on semengine#10 as P02 against graph_search. Moved to doc_context because the #269 grader never reads property keys, which is where graph_search carries a predicate; test/setup03a/README.md carries the literal in prose. Tokenized it is three common words. Expected red on SemStreams 8b99efe9 and on any bag-of-words tier; goes green only when SemEngine 04B delivers the lexical contract (semengine#10, #233)."
+  },
+  {
+   "id": "LX03",
+   "band": "lexical",
+   "tool": "code_search",
+   "args": {
+    "query": "retry backoff -test"
+   },
+   "expect_any": [
+    "withRetry",
+    "Retry"
+   ],
+   "expect_none": [
+    "func Test"
+   ],
+   "why": "R3 boolean exclusion, posted on semengine#10 as P03 with expect_none _test.go. The #269 grader never reads paths, so exclusion is graded on content: a returned test function body begins with func Test. Salience demotes tests by design; exclusion is a different contract with no surface today. Expected red on SemStreams 8b99efe9 and on any bag-of-words tier; goes green only when SemEngine 04B delivers the lexical contract (semengine#10, #233)."
   }
  ]
 }

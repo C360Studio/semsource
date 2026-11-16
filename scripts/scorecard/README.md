@@ -454,6 +454,33 @@ outcome: arm B saturated the band (7/7, 63 ms median), the only
 twin-pass/loose-fail pair landed at the raw-cosine floor (L05 vs D01, arm C),
 and #170 closed measured-no-gap — the T1 classifier stays unfed.
 
+## The lexical band and R1 rank stability — the SemEngine 04B contract
+
+**Version 7 adds the lexical band (LX01–LX03) and does not compare to version 6.**
+They are the three questions SemSource posted on semengine#10 for slice 04B:
+exact phrase over a shell flag (LX01) and over a dotted predicate (LX02), and
+boolean exclusion (LX03). They are **expected red** on SemStreams and on any
+bag-of-words tier, and go green only when 04B delivers (#233). Two departures from
+the posted text, both forced by the #269 grader, are recorded in each question's
+`why`: LX02 asks `doc_context` because `graph_search` carries a predicate only as a
+property key, and LX03 excludes `func Test` (test body content) rather than
+`_test.go` (a path).
+
+**R1 is a rank-identical requirement, not a verdict-identical one.** The probe:
+
+1. Fresh stack (`down -v`), seed with the tier's config, wait for ready, score:
+   `run.sh <label>-r1a`.
+2. Stop `semsource` only (NATS and its volume stay), restart it with the same
+   config but the `sources` array reversed, wait for ready, score:
+   `run.sh <label>-r1b`.
+3. `rank-diff.sh results/<label>-r1a.json results/<label>-r1b.json`
+
+`rank-diff.sh` compares each question's first-call ranking (node handles, or
+`graph_search` match ids) and reports identical / reordered / different, the first
+diverging rank, and `RANK-STABLE` or `RANK-UNSTABLE` (exit 1). A restart resets
+corpus statistics on the SemStreams tier-0 embedder, so the baseline is expected
+unstable.
+
 ## Latency — the dimension the harness never measured
 
 v4 records per-question wall-clock in every arm: `latency_ms` is the **first**
