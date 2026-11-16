@@ -176,6 +176,13 @@ res "$rd/dup.json" "Q1|$n1" "Q1|$n1"
 res "$rd/less.json" "Q1|$n1" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}'
 [ "$(rdiff "$rd/less.json" "$rd/ok.json")" = 2 ] && ok "a question only in the second file is refused" || fail "an added question passed"
 [ "$(rdiff "$rd/ok.json" "$rd/less.json")" = 2 ] && ok "a question missing from the second file is refused" || fail "a removed question passed"
+res "$rd/ids.json" 'Q1|{"nodes":[{"id":"x","body":"1"},{"id":"y","body":"2"}]}'
+res "$rd/ids-rev.json" 'Q1|{"nodes":[{"id":"y","body":"2"},{"id":"x","body":"1"}]}'
+[ "$(rdiff "$rd/ids.json" "$rd/ids-rev.json")" = 1 ] && ok "an id-only (arm C) reordering is RANK-UNSTABLE" || fail "an id-only reordering passed"
+res "$rd/anon.json" 'Q1|{"nodes":[{"body":"1"},{"body":"2"}]}'
+[ "$(rdiff "$rd/anon.json" "$rd/anon.json")" = 2 ] && ok "anonymous nodes are refused" || fail "anonymous nodes were ranked"
+res "$rd/anonm.json" 'Q1|{"matches":[{"label":"x"}]}'
+[ "$(rdiff "$rd/anonm.json" "$rd/anonm.json")" = 2 ] && ok "matches without an id are refused" || fail "anonymous matches were ranked"
 rm -rf "$rd"
 
 echo

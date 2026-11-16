@@ -10,8 +10,8 @@
 # full, so the probe is a pure function of the two result files.
 #
 # A question's ranking is the ordered list of what it returned: node handles
-# (fusion tools; name+path where a node has no handle) or match ids
-# (graph_search). The first call of each question is compared — repeats are
+# (fusion tools), node ids (arm C), name@path, or match ids (graph_search). A
+# returned node or match with none of those is refused. The first call of each question is compared — repeats are
 # instability instrumentation, not a second ranking.
 #
 # This is an acceptance gate, so it refuses evidence it cannot rank (exit 2):
@@ -27,6 +27,16 @@ b="${2:?usage: rank-diff.sh <first.json> <second.json>}"
 
 ranks() { # $1 = results file; prints {id: [ranked identities]} or fails
 	jq -ce '
+		def str: type == "string" and length > 0;
+		# A node is identified by its handle (fusion tools), its id (arm C), or
+		# name@path when both are present; anything else would collapse distinct
+		# entities into one identity and certify a reordering as stable.
+		def nodeid($q): if type != "object" then error("\($q): node is not an object")
+			elif (.handle | str) then .handle elif (.id | str) then .id
+			elif (.name | str) and (.path | str) then .name + "@" + .path
+			else error("\($q): node has no handle, id, or name and path") end;
+		def matchid($q): if type == "object" and (.id | str) then .id
+			else error("\($q): match has no id") end;
 		(.results // []) as $r
 		| if ($r | length) == 0 then error("no results") else . end
 		| if ([$r[].id] | unique | length) != ($r | length) then error("duplicate question ids") else . end
@@ -35,8 +45,7 @@ ranks() { # $1 = results file; prints {id: [ranked identities]} or fails
 			| if ($ans | type) != "object" then error("\($id): answer is not an object")
 			  elif $ans.isError == true then error("\($id): answer is an error: \($ans.error // "isError")")
 			  elif ([$ans.nodes, $ans.matches, $ans.misses] | map(type == "array") | any | not) then error("\($id): answer has no nodes, matches, or misses")
-			  else [((($ans.nodes // [])[]) | (.handle // ((.name // "") + "@" + (.path // "")))),
-			        ((($ans.matches // [])[]) | (.id // ""))]
+			  else [((($ans.nodes // [])[]) | nodeid($id)), ((($ans.matches // [])[]) | matchid($id))]
 			  end)}] | from_entries' "$1"
 }
 
