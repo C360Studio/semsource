@@ -189,15 +189,21 @@ func TestKnownAnswerCorpus(t *testing.T) {
 	}
 	if profile != "foundation" {
 		h.check("graph_search_public_query", 30*time.Second, func() (any, error) {
-			raw, err := h.rpc("graph.query.searchGraph", map[string]any{"query": "cobalt lantern routing", "include_sources": true, "include_summaries": false})
+			raw, err := h.rpc("graph.query.searchGraph", map[string]any{"query": "cobalt lantern routing"})
 			if err != nil {
 				return nil, err
 			}
-			var v map[string]any
+			var v struct {
+				Data struct {
+					Text *struct {
+						Matches []json.RawMessage `json:"matches"`
+					} `json:"text"`
+				} `json:"data"`
+			}
 			if err = json.Unmarshal(raw, &v); err != nil {
 				return nil, err
 			}
-			if entities, ok := v["entities"].([]any); !ok || len(entities) == 0 {
+			if v.Data.Text == nil || len(v.Data.Text.Matches) == 0 {
 				return json.RawMessage(raw), errors.New("searchGraph returned no corpus entities")
 			}
 			return json.RawMessage(raw), nil

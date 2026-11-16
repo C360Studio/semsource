@@ -111,9 +111,10 @@ func (c *Component) buildServer() *mcp.Server {
 
 	// Substrate graph-query tool — a second family (ADR-0004 revision). NOT
 	// fusion-backed: it carries the substrate's own values and no
-	// contract_version. Ungated, because graph.query.searchGraph does not need
-	// clustering; what varies by tier is how far the answer escalates, which the
-	// result discloses rather than hiding behind an empty result.
+	// contract_version. Ungated, because graph.query.searchGraph is a word
+	// search that does not wait for clustering (its groups answer not_ready
+	// without it); whether the answer is community-backed is disclosed in the
+	// result rather than expressed by withholding the tool.
 	//
 	// A graph_summary tool over graph.query.summary was built and cut: this
 	// roster has no tool that accepts an entity type or a predicate, so a graph
@@ -122,7 +123,7 @@ func (c *Component) buildServer() *mcp.Server {
 	// summarize_graph works because its roster has query_by_type; ours does not.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "graph_search",
-		Description: "Corpus-wide thematic search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Matches are id/type/label; follow up with a deterministic tool on IDs of interest (property values are not carried on the default response). Every result carries a `retrieval` block disclosing how far the answer escalated: entity hits only, community-backed summaries, or an LLM-synthesized answer. A non-community answer is a similarity hit list, not thematic reasoning — read the disclosure before treating results as community evidence. Natural-language query understanding depends on deployment configuration and is not guaranteed.",
+		Description: "Corpus-wide word search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Matches are id/type/label/relevance plus allowlisted value properties (versions, kinds); follow up with a deterministic tool on IDs of interest. Every result carries a `retrieval` block disclosing whether matches are community-backed (clustering on) or word hits only; the answer text is a template, never LLM-synthesized. `hints` lists what the question asked beyond its words and whether it was applied; an applied entity reference or path walk comes back as `entity` / `path`",
 	}, c.graphSearch)
 	return s
 }
