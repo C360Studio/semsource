@@ -117,6 +117,16 @@ v=$(grade '{"expect_any":["ingestFileEntityStates"]}' '{"nodes":[{"name":"splitP
 v=$(grade '{"expect_all":["32.1.3-jre"]}' '{"matches":[{"id":"a.b.c.d.dependency.x","label":"guava","properties":{"source.config.dependency.version":"32.1.3-jre"}}]}')
 [ "$v" = "correct" ] && ok "a graph match property value passes" || fail "graph match property graded $v"
 
+# P02 is answerable from what code_impact returns: the seed's body plus its
+# direct callers' names, never a caller's body (the shape of the audit frames).
+p02=$(jq -c '.questions[] | select(.id == "P02")' "$here/questions.json")
+seed=$(jq -nc --arg q "$(jq -r '.args.query' <<<"$p02")" '{name: $q, path: "graph/lifecycle.go",
+	body: "func LifecycleOwner(instance, root string) string {\n\tsum := sha256.Sum256([]byte(root))\n\treturn instance + \"/\" + hex.EncodeToString(sum[:6])\n}"}')
+v=$(grade "$p02" "$(jq -c '{nodes: [. + {relations: {caller: [{name: "initializeWatchers"}, {name: "ownerFor"}, {name: "owner"}]}}]}' <<<"$seed")")
+[ "$v" = "correct" ] && ok "P02 passes on the seed body plus direct caller names" || fail "P02 on a correct code_impact shape graded $v"
+v=$(grade "$p02" "$(jq -c '{nodes: [.]}' <<<"$seed")")
+[ "$v" = "miss" ] && ok "P02 misses on the seed body alone" || fail "P02 on the seed alone graded $v"
+
 echo "6. gateway, transport, and non-JSON failures grade error, never miss or correct (#269)"
 v=$(grade '{"expect_any":["sources"]}' '{"isError":true,"error":"fusion query failed: semantic is not enabled"}')
 [ "$v" = "error" ] && ok "a gateway refusal grades error" || fail "gateway refusal graded $v"

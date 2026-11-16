@@ -49,8 +49,9 @@ the envelope's `index` block. Matching the whole answer JSON passed L05 ("ast"
 inside the key `last_synced`), D09 ("index" in the envelope), and I02 ("doc" in
 the anchor's own path) on vacuous hits. Gateway, transport, and non-JSON results
 now grade `error` (an `isError` refusal used to become `{}` and passed N02).
-D10 tracks the SemEngine pin and P02 tracks the current callers of
-`PublishLifecycleTrigger`; both rot with the code they cite.
+D10 tracks the SemEngine pin. P02 now asks for the direct callers of
+`graph.LifecycleOwner`, which `code_impact` names without returning their bodies;
+both rot with the code they cite.
 
 **Two more comparability rules ship with v4:**
 

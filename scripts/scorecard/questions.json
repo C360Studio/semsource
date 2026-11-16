@@ -317,13 +317,13 @@
    "band": "composition",
    "tool": "code_impact",
    "args": {
-    "query": "PublishLifecycleTrigger"
+    "query": "LifecycleOwner"
    },
    "expect_all": [
-    "triggerLifecycleRun",
-    "retractionRequest"
+    "initializeWatchers",
+    "ownerFor"
    ],
-   "why": "Impact closure across processors. PublishLifecycleTrigger (graph/lifecycle.go) is called by triggerLifecycleRun in processor/ast-source and processor/doc-source and by retract in processor/objectstore-source, whose request comes from retractionRequest. The two names never share a file, and neither is a substring of the other. The former triggerRemovalLifecycleRun was deleted in 5334716 and failed every arm while the gate stayed green (#269)."
+   "why": "Impact closure across processors. graph.LifecycleOwner (graph/lifecycle.go) is called by initializeWatchers in processor/ast-source, ownerFor in processor/doc-source, and owner in processor/objectstore-source. code_impact names direct callers without returning their bodies, so the facts are caller names: the two never share a file, and neither occurs in the seed's body. owner is too generic to grade. Until #269 P02 expected triggerRemovalLifecycleRun, deleted in 5334716, and then retractionRequest, a helper that code_impact never returns."
   },
   {
    "id": "P03",
