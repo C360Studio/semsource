@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -289,4 +290,86 @@ func TestIntegration_TwoDocsRootsOfOneProjectDoNotCrossMark(t *testing.T) {
 		t.Errorf("document %s carries no stale marker after its file was deleted", idA)
 	}
 	requireNotStale(t, ctx, tc, idB, filepath.Join(rootB, "b.md"))
+}
+
+// TestIntegration_OverlappingDocsRootsRetractBothViews is the #293 review's
+// second case: one watched doc-source over [root, root/sub]. A file under
+// root/sub is ingested twice — sub-a-md owned by root and a-md owned by
+// root/sub — so its deletion must sweep both roots, and both documents and
+// their passages must end up stale. Sweeping only the first containing root
+// would leave the inner root's view current indefinitely.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
+func TestIntegration_OverlappingDocsRootsRetractBothViews(t *testing.T) {
+	ctx := context.Background()
+	tc, deps := startLifecycleStack(t, ctx)
+
+	const org, project = "acme", "svc"
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(sub, "a.md")
+	if err := os.WriteFile(file, []byte("# A\n\nFirst.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	docCfg, _ := json.Marshal(map[string]any{
+		"paths": []string{root, sub}, "org": org, "project": project,
+		"watch_enabled": true, "instance_name": "doc-source-svc",
+	})
+	dd, err := docsource.NewComponent(docCfg, deps)
+	if err != nil {
+		t.Fatalf("doc-source NewComponent: %v", err)
+	}
+	docComp := dd.(*docsource.Component)
+	if err := docComp.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := docComp.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stopWithin(5*time.Second, docComp.Stop) })
+
+	system := entityid.ScopedSystemSlug(project, "")
+	outer := dochandler.DocumentEntityID(fixtureAuthority(), system, "sub/a.md")
+	inner := dochandler.DocumentEntityID(fixtureAuthority(), system, "a.md")
+	if outer == inner {
+		t.Fatalf("fixture drift: the two views must have distinct IDs, both %s", outer)
+	}
+	for _, id := range []string{outer, inner} {
+		if waitForEntityState(t, ctx, tc.Client, id, 30*time.Second) == nil {
+			t.Fatalf("document %s never reached ENTITY_STATES", id)
+		}
+	}
+
+	// Prove both watchers are armed before the delete: an edit must reach both
+	// views as a new title.
+	if err := os.WriteFile(file, []byte("# Edited\n\nSecond.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	titled := func(id string) bool {
+		e, ok := fetchEntity(ctx, tc.Client, id)
+		return ok && tripleObject(e.Triples, source.DcTitle) == "Edited"
+	}
+	if !testutil.WaitFor(t, 30*time.Second, func() bool { return titled(outer) && titled(inner) }) {
+		t.Fatal("the watchers never republished both views of the edited file")
+	}
+
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	stale := func(id string) bool {
+		e, ok := fetchEntity(ctx, tc.Client, id)
+		return ok && hasStaleMarker(e.Triples)
+	}
+	if !testutil.WaitFor(t, 30*time.Second, func() bool { return stale(outer) && stale(inner) }) {
+		t.Fatalf("after deletion: %s stale=%v, %s stale=%v; want both views retracted",
+			outer, stale(outer), inner, stale(inner))
+	}
+	for _, id := range []string{outer, inner} {
+		passage := strings.Replace(id, ".web.doc.", ".web.chunk.", 1) + "-0000"
+		if !stale(passage) {
+			t.Errorf("passage %s of a deleted document carries no stale marker", passage)
+		}
+	}
 }
