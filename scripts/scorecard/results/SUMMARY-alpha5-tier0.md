@@ -95,9 +95,36 @@ none.
 ### R1 rank stability
 
 The procedure is the baseline's: score a fresh seed, restart `semsource` alone on the same
-NATS store with `sources` reversed, score again, then `rank-diff.sh`. The result is **36/36
-rank-identical, RANK-STABLE**, against 10/36 at the pin. The second-leg score is 32/36, the
-same as the first.
+NATS store with `sources` reversed, score again, then `rank-diff.sh`. It is scripted as
+[`alpha5-tier0/r1.sh`](alpha5-tier0/r1.sh). The result is **36/36 rank-identical,
+RANK-STABLE**, against 10/36 at the pin. Both legs score 32/36.
+
+The restart is proved by retained evidence, not inferred from equal ranks
+([`alpha5-tier0/r1-evidence/`](alpha5-tier0/r1-evidence/)). The script stops if any check
+fails:
+
+- **The container was recreated.** `before.txt` and `after.txt` show different container IDs,
+  a new start time, and `tier0-reversed.json` in the new process's arguments.
+- **The new process reseeded every source**, and leg 2 was scored only after all three
+  finished. `reseed-log.jsonl` holds that process's own log lines:
+  - cfgfile, 126 entities
+  - doc, 1,225 entities
+  - code, 6,989 entities, 0 parse failures
+
+  They start in the reversed order (cfgfile, then doc, then code). The wait is bounded at 15
+  minutes and reads those log lines, not the status text.
+- **`rank-diff.txt`** is the comparison output.
+
+This R1 pair was re-measured with that evidence after review. An earlier pair, retained only as
+result files, waited on a `grep seeding` that the status payload's readiness note satisfies
+even when the service is ready, so it proved nothing about a reseed. The committed dogfood
+result files come from the evidenced run.
+
+Compared with the earlier pair, which ran on a different fresh store, both legs score the same
+32/36. Each fresh store mints its own deployment authority (`c360.semsource-<id>`), so handles
+differ by that segment. With it removed, 35 of 36 rankings are identical, and L03 swaps two
+items at rank 18. R1 compares legs within one store, where authority is retained, so its handles
+compare directly.
 
 ### setup03a BM25 lane
 
@@ -116,15 +143,27 @@ built from `e5d90d3`:
 
 ## Replay
 
-Run these from a checkout of `e5d90d3`. They don't depend on any `/tmp` state from this run.
+Two checkouts are involved:
+
+- `ART`: a checkout containing this PR, which holds the recipe artifacts.
+- `SRC`: the measured commit `e5d90d3`, which builds the setup03a binary and runs its harness.
+
+The PR changes only results and the ledger. The scorecard harness, `docker-compose.yml`,
+`cmd/` and `test/` are byte-identical between the two: `git diff --quiet e5d90d3 HEAD --
+docker-compose.yml scripts/scorecard/run.sh scripts/scorecard/rank-diff.sh scripts/scorecard/grade.sh
+scripts/scorecard/questions.json scripts/scorecard/questions-osh.json test/ cmd/` exits 0. The
+measured SemSource is the image pinned by digest in `compose.sem233.yml`.
 
 ```sh
+ART=$(git rev-parse --show-toplevel)          # this PR's checkout
 W=$(mktemp -d)
-O=scripts/scorecard/results/alpha5-tier0
+git -C "$ART" worktree add --detach "$W/src" e5d90d3
+SRC="$W/src"
+O="$ART/scripts/scorecard/results/alpha5-tier0"
 
 # 1. Corpora, as in SUMMARY-pin-8b99efe9.md "Reproduce". Check each against its tree hash.
 mkdir -p "$W/dogfood" "$W/osh"
-git archive 758a805 | tar -x -C "$W/dogfood" && rm -rf "$W/dogfood/scripts/scorecard"
+git -C "$ART" archive 758a805 | tar -x -C "$W/dogfood" && rm -rf "$W/dogfood/scripts/scorecard"
 curl -L https://codeload.github.com/opensensorhub/osh-core/tar.gz/235c0eabf24b6d6137b499b4402943d2794b70e6 \
   | tar -xz -C "$W/osh" --strip-components 1
 for c in dogfood osh; do (cd "$W/$c" && find . -type f -print0 | LC_ALL=C sort -z \
@@ -134,19 +173,11 @@ for c in dogfood osh; do (cd "$W/$c" && find . -type f -print0 | LC_ALL=C sort -
 mkdir -p "$W/configs" && cp "$O/tier0.json" "$W/configs/"
 jq '.sources |= reverse' "$O/tier0.json" > "$W/configs/tier0-reversed.json"
 export SEM233_CONFIGS="$W/configs"
+cd "$ART"
 dc() { docker compose -p sem233 -f docker-compose.yml -f "$O/compose.sem233.yml" "$@"; }
 
-# 3. Dogfood on fresh storage, then the R1 second leg: restart only semsource, on the
-#    same NATS volume, with the sources reversed.
-export SEM233_CORPUS="$W/dogfood"
-dc down -v
-SEMSOURCE_CONFIG=tier0.json dc up -d nats semsource
-SEMSOURCE_HTTP_PORT=28080 scripts/scorecard/run.sh alpha5-tier0-dogfood-B
-SEMSOURCE_CONFIG=tier0-reversed.json dc up -d --no-deps semsource
-until curl -s localhost:28080/source-manifest/status | grep -q seeding; do sleep 1; done
-SEMSOURCE_HTTP_PORT=28080 scripts/scorecard/run.sh alpha5-tier0-dogfood-r1b
-scripts/scorecard/rank-diff.sh scripts/scorecard/results/alpha5-tier0-dogfood-B.json \
-  scripts/scorecard/results/alpha5-tier0-dogfood-r1b.json
+# 3. Dogfood: fresh storage, leg 1, the evidenced restart, leg 2, then rank-diff.
+SEM233_CORPUS="$W/dogfood" "$O/r1.sh"
 
 # 4. OSH on fresh storage.
 export SEM233_CORPUS="$W/osh"
@@ -156,15 +187,20 @@ SEMSOURCE_HTTP_PORT=28080 SCORECARD_READY_TIMEOUT=5400 \
   SCORECARD_QUESTIONS=scripts/scorecard/questions-osh.json scripts/scorecard/run.sh alpha5-tier0-osh-B
 dc down -v
 
-# 5. setup03a BM25 lane on a binary built from the same commit.
-go build -o "$W/semsource" ./cmd/semsource   # SHA-256 6de2470e…d412f on darwin/arm64, go 1.26
+# 5. setup03a BM25 lane: binary and harness both from the measured commit.
+cd "$SRC" && go build -o "$W/semsource" ./cmd/semsource
 SETUP03A_BINARY="$W/semsource" SETUP03A_OUT="$W/setup03a-bm25" SETUP03A_PROFILE=bm25 \
   SETUP03A_IDENTITY=governed go test -tags=qualification -count=1 -v -run TestKnownAnswerCorpus ./test/setup03a
 ```
 
-The `seeding` wait in step 3 confirms that the restarted service really reseeded before the
-second leg. `run.sh` then gates on `phase: ready` and lexical readiness, as in every leg.
-`compose.sem233.yml` pins the image by its index digest, so the tag can't drift.
+The measured setup03a binary was built from a clean `e5d90d3` worktree on darwin/arm64 with Go 1.26,
+SHA-256 `6de2470e5f3348f706380f86b3ba2f42e6805628d9030922c8b77b59870d412f`. A replay build is not
+byte-identical: the same build from another worktree path hashed `099b8ae991dbd0fa…`, because Go
+embeds build metadata. The report records the binary that actually ran.
+
+`r1.sh` runs from `ART`'s root and writes its evidence and result files there, so a replay
+overwrites the committed ones; compare them with `git diff`. `compose.sem233.yml` pins the
+image by its index digest, so the tag can't drift.
 
 ## Not covered
 
