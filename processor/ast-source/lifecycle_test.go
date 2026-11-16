@@ -18,9 +18,11 @@ func TestDeleteTriggersLifecycleRun(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
 func TestLifecycleRunRequestFor(t *testing.T) {
 	pw := &pathWatcher{
 		root:         "/workspace/github-com-acme-repo",
+		owner:        "ast-source-repo/0123456789ab",
 		scopedSystem: "github-com-acme-repo",
 		config:       WatchPathConfig{Org: "acme", Project: "repo"},
 	}
@@ -38,6 +40,10 @@ func TestLifecycleRunRequestFor(t *testing.T) {
 	}
 	if req.Reason != graph.LifecycleReasonFileDeleted {
 		t.Errorf("Reason = %q, want %q", req.Reason, graph.LifecycleReasonFileDeleted)
+	}
+	// Only this root's own entities answer to its stat (#286).
+	if req.Owner != pw.owner {
+		t.Errorf("Owner = %q, want the watch path's owner %q", req.Owner, pw.owner)
 	}
 }
 

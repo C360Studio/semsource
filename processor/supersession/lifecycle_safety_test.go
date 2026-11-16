@@ -88,6 +88,7 @@ func replayComponent(p *replayRequester, m *replayMutator) *Component {
 	return &Component{authority: entityid.Authority{Org: "acme", Platform: "semsource"}, running: true, config: DefaultConfig(), logger: slog.New(slog.NewTextHandler(io.Discard, nil)), queryClient: &prefixQuerier{client: p}, mutClient: m}
 }
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: Stale facts are distinguishable from live facts
 func TestSourceRemovedStickyAcrossLegacyOracles(t *testing.T) {
 	id := "acme.semsource.docs.web.doc.a"
 	e := replayEntity(id, graph.LifecycleReasonSourceRemoved)
@@ -97,7 +98,7 @@ func TestSourceRemovedStickyAcrossLegacyOracles(t *testing.T) {
 			t.Fatalf("legacy changed source_removed: %v %v", m, c)
 		}
 	}
-	oracle, err := livenessOracle(graph.LifecycleRunRequest{Absent: []string{}})
+	oracle, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a", Absent: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

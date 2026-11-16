@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/graph"
@@ -70,5 +71,26 @@ func TestLifecycleReasonConstants(t *testing.T) {
 		if tt.got != tt.want {
 			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
 		}
+	}
+}
+
+// TestLifecycleOwnerSeparatesRootsAndInstances: the owner key is
+// deterministic, differs per root and per instance at one root (repo expansion
+// gives AST and docs the same path), and never carries the local path.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
+func TestLifecycleOwnerSeparatesRootsAndInstances(t *testing.T) {
+	const root = "/home/someone/src/svc"
+	a := graph.LifecycleOwner("ast-source-svc", root)
+	if a != graph.LifecycleOwner("ast-source-svc", root) {
+		t.Fatal("owner key is not deterministic")
+	}
+	if a == graph.LifecycleOwner("doc-source-svc", root) {
+		t.Error("two instances at one root share an owner key")
+	}
+	if a == graph.LifecycleOwner("ast-source-svc", root+"/docs") {
+		t.Error("two roots of one instance share an owner key")
+	}
+	if strings.Contains(a, "someone") || strings.Contains(a, "/home") {
+		t.Errorf("owner key %q leaks the local path", a)
 	}
 }

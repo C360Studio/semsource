@@ -210,6 +210,8 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 		Systems:  []string{system},
 		RootPath: root,
 		Reason:   semsourcegraph.LifecycleReasonFileDeleted,
+		// The AST source's own request shape (#286).
+		Owner: semsourcegraph.LifecycleOwner("ast-source-svc", root),
 	}); err != nil {
 		t.Fatalf("trigger lifecycle pass (recreate): %v", err)
 	}

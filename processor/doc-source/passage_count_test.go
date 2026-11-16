@@ -145,7 +145,7 @@ func isTriggerRecord(rec loggedRecord) bool {
 // --- fixtures --------------------------------------------------------------
 
 // docRoot is the configured watch root every fixture path lives under. Made
-// absolute because rootForPath compares against filepath.Abs of the config.
+// absolute because rootsForPath compares against filepath.Abs of the config.
 func docRoot(t *testing.T) string {
 	t.Helper()
 	root, err := filepath.Abs(t.TempDir())

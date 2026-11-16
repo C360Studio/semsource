@@ -307,7 +307,11 @@ func (c *Component) publishDocument(ctx context.Context, key string, states []*h
 		return
 	}
 
+	owner := c.owner()
 	for _, state := range states {
+		if state != nil {
+			state.Triples = append(state.Triples, graph.LifecycleOwnerTriple(state.ID, owner, state.UpdatedAt))
+		}
 		payload, err := entitypub.PayloadFromState(state)
 		if err != nil {
 			stateID := ""
@@ -329,6 +333,15 @@ func (c *Component) publishDocument(ctx context.Context, key string, states []*h
 		c.distinct.Observe(state.ID)
 		c.updateLastActivity()
 	}
+}
+
+// owner is this source's lifecycle owner key: one bucket, one owner.
+func (c *Component) owner() string {
+	instance := c.config.InstanceName
+	if instance == "" {
+		instance = "objectstore-source"
+	}
+	return graph.LifecycleOwner(instance, c.config.Bucket)
 }
 
 // retractionRequest builds the lifecycle request for a completed pass's
@@ -358,6 +371,8 @@ func (c *Component) retractionRequest(removed []objectstore.Removal) (graph.Life
 		Systems: []string{c.system},
 		Absent:  absent,
 		Reason:  graph.LifecycleReasonFileDeleted,
+		// Only this bucket's documents answer to its listing (#286).
+		Owner: c.owner(),
 	}, true
 }
 

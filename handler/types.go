@@ -114,6 +114,12 @@ type EntityState struct {
 	// IndexingProfile declares how SemStreams should treat this entity for
 	// semantic indexing: content, control, signal, or trace.
 	IndexingProfile string
+
+	// Root is the configured source root the entity was read from, as
+	// configured (not necessarily absolute). Not a graph fact: the source
+	// derives its lifecycle owner key from it. Empty when the entity did not
+	// come from a filesystem root.
+	Root string
 }
 
 // ChangeEvent is emitted by a handler's Watch channel when a source change is detected.

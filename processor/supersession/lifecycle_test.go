@@ -1,10 +1,12 @@
 package supersession
 
 import (
+	"reflect"
 	"testing"
 
 	gtypes "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -195,5 +197,67 @@ func TestDecideLifecycleActions_GroupsMultipleEntitiesUnderOnePath(t *testing.T)
 	}
 	if len(toMark) != 2 {
 		t.Errorf("toMark count = %d, want 2 (both symbols from the one deleted file)", len(toMark))
+	}
+}
+
+// TestLifecycleScopeJudgesOnlyItsOwnRoot pins #286: every root configured
+// with one project shares a system slug, and a sweep may judge only the
+// entities its own root produced — an AST root against a docs root, two docs
+// roots with disjoint filenames, and never an entity that carries no owner.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
+func TestLifecycleScopeJudgesOnlyItsOwnRoot(t *testing.T) {
+	owned := func(id, pathPred, path, owner string) gtypes.EntityState {
+		tr := []message.Triple{{Predicate: pathPred, Object: path}}
+		if owner != "" {
+			tr = append(tr, message.Triple{Predicate: source.EntityLifecycleOwner, Object: owner})
+		}
+		return gtypes.EntityState{ID: id, Triples: tr}
+	}
+	astOwner := graph.LifecycleOwner("ast-source-svc", "/r")
+	docsA := graph.LifecycleOwner("doc-source-svc", "/r/docs-a")
+	docsB := graph.LifecycleOwner("doc-source-svc", "/r/docs-b")
+	code := owned("acme.p.svc.golang.function.Live", semsourceast.CodePath, "live.go", astOwner)
+	a := owned("acme.p.svc.web.doc.a-md", source.DocFilePath, "a.md", docsA)
+	b := owned("acme.p.svc.web.doc.b-md", source.DocFilePath, "b.md", docsB)
+	unowned := owned("acme.p.svc.web.doc.c-md", source.DocFilePath, "c.md", "")
+	foreign := owned("acme.p.other.web.doc.d-md", source.DocFilePath, "d.md", docsA)
+	all := []gtypes.EntityState{code, a, b, unowned, foreign}
+	systems := map[string]struct{}{"svc": {}}
+
+	ids := func(es []gtypes.EntityState) []string {
+		var out []string
+		for _, e := range es {
+			out = append(out, e.ID)
+		}
+		return out
+	}
+	for name, tc := range map[string]struct {
+		owner string
+		want  []string
+	}{
+		"AST root":    {astOwner, []string{code.ID}},
+		"docs root A": {docsA, []string{a.ID}},
+		"docs root B": {docsB, []string{b.ID}},
+	} {
+		if got := ids(lifecycleScope(all, systems, tc.owner, true)); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: scope = %v, want %v", name, got, tc.want)
+		}
+	}
+	if docsA == docsB || docsA == astOwner {
+		t.Fatalf("owner keys must separate roots and instances: %q %q %q", astOwner, docsA, docsB)
+	}
+}
+
+// TestLivenessOracleRequiresAnOwner: an oracle request with no owner would
+// judge every root of the system, so it is refused.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
+func TestLivenessOracleRequiresAnOwner(t *testing.T) {
+	for name, req := range map[string]graph.LifecycleRunRequest{
+		"root without owner":   {RootPath: "/r"},
+		"absent without owner": {Absent: []string{}},
+	} {
+		if _, err := livenessOracle(req); err == nil {
+			t.Errorf("%s: accepted, want refused", name)
+		}
 	}
 }

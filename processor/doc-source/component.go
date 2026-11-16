@@ -308,6 +308,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 	}
 
 	for _, state := range states {
+		c.stampOwner(state)
 		payload, err := entitypub.PayloadFromState(state)
 		if err != nil {
 			c.logger.Warn("Invalid doc entity state",
@@ -383,8 +384,10 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 
 	if event.Operation == handler.OperationDelete {
 		if c.deleteTriggersLifecycleRun() {
-			if root, ok := c.rootForPath(event.Path); ok {
-				c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
+			if roots := c.rootsForPath(event.Path); len(roots) > 0 {
+				for _, root := range roots {
+					c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
+				}
 			} else {
 				c.logger.Debug("delete event path not under any configured root; skipping lifecycle trigger",
 					"path", event.Path)
@@ -396,6 +399,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	// Prefer pre-built EntityStates.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
+			c.stampOwner(state)
 			payload, err := entitypub.PayloadFromState(state)
 			if err != nil {
 				stateID := ""
@@ -427,6 +431,29 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	c.logger.Warn("Doc-source change event missing required EntityStates",
 		"path", event.Path,
 		"operation", event.Operation)
+}
+
+// ownerFor is the lifecycle owner key of one configured root, keyed by its
+// absolute form so the stamp and the sweep (rootsForPath) agree.
+func (c *Component) ownerFor(root string) string {
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	instance := c.config.InstanceName
+	if instance == "" {
+		instance = "doc-source"
+	}
+	return graph.LifecycleOwner(instance, root)
+}
+
+// stampOwner writes the owner fact of the root a document came from, so only
+// that root's sweep judges it (#286). A state with no root carries none and is
+// never judged by a sweep.
+func (c *Component) stampOwner(state *handler.EntityState) {
+	if state == nil || state.Root == "" {
+		return
+	}
+	state.Triples = append(state.Triples, graph.LifecycleOwnerTriple(state.ID, c.ownerFor(state.Root), state.UpdatedAt))
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via entitypub.
@@ -472,13 +499,15 @@ func (c *Component) notePassageCount(ctx context.Context, path string, states []
 	if !c.deleteTriggersLifecycleRun() || passages >= previous {
 		return
 	}
-	root, ok := c.rootForPath(path)
-	if !ok {
+	roots := c.rootsForPath(path)
+	if len(roots) == 0 {
 		return
 	}
 	c.logger.Debug("document shrank; announcing scope so vanished passages are marked",
 		"path", path, "was", previous, "now", passages)
-	c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonPassageRemoved)
+	for _, root := range roots {
+		c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonPassageRemoved)
+	}
 }
 
 // stateIsPassage reports whether an entity state is a passage rather than the
@@ -503,22 +532,26 @@ func (c *Component) deleteTriggersLifecycleRun() bool {
 	return c.config.WatchEnabled
 }
 
-// rootForPath returns the configured Paths entry that is an ancestor of (or
-// equal to) absPath, resolving both to absolute form for comparison.
-// doc-source may watch multiple root paths; a deleted file's containing root
-// determines the entity-ID system and the RootPath the lifecycle pass
-// anchors its liveness stat to.
-func (c *Component) rootForPath(absPath string) (root string, ok bool) {
+// rootsForPath returns every configured Paths entry that is an ancestor of
+// (or equal to) absPath, in absolute form. Roots may overlap — [root,
+// root/sub] — and each containing root ingested its own view of the file, a
+// distinct document owned by that root, so a lifecycle event must announce
+// every one of them: sweeping only the first would leave the others' views
+// current after the file is gone (#286).
+func (c *Component) rootsForPath(absPath string) []string {
+	var roots []string
+	seen := make(map[string]bool, len(c.config.Paths))
 	for _, p := range c.config.Paths {
 		absRoot, err := filepath.Abs(p)
-		if err != nil {
+		if err != nil || seen[absRoot] {
 			continue
 		}
 		if absPath == absRoot || strings.HasPrefix(absPath, absRoot+string(filepath.Separator)) {
-			return absRoot, true
+			seen[absRoot] = true
+			roots = append(roots, absRoot)
 		}
 	}
-	return "", false
+	return roots
 }
 
 // triggerLifecycleRun announces root's scope to the staleness lifecycle pass
@@ -536,6 +569,9 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string
 		Systems:  []string{system},
 		RootPath: root,
 		Reason:   reason,
+		// Only this root's documents answer to its stat; a shared project
+		// does not make another root's artifacts this root's to judge (#286).
+		Owner: c.ownerFor(root),
 	}
 	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)

@@ -11,8 +11,9 @@ import (
 // caller's completed enumeration is the only liveness evidence there is — and
 // it is better evidence than a stat, not worse.
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestLivenessOracle_NoOracleWhenNeitherIsGiven(t *testing.T) {
-	stat, err := livenessOracle(graph.LifecycleRunRequest{Org: "acme", Systems: []string{"s"}})
+	stat, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a", Org: "acme", Systems: []string{"s"}})
 	if err != nil {
 		t.Fatalf("livenessOracle: %v", err)
 	}
@@ -23,8 +24,9 @@ func TestLivenessOracle_NoOracleWhenNeitherIsGiven(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestLivenessOracle_RejectsTwoOracles(t *testing.T) {
-	_, err := livenessOracle(graph.LifecycleRunRequest{
+	_, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a",
 		Org:      "acme",
 		Systems:  []string{"s"},
 		RootPath: "/docs",
@@ -35,8 +37,9 @@ func TestLivenessOracle_RejectsTwoOracles(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestLivenessOracle_AbsentSetAnswersLiveness(t *testing.T) {
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a",
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/q4.md", "reports/old.md"},
@@ -62,8 +65,9 @@ func TestLivenessOracle_AbsentSetAnswersLiveness(t *testing.T) {
 // TestLivenessOracle_EmptyAbsentSetIsAnAssertion is the case the field's
 // missing omitempty protects. "My listing completed and nothing is gone" must
 // not decay into "mark everything in scope".
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestLivenessOracle_EmptyAbsentSetIsAnAssertion(t *testing.T) {
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a",
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{},
@@ -83,10 +87,11 @@ func TestLivenessOracle_EmptyAbsentSetIsAnAssertion(t *testing.T) {
 // pass rather than being marked by the source. The source knows the object key
 // and the parent document's ID; the passages carry their own IDs and the
 // parent's path. Grouping by path is what reaches all of them.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestAbsentSet_MarksParentAndPassagesTogether(t *testing.T) {
 	fx := docFixture{path: "reports/q4.md", count: 3, passages: 3}
 
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a",
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/q4.md"},
@@ -116,12 +121,13 @@ func TestAbsentSet_MarksParentAndPassagesTogether(t *testing.T) {
 
 // TestAbsentSet_LeavesPresentObjectsAlone keeps the blast radius proportional:
 // naming one gone object must not disturb the rest of the prefix.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestAbsentSet_LeavesPresentObjectsAlone(t *testing.T) {
 	present := docFixture{path: "reports/q3.md", count: 2, passages: 2}
 	gone := docFixture{path: "reports/q4.md", count: 2, passages: 2}
 	entities := append(present.build(), gone.build()...)
 
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a",
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/q4.md"},
@@ -157,6 +163,7 @@ func TestAbsentSet_LeavesPresentObjectsAlone(t *testing.T) {
 //
 // Without this the marker would survive until a re-seed, and a document that
 // came back would stay ranked as stale while being perfectly readable.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: The staleness pass accepts liveness evidence from sources whose artifacts are not files
 func TestAbsentSet_ReappearedArtifactIsCleared(t *testing.T) {
 	// The document is marked stale from an earlier pass, and its passages
 	// with it.
@@ -170,7 +177,7 @@ func TestAbsentSet_ReappearedArtifactIsCleared(t *testing.T) {
 
 	// The bucket now holds it again, so the completed pass names something
 	// else as absent — or nothing at all.
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{Owner: "owner-a",
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/some-other-doc.md"},

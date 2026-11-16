@@ -97,17 +97,11 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	for _, s := range req.Systems {
 		systemSet[s] = struct{}{}
 	}
-	var inScope []gtypes.EntityState
-	for i := range entities {
-		if _, ok := systemSet[entityIDSystem(entities[i].ID)]; ok {
-			inScope = append(inScope, entities[i])
-		}
-	}
-
 	statFn, err := livenessOracle(req)
 	if err != nil {
 		return graph.LifecycleRunResponse{}, err
 	}
+	inScope := lifecycleScope(entities, systemSet, req.Owner, statFn != nil)
 	toMark, toClear, pathCount := decideLifecycleActions(inScope, req.Reason, statFn)
 
 	resp := graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
@@ -134,6 +128,26 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	return resp, failures
 }
 
+// lifecycleScope selects the entities a pass judges: those in the request's
+// systems and, when the request carries a liveness oracle, whose owner fact
+// names the request's owner. A system slug is shared by every root configured
+// with the same project, so the system alone would let one root's sweep judge
+// another root's artifacts (#286). An entity with no owner fact is never
+// judged by an oracle sweep: no root has shown it is that root's to judge.
+func lifecycleScope(entities []gtypes.EntityState, systems map[string]struct{}, owner string, hasOracle bool) []gtypes.EntityState {
+	var inScope []gtypes.EntityState
+	for i := range entities {
+		if _, ok := systems[entityIDSystem(entities[i].ID)]; !ok {
+			continue
+		}
+		if hasOracle && tripleString(entities[i].Triples, source.EntityLifecycleOwner) != owner {
+			continue
+		}
+		inScope = append(inScope, entities[i])
+	}
+	return inScope
+}
+
 // livenessOracle turns a request into the function that answers "is the
 // artifact at this path still there?", or nil when the request carries no way
 // to tell.
@@ -145,6 +159,9 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 func livenessOracle(req graph.LifecycleRunRequest) (func(path string) bool, error) {
 	if req.RootPath != "" && req.Absent != nil {
 		return nil, fmt.Errorf("lifecycle run: root_path and absent are mutually exclusive")
+	}
+	if (req.RootPath != "" || req.Absent != nil) && req.Owner == "" {
+		return nil, fmt.Errorf("lifecycle run: owner is required with root_path or absent")
 	}
 
 	if req.RootPath != "" {

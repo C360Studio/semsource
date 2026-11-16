@@ -2,11 +2,17 @@ package graph
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semengine/natsclient"
+
+	"github.com/c360studio/semsource/entityid"
+	sourcevocab "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // LifecycleTriggerSubject is the NATS request/reply subject that runs the
@@ -73,6 +79,35 @@ type LifecycleRunRequest struct {
 	// marks everything in scope. omitempty would collapse the first into the
 	// second and retract a whole corpus on a pass that found nothing wrong.
 	Absent []string `json:"absent"`
+
+	// Owner is the LifecycleOwner key of the root (or bucket) whose liveness
+	// this request answers for. Only in-scope entities whose owner fact
+	// (source.lifecycle.owner) equals it are judged. A system slug is shared by
+	// every root configured with the same project, so without it one root's
+	// sweep would stat another root's artifacts in the wrong directory and mark
+	// live entities stale (#286). Required whenever RootPath or Absent is set.
+	Owner string `json:"owner,omitempty"`
+}
+
+// LifecycleOwner returns the owner key a source writes on the entities one of
+// its roots produces, and sends in that root's lifecycle requests:
+// "<instance>/<first 12 hex of sha256(root)>". The instance separates two
+// sources at one root (repo expansion gives AST and docs the same path); the
+// digest separates the roots of one multi-root instance and keeps local paths
+// out of graph facts. root must be canonical for the source — an absolute
+// filesystem path, or the bucket name for an object store — since the same
+// root spelled two ways yields two owners.
+func LifecycleOwner(instance, root string) string {
+	sum := sha256.Sum256([]byte(root))
+	return instance + "/" + hex.EncodeToString(sum[:6])
+}
+
+// LifecycleOwnerTriple is the owner fact for subject.
+func LifecycleOwnerTriple(subject, owner string, ts time.Time) message.Triple {
+	return message.Triple{
+		Subject: subject, Predicate: sourcevocab.EntityLifecycleOwner, Object: owner,
+		Source: entityid.PlatformSemsource, Timestamp: ts, Confidence: 1.0,
+	}
 }
 
 // LifecycleRunResponse summarizes one lifecycle pass.

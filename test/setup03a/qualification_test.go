@@ -633,6 +633,20 @@ func (h *harness) entity(id string) (exact, error) {
 	}
 	return e, nil
 }
+
+// ownerOf reads the lifecycle owner fact a source stamped on id.
+func (h *harness) ownerOf(id string) (string, error) {
+	e, err := h.entity(id)
+	if err != nil {
+		return "", err
+	}
+	owner, _ := value(e, "source.lifecycle.owner").(string)
+	if owner == "" {
+		return "", fmt.Errorf("entity %s carries no source.lifecycle.owner", id)
+	}
+	return owner, nil
+}
+
 func value(e exact, predicate string) any {
 	if e.Entity != nil {
 		for _, tr := range e.Entity.Triples {
@@ -969,7 +983,13 @@ func (h *harness) queries(stage string) {
 }
 func (h *harness) lifecycle(stage string) {
 	h.check(stage+"_lifecycle_pass", 20*time.Second, func() (any, error) {
-		raw, err := h.rpc("graph.lifecycle.run", map[string]any{"org": "setup03a", "systems": []string{"setup03a-corpus-v1"}, "root_path": h.source, "reason": "path_missing"})
+		// The sweep names the AST root's owner, read off an entity that root
+		// produced: a root judges only its own entities (#286).
+		owner, err := h.ownerOf(h.ids["run"])
+		if err != nil {
+			return nil, err
+		}
+		raw, err := h.rpc("graph.lifecycle.run", map[string]any{"org": "setup03a", "systems": []string{"setup03a-corpus-v1"}, "root_path": h.source, "reason": "path_missing", "owner": owner})
 		return json.RawMessage(raw), err
 	})
 }
