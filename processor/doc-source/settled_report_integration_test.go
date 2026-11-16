@@ -40,6 +40,7 @@ func (h heldDelivery) PublishToStreamWithMsgID(ctx context.Context, s string, d 
 // delivered < offered. The settled report must follow once delivery completes,
 // with no periodic reporter running — before the fix the figures corrected only
 // on the 30s tick, and the required e2e-local settle check rode on that tick.
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestReportWhenSettled_PublishesDeliveredFiguresWithoutTheTick(t *testing.T) {
 	srv := natstest.New(t)
 	reports := make(chan sourcestatus.Report, 8)

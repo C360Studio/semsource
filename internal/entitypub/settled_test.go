@@ -3,10 +3,14 @@ package entitypub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // enteringPublisher signals when a publish starts and holds it until released,
@@ -33,6 +37,7 @@ func (e *enteringPublisher) PublishToStream(ctx context.Context, _ string, _ []b
 // TestWaitSettled_WaitsForTheEntityTheDrainLoopHolds pins #284: a source's
 // post-seed report must wait for delivery, and an empty buffer is not
 // delivery — the drain loop holds a read entity while it publishes.
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestWaitSettled_WaitsForTheEntityTheDrainLoopHolds(t *testing.T) {
 	if err := mustPublisher(t, &enteringPublisher{}).WaitSettled(context.Background()); err != nil {
 		t.Fatalf("WaitSettled with nothing accepted = %v, want nil", err)
@@ -77,6 +82,80 @@ func TestWaitSettled_WaitsForTheEntityTheDrainLoopHolds(t *testing.T) {
 	}
 	if got := pub.Published(); got != 1 {
 		t.Fatalf("Published() = %d after WaitSettled returned, want 1", got)
+	}
+}
+
+// recoveringPublisher refuses its first publish with a retryable error, then
+// accepts, so the publisher enters backpressure and recovers on the retry.
+type recoveringPublisher struct{ calls int }
+
+func (r *recoveringPublisher) PublishToStreamWithMsgID(ctx context.Context, subject string, data []byte, _ string) error {
+	return r.PublishToStream(ctx, subject, data)
+}
+
+func (r *recoveringPublisher) PublishToStream(context.Context, string, []byte) error {
+	r.calls++
+	if r.calls == 1 {
+		return fmt.Errorf("first attempt: %w", nats.ErrNoResponders)
+	}
+	return nil
+}
+
+// pausingCounter holds the published metric's Inc, which runs after the
+// delivery counter has moved, so a test can observe the publisher there.
+type pausingCounter struct {
+	prometheus.Counter
+	reached chan struct{}
+	resume  chan struct{}
+}
+
+func (c pausingCounter) Inc() {
+	close(c.reached)
+	<-c.resume
+}
+
+// TestWaitSettled_RecoveryStateSettlesWithDelivery pins the #287 review
+// finding: once a retry succeeds, a caller woken by WaitSettled must not see
+// full delivery alongside the backpressure flag of the recovered stall.
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Backpressure is visible even when nothing is lost
+func TestWaitSettled_RecoveryStateSettlesWithDelivery(t *testing.T) {
+	pub, err := New(&recoveringPublisher{}, slog.Default(), WithRetryBackoff(time.Millisecond, time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newCounter := func(name string) prometheus.Counter {
+		return prometheus.NewCounter(prometheus.CounterOpts{Name: name})
+	}
+	paused := pausingCounter{Counter: newCounter("published"), reached: make(chan struct{}), resume: make(chan struct{})}
+	pub.metrics = &pubMetrics{
+		published:    paused,
+		failed:       newCounter("failed"),
+		dropped:      newCounter("dropped"),
+		retries:      newCounter("retries"),
+		backpressure: prometheus.NewGauge(prometheus.GaugeOpts{Name: "backpressure"}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pub.Start(ctx)
+	var resume sync.Once
+	defer func() {
+		resume.Do(func() { close(paused.resume) })
+		_ = pub.Stop(context.Background())
+	}()
+
+	if err := pub.Send(payloadN("recovers")); err != nil {
+		t.Fatal(err)
+	}
+	<-paused.reached // delivered and counted; the publisher is held here
+
+	if err := pub.WaitSettled(ctx); err != nil {
+		t.Fatalf("WaitSettled after delivery = %v, want nil", err)
+	}
+	if pub.InBackpressure() {
+		t.Fatal("settled observer sees backpressure after the retry delivered")
+	}
+	if got := pub.Retries(); got != 1 {
+		t.Fatalf("Retries() = %d, want 1: the harness must actually enter backpressure", got)
 	}
 }
 

@@ -469,11 +469,14 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
 		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
+			// Recovery state settles before the delivery counter moves: a
+			// WaitSettled caller can return the moment published advances, and
+			// its report must not pair full delivery with stale backpressure.
+			p.clearBackpressure()
+			p.publishFailing.Clear(p.logger, "entity publishing recovered")
 			p.published.Add(1)
 			p.noteOutcome()
 			p.metrics.incPublished()
-			p.clearBackpressure()
-			p.publishFailing.Clear(p.logger, "entity publishing recovered")
 			return nil
 		}
 
