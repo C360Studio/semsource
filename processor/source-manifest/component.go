@@ -78,8 +78,11 @@ type Component struct {
 	statusSub      *natsclient.Subscription
 	statusQuerySub *natsclient.Subscription
 	statusData     []byte // pre-marshaled latest status for HTTP and NATS
-	statusMu       sync.RWMutex
-	seedComplete   bool
+	// statusBuilt is a test seam: refreshStatus calls it between building a
+	// snapshot and storing it. Nil outside tests.
+	statusBuilt  func()
+	statusMu     sync.RWMutex
+	seedComplete bool
 	// removedSources guards against in-flight periodic reports from
 	// deregistered components resurrecting phantom status entries. Cleared
 	// per-instance on re-add. Guarded by statusMu.
@@ -472,6 +475,9 @@ func (c *Component) refreshStatus() *StatusPayload {
 	c.statusMu.Lock()
 	defer c.statusMu.Unlock()
 	status := c.aggregator.buildStatus(c.config.Namespace)
+	if c.statusBuilt != nil {
+		c.statusBuilt()
+	}
 	c.storeStatusLocked(status)
 	return status
 }
