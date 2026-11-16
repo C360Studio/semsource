@@ -150,6 +150,34 @@ python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "an absent fact FAILS the gate" || fail "an absent fact passed the gate"
 rm -rf "$corpus"
 
+echo "8. the R1 rank diff ranks valid evidence and refuses the rest"
+rd="$(mktemp -d)"
+res() { # $1 = file, rest = "id|answer-json" pairs
+	f="$1"; shift
+	printf '%s\n' "$@" | jq -Rn '{results: [inputs | split("|") | {id: .[0], answer: .[1]}]}' > "$f"
+}
+n1='{"nodes":[{"handle":"a"},{"handle":"b"}]}'
+n2='{"nodes":[{"handle":"b"},{"handle":"a"}]}'
+res "$rd/ok.json" "Q1|$n1" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}' 'Q4|{"misses":[{"query":"x"}]}'
+res "$rd/swap.json" "Q1|$n2" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}' 'Q4|{"misses":[{"query":"x"}]}'
+rdiff() { "$here/rank-diff.sh" "$1" "$2" >/dev/null 2>&1; echo $?; }
+[ "$(rdiff "$rd/ok.json" "$rd/ok.json")" = 0 ] && ok "identical rankings, including no-hit answers, are RANK-STABLE" || fail "identical rankings did not pass"
+[ "$(rdiff "$rd/ok.json" "$rd/swap.json")" = 1 ] && ok "a reordering is RANK-UNSTABLE" || fail "a reordering passed"
+res "$rd/err.json" 'Q1|{"isError":true,"error":"down"}'
+[ "$(rdiff "$rd/err.json" "$rd/err.json")" = 2 ] && ok "an error answer is refused" || fail "an error answer was ranked"
+res "$rd/bad.json" 'Q1|not JSON'
+[ "$(rdiff "$rd/bad.json" "$rd/bad.json")" = 2 ] && ok "a non-JSON answer is refused" || fail "a non-JSON answer was ranked"
+res "$rd/shape.json" 'Q1|{"index":{}}'
+[ "$(rdiff "$rd/shape.json" "$rd/shape.json")" = 2 ] && ok "an answer with neither nodes nor matches is refused" || fail "a shapeless answer was ranked"
+echo '{"results":[]}' > "$rd/empty.json"
+[ "$(rdiff "$rd/empty.json" "$rd/empty.json")" = 2 ] && ok "an empty result set is refused" || fail "an empty result set passed"
+res "$rd/dup.json" "Q1|$n1" "Q1|$n1"
+[ "$(rdiff "$rd/dup.json" "$rd/dup.json")" = 2 ] && ok "duplicate question ids are refused" || fail "duplicate question ids passed"
+res "$rd/less.json" "Q1|$n1" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}'
+[ "$(rdiff "$rd/less.json" "$rd/ok.json")" = 2 ] && ok "a question only in the second file is refused" || fail "an added question passed"
+[ "$(rdiff "$rd/ok.json" "$rd/less.json")" = 2 ] && ok "a question missing from the second file is refused" || fail "a removed question passed"
+rm -rf "$rd"
+
 echo
 if [ "$fails" -eq 0 ]; then
 	echo "matcher tests passed"
