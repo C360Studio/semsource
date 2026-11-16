@@ -51,6 +51,14 @@ func (c pathSeedClient) Resolve(ctx context.Context, q fusion.ResolveQuery) (fus
 	return c.resolveCodeFile(ctx, cleanPath(q.Query), q.Limit)
 }
 
+// limitSeeds applies the caller's limit after path filtering (zero or less: none).
+func limitSeeds(res fusion.Resolution, limit int) fusion.Resolution {
+	if limit > 0 && len(res.Seeds) > limit {
+		res.Seeds = res.Seeds[:limit]
+	}
+	return res
+}
+
 // cleanPath normalizes a query path to the slash-delimited, root-relative form
 // the path triples carry.
 func cleanPath(query string) string {
@@ -58,15 +66,20 @@ func cleanPath(query string) string {
 }
 
 func (c pathSeedClient) resolveCodeFile(ctx context.Context, p string, limit int) (fusion.Resolution, error) {
+	// Every file with this base name, unlimited: the caller's limit applies after
+	// the path filter, or the file asked for could rank past it among same-named
+	// files and read as absent. The name index bounds the read itself and refuses
+	// with an error past its budget.
 	res, err := c.RetrievalClient.Resolve(ctx, fusion.ResolveQuery{
-		Query: path.Base(p), Mode: fusion.ResolveModeSymbol, Limit: limit,
+		Query: path.Base(p), Mode: fusion.ResolveModeSymbol,
 	})
 	if err != nil || len(res.Seeds) == 0 {
 		return fusion.Resolution{}, err
 	}
-	return c.keep(ctx, fusion.SeedIDs(res.Seeds), func(e *fusion.Entity) bool {
+	kept, err := c.keep(ctx, fusion.SeedIDs(res.Seeds), func(e *fusion.Entity) bool {
 		return e.First(ast.CodeType) == string(ast.TypeFile) && e.First(ast.CodePath) == p
 	})
+	return limitSeeds(kept, limit), err
 }
 
 func (c pathSeedClient) resolveDocument(ctx context.Context, p string) (fusion.Resolution, error) {
@@ -88,9 +101,13 @@ func (c pathSeedClient) resolveDocument(ctx context.Context, p string) (fusion.R
 	})
 }
 
-// keep hydrates ids and returns, in order, the seeds whose entity matches. An
-// absent ID is simply not kept; a backend failure stays a failure, so a degraded
-// graph never reads as "no such file".
+// keep hydrates ids and returns, in order, the seeds whose entity matches. Only
+// an ID the graph reports not found is dropped. A candidate that could not be
+// read (unhydrated error or unknown) is kept as a seed, because whether it
+// matches cannot be known: the engine then fails to hydrate it again and reports
+// it under the response's unhydrated seeds (deferring when every seed is), never
+// as an ordinary miss. A backend failure stays a failure, so a degraded graph
+// never reads as "no such file".
 func (c pathSeedClient) keep(ctx context.Context, ids []string, match func(*fusion.Entity) bool) (fusion.Resolution, error) {
 	hydration, err := c.RetrievalClient.Entities(ctx, ids)
 	if err != nil {
@@ -100,6 +117,11 @@ func (c pathSeedClient) keep(ctx context.Context, ids []string, match func(*fusi
 	for _, e := range hydration.Entities {
 		if match(e) {
 			matched[e.ID] = true
+		}
+	}
+	for _, u := range hydration.Unhydrated {
+		if u.Reason != fusion.UnhydratedNotFound {
+			matched[u.Handle] = true
 		}
 	}
 	seeds := make([]fusion.Seed, 0, len(matched))

@@ -3,6 +3,7 @@ package codecontext
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ type wireGraph struct {
 	*fusiontest.MemGraph
 	resolves    []fusion.ResolveQuery
 	entitiesErr error
+	unreadable  map[string]fusion.UnhydratedReason
 }
 
 func (g *wireGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) (fusion.Resolution, error) {
@@ -30,14 +32,24 @@ func (g *wireGraph) Resolve(ctx context.Context, q fusion.ResolveQuery) (fusion.
 	if q.Mode == fusion.ResolveModePrefix && strings.ContainsAny(q.Query, `/\`) {
 		return fusion.Resolution{}, errors.New("invalid entity ID contract input")
 	}
-	return g.MemGraph.Resolve(ctx, q)
+	res, err := g.MemGraph.Resolve(ctx, q)
+	if q.Limit > 0 && len(res.Seeds) > q.Limit {
+		res.Seeds = res.Seeds[:q.Limit] // the real name index truncates at the limit
+	}
+	return res, err
 }
 
 func (g *wireGraph) Entities(ctx context.Context, ids []string) (fusion.Hydration, error) {
 	if g.entitiesErr != nil {
 		return fusion.Hydration{}, g.entitiesErr
 	}
-	return g.MemGraph.Entities(ctx, ids)
+	h, err := g.MemGraph.Entities(ctx, ids)
+	for i, u := range h.Unhydrated {
+		if reason, ok := g.unreadable[u.Handle]; ok {
+			h.Unhydrated[i].Reason = reason
+		}
+	}
+	return h, err
 }
 
 func prefix(q string) fusion.ResolveQuery {
@@ -144,5 +156,55 @@ func TestPathSeed_OtherModesPassThrough(t *testing.T) {
 		if err != nil || !slices.Equal(fusion.SeedIDs(res.Seeds), []string{"x"}) {
 			t.Errorf("%s = %v, %v; want pass-through", mode, fusion.SeedIDs(res.Seeds), err)
 		}
+	}
+}
+
+// TestPathSeed_PathBeyondNameLimit: the file asked for ranks after the caller's
+// limit among same-named files and must still be found; the limit applies after
+// the path filter.
+func TestPathSeed_PathBeyondNameLimit(t *testing.T) {
+	g := &wireGraph{MemGraph: fusiontest.NewMemGraph()}
+	ids := make([]string, 0, 41)
+	for i := range 40 {
+		id := fmt.Sprintf("o.p.s.golang.file.d%02d-comp-go", i)
+		g.AddEntity(id, map[string]any{ast.DcTitle: "comp.go", ast.CodeType: "file", ast.CodePath: fmt.Sprintf("d%02d/comp.go", i)})
+		ids = append(ids, id)
+	}
+	target := "o.p.s.golang.file.target-comp-go"
+	g.AddEntity(target, map[string]any{ast.DcTitle: "comp.go", ast.CodeType: "file", ast.CodePath: "target/comp.go"})
+	g.SetResolve("comp.go", append(ids, target)...)
+	c := pathSeedClient{RetrievalClient: g, lens: "code"}
+
+	res, err := c.Resolve(context.Background(), prefix("target/comp.go"))
+	if err != nil || !slices.Equal(fusion.SeedIDs(res.Seeds), []string{target}) {
+		t.Errorf("Resolve = %v, %v; want [%s] from past the 40th name match", fusion.SeedIDs(res.Seeds), err, target)
+	}
+}
+
+// TestPathSeed_UnreadableCandidateIsNotAMiss: a candidate the graph could not
+// read stays a seed, so the engine reports it unhydrated instead of a miss; only
+// a candidate reported not found is dropped.
+func TestPathSeed_UnreadableCandidateIsNotAMiss(t *testing.T) {
+	auth := entityid.Authority{Org: "o", Platform: "p"}
+	healthy := handlerdoc.DocumentEntityID(auth, "a", "docs/x.md")
+	broken := handlerdoc.DocumentEntityID(auth, "b", "docs/x.md")
+	for _, reason := range []fusion.UnhydratedReason{fusion.UnhydratedError, fusion.UnhydratedUnknown} {
+		t.Run(string(reason), func(t *testing.T) {
+			g := &wireGraph{MemGraph: fusiontest.NewMemGraph(), unreadable: map[string]fusion.UnhydratedReason{broken: reason}}
+			ctx := context.Background()
+
+			only := pathSeedClient{RetrievalClient: g, lens: "docs", authority: auth, systems: []string{"b"}}
+			res, err := only.Resolve(ctx, prefix("docs/x.md"))
+			if err != nil || !slices.Equal(fusion.SeedIDs(res.Seeds), []string{broken}) {
+				t.Errorf("unreadable only = %v, %v; want the unreadable candidate kept", fusion.SeedIDs(res.Seeds), err)
+			}
+
+			g.AddEntity(healthy, map[string]any{source.DocFilePath: "docs/x.md"})
+			mixed := pathSeedClient{RetrievalClient: g, lens: "docs", authority: auth, systems: []string{"a", "b"}}
+			res, err = mixed.Resolve(ctx, prefix("docs/x.md"))
+			if err != nil || !slices.Equal(fusion.SeedIDs(res.Seeds), []string{healthy, broken}) {
+				t.Errorf("mixed = %v, %v; want the match and the unreadable candidate", fusion.SeedIDs(res.Seeds), err)
+			}
+		})
 	}
 }
