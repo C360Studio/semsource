@@ -1,0 +1,18 @@
+# #233 part 2 override: main e5d90d3 (SemEngine v0.1.0-alpha.5) pinned by digest,
+# the #230 corpora, isolated ports. SEM233_CONFIGS holds tier0.json (and
+# tier0-reversed.json for R1); SEM233_CORPUS is the corpus tree. Select the config
+# with SEMSOURCE_CONFIG=tier0.json — the base compose defaults to mvp.json.
+services:
+  semsource:
+    image: ghcr.io/c360studio/semsource@sha256:e65c9d5c59d2853c13a52e936e2d47000fc3496d87dca695eb1f613cf51d19c0
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:28080:8080"
+    volumes: !override
+      - ${SEM233_CONFIGS:?set SEM233_CONFIGS}:/etc/semsource:ro
+      - ${SEM233_CORPUS:?set SEM233_CORPUS}:/workspace:ro
+    restart: "no"
+  nats:
+    ports: !override
+      - "127.0.0.1:25222:4222"
+      - "127.0.0.1:29222:8222"
