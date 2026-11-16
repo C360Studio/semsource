@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -11,9 +12,11 @@ import (
 	"github.com/c360studio/semengine/pkg/fusion"
 
 	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/graph"
 	handlerdoc "github.com/c360studio/semsource/handler/doc"
 	"github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/fusiontest"
+	"github.com/c360studio/semsource/source/fusion/lens/code"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
@@ -181,30 +184,74 @@ func TestPathSeed_PathBeyondNameLimit(t *testing.T) {
 	}
 }
 
-// TestPathSeed_UnreadableCandidateIsNotAMiss: a candidate the graph could not
-// read stays a seed, so the engine reports it unhydrated instead of a miss; only
-// a candidate reported not found is dropped.
-func TestPathSeed_UnreadableCandidateIsNotAMiss(t *testing.T) {
+// TestPathSeed_UnreadableCandidateFailsTheLookup: a candidate the graph could
+// not read fails the lookup, alone or beside a healthy match, because its path
+// cannot be checked; only a candidate reported not found is dropped.
+func TestPathSeed_UnreadableCandidateFailsTheLookup(t *testing.T) {
 	auth := entityid.Authority{Org: "o", Platform: "p"}
 	healthy := handlerdoc.DocumentEntityID(auth, "a", "docs/x.md")
 	broken := handlerdoc.DocumentEntityID(auth, "b", "docs/x.md")
 	for _, reason := range []fusion.UnhydratedReason{fusion.UnhydratedError, fusion.UnhydratedUnknown} {
 		t.Run(string(reason), func(t *testing.T) {
 			g := &wireGraph{MemGraph: fusiontest.NewMemGraph(), unreadable: map[string]fusion.UnhydratedReason{broken: reason}}
-			ctx := context.Background()
-
-			only := pathSeedClient{RetrievalClient: g, lens: "docs", authority: auth, systems: []string{"b"}}
-			res, err := only.Resolve(ctx, prefix("docs/x.md"))
-			if err != nil || !slices.Equal(fusion.SeedIDs(res.Seeds), []string{broken}) {
-				t.Errorf("unreadable only = %v, %v; want the unreadable candidate kept", fusion.SeedIDs(res.Seeds), err)
-			}
-
 			g.AddEntity(healthy, map[string]any{source.DocFilePath: "docs/x.md"})
-			mixed := pathSeedClient{RetrievalClient: g, lens: "docs", authority: auth, systems: []string{"a", "b"}}
-			res, err = mixed.Resolve(ctx, prefix("docs/x.md"))
-			if err != nil || !slices.Equal(fusion.SeedIDs(res.Seeds), []string{healthy, broken}) {
-				t.Errorf("mixed = %v, %v; want the match and the unreadable candidate", fusion.SeedIDs(res.Seeds), err)
+			for _, systems := range [][]string{{"b"}, {"a", "b"}} {
+				c := pathSeedClient{RetrievalClient: g, lens: "docs", authority: auth, systems: systems}
+				res, err := c.Resolve(context.Background(), prefix("docs/x.md"))
+				if err == nil {
+					t.Errorf("systems %v: seeds = %v, nil error; want the lookup to fail", systems, fusion.SeedIDs(res.Seeds))
+				}
 			}
 		})
+	}
+}
+
+// flakyGraph reports one entity unknown on its first hydration and serves it
+// on every later one: a transient incomplete read.
+type flakyGraph struct {
+	*fusiontest.MemGraph
+	flaky string
+	reads int
+}
+
+func (g *flakyGraph) Entities(ctx context.Context, ids []string) (fusion.Hydration, error) {
+	g.reads++
+	h, err := g.MemGraph.Entities(ctx, ids)
+	if g.reads > 1 {
+		return h, err
+	}
+	kept := h.Entities[:0]
+	for _, e := range h.Entities {
+		if e.ID == g.flaky {
+			h.Unhydrated = append(h.Unhydrated, fusion.Unhydrated{Handle: e.ID, Reason: fusion.UnhydratedUnknown})
+			continue
+		}
+		kept = append(kept, e)
+	}
+	h.Entities = kept
+	return h, err
+}
+
+// TestPathSeed_TransientReadNeverAnswersWithAnotherFile runs the real engine: a
+// same-named file at another path whose first read is incomplete must never come
+// back as the answer to the requested path once a later read succeeds.
+func TestPathSeed_TransientReadNeverAnswersWithAnotherFile(t *testing.T) {
+	other := "o.p.s.golang.file.other-comp-go"
+	g := &flakyGraph{MemGraph: fusiontest.NewMemGraph(), flaky: other}
+	g.AddEntity(other, map[string]any{ast.DcTitle: "comp.go", ast.CodeType: "file", ast.CodePath: "other/comp.go"})
+	g.SetResolve("comp.go", other)
+	resolver := fusion.NewBodyResolver(fusion.MapStoreResolver{graph.BodyStoreInstance: fusiontest.NewMemStore()})
+	eng, err := fusion.NewEngine(pathSeedClient{RetrievalClient: g, lens: "code"}, resolver, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := eng.Fuse(context.Background(), fusion.Request{Query: "wanted/comp.go"}, code.New())
+	for _, n := range resp.Nodes {
+		if n.Handle == other {
+			t.Fatalf("answered wanted/comp.go with %s (err %v)", n.Handle, err)
+		}
+	}
+	if err == nil && !resp.Deferred {
+		t.Errorf("resp = %+v, nil error; want the unchecked read to fail or defer, not answer", resp)
 	}
 }

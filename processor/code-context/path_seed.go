@@ -2,6 +2,7 @@ package codecontext
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"strings"
 
@@ -103,11 +104,11 @@ func (c pathSeedClient) resolveDocument(ctx context.Context, p string) (fusion.R
 
 // keep hydrates ids and returns, in order, the seeds whose entity matches. Only
 // an ID the graph reports not found is dropped. A candidate that could not be
-// read (unhydrated error or unknown) is kept as a seed, because whether it
-// matches cannot be known: the engine then fails to hydrate it again and reports
-// it under the response's unhydrated seeds (deferring when every seed is), never
-// as an ordinary miss. A backend failure stays a failure, so a degraded graph
-// never reads as "no such file".
+// read (unhydrated error or unknown) fails the lookup: whether it is the file
+// asked for cannot be checked, so neither a miss nor a seed would be honest (a
+// seed would let a later successful read return an unchecked, possibly
+// different file). A backend failure likewise stays a failure, so a degraded
+// graph never reads as "no such file".
 func (c pathSeedClient) keep(ctx context.Context, ids []string, match func(*fusion.Entity) bool) (fusion.Resolution, error) {
 	hydration, err := c.RetrievalClient.Entities(ctx, ids)
 	if err != nil {
@@ -121,7 +122,7 @@ func (c pathSeedClient) keep(ctx context.Context, ids []string, match func(*fusi
 	}
 	for _, u := range hydration.Unhydrated {
 		if u.Reason != fusion.UnhydratedNotFound {
-			matched[u.Handle] = true
+			return fusion.Resolution{}, fmt.Errorf("path lookup: candidate %s unreadable (%s)", u.Handle, u.Reason)
 		}
 	}
 	seeds := make([]fusion.Seed, 0, len(matched))
