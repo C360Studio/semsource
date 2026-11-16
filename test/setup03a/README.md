@@ -56,7 +56,7 @@ the process exit code. The report is flushed after every check, including before
 | --- | --- | --- | --- |
 | `bm25`, structural checks | `configs/tiers/tier0-statistical.json` | Structural slice under BM25 | 0 |
 | `bm25`, retrieval checks | `configs/tiers/tier0-statistical.json` | BM25 | 1 |
-| `neural` | `configs/tiers/tier1-semantic.json` | Real HTTP embeddings | 2, retaining structural checks |
+| `neural` | none until 04C (#234); the harness refuses it | Real HTTP embeddings | 2, retaining structural checks |
 
 The harness loads the selected config and replaces only source paths, fixture namespace/project/revision, per-run
 ports, and the provider URL. It retains model name, query prefix, index-worker count, and coalescing settings.

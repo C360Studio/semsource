@@ -24,10 +24,11 @@ type EntityStoreConfig struct {
 
 // GraphConfig configures graph subsystem components.
 type GraphConfig struct {
-	// EmbedderType is the embedding mode ("none", "bm25", or "http"). Defaults to "bm25".
-	EmbedderType string `json:"embedder_type,omitempty"`
+	// LexicalSearch runs graph-lexical, the tier 0 word index behind code_search
+	// and doc_context. Nil means on; false composes a structural-only graph.
+	LexicalSearch *bool `json:"lexical_search,omitempty"`
 
-	// CoalesceMs is the debounce window in ms for graph-index and graph-embedding.
+	// CoalesceMs is the debounce window in ms for graph-index.
 	// Defaults to 200.
 	CoalesceMs int `json:"coalesce_ms,omitempty"`
 
@@ -47,6 +48,7 @@ type GraphConfig struct {
 	EnablePlayground   *bool           `json:"enable_playground,omitempty"`
 	EmbeddingBatchSize *int            `json:"embedding_batch_size,omitempty"`
 	ClusteringLLM      *bool           `json:"clustering_llm,omitempty"`
+	EmbedderType       json.RawMessage `json:"embedder_type,omitempty"`
 	EntityIDEdges      json.RawMessage `json:"entity_id_edges,omitempty"`
 }
 
@@ -140,11 +142,10 @@ type Config struct {
 	Graph *GraphConfig `json:"graph,omitempty"`
 
 	// ModelRegistry is the semengine unified model-endpoint registry, passed
-	// straight through to the ServiceManager (ssCfg.ModelRegistry) so
-	// graph-embedding's HTTP embedder (tier 1, semembed) can resolve its endpoint
-	// by capability ("embedding"). Reuses the semengine model.Registry type
-	// directly — no bespoke shape. Nil = tier 0 (none / BM25), no external model
-	// services. See configs/tiers/ and docs.
+	// straight through to the ServiceManager (ssCfg.ModelRegistry). Reuses the
+	// semengine model.Registry type directly — no bespoke shape. Nil = tier 0,
+	// no external model services. Nothing at tier 0 resolves from it; the
+	// tier 1 embedder that will is #234.
 	ModelRegistry *model.Registry `json:"model_registry,omitempty"`
 
 	// Metrics configures the Prometheus metrics endpoint.
@@ -264,12 +265,16 @@ func (c *Config) validateGraph() error {
 	if len(c.Graph.EntityIDEdges) > 0 && string(c.Graph.EntityIDEdges) != "null" {
 		return fmt.Errorf("config: graph.entity_id_edges is retired in SemEngine (ADR-099 groups communities by entity-ID prefix); remove graph.entity_id_edges")
 	}
-	switch c.Graph.EmbedderType {
-	case "", "none", "bm25", "http":
-	default:
-		return fmt.Errorf("config: graph.embedder_type %q is invalid (allowed: \"none\", \"bm25\", \"http\")", c.Graph.EmbedderType)
+	if len(c.Graph.EmbedderType) > 0 && string(c.Graph.EmbedderType) != "null" {
+		return fmt.Errorf("config: graph.embedder_type is retired in SemEngine: tier 0 word search is graph-lexical, on by default " +
+			"(set graph.lexical_search to false for a structural-only graph), and the HTTP embedder returns with tier 1 (#234) — remove graph.embedder_type")
 	}
 	return nil
+}
+
+// LexicalSearchEnabled reports whether the composition runs graph-lexical.
+func (g *GraphConfig) LexicalSearchEnabled() bool {
+	return g == nil || g.LexicalSearch == nil || *g.LexicalSearch
 }
 
 // defaultGraphIngestSubjects lists the five subjects SemSource's GRAPH stream
@@ -359,11 +364,10 @@ func validateWebSocketPath(path string) error {
 	return nil
 }
 
-// validateModelRegistry checks the optional model registry and the tier wiring
-// that depends on it, failing fast at load time (before any component starts)
-// rather than letting graph-embedding degrade silently at runtime. The registry
-// itself is validated by semengine; here we additionally enforce that a selected
-// tier has the capability it needs to resolve.
+// validateModelRegistry checks the optional model registry at load time, before
+// any component starts. The registry itself is validated by semengine; here we
+// additionally enforce that every capability resolves to an endpoint that can
+// serve it.
 func (c *Config) validateModelRegistry() error {
 	if c.ModelRegistry != nil {
 		if err := c.ModelRegistry.Validate(); err != nil {
@@ -371,52 +375,14 @@ func (c *Config) validateModelRegistry() error {
 		}
 	}
 
-	var embedderType string
-	if c.Graph != nil {
-		embedderType = c.Graph.EmbedderType
-	}
-
-	// Tier 1: the HTTP embedder resolves the "embedding" capability at startup;
-	// without a registry that provides it, graph-embedding cannot start.
-	if embedderType == "http" {
-		if err := requireCapability(c.ModelRegistry, model.CapabilityEmbedding,
-			`graph.embedder_type "http" (tier 1) needs a model_registry with an "embedding" capability (→ semembed)`); err != nil {
-			return err
-		}
-	}
-
 	// Every capability that resolves at all must resolve to an endpoint that can
-	// serve it — the complement of the tier checks above, which only cover the
-	// capabilities a selected tier needs.
+	// serve it.
 	return validateCapabilityRoles(c.ModelRegistry)
-}
-
-// requireCapability fails unless the registry EXPLICITLY declares capability.
-// We require an explicit capability rather than accepting reg.Resolve's
-// fallback to defaults.model: that fallback would silently route, say,
-// community_summary to the embedding endpoint (defaults.model is typically the
-// embedder), which starts cleanly and then produces garbage. Demanding the
-// operator declare the capability is the honest fail-fast. GetCapability!=nil
-// already implies a non-empty Preferred list with existing endpoints (semstreams
-// Registry.Validate ran first), so resolution is guaranteed to succeed.
-func requireCapability(reg *model.Registry, capability, hint string) error {
-	if reg == nil {
-		return fmt.Errorf("config: %s, but none is configured", hint)
-	}
-	if reg.GetCapability(capability) == nil {
-		return fmt.Errorf("config: %s — the registry declares no %q capability", hint, capability)
-	}
-	name := reg.Resolve(capability)
-	if name == "" || reg.GetEndpoint(name) == nil {
-		return fmt.Errorf("config: %s — %q resolves to no endpoint", hint, capability)
-	}
-	return nil
 }
 
 // llmCapabilities are the model-registry capabilities that require a generative
 // (chat-completions) endpoint. Routing any of them to an embeddings endpoint
-// starts cleanly and then fails at call time — the failure mode requireCapability
-// already names for the tier capabilities it guards.
+// starts cleanly and then fails at call time.
 //
 // embedding is deliberately absent: it is the one capability that REQUIRES an
 // embeddings endpoint, and it is checked in the opposite direction below.
@@ -466,12 +432,10 @@ func isEmbeddingEndpoint(ep *model.EndpointConfig) bool {
 // validateCapabilityRoles rejects a registry in which a capability resolves to an
 // endpoint that cannot serve it.
 //
-// This is the complement of requireCapability. That function enforces that a
-// capability a SELECTED TIER needs is explicitly declared; this one enforces that
-// a capability which resolves AT ALL resolves to something real. Both say the same
-// thing — a capability's binding is never allowed to be fictional — and the gap
-// between them is how every shipped config came to route query_classification and
-// answer_synthesis to the embedder via defaults.model.
+// A capability which resolves AT ALL must resolve to something real: a
+// capability's binding is never allowed to be fictional. Without this check every
+// shipped config came to route query_classification and answer_synthesis to the
+// embedder via defaults.model.
 //
 // A misroute is REJECTED, not silently treated as unbound. Quietly degrading would
 // fix the runtime behaviour and leave the configuration asserting something untrue,

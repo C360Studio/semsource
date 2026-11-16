@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -59,7 +60,7 @@ func TestBuildSemstreamsConfig_RequiredComponentSet(t *testing.T) {
 		"source-manifest",
 		"graph-ingest",
 		"graph-index",
-		"graph-embedding",
+		"graph-lexical",
 		"graph-query",
 		"graph-gateway",
 		"objectstore",
@@ -360,58 +361,69 @@ func assertPortSubjects(t *testing.T, got, want map[string]string) {
 	}
 }
 
-func TestGraphSubsystemComponents_GraphEmbeddingDefersToDefaultPorts(t *testing.T) {
-	components, err := graphSubsystemComponents(&config.Config{})
+func TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts(t *testing.T) {
+	components, err := graphSubsystemComponents(&config.Config{Graph: &config.GraphConfig{EnableClustering: true}})
 	if err != nil {
 		t.Fatalf("graphSubsystemComponents() error = %v", err)
 	}
-
-	embedding, ok := components["graph-embedding"]
-	if !ok {
-		t.Fatal("graph-embedding component not configured")
+	if _, ok := components["graph-embedding"]; ok {
+		t.Fatal("graph-embedding composed at tier 0; SemEngine refuses it without an embedder")
 	}
-
-	var raw map[string]any
-	if err := json.Unmarshal(embedding.Config, &raw); err != nil {
-		t.Fatalf("unmarshal graph-embedding config: %v", err)
+	suffixesOf := func(name string) []string {
+		t.Helper()
+		comp, ok := components[name]
+		if !ok {
+			t.Fatalf("%s component not configured", name)
+		}
+		var raw struct {
+			Ports        json.RawMessage `json:"ports"`
+			TextSuffixes []string        `json:"text_suffixes"`
+		}
+		if err := json.Unmarshal(comp.Config, &raw); err != nil {
+			t.Fatalf("unmarshal %s config: %v", name, err)
+		}
+		if raw.Ports != nil {
+			t.Fatalf("%s config overrides ports; its DefaultConfig owns them", name)
+		}
+		return raw.TextSuffixes
 	}
-	// beta.160 defaults declare the entity watch and content_store read; an
-	// override here would drift on every bump, and the beta.159 outputs
-	// rejection this test used to pin is superseded by the strict envelope.
-	if _, present := raw["ports"]; present {
-		t.Fatal("graph-embedding config overrides ports; beta.160 defaults own them")
+	lexical := suffixesOf("graph-lexical")
+	// A non-empty list replaces SemEngine's defaults: it must keep a default
+	// (.title) and add the code doc predicates, or signatures and docstrings
+	// never reach word search.
+	for _, want := range []string{".title", ".signature", ".comment"} {
+		if !slices.Contains(lexical, want) {
+			t.Fatalf("graph-lexical text_suffixes %v lack %s", lexical, want)
+		}
 	}
-	// text_suffixes stays product-owned: without the code doc predicates,
-	// signatures and docstrings never reach the semantic index (#601).
-	suffixes, _ := raw["text_suffixes"].([]any)
-	if len(suffixes) == 0 {
-		t.Fatal("text_suffixes override missing; code doc predicates would not embed")
+	if clustering := suffixesOf("graph-clustering"); !slices.Equal(clustering, lexical) {
+		t.Fatalf("graph-clustering text_suffixes %v differ from graph-lexical's %v", clustering, lexical)
 	}
 }
 
 // spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
-func TestGraphSubsystemComponents_EmbedderNoneOmitsGraphEmbeddingAndDisablesQueryEmbeddings(t *testing.T) {
+func TestGraphSubsystemComponents_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
+	off := false
 	cfg := &config.Config{
 		Namespace: "acme",
-		Graph:     &config.GraphConfig{EmbedderType: "none"},
+		Graph:     &config.GraphConfig{LexicalSearch: &off},
 	}
 	ssCfg, err := buildSemstreamsConfig(cfg, "acme")
 	if err != nil {
 		t.Fatalf("buildSemstreamsConfig() error = %v", err)
 	}
-
-	if _, ok := ssCfg.Components["graph-embedding"]; ok {
-		t.Fatal("graph-embedding must not be instantiated when embedder_type is none")
+	for _, name := range []string{"graph-lexical", "graph-embedding"} {
+		if _, ok := ssCfg.Components[name]; ok {
+			t.Fatalf("%s must not be composed when lexical_search is false", name)
+		}
 	}
-
 	var queryRaw map[string]any
 	if err := json.Unmarshal(ssCfg.Components["graph-query"].Config, &queryRaw); err != nil {
 		t.Fatalf("unmarshal graph-query config: %v", err)
 	}
-	if enabled, ok := queryRaw["embedding_enabled"].(bool); !ok || enabled {
-		t.Fatalf("graph-query embedding_enabled = %v, want false", queryRaw["embedding_enabled"])
+	if enabled, _ := queryRaw["embedding_enabled"].(bool); enabled {
+		t.Fatal("graph-query embedding_enabled = true with no embedder")
 	}
-
 	for _, compName := range []string{"source-manifest", "mcp-gateway"} {
 		var raw map[string]any
 		if err := json.Unmarshal(ssCfg.Components[compName].Config, &raw); err != nil {

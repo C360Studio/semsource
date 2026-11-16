@@ -35,9 +35,10 @@ type Config struct {
 	// InstanceName is the unique component instance name.
 	InstanceName string `json:"instance_name,omitempty" schema:"type:string,description:Unique component instance name,category:advanced"`
 
-	// SemanticEnabled reports whether the composition runs graph-embedding.
-	// Nil defaults to true; false reports embedding as disabled (not_enabled)
-	// in source_status without polling GRAPH_STATUS/graph-embedding.
+	// SemanticEnabled reports whether the composition runs a search index
+	// (graph-lexical at tier 0). Nil defaults to true; false reports embedding
+	// as disabled (not_enabled) in source_status without polling
+	// GRAPH_STATUS/graph-lexical.
 	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
 }
 

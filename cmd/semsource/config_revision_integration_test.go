@@ -38,10 +38,10 @@ const (
 	guideEdited = `[{"type": "docs", "paths": ["./guide", "./more"]}]`
 )
 
-// semanticMembers is a tier 1 composition whose embedding endpoint is at url.
+// semanticMembers is a composition whose model registry's embedding endpoint is
+// at url. Nothing at tier 0 resolves it; it gives a revision a registry to change.
 func semanticMembers(url string) string {
-	return `"graph": {"embedder_type": "http"},
-	  "model_registry": {"endpoints": {"semembed": {"provider": "openai", "url": "` + url + `", "model": "embed-s"}},
+	return `"model_registry": {"endpoints": {"semembed": {"provider": "openai", "url": "` + url + `", "model": "embed-s"}},
 	                     "capabilities": {"embedding": {"preferred": ["semembed"]}}},`
 }
 

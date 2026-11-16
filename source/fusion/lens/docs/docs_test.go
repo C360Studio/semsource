@@ -116,9 +116,9 @@ func TestDocsLensViaEngine(t *testing.T) {
 	if n.Class != cco.MaterialCopyOfDocument {
 		t.Fatalf("expected MaterialCopyOfDocument class, got %q", n.Class)
 	}
-	// NL query → semantic resolve → embedding provenance.
-	if resp.Provenance != fusion.ProvenanceEmbedding {
-		t.Fatalf("expected embedding provenance for NL doc query, got %q", resp.Provenance)
+	// NL query → word-index resolve → lexical provenance (semengine alpha.5).
+	if resp.Provenance != fusion.ProvenanceLexical {
+		t.Fatalf("expected lexical provenance for NL doc query, got %q", resp.Provenance)
 	}
 }
 

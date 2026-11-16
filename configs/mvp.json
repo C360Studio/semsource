@@ -33,7 +33,6 @@
     "/workspace"
   ],
   "graph": {
-    "embedder_type": "bm25",
     "index_workers": 4,
     "coalesce_ms": 200
   }

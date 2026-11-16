@@ -55,7 +55,7 @@ func IndexReadinessJSON(raw []byte, err error, label string) json.RawMessage {
 
 // disabledIndexReadiness returns the canonical readiness object for an index
 // producer that is intentionally omitted from the composition (e.g.
-// embedder_type: "none").
+// graph.lexical_search: false).
 func disabledIndexReadiness(label string) workbenchIndexReadiness {
 	return workbenchIndexReadiness{
 		Available: false,

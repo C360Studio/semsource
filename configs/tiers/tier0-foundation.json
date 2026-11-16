@@ -5,7 +5,7 @@
   ],
   "source_roots": ["/workspace"],
   "graph": {
-    "embedder_type": "none",
+    "lexical_search": false,
     "index_workers": 4,
     "coalesce_ms": 200
   }

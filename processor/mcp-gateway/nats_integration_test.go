@@ -105,7 +105,7 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	if _, err := statusKV.PutString(ctx, "graph-index", `{"ready":false,"state":"building"}`); err != nil {
 		t.Fatalf("seed graph-index readiness: %v", err)
 	}
-	if _, err := statusKV.PutString(ctx, "graph-embedding", `{"ready":true,"state":"ready"}`); err != nil {
+	if _, err := statusKV.PutString(ctx, "graph-lexical", `{"ready":true,"state":"ready"}`); err != nil {
 		t.Fatalf("seed graph-embedding readiness: %v", err)
 	}
 

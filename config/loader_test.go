@@ -689,14 +689,10 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
   "namespace": "acme",
   "sources": [{"type": "ast", "path": "./", "language": "go"}],
   "graph": {
-    "embedder_type": "http",
+    "lexical_search": false,
     "coalesce_ms": 500,
     "index_workers": 4,
     "enable_clustering": true
-  },
-  "model_registry": {
-    "endpoints": {"semembed": {"provider": "openai", "url": "http://localhost:8081/v1", "model": "arctic-s"}},
-    "capabilities": {"embedding": {"preferred": ["semembed"]}}
   }
 }`
 	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
@@ -706,8 +702,8 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
 	if cfg.Graph == nil {
 		t.Fatal("graph config is nil")
 	}
-	if cfg.Graph.EmbedderType != "http" {
-		t.Errorf("embedder_type: got %q, want %q", cfg.Graph.EmbedderType, "http")
+	if cfg.Graph.LexicalSearchEnabled() {
+		t.Error("lexical_search: want false")
 	}
 	if cfg.Graph.CoalesceMs != 500 {
 		t.Errorf("coalesce_ms: got %d, want 500", cfg.Graph.CoalesceMs)
