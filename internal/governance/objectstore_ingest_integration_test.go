@@ -109,6 +109,16 @@ func TestIntegration_ObjectStoreCorpusReachesTheGraph(t *testing.T) {
 		t.Errorf("the stored document carries no path predicate: %+v", stored)
 	}
 
+	// The publish is asynchronous per entity, so the first document landing
+	// says nothing about the other two. Wait for each before reading the page
+	// that asserts all three: the prefix query below used to race them.
+	for _, key := range []string{"reports/q4-plan.md", "reports/notes.txt"} {
+		id := dochandler.DocumentEntityID(fixtureAuthority(), system, key)
+		if waitForEntityState(t, ctx, tc.Client, id, 60*time.Second) == nil {
+			t.Fatalf("%q never reached ENTITY_STATES", key)
+		}
+	}
+
 	// One query, answered from the ingested corpus. graph.query.prefix is the
 	// governed read contract a consumer would use.
 	page := requestPrefixPage(t, ctx, tc.Client, semgraph.PrefixQueryRequest{
