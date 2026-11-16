@@ -127,6 +127,27 @@ v=$(grade "$p02" "$(jq -c '{nodes: [. + {relations: {caller: [{name: "initialize
 v=$(grade "$p02" "$(jq -c '{nodes: [.]}' <<<"$seed")")
 [ "$v" = "miss" ] && ok "P02 misses on the seed body alone" || fail "P02 on the seed alone graded $v"
 
+# Relation file stems count only for a question that opts in (OSH I01/P02:
+# in Java the class is the file), and never the answer's own node path.
+rel='{"nodes":[{"name":"checkDataStreamKey","path":"lib/DataStoreUtils.java","relations":{"caller":[{"name":"checkKey","path":"impl/InMemoryDataStreamStore.java"}]}}]}'
+v=$(grade '{"expect_any":["InMemoryDataStreamStore"],"grade_relation_files":true}' "$rel")
+[ "$v" = "correct" ] && ok "an opted-in question matches a related symbol's file stem" || fail "opted-in relation file graded $v"
+v=$(grade '{"expect_any":["InMemoryDataStreamStore"]}' "$rel")
+[ "$v" = "miss" ] && ok "relation file stems are not content without the opt-in" || fail "relation file without opt-in graded $v"
+v=$(grade '{"expect_any":["DataStoreUtils"],"grade_relation_files":true}' "$rel")
+[ "$v" = "miss" ] && ok "the opt-in never reads the answer's own node path" || fail "own node path graded $v"
+v=$(grade '{"expect_any":["impl"],"grade_relation_files":true}' "$rel")
+[ "$v" = "miss" ] && ok "the opt-in reads the file stem, not the directory" || fail "relation directory graded $v"
+
+# A hit at the start of a large answer must pass under pipefail (this file
+# runs with pipefail, like every arm).
+# The hit sits on the first line of 2 MB of later lines, so grep -q stops
+# reading long before its writer finishes.
+big=$({ printf 'needle-at-start\n'; head -c 2000000 /dev/zero | tr '\0' 'x' | fold -w 100; } \
+	| jq -Rsc '{nodes:[{name:"n",body:.}]}')
+v=$(grade '{"expect_all":["needle-at-start"]}' "$big")
+[ "$v" = "correct" ] && ok "an early hit in a large answer passes under pipefail" || fail "early hit in a large answer graded $v"
+
 echo "6. gateway, transport, and non-JSON failures grade error, never miss or correct (#269)"
 v=$(grade '{"expect_any":["sources"]}' '{"isError":true,"error":"fusion query failed: semantic is not enabled"}')
 [ "$v" = "error" ] && ok "a gateway refusal grades error" || fail "gateway refusal graded $v"
@@ -149,6 +170,41 @@ printf 'synthetic-fact-alpha\n' > "$corpus/a.md"
 python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "an absent fact FAILS the gate" || fail "an absent fact passed the gate"
 rm -rf "$corpus"
+
+echo "8. the R1 rank diff ranks valid evidence and refuses the rest"
+rd="$(mktemp -d)"
+res() { # $1 = file, rest = "id|answer-json" pairs
+	f="$1"; shift
+	printf '%s\n' "$@" | jq -Rn '{results: [inputs | split("|") | {id: .[0], answer: .[1]}]}' > "$f"
+}
+n1='{"nodes":[{"handle":"a"},{"handle":"b"}]}'
+n2='{"nodes":[{"handle":"b"},{"handle":"a"}]}'
+res "$rd/ok.json" "Q1|$n1" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}' 'Q4|{"misses":[{"query":"x"}]}'
+res "$rd/swap.json" "Q1|$n2" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}' 'Q4|{"misses":[{"query":"x"}]}'
+rdiff() { "$here/rank-diff.sh" "$1" "$2" >/dev/null 2>&1; echo $?; }
+[ "$(rdiff "$rd/ok.json" "$rd/ok.json")" = 0 ] && ok "identical rankings, including no-hit answers, are RANK-STABLE" || fail "identical rankings did not pass"
+[ "$(rdiff "$rd/ok.json" "$rd/swap.json")" = 1 ] && ok "a reordering is RANK-UNSTABLE" || fail "a reordering passed"
+res "$rd/err.json" 'Q1|{"isError":true,"error":"down"}'
+[ "$(rdiff "$rd/err.json" "$rd/err.json")" = 2 ] && ok "an error answer is refused" || fail "an error answer was ranked"
+res "$rd/bad.json" 'Q1|not JSON'
+[ "$(rdiff "$rd/bad.json" "$rd/bad.json")" = 2 ] && ok "a non-JSON answer is refused" || fail "a non-JSON answer was ranked"
+res "$rd/shape.json" 'Q1|{"index":{}}'
+[ "$(rdiff "$rd/shape.json" "$rd/shape.json")" = 2 ] && ok "an answer with neither nodes nor matches is refused" || fail "a shapeless answer was ranked"
+echo '{"results":[]}' > "$rd/empty.json"
+[ "$(rdiff "$rd/empty.json" "$rd/empty.json")" = 2 ] && ok "an empty result set is refused" || fail "an empty result set passed"
+res "$rd/dup.json" "Q1|$n1" "Q1|$n1"
+[ "$(rdiff "$rd/dup.json" "$rd/dup.json")" = 2 ] && ok "duplicate question ids are refused" || fail "duplicate question ids passed"
+res "$rd/less.json" "Q1|$n1" 'Q2|{"matches":[{"id":"m1"}]}' 'Q3|{"nodes":[]}'
+[ "$(rdiff "$rd/less.json" "$rd/ok.json")" = 2 ] && ok "a question only in the second file is refused" || fail "an added question passed"
+[ "$(rdiff "$rd/ok.json" "$rd/less.json")" = 2 ] && ok "a question missing from the second file is refused" || fail "a removed question passed"
+res "$rd/ids.json" 'Q1|{"nodes":[{"id":"x","body":"1"},{"id":"y","body":"2"}]}'
+res "$rd/ids-rev.json" 'Q1|{"nodes":[{"id":"y","body":"2"},{"id":"x","body":"1"}]}'
+[ "$(rdiff "$rd/ids.json" "$rd/ids-rev.json")" = 1 ] && ok "an id-only (arm C) reordering is RANK-UNSTABLE" || fail "an id-only reordering passed"
+res "$rd/anon.json" 'Q1|{"nodes":[{"body":"1"},{"body":"2"}]}'
+[ "$(rdiff "$rd/anon.json" "$rd/anon.json")" = 2 ] && ok "anonymous nodes are refused" || fail "anonymous nodes were ranked"
+res "$rd/anonm.json" 'Q1|{"matches":[{"label":"x"}]}'
+[ "$(rdiff "$rd/anonm.json" "$rd/anonm.json")" = 2 ] && ok "matches without an id are refused" || fail "anonymous matches were ranked"
+rm -rf "$rd"
 
 echo
 if [ "$fails" -eq 0 ]; then

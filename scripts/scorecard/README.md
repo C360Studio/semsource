@@ -255,7 +255,16 @@ quoted as evidence that anything is stable. The run prints that caveat itself.
 
 ### Matchers
 
-`expect_all`, `expect_any` and `expect_none` match against the **whole answer**.
+`expect_all`, `expect_any` and `expect_none` match against the answer's **content**:
+node names and bodies, related symbol names, and graph match labels and property
+values (#269). A question that sets `"grade_relation_files": true` also matches the
+file stems of related symbols. OSH I01 and P02 use it because a Java class name
+reaches the answer only as a caller's file. The answer's own node paths are never
+content.
+
+`regrade.sh <results.json> [questions.json]` regrades a results file from its
+retained answers after a grader or question change, without rerunning the stack.
+
 `expect_top_all` and `expect_top_none` match against the **top-ranked node's body
 only** — see the discrimination band below for why that distinction is the whole
 point.
@@ -454,6 +463,33 @@ outcome: arm B saturated the band (7/7, 63 ms median), the only
 twin-pass/loose-fail pair landed at the raw-cosine floor (L05 vs D01, arm C),
 and #170 closed measured-no-gap — the T1 classifier stays unfed.
 
+## The lexical band and R1 rank stability — the SemEngine 04B contract
+
+**Version 7 adds the lexical band (LX01–LX03) and does not compare to version 6.**
+They are the three questions SemSource posted on semengine#10 for slice 04B:
+exact phrase over a shell flag (LX01) and over a dotted predicate (LX02), and
+boolean exclusion (LX03). They are **expected red** on SemStreams and on any
+bag-of-words tier, and go green only when 04B delivers (#233). Two departures from
+the posted text, both forced by the #269 grader, are recorded in each question's
+`why`: LX02 asks `doc_context` because `graph_search` carries a predicate only as a
+property key, and LX03 excludes `func Test` (test body content) rather than
+`_test.go` (a path).
+
+**R1 is a rank-identical requirement, not a verdict-identical one.** The probe:
+
+1. Fresh stack (`down -v`), seed with the tier's config, wait for ready, score:
+   `run.sh <label>-r1a`.
+2. Stop `semsource` only (NATS and its volume stay), restart it with the same
+   config but the `sources` array reversed, wait for ready, score:
+   `run.sh <label>-r1b`.
+3. `rank-diff.sh results/<label>-r1a.json results/<label>-r1b.json`
+
+`rank-diff.sh` compares each question's first-call ranking (node handles, or
+`graph_search` match ids) and reports identical / reordered / different, the first
+diverging rank, and `RANK-STABLE` or `RANK-UNSTABLE` (exit 1). A restart resets
+corpus statistics on the SemStreams tier-0 embedder, so the baseline is expected
+unstable.
+
 ## Latency — the dimension the harness never measured
 
 v4 records per-question wall-clock in every arm: `latency_ms` is the **first**
@@ -503,6 +539,10 @@ rendering itself is unit-tested and was live-verified 13/13 under the
 threshold-0 experiment (`results/166-pass-after-osh-B.json`, preserved). Only
 configurations the regex parser ingests exist in the graph — see
 `handler/cfgfile/parsers.go`.
+
+**Version 3 adds `grade_relation_files` to I01 and P02** (#230). It does not compare
+with v2: both questions missed on every arm under the #269 grader even though
+retrieval was right.
 
 ## Arm-D readiness — dormant LLM-cost fields
 

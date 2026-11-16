@@ -1,0 +1,16 @@
+# Baseline override for #230: the published bbfb3c6 image (SemStreams 8b99efe9),
+# fixed corpus and configs, isolated ports.
+services:
+  semsource:
+    image: ghcr.io/c360studio/semsource:bbfb3c6
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:28080:8080"
+    volumes: !override
+      - /tmp/base230/configs:/etc/semsource:ro
+      - ${BASE230_CORPUS}:/workspace:ro
+    restart: "no"
+  nats:
+    ports: !override
+      - "127.0.0.1:25222:4222"
+      - "127.0.0.1:29222:8222"

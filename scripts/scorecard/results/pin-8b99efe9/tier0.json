@@ -1,0 +1,40 @@
+{
+  "namespace": "c360",
+  "sources": [
+    {
+      "type": "ast",
+      "path": "/workspace",
+      "languages": [
+        "go",
+        "typescript",
+        "javascript",
+        "java",
+        "python",
+        "svelte"
+      ],
+      "watch": false
+    },
+    {
+      "type": "docs",
+      "paths": [
+        "/workspace"
+      ],
+      "watch": false
+    },
+    {
+      "type": "config",
+      "paths": [
+        "/workspace"
+      ],
+      "watch": false
+    }
+  ],
+  "source_roots": [
+    "/workspace"
+  ],
+  "graph": {
+    "embedder_type": "bm25",
+    "index_workers": 4,
+    "coalesce_ms": 200
+  }
+}

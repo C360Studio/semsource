@@ -1,0 +1,4 @@
+services:
+  semembed:
+    ports:
+      - "127.0.0.1:28081:8081"

@@ -31,8 +31,24 @@ answer_content() {
 		| map(select(type == "string" and . != "")) | join("\n")' 2>/dev/null || true
 }
 
+# relation_files prints the file stem (basename without extension) of every
+# related symbol an answer returns. A question reads them only when it sets
+# "grade_relation_files": true. In Java the class is the file, so "the closure
+# reaches SystemDataProvider" lives only in a caller's path (OSH I01/P02). It is
+# opt-in because paths are not content for any other question (#269), and it
+# never reads the answer's own node paths, which carried the vacuous I02 hit.
+relation_files() {
+	printf '%s' "$answer" | jq -r '
+		[ (.nodes // [])[] | (.relations // {}) | to_entries[] | .value[]? | (.path // "")
+		  | select(type == "string" and . != "") | split("/") | last | sub("\\.[^.]*$"; "") ]
+		| unique | join("\n")' 2>/dev/null || true
+}
+
 grade_answer() {
 	lower=$(answer_content | tr '[:upper:]' '[:lower:]')
+	if [ "$(jq -r '.grade_relation_files == true' <<<"$q")" = true ]; then
+		lower=$(printf '%s\n%s' "$lower" "$(relation_files | tr '[:upper:]' '[:lower:]')")
+	fi
 
 	# Evidence precision is the measure that actually separates whole-file
 	# retrieval from passage retrieval. Fact-presence alone cannot: a whole-file
@@ -46,6 +62,10 @@ grade_answer() {
 	toplower=$(printf '%s' "$topbody" | tr '[:upper:]' '[:lower:]')
 
 	verdict="correct"; reason=""
+	# Literals are matched with here-strings, never `printf | grep -q`: grep -q
+	# exits at the first hit, printf then dies of SIGPIPE, and under pipefail
+	# the pipeline reports failure, so a hit early in a large answer graded as
+	# a miss (found regrading the #230 baseline).
 	# isError is a failed call, never a graded answer: a refusal is not a miss,
 	# and on a negative-band question it must not pass as a correct "nothing".
 	# The callers record gateway, transport and non-JSON results as isError.
@@ -55,14 +75,14 @@ grade_answer() {
 	if [ "$verdict" = "correct" ]; then
 		for want in $(jq -r '(.expect_all // [])[]' <<<"$q" | tr ' ' '\001'); do
 			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$lower" | grep -qF -- "$w" || { verdict="miss"; reason="missing required: $w"; break; }
+			grep -qF -- "$w" <<<"$lower" || { verdict="miss"; reason="missing required: $w"; break; }
 		done
 	fi
 	if [ "$verdict" = "correct" ] && [ "$(jq '(.expect_any // []) | length' <<<"$q")" -gt 0 ]; then
 		hit=0
 		for want in $(jq -r '(.expect_any // [])[]' <<<"$q" | tr ' ' '\001'); do
 			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$lower" | grep -qF -- "$w" && { hit=1; break; }
+			grep -qF -- "$w" <<<"$lower" && { hit=1; break; }
 		done
 		[ "$hit" = 1 ] || { verdict="miss"; reason="none of expect_any present"; }
 	fi
@@ -83,11 +103,11 @@ grade_answer() {
 		top_all_hit=1; top_none_hit=0; top_missing=""; top_carried=""
 		for want in $(jq -r '(.expect_top_all // [])[]' <<<"$q" | tr ' ' '\001'); do
 			w=$(printf '%s' "$want" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$toplower" | grep -qF -- "$w" || { top_all_hit=0; top_missing="$w"; break; }
+			grep -qF -- "$w" <<<"$toplower" || { top_all_hit=0; top_missing="$w"; break; }
 		done
 		for bad in $(jq -r '(.expect_top_none // [])[]' <<<"$q" | tr ' ' '\001'); do
 			b=$(printf '%s' "$bad" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-			printf '%s' "$toplower" | grep -qF -- "$b" && { top_none_hit=1; top_carried="$b"; break; }
+			grep -qF -- "$b" <<<"$toplower" && { top_none_hit=1; top_carried="$b"; break; }
 		done
 		# Four states, four verdicts:
 		#
@@ -114,7 +134,7 @@ grade_answer() {
 	[ "$verdict" = "error" ] && return 0
 	for bad in $(jq -r '(.expect_none // [])[]' <<<"$q" | tr ' ' '\001'); do
 		b=$(printf '%s' "$bad" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
-		printf '%s' "$lower" | grep -qF -- "$b" && { verdict="FABRICATED"; reason="asserted: $b"; break; }
+		grep -qF -- "$b" <<<"$lower" && { verdict="FABRICATED"; reason="asserted: $b"; break; }
 	done
 	return 0
 }

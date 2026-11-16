@@ -40,6 +40,10 @@ questions="${SCORECARD_QUESTIONS:-$here/questions.json}"
 cap="${SCORECARD_ARM_A_FILE_CAP:-5}"
 outdir="$here/results"
 mkdir -p "$outdir"
+# Answers and accumulated nodes go to jq through files: a full answer can
+# exceed ARG_MAX, and jq then fails to start.
+tmp_answer=$(mktemp); tmp_nodes=$(mktemp)
+trap 'rm -f "$tmp_answer" "$tmp_nodes"' EXIT
 out="$outdir/${label}.json"
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
@@ -118,7 +122,9 @@ for i in $(seq 0 $((n - 1))); do
 
 	# The read set becomes the answer: nodes in rank order, body = file text,
 	# so the shared grader applies unchanged (top-ranked file = top node).
-	nodes_json="[]"
+	# Nodes accumulate in a file, never in an argument: a few whole files
+	# exceed ARG_MAX (OSH G01 reads 282 KB), and jq then fails to start.
+	: > "$tmp_nodes"
 	context_bytes=0
 	files_json="[]"
 	while IFS= read -r f; do
@@ -126,12 +132,11 @@ for i in $(seq 0 $((n - 1))); do
 		fb=$(wc -c < "$f" | tr -d ' ')
 		context_bytes=$((context_bytes + fb))
 		rel="${f#"$corpus"/}"
-		nodes_json=$(jq --argjson cur "$nodes_json" -Rs --arg p "$rel" \
-			'$cur + [{path:$p, body:.}]' < "$f")
+		jq -Rsc --arg p "$rel" '{path:$p, body:.}' < "$f" >> "$tmp_nodes"
 		files_json=$(jq -n --argjson cur "$files_json" --arg p "$rel" --argjson b "$fb" \
 			'$cur + [{path:$p, bytes:$b}]')
 	done <<<"$files_read"
-	answer=$(jq -nc --argjson nodes "$nodes_json" '{nodes:$nodes}')
+	answer=$(jq -sc '{nodes: .}' "$tmp_nodes")
 	lat=$(( $(now_ms) - t0 ))
 
 	grade_answer
@@ -141,12 +146,13 @@ for i in $(seq 0 $((n - 1))); do
 	printf '%-5s %-14s %-10s files=%-3s ctx=%-8s %s\n' \
 		"$id" "$band" "$verdict" "$nread" "$context_bytes" "$reason"
 
+	printf '%s' "$answer" > "$tmp_answer"
 	jq --arg id "$id" --arg band "$band" --arg v "$verdict" --arg r "$reason" \
 	   --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "$context_bytes" \
 	   --argjson lat "$lat" \
 	   --argjson files "$files_json" \
-	   --arg a "$answer" \
+	   --rawfile a "$tmp_answer" \
 	   '. += [{id:$id, band:$band, tool:"grep", verdict:$v, reason:$r, nodes:$n,
 	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb,
 	           latency_ms:$lat, latency_samples:[$lat],
