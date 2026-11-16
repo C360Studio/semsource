@@ -56,13 +56,22 @@ func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	if strings.ContainsAny(q, " \t\n") {
 		return fusion.ResolveModeNL
 	}
-	if strings.ContainsAny(q, "/\\") || source.IsDocExtension(path.Ext(q)) {
+	if IsPath(q) {
 		return fusion.ResolveModePrefix
 	}
 	if isDottedEntityIDOrPrefix(q) {
 		return fusion.ResolveModePrefix
 	}
 	return fusion.ResolveModeNL
+}
+
+// IsPath reports whether a whitespace-free query is a document path: it has a
+// directory part or a document extension. Prefix mode takes only an entity-ID
+// prefix on the wire, so processor/code-context answers a path routed there
+// itself, as the document's logical path (#276).
+func IsPath(query string) bool {
+	q := strings.TrimSpace(query)
+	return strings.ContainsAny(q, "/\\") || source.IsDocExtension(path.Ext(q))
 }
 
 func isDottedEntityIDOrPrefix(q string) bool {

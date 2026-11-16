@@ -9,7 +9,6 @@ package code
 
 import (
 	"context"
-	"path"
 	"strings"
 
 	"github.com/c360studio/semengine/message"
@@ -28,19 +27,31 @@ func New() *Lens { return &Lens{} }
 // Name identifies the lens.
 func (*Lens) Name() string { return "code" }
 
-// ResolveMode routes anything with whitespace to nl (semantic), a single
-// path-like token to prefix, and a single identifier to symbol. The nl check is
-// first so a question that merely ends in a code-extension word (e.g. "where is
-// foo.go") is not misrouted to a path lookup.
+// ResolveMode routes anything with whitespace to nl (semantic), a file path
+// with a directory to prefix, and a single identifier or bare file name to
+// symbol. The nl check is first so a question that merely ends in a
+// code-extension word (e.g. "where is foo.go") is not misrouted to a path lookup.
+//
+// A bare file name is a symbol because a file entity's display name is its base
+// name, so the exact name lookup finds every file called that (#276). Prefix
+// mode takes only an entity-ID prefix on the wire, so processor/code-context
+// answers a path routed there itself, from the file's base name and its
+// code.artifact.path triple; IsPath is the shared test for which queries those are.
 func (*Lens) ResolveMode(query string) fusion.ResolveMode {
 	q := strings.TrimSpace(query)
 	if strings.ContainsAny(q, " \t\n") {
 		return fusion.ResolveModeNL
 	}
-	if strings.ContainsAny(q, "/\\") || codeExtensions[strings.ToLower(path.Ext(q))] {
+	if IsPath(q) {
 		return fusion.ResolveModePrefix
 	}
 	return fusion.ResolveModeSymbol
+}
+
+// IsPath reports whether a whitespace-free query is a file path with a
+// directory part, which ResolveMode sends to prefix mode.
+func IsPath(query string) bool {
+	return strings.ContainsAny(strings.TrimSpace(query), "/\\")
 }
 
 // Edges are the code relationships to expand: calls, containment, and the type
@@ -110,12 +121,4 @@ func (*Lens) Hydrate(_ context.Context, e *fusion.Entity) (*message.StorageRefer
 		Key:             key,
 		ContentType:     "text/plain; charset=utf-8",
 	}, nil
-}
-
-// codeExtensions marks a query as a file path.
-var codeExtensions = map[string]bool{
-	".go": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true,
-	".mjs": true, ".cjs": true, ".svelte": true, ".java": true, ".py": true,
-	".c": true, ".h": true, ".cpp": true, ".cc": true, ".cxx": true,
-	".hpp": true, ".hh": true, ".hxx": true,
 }
