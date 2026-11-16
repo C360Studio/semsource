@@ -78,8 +78,11 @@ type Component struct {
 	statusSub      *natsclient.Subscription
 	statusQuerySub *natsclient.Subscription
 	statusData     []byte // pre-marshaled latest status for HTTP and NATS
-	statusMu       sync.RWMutex
-	seedComplete   bool
+	// statusBuilt is a test seam: refreshStatus calls it between building a
+	// snapshot and storing it. Nil outside tests.
+	statusBuilt  func()
+	statusMu     sync.RWMutex
+	seedComplete bool
 	// removedSources guards against in-flight periodic reports from
 	// deregistered components resurrecting phantom status entries. Cleared
 	// per-instance on re-add. Guarded by statusMu.
@@ -347,9 +350,8 @@ func (c *Component) handleStatusReport(ctx context.Context, data []byte) {
 		c.aggregator.degraded = false
 	}
 	status := c.aggregator.buildStatus(c.config.Namespace)
+	c.storeStatusLocked(status)
 	c.statusMu.Unlock()
-
-	c.updateStatusData(status)
 
 	// Publish the phase transition to consumers. Recovery (degraded → ready)
 	// must be checked first because wasComplete is also false in that case
@@ -386,10 +388,7 @@ func (c *Component) startHeartbeat(ctx context.Context) context.CancelFunc {
 			case <-hbCtx.Done():
 				return
 			case <-ticker.C:
-				c.statusMu.RLock()
-				status := c.aggregator.buildStatus(c.config.Namespace)
-				c.statusMu.RUnlock()
-				c.updateStatusData(status)
+				status := c.refreshStatus()
 
 				if err := c.publishPayload(hbCtx, StatusType, status, statusSubject); err != nil {
 					// The heartbeat IS the liveness signal; losing it silently
@@ -433,9 +432,9 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 			// prevents the recovery publish in handleStatusReport from firing
 			// when a late source finally reports.
 			status := c.aggregator.markDegraded(c.config.Namespace)
+			c.storeStatusLocked(status)
 			c.statusMu.Unlock()
 
-			c.updateStatusData(status)
 			c.logger.Warn("seed timeout — marking status degraded (may recover)",
 				"expected", c.config.ExpectedSourceCount,
 				"received", len(status.Sources))
@@ -451,14 +450,36 @@ func (c *Component) startSeedTimeout(ctx context.Context) context.CancelFunc {
 
 // updateStatusData pre-marshals the latest status for query responses.
 func (c *Component) updateStatusData(status *StatusPayload) {
+	c.statusMu.Lock()
+	c.storeStatusLocked(status)
+	c.statusMu.Unlock()
+}
+
+// storeStatusLocked stores status as the served snapshot. The caller holds
+// statusMu for writing and built status under that same hold. Building under
+// the lock and storing after releasing it let an older snapshot overwrite a
+// newer one: the heartbeat and a source's periodic report tick together, and
+// the stale figures were then served until the next tick (#268).
+func (c *Component) storeStatusLocked(status *StatusPayload) {
 	data, err := json.Marshal(status)
 	if err != nil {
 		c.logger.Warn("failed to marshal status", "error", err)
 		return
 	}
-	c.statusMu.Lock()
 	c.statusData = data
-	c.statusMu.Unlock()
+}
+
+// refreshStatus rebuilds the served snapshot from the aggregator's current
+// reports and returns it.
+func (c *Component) refreshStatus() *StatusPayload {
+	c.statusMu.Lock()
+	defer c.statusMu.Unlock()
+	status := c.aggregator.buildStatus(c.config.Namespace)
+	if c.statusBuilt != nil {
+		c.statusBuilt()
+	}
+	c.storeStatusLocked(status)
+	return status
 }
 
 // buildSummary constructs a SummaryPayload from current aggregator state
