@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	gtypes "github.com/c360studio/semengine/graph"
 )
 
 // QueryInput is the shared argument for the fused query tools. The per-tool
@@ -73,9 +75,9 @@ func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in Q
 }
 
 // graphSearch answers a corpus-wide thematic question. It routes to
-// graph.query.searchGraph, which delegates to globalSearch and returns that
-// response unchanged when non-empty, adding a labelled semantic fallback only
-// when it is empty — so this one subject covers both.
+// graph.query.searchGraph, which the pinned substrate answers as globalSearch:
+// a word search over every entity, grouped by community afterwards. It carries
+// no semantic fallback; a question whose words match nothing answers empty.
 //
 // The result is a RANKED, BOUNDED match list plus a disclosure of the rung the
 // answer reached. It is deliberately not the substrate payload verbatim: on a
@@ -84,23 +86,15 @@ func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in Q
 // an answer an agent cannot read. A search verb's job is to rank so the agent
 // can follow up on the IDs worth reading.
 //
-// summarize_threshold: 1 keeps the substrate's ranked COMPACT shape as the
-// default, deliberately. Disabling it (0 → full EntityStates) was tried and
-// falsified by review against the pinned substrate: the full shape has no
-// reply-size guard (a monorepo-scale entity set can exceed NATS max_payload
-// and hard-fail the call), arrives in cache-warmth order that is
-// non-deterministic BY CONTRACT (so which matches survive truncation flaps
-// run-to-run), and carries no relevance scores (an unranked default violates
-// the ranked-list requirement). The compact shape's own defect — dependency
-// digests labeled with hash instances, no property values — is upstream's to
-// fix: semstreams#958. Until it lands, value facts render only when a
-// response happens to carry entity triples (the semantic strategy's shape),
-// which deriveMatches handles either way.
+// The request is the substrate's GlobalSearchRequest, decoded strictly: only
+// the query and the match limit are sent. The limit is the result cap, so the
+// substrate ranks and bounds the reply itself and reports the true total in
+// matched.
 func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in GraphSearchInput) (*mcp.CallToolResult, any, error) {
 	if in.Query == "" {
 		return nil, nil, fmt.Errorf("query is required")
 	}
-	data, err := json.Marshal(map[string]any{"query": in.Query, "summarize_threshold": 1})
+	data, err := json.Marshal(gtypes.GlobalSearchRequest{Query: in.Query, Limit: maxGraphMatches})
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal query: %w", err)
 	}
@@ -109,26 +103,25 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 		return nil, nil, fmt.Errorf("graph search failed: %w", err)
 	}
 
-	var body graphSearchBody
-	if err := json.Unmarshal(resp, &body); err != nil {
-		// Unreadable payload: report the disclosure's unknown rung rather than
-		// failing the call, and say nothing about matches we cannot see.
-		out, mErr := json.Marshal(graphSearchResult{Retrieval: deriveDisclosure(resp)})
-		if mErr != nil {
-			return nil, nil, fmt.Errorf("marshal graph search result: %w", mErr)
+	result := graphSearchResult{Retrieval: unknownDisclosure()}
+	var reply graphSearchReply
+	if err := json.Unmarshal(resp, &reply); err == nil && reply.Data.Text != nil {
+		text := reply.Data.Text
+		matches, total, truncated := deriveMatches(text)
+		communities := deriveCommunities(text)
+		result = graphSearchResult{
+			Retrieval:          deriveDisclosure(&reply.Data, communities),
+			Answer:             text.Answer,
+			Matches:            matches,
+			TotalMatches:       total,
+			Truncated:          truncated,
+			CommunitySummaries: communities,
+			Hints:              reply.Data.Hints,
 		}
-		return textResult(out), nil, nil
 	}
-
-	matches, total, truncated := deriveMatches(&body)
-	out, err := json.Marshal(graphSearchResult{
-		Retrieval:          deriveDisclosure(resp),
-		Answer:             body.Answer,
-		Matches:            matches,
-		TotalMatches:       total,
-		Truncated:          truncated,
-		CommunitySummaries: body.CommunitySummaries,
-	})
+	// An unreadable payload reports the unknown rung rather than failing the
+	// call, and says nothing about matches we cannot see.
+	out, err := json.Marshal(result)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal graph search result: %w", err)
 	}

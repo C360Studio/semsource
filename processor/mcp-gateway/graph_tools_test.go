@@ -43,8 +43,10 @@ func TestGraphToolDescriptionsStayHonest(t *testing.T) {
 	if !ok {
 		t.Fatal("graph_search is not registered")
 	}
-	// It must advertise the disclosure, or an agent has no reason to read it.
-	for _, want := range []string{"retrieval", "not guaranteed"} {
+	// It must advertise the disclosure, or an agent has no reason to read it,
+	// and say it searches words: the substrate understands no meaning, so a
+	// description implying query understanding promises what it cannot keep.
+	for _, want := range []string{"retrieval", "word search", "never LLM-synthesized"} {
 		if !strings.Contains(search, want) {
 			t.Errorf("graph_search description missing %q: %s", want, search)
 		}

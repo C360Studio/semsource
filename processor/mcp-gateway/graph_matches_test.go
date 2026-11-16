@@ -3,10 +3,12 @@ package mcpgateway
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	gtypes "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/message"
 
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -21,19 +23,28 @@ func entityWithTriples(id string, pairs ...string) substrateEntity {
 	return e
 }
 
+// textMatch is one substrate word-search match carrying the entity's bytes.
+func textMatch(t *testing.T, e substrateEntity, label string, score float64) gtypes.TextSearchMatch {
+	t.Helper()
+	raw, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal entity: %v", err)
+	}
+	return gtypes.TextSearchMatch{ID: e.ID, Label: label, Score: score, Entity: raw}
+}
+
 // TestMatchPropertiesOnEntitiesPath pins the change's reason to exist (#166):
 // a config dependency's VALUE facts are answerable from the match itself.
 func TestMatchPropertiesOnEntitiesPath(t *testing.T) {
-	body := &graphSearchBody{Entities: []substrateEntity{
-		entityWithTriples("acme.semsource.config.osh.dependency.abc123",
-			source.DcTitle, "com.google.guava:guava",
-			source.ConfigDepName, "com.google.guava:guava",
-			source.ConfigDepVersion, "33.0.0-jre",
-			source.ConfigDepKind, "gradle",
-			source.ConfigDepConfiguration, "implementation",
-		),
-	}}
-	matches, _, _ := deriveMatches(body)
+	e := entityWithTriples("acme.semsource.config.osh.dependency.abc123",
+		source.DcTitle, "com.google.guava:guava",
+		source.ConfigDepName, "com.google.guava:guava",
+		source.ConfigDepVersion, "33.0.0-jre",
+		source.ConfigDepKind, "gradle",
+		source.ConfigDepConfiguration, "implementation",
+	)
+	text := &gtypes.TextSearchData{Matched: 1, Matches: []gtypes.TextSearchMatch{textMatch(t, e, "", 1.5)}}
+	matches, _, _ := deriveMatches(text)
 	if len(matches) != 1 {
 		t.Fatalf("matches = %d, want 1", len(matches))
 	}
@@ -52,20 +63,48 @@ func TestMatchPropertiesOnEntitiesPath(t *testing.T) {
 	}
 }
 
-// TestMatchPropertiesAbsentOnTriplelessPaths pins the no-hydration rule:
-// digest and ID-only paths carry no triples, so matches render without
-// properties rather than fetching them.
+// TestMatchPropertiesAbsentOnTriplelessPaths pins the no-hydration rule: a
+// match whose entity bytes are absent or unreadable renders from the
+// substrate's own ID, label, and score, without properties, rather than being
+// dropped or fetched.
 func TestMatchPropertiesAbsentOnTriplelessPaths(t *testing.T) {
-	digest := &graphSearchBody{EntityDigests: []substrateDigest{{ID: "a.b.config.s.dependency.x", Label: "dep"}}}
-	ids := &graphSearchBody{EntityIDs: []string{"a.b.config.s.dependency.x"}}
-	for name, body := range map[string]*graphSearchBody{"digests": digest, "entity_ids": ids} {
-		matches, _, _ := deriveMatches(body)
+	for name, entity := range map[string]json.RawMessage{"absent": nil, "unreadable": json.RawMessage(`"not an entity"`)} {
+		text := &gtypes.TextSearchData{Matched: 1, Matches: []gtypes.TextSearchMatch{
+			{ID: "a.b.config.s.dependency.x", Label: "dep", Score: 0.4, Entity: entity},
+		}}
+		matches, _, _ := deriveMatches(text)
 		if len(matches) != 1 {
 			t.Fatalf("%s: matches = %d, want 1", name, len(matches))
 		}
 		if matches[0].Properties != nil {
 			t.Errorf("%s: properties = %v, want nil (absence stays absence)", name, matches[0].Properties)
 		}
+		if matches[0].Label != "dep" || matches[0].Relevance != 0.4 || matches[0].Type != "dependency" {
+			t.Errorf("%s: substrate values not preserved: %+v", name, matches[0])
+		}
+	}
+}
+
+// TestSubstrateLabelAndOrderWin pins that the substrate's ranking and label are
+// reported as given: matches keep the reply's order (best first), the score is
+// the relevance, and the entity title fills in only when the substrate sent no
+// label.
+func TestSubstrateLabelAndOrderWin(t *testing.T) {
+	first := entityWithTriples("a.b.c.golang.function.Second", source.DcTitle, "title-second")
+	second := entityWithTriples("a.b.c.golang.function.First", source.DcTitle, "title-first")
+	text := &gtypes.TextSearchData{Matched: 2, Matches: []gtypes.TextSearchMatch{
+		textMatch(t, first, "Second", 2.5),
+		textMatch(t, second, "", 1.25),
+	}}
+	matches, total, truncated := deriveMatches(text)
+	if total != 2 || truncated {
+		t.Fatalf("total=%d truncated=%v, want 2/false", total, truncated)
+	}
+	if matches[0].ID != first.ID || matches[0].Label != "Second" || matches[0].Relevance != 2.5 {
+		t.Errorf("first match = %+v, want the substrate's first hit, label, and score", matches[0])
+	}
+	if matches[1].Label != "title-first" {
+		t.Errorf("second label = %q, want the entity title when the substrate sent none", matches[1].Label)
 	}
 }
 
@@ -159,20 +198,22 @@ func TestTruncationNeverSplitsARune(t *testing.T) {
 // substrate shape verbatim; it must decode, render the title, and render only
 // scalar allowlisted values.
 func TestDeriveMatchesSurvivesNonStringObjects(t *testing.T) {
-	raw := []byte(`{"entities":[{"id":"acme.semsource.config.s.dependency.abc",
-		"triples":[
+	raw := []byte(`{"data":{"text":{"level":0,"groups":[],"matched":1,"missing":0,"bodies_not_indexed":0,
+		"truncated":false,"unreadable_groups":0,"answer":"",
+		"matches":[{"id":"acme.semsource.config.s.dependency.abc","score":1,
+		"entity":{"id":"acme.semsource.config.s.dependency.abc","triples":[
 			{"predicate":"dc.terms.title","object":"com.google.guava:guava"},
 			{"predicate":"code.metric.start-line","object":16},
 			{"predicate":"source.doc.chunk-index","object":3},
 			{"predicate":"source.config.dependency-version","object":"33.0.0-jre"},
 			{"predicate":"source.config.dependency-scope","object":null},
 			{"predicate":"source.config.dependency-kind","object":{"nested":"composite"}}
-		]}],"count":1}`)
-	var body graphSearchBody
-	if err := json.Unmarshal(raw, &body); err != nil {
+		]}}]},"hints":[]},"indexed_revision":7,"producer":"graph-query"}`)
+	var reply graphSearchReply
+	if err := json.Unmarshal(raw, &reply); err != nil {
 		t.Fatalf("substrate shape with numeric objects must decode, got: %v", err)
 	}
-	matches, _, _ := deriveMatches(&body)
+	matches, _, _ := deriveMatches(reply.Data.Text)
 	if len(matches) != 1 {
 		t.Fatalf("matches = %d, want 1", len(matches))
 	}
@@ -185,20 +226,33 @@ func TestDeriveMatchesSurvivesNonStringObjects(t *testing.T) {
 	}
 }
 
-// TestTotalMatchesHonestyInvariant pins the pairing the shapes must keep: the
-// substrate's count wins when it exceeds what the shape carried, and whenever
-// fewer matches render than exist, truncated says so — a partial list must
-// never read as the complete hit set.
+// TestTotalMatchesHonestyInvariant pins the pairing the reply must keep: the
+// substrate's matched count wins when it exceeds what the reply carried, and
+// whenever fewer matches render than exist — or the substrate itself says it
+// left matches out — truncated says so. A partial list must never read as the
+// complete hit set.
 func TestTotalMatchesHonestyInvariant(t *testing.T) {
-	body := &graphSearchBody{
-		Count:    100,
-		Entities: []substrateEntity{entityWithTriples("a.b.c.d.dependency.x", source.DcTitle, "x")},
-	}
-	matches, total, truncated := deriveMatches(body)
+	one := []gtypes.TextSearchMatch{{ID: "a.b.c.d.dependency.x", Label: "x"}}
+	matches, total, truncated := deriveMatches(&gtypes.TextSearchData{Matched: 100, Matches: one})
 	if total != 100 {
-		t.Errorf("total = %d, want the substrate's count 100, not len(entities)", total)
+		t.Errorf("total = %d, want the substrate's matched 100, not len(matches)", total)
 	}
 	if len(matches) != 1 || !truncated {
 		t.Errorf("matches=%d truncated=%v — rendering fewer than total MUST set truncated", len(matches), truncated)
+	}
+
+	// A hit gone on read-back: matched equals what came, but the substrate
+	// reports truncated. Its flag is carried, never recomputed away.
+	if _, _, truncated := deriveMatches(&gtypes.TextSearchData{Matched: 1, Matches: one, Missing: 1, Truncated: true}); !truncated {
+		t.Error("the substrate's truncated flag was dropped")
+	}
+
+	many := make([]gtypes.TextSearchMatch, maxGraphMatches+5)
+	for i := range many {
+		many[i] = gtypes.TextSearchMatch{ID: "a.b.c.d.dependency.x" + strconv.Itoa(i)}
+	}
+	matches, total, truncated = deriveMatches(&gtypes.TextSearchData{Matched: len(many), Matches: many})
+	if len(matches) != maxGraphMatches || total != len(many) || !truncated {
+		t.Errorf("cap: matches=%d total=%d truncated=%v, want %d/%d/true", len(matches), total, truncated, maxGraphMatches, len(many))
 	}
 }
