@@ -13,8 +13,13 @@
 # ENJOY_MCP_ENDPOINT, and on the cli host ateam review notify exits 0 printing
 # nothing, so the notification is silently lost (ateam v0.3.9; PR #252).
 
+# The launch text carries the reviewer's own settings into its prompt. A
+# session cannot read its model or reasoning effort from inside: two codex
+# reviewers on PR #277 signed "gpt-6, unknown" and withheld approval on
+# eligibility alone. The requester must also pass the effort to
+# start_conversation, or the host's default runs and the attestation is false.
 [launch]
-tool = "call the Enjoy MCP tool start_conversation with provider {agent}, model {model}, effort {effort} and prompt '{prompt}'; tell the reviewer to finish with ATEAM_HOST=enjoy ateam review notify --record <record file> --return-to {return_to} {pr}"
+tool = "call the Enjoy MCP tool start_conversation with agent provider {agent}, model {model}, reasoning {effort} (all three; if start_conversation rejects reasoning {effort}, rerun ateam review request with --reviewer {agent}:{model}:<an effort list_agents offers> rather than launching without one) and this text: '{prompt}' then a blank line and 'Launch settings reported by the Enjoy host for this conversation: provider {agent}, model {model}, reasoning effort {effort}. You cannot read these from inside the session. Use them in your reviewed-by: line unless you have evidence they are wrong; if you do, say so in the record. Finish with ATEAM_HOST=enjoy scripts/ateam review notify --record <record file> --return-to {return_to} {pr}, then call the queue_message it prints.'"
 
 [notify]
 tool = "call the Enjoy MCP tool queue_message for conversation {return_to} (message_project_conversation only when that conversation is in another project)"
