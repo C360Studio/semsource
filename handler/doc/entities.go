@@ -316,7 +316,11 @@ func (h *Handler) ingestFileEntityStates(ctx context.Context, filePath, root, sy
 	}
 
 	relPath, _ := filepath.Rel(root, filePath)
-	return h.IngestContentEntityStates(ctx, content, filepath.ToSlash(relPath), system, authority, now)
+	states, err := h.IngestContentEntityStates(ctx, content, filepath.ToSlash(relPath), system, authority, now)
+	for _, state := range states {
+		state.Root = root
+	}
+	return states, err
 }
 
 // IngestContentEntityStates builds the parent entity followed by one entity per

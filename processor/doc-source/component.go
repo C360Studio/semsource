@@ -308,6 +308,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 	}
 
 	for _, state := range states {
+		c.stampOwner(state)
 		payload, err := entitypub.PayloadFromState(state)
 		if err != nil {
 			c.logger.Warn("Invalid doc entity state",
@@ -396,6 +397,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	// Prefer pre-built EntityStates.
 	if len(event.EntityStates) > 0 {
 		for _, state := range event.EntityStates {
+			c.stampOwner(state)
 			payload, err := entitypub.PayloadFromState(state)
 			if err != nil {
 				stateID := ""
@@ -427,6 +429,29 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	c.logger.Warn("Doc-source change event missing required EntityStates",
 		"path", event.Path,
 		"operation", event.Operation)
+}
+
+// ownerFor is the lifecycle owner key of one configured root, keyed by its
+// absolute form so the stamp and the sweep (rootForPath) agree.
+func (c *Component) ownerFor(root string) string {
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	instance := c.config.InstanceName
+	if instance == "" {
+		instance = "doc-source"
+	}
+	return graph.LifecycleOwner(instance, root)
+}
+
+// stampOwner writes the owner fact of the root a document came from, so only
+// that root's sweep judges it (#286). A state with no root carries none and is
+// never judged by a sweep.
+func (c *Component) stampOwner(state *handler.EntityState) {
+	if state == nil || state.Root == "" {
+		return
+	}
+	state.Triples = append(state.Triples, graph.LifecycleOwnerTriple(state.ID, c.ownerFor(state.Root), state.UpdatedAt))
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via entitypub.
@@ -536,9 +561,9 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string
 		Systems:  []string{system},
 		RootPath: root,
 		Reason:   reason,
-		// Only documents answer to this root; an AST source sharing the
-		// project keys its code by a path relative to its own root (#286).
-		PathPredicate: source.DocFilePath,
+		// Only this root's documents answer to its stat; a shared project
+		// does not make another root's artifacts this root's to judge (#286).
+		Owner: c.ownerFor(root),
 	}
 	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)

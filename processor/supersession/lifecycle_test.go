@@ -200,22 +200,28 @@ func TestDecideLifecycleActions_GroupsMultipleEntitiesUnderOnePath(t *testing.T)
 	}
 }
 
-// TestLifecycleScopeExcludesOtherSourcesOfASharedSystem pins #286 in both
-// directions: an AST source and a docs source configured with one project
-// share a system slug, and neither's sweep may judge the other's artifacts —
-// a path relative to one root is meaningless under the other.
-// spec: openspec/specs/entity-staleness/spec.md#Requirement: Stale facts are distinguishable from live facts
-func TestLifecycleScopeExcludesOtherSourcesOfASharedSystem(t *testing.T) {
-	code := gtypes.EntityState{ID: "acme.p.svc.golang.function.Live", Triples: []message.Triple{
-		{Predicate: semsourceast.CodePath, Object: "live.go"},
-	}}
-	doc := gtypes.EntityState{ID: "acme.p.svc.web.doc.a-md", Triples: []message.Triple{
-		{Predicate: source.DocFilePath, Object: "a.md"},
-	}}
-	other := gtypes.EntityState{ID: "acme.p.other.web.doc.b-md", Triples: []message.Triple{
-		{Predicate: source.DocFilePath, Object: "b.md"},
-	}}
-	all := []gtypes.EntityState{code, doc, other}
+// TestLifecycleScopeJudgesOnlyItsOwnRoot pins #286: every root configured
+// with one project shares a system slug, and a sweep may judge only the
+// entities its own root produced — an AST root against a docs root, two docs
+// roots with disjoint filenames, and never an entity that carries no owner.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
+func TestLifecycleScopeJudgesOnlyItsOwnRoot(t *testing.T) {
+	owned := func(id, pathPred, path, owner string) gtypes.EntityState {
+		tr := []message.Triple{{Predicate: pathPred, Object: path}}
+		if owner != "" {
+			tr = append(tr, message.Triple{Predicate: source.EntityLifecycleOwner, Object: owner})
+		}
+		return gtypes.EntityState{ID: id, Triples: tr}
+	}
+	astOwner := graph.LifecycleOwner("ast-source-svc", "/r")
+	docsA := graph.LifecycleOwner("doc-source-svc", "/r/docs-a")
+	docsB := graph.LifecycleOwner("doc-source-svc", "/r/docs-b")
+	code := owned("acme.p.svc.golang.function.Live", semsourceast.CodePath, "live.go", astOwner)
+	a := owned("acme.p.svc.web.doc.a-md", source.DocFilePath, "a.md", docsA)
+	b := owned("acme.p.svc.web.doc.b-md", source.DocFilePath, "b.md", docsB)
+	unowned := owned("acme.p.svc.web.doc.c-md", source.DocFilePath, "c.md", "")
+	foreign := owned("acme.p.other.web.doc.d-md", source.DocFilePath, "d.md", docsA)
+	all := []gtypes.EntityState{code, a, b, unowned, foreign}
 	systems := map[string]struct{}{"svc": {}}
 
 	ids := func(es []gtypes.EntityState) []string {
@@ -225,21 +231,30 @@ func TestLifecycleScopeExcludesOtherSourcesOfASharedSystem(t *testing.T) {
 		}
 		return out
 	}
-	if got := ids(lifecycleScope(all, systems, semsourceast.CodePath, true)); !reflect.DeepEqual(got, []string{code.ID}) {
-		t.Errorf("AST sweep scope = %v, want only the code entity", got)
+	for name, tc := range map[string]struct {
+		owner string
+		want  []string
+	}{
+		"AST root":    {astOwner, []string{code.ID}},
+		"docs root A": {docsA, []string{a.ID}},
+		"docs root B": {docsB, []string{b.ID}},
+	} {
+		if got := ids(lifecycleScope(all, systems, tc.owner, true)); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: scope = %v, want %v", name, got, tc.want)
+		}
 	}
-	if got := ids(lifecycleScope(all, systems, source.DocFilePath, true)); !reflect.DeepEqual(got, []string{doc.ID}) {
-		t.Errorf("docs sweep scope = %v, want only the document", got)
+	if docsA == docsB || docsA == astOwner {
+		t.Fatalf("owner keys must separate roots and instances: %q %q %q", astOwner, docsA, docsB)
 	}
 }
 
-// TestLivenessOracleRequiresAPathPredicate: an oracle with no path predicate
-// would judge every source's artifacts of the system, so it is refused.
-func TestLivenessOracleRequiresAPathPredicate(t *testing.T) {
+// TestLivenessOracleRequiresAnOwner: an oracle request with no owner would
+// judge every root of the system, so it is refused.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
+func TestLivenessOracleRequiresAnOwner(t *testing.T) {
 	for name, req := range map[string]graph.LifecycleRunRequest{
-		"root without predicate":   {RootPath: "/r"},
-		"absent without predicate": {Absent: []string{}},
-		"unknown predicate":        {RootPath: "/r", PathPredicate: "dc.terms.title"},
+		"root without owner":   {RootPath: "/r"},
+		"absent without owner": {Absent: []string{}},
 	} {
 		if _, err := livenessOracle(req); err == nil {
 			t.Errorf("%s: accepted, want refused", name)

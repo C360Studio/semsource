@@ -52,6 +52,7 @@ type pathWatcher struct {
 	config       WatchPathConfig
 	root         string // Resolved absolute path
 	scopedSystem string // Pre-computed version-scoped system slug (entityid.ScopedSystemSlug result)
+	owner        string // graph.LifecycleOwner key this root stamps on its entities and sweeps with
 	watcher      *semsourceast.Watcher
 	parsers      map[string]semsourceast.FileParser // language → parser instance
 	routes       map[string]string                  // file extension → language (see routing.go)
@@ -239,6 +240,7 @@ func (c *Component) initializeWatchers() error {
 			config:       rp.Config,
 			root:         rp.AbsPath,
 			scopedSystem: scopedSystem,
+			owner:        graph.LifecycleOwner(c.ownerInstance(), rp.AbsPath),
 			parsers:      make(map[string]semsourceast.FileParser),
 			excludes:     make(map[string]bool),
 		}
@@ -648,9 +650,9 @@ func lifecycleRunRequestFor(pw *pathWatcher, reason string) graph.LifecycleRunRe
 		Systems:  []string{pw.scopedSystem},
 		RootPath: pw.root,
 		Reason:   reason,
-		// Only code entities answer to this root; a docs source sharing the
-		// project keys its documents by a path relative to its own root (#286).
-		PathPredicate: semsourceast.CodePath,
+		// Only this root's entities answer to its stat; a shared project
+		// does not make another root's artifacts this root's to judge (#286).
+		Owner: pw.owner,
 	}
 }
 
@@ -791,6 +793,7 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 		// no-op) and a nil StorageRef.
 		body := bodies[state.ID]
 		state.Triples = append(state.Triples, body.triples...)
+		state.Triples = append(state.Triples, graph.LifecycleOwnerTriple(state.ID, pw.owner, state.UpdatedAt))
 		payload, err := payloadFromASTState(state, body.ref)
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
@@ -867,6 +870,14 @@ func payloadFromASTState(state *semsourceast.EntityState, ref *message.StorageRe
 		return nil, err
 	}
 	return payload, nil
+}
+
+// ownerInstance is the instance part of this source's lifecycle owner keys.
+func (c *Component) ownerInstance() string {
+	if c.config.InstanceName != "" {
+		return c.config.InstanceName
+	}
+	return "ast-source"
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.

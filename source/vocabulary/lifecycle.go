@@ -17,6 +17,12 @@ import "github.com/c360studio/semengine/vocabulary"
 // reappears — never left to coexist with a live fact.
 const EntityLifecycleStale = "entity.lifecycle.stale"
 
+// EntityLifecycleOwner names the root (or bucket) of the source that produced
+// an entity, as graph.LifecycleOwner keys it. A staleness sweep judges only
+// entities whose owner equals its request's owner: a shared system slug does
+// not let one root's sweep judge another root's artifacts (#286).
+const EntityLifecycleOwner = "source.lifecycle.owner"
+
 // Reason values for EntityLifecycleStale.
 const (
 	LifecycleReasonFileDeleted   = "file_deleted"
@@ -34,4 +40,8 @@ func registerLifecyclePredicates() {
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(Namespace+"lifecycleStale"),
 		vocabulary.WithWeight(-3.0))
+	vocabulary.Register(EntityLifecycleOwner,
+		vocabulary.WithDescription("Owner key of the source root or bucket that produced the entity; scopes staleness sweeps"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"lifecycleOwner"))
 }

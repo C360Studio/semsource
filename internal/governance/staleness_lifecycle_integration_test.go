@@ -28,7 +28,6 @@ import (
 	"github.com/c360studio/semsource/internal/natstest"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	"github.com/c360studio/semsource/processor/supersession"
-	semsourceast "github.com/c360studio/semsource/source/ast"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -212,7 +211,7 @@ func TestIntegration_StalenessLifecycle(t *testing.T) {
 		RootPath: root,
 		Reason:   semsourcegraph.LifecycleReasonFileDeleted,
 		// The AST source's own request shape (#286).
-		PathPredicate: semsourceast.CodePath,
+		Owner: semsourcegraph.LifecycleOwner("ast-source-svc", root),
 	}); err != nil {
 		t.Fatalf("trigger lifecycle pass (recreate): %v", err)
 	}

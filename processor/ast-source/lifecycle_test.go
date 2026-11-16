@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/graph"
-	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
 func TestDeleteTriggersLifecycleRun(t *testing.T) {
@@ -22,6 +21,7 @@ func TestDeleteTriggersLifecycleRun(t *testing.T) {
 func TestLifecycleRunRequestFor(t *testing.T) {
 	pw := &pathWatcher{
 		root:         "/workspace/github-com-acme-repo",
+		owner:        "ast-source-repo/0123456789ab",
 		scopedSystem: "github-com-acme-repo",
 		config:       WatchPathConfig{Org: "acme", Project: "repo"},
 	}
@@ -40,9 +40,9 @@ func TestLifecycleRunRequestFor(t *testing.T) {
 	if req.Reason != graph.LifecycleReasonFileDeleted {
 		t.Errorf("Reason = %q, want %q", req.Reason, graph.LifecycleReasonFileDeleted)
 	}
-	// Only code entities answer to an AST root (#286).
-	if req.PathPredicate != semsourceast.CodePath {
-		t.Errorf("PathPredicate = %q, want %q", req.PathPredicate, semsourceast.CodePath)
+	// Only this root's own entities answer to its stat (#286).
+	if req.Owner != pw.owner {
+		t.Errorf("Owner = %q, want the watch path's owner %q", req.Owner, pw.owner)
 	}
 }
 

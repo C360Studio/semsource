@@ -101,7 +101,7 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	if err != nil {
 		return graph.LifecycleRunResponse{}, err
 	}
-	inScope := lifecycleScope(entities, systemSet, req.PathPredicate, statFn != nil)
+	inScope := lifecycleScope(entities, systemSet, req.Owner, statFn != nil)
 	toMark, toClear, pathCount := decideLifecycleActions(inScope, req.Reason, statFn)
 
 	resp := graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
@@ -129,27 +129,24 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 }
 
 // lifecycleScope selects the entities a pass judges: those in the request's
-// systems and, when the request carries a liveness oracle, keyed by the path
-// predicate that oracle answers for. A system slug is shared by every source
-// configured with the same project, so the system alone would let one source's
-// root judge another source's artifacts (#286).
-func lifecycleScope(entities []gtypes.EntityState, systems map[string]struct{}, pathPredicate string, hasOracle bool) []gtypes.EntityState {
+// systems and, when the request carries a liveness oracle, whose owner fact
+// names the request's owner. A system slug is shared by every root configured
+// with the same project, so the system alone would let one root's sweep judge
+// another root's artifacts (#286). An entity with no owner fact is never
+// judged by an oracle sweep: no root has shown it is that root's to judge.
+func lifecycleScope(entities []gtypes.EntityState, systems map[string]struct{}, owner string, hasOracle bool) []gtypes.EntityState {
 	var inScope []gtypes.EntityState
 	for i := range entities {
 		if _, ok := systems[entityIDSystem(entities[i].ID)]; !ok {
 			continue
 		}
-		if hasOracle && tripleString(entities[i].Triples, pathPredicate) == "" {
+		if hasOracle && tripleString(entities[i].Triples, source.EntityLifecycleOwner) != owner {
 			continue
 		}
 		inScope = append(inScope, entities[i])
 	}
 	return inScope
 }
-
-// livenessPathPredicates are the path predicates a liveness oracle can answer
-// for — the same two pathOf reads.
-var livenessPathPredicates = map[string]bool{semsourceast.CodePath: true, source.DocFilePath: true}
 
 // livenessOracle turns a request into the function that answers "is the
 // artifact at this path still there?", or nil when the request carries no way
@@ -163,9 +160,8 @@ func livenessOracle(req graph.LifecycleRunRequest) (func(path string) bool, erro
 	if req.RootPath != "" && req.Absent != nil {
 		return nil, fmt.Errorf("lifecycle run: root_path and absent are mutually exclusive")
 	}
-	if (req.RootPath != "" || req.Absent != nil) && !livenessPathPredicates[req.PathPredicate] {
-		return nil, fmt.Errorf("lifecycle run: path_predicate must be %q or %q with root_path or absent, got %q",
-			semsourceast.CodePath, source.DocFilePath, req.PathPredicate)
+	if (req.RootPath != "" || req.Absent != nil) && req.Owner == "" {
+		return nil, fmt.Errorf("lifecycle run: owner is required with root_path or absent")
 	}
 
 	if req.RootPath != "" {
