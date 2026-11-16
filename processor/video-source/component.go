@@ -240,6 +240,7 @@ func (c *Component) runSeed(ctx context.Context) error {
 		"entities_published", c.entitiesPublished.Load())
 
 	c.publishStatusReport(ctx, "watching")
+	c.reportWhenSettled(ctx)
 
 	cancel := c.startWatching(ctx)
 
@@ -426,6 +427,19 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		LastError:    c.seed.LastError(),
 		Timestamp:    time.Now(),
 	}
+}
+
+// reportWhenSettled publishes one more status report once the publisher has
+// settled everything the seed handed it. The seed-end report is built straight
+// after the last Send, so it can carry delivered < offered; without this the
+// figures correct only on the periodic tick (#284). ctx is the seed context,
+// which Stop cancels before it joins the workers.
+func (c *Component) reportWhenSettled(ctx context.Context) {
+	c.workers.Go(func() {
+		if c.publisher.WaitSettled(ctx) == nil {
+			c.publishStatusReport(ctx, c.currentPhase())
+		}
+	})
 }
 
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {
