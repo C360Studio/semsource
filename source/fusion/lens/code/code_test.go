@@ -20,7 +20,8 @@ func TestResolveMode(t *testing.T) {
 		"OnEvent":             fusion.ResolveModeSymbol,
 		"PlanManager.OnEvent": fusion.ResolveModeSymbol,
 		"pkg/comp.go":         fusion.ResolveModePrefix,
-		"comp.go":             fusion.ResolveModePrefix,
+		"comp.go":             fusion.ResolveModeSymbol,
+		`pkg\comp.go`:         fusion.ResolveModePrefix,
 		"where is dispatch":   fusion.ResolveModeNL,
 	}
 	for q, want := range cases {

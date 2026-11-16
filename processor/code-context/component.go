@@ -29,6 +29,7 @@ import (
 	"github.com/c360studio/semengine/storage/storeregistry"
 	"github.com/c360studio/semvocab/catalog/cco"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/source/fusion/lens/code"
 	"github.com/c360studio/semsource/source/fusion/lens/docs"
@@ -138,7 +139,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		if err != nil {
 			return nil, fmt.Errorf("create fusionnats client: %w", err)
 		}
-		graph = g
+		graph = pathSeedClient{
+			RetrievalClient: g,
+			lens:            config.Lens,
+			authority:       entityid.Authority{Org: deps.Platform.Org, Platform: deps.Platform.Platform},
+			systems:         append([]string(nil), config.SourceSystems...),
+		}
 	}
 	return &Component{
 		name:          name,
