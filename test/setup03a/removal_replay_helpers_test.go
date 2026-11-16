@@ -955,7 +955,7 @@ func (p *replayQualification) reactivated(name string, before replayRecord, expe
 	return result
 }
 func (p *replayQualification) legacySweep() {
-	raw, err := p.h.rpc("graph.lifecycle.run", map[string]any{"org": "setup03a", "systems": []string{replayTargetProject}, "root_path": p.h.source, "reason": "path_missing"})
+	raw, err := p.h.rpc("graph.lifecycle.run", map[string]any{"org": "setup03a", "systems": []string{replayTargetProject}, "root_path": p.h.source, "reason": "path_missing", "path_predicate": "source.doc.file-path"})
 	if !p.h.check("legacy_sweep_completed", time.Nanosecond, func() (any, error) { return json.RawMessage(raw), err }) {
 		p.h.t.FailNow()
 	}

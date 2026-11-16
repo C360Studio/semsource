@@ -73,6 +73,16 @@ type LifecycleRunRequest struct {
 	// marks everything in scope. omitempty would collapse the first into the
 	// second and retract a whole corpus on a pass that found nothing wrong.
 	Absent []string `json:"absent"`
+
+	// PathPredicate names the path predicate the caller's liveness oracle
+	// answers for: the code path for an AST source, the doc file path for a
+	// document or object-store source. Only in-scope entities carrying it are
+	// considered. A system slug is shared by every source configured with the
+	// same project, so without it one source's root would judge another
+	// source's artifacts — a doc path checked under an AST root is "missing"
+	// and its live document is marked stale (#286). Required whenever RootPath
+	// or Absent is set.
+	PathPredicate string `json:"path_predicate,omitempty"`
 }
 
 // LifecycleRunResponse summarizes one lifecycle pass.

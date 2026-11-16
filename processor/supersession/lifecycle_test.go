@@ -1,10 +1,12 @@
 package supersession
 
 import (
+	"reflect"
 	"testing"
 
 	gtypes "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/message"
+	"github.com/c360studio/semsource/graph"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
@@ -195,5 +197,52 @@ func TestDecideLifecycleActions_GroupsMultipleEntitiesUnderOnePath(t *testing.T)
 	}
 	if len(toMark) != 2 {
 		t.Errorf("toMark count = %d, want 2 (both symbols from the one deleted file)", len(toMark))
+	}
+}
+
+// TestLifecycleScopeExcludesOtherSourcesOfASharedSystem pins #286 in both
+// directions: an AST source and a docs source configured with one project
+// share a system slug, and neither's sweep may judge the other's artifacts —
+// a path relative to one root is meaningless under the other.
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: Stale facts are distinguishable from live facts
+func TestLifecycleScopeExcludesOtherSourcesOfASharedSystem(t *testing.T) {
+	code := gtypes.EntityState{ID: "acme.p.svc.golang.function.Live", Triples: []message.Triple{
+		{Predicate: semsourceast.CodePath, Object: "live.go"},
+	}}
+	doc := gtypes.EntityState{ID: "acme.p.svc.web.doc.a-md", Triples: []message.Triple{
+		{Predicate: source.DocFilePath, Object: "a.md"},
+	}}
+	other := gtypes.EntityState{ID: "acme.p.other.web.doc.b-md", Triples: []message.Triple{
+		{Predicate: source.DocFilePath, Object: "b.md"},
+	}}
+	all := []gtypes.EntityState{code, doc, other}
+	systems := map[string]struct{}{"svc": {}}
+
+	ids := func(es []gtypes.EntityState) []string {
+		var out []string
+		for _, e := range es {
+			out = append(out, e.ID)
+		}
+		return out
+	}
+	if got := ids(lifecycleScope(all, systems, semsourceast.CodePath, true)); !reflect.DeepEqual(got, []string{code.ID}) {
+		t.Errorf("AST sweep scope = %v, want only the code entity", got)
+	}
+	if got := ids(lifecycleScope(all, systems, source.DocFilePath, true)); !reflect.DeepEqual(got, []string{doc.ID}) {
+		t.Errorf("docs sweep scope = %v, want only the document", got)
+	}
+}
+
+// TestLivenessOracleRequiresAPathPredicate: an oracle with no path predicate
+// would judge every source's artifacts of the system, so it is refused.
+func TestLivenessOracleRequiresAPathPredicate(t *testing.T) {
+	for name, req := range map[string]graph.LifecycleRunRequest{
+		"root without predicate":   {RootPath: "/r"},
+		"absent without predicate": {Absent: []string{}},
+		"unknown predicate":        {RootPath: "/r", PathPredicate: "dc.terms.title"},
+	} {
+		if _, err := livenessOracle(req); err == nil {
+			t.Errorf("%s: accepted, want refused", name)
+		}
 	}
 }

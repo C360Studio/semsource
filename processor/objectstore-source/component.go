@@ -26,6 +26,7 @@ import (
 	"github.com/c360studio/semsource/internal/seedloss"
 	"github.com/c360studio/semsource/internal/seedsup"
 	"github.com/c360studio/semsource/internal/sourcestatus"
+	source "github.com/c360studio/semsource/source/vocabulary"
 	"github.com/c360studio/semsource/storage/filestore"
 	"github.com/c360studio/semsource/storage/s3store"
 )
@@ -358,6 +359,8 @@ func (c *Component) retractionRequest(removed []objectstore.Removal) (graph.Life
 		Systems: []string{c.system},
 		Absent:  absent,
 		Reason:  graph.LifecycleReasonFileDeleted,
+		// Object keys are carried as the doc file path (#286).
+		PathPredicate: source.DocFilePath,
 	}, true
 }
 

@@ -648,6 +648,9 @@ func lifecycleRunRequestFor(pw *pathWatcher, reason string) graph.LifecycleRunRe
 		Systems:  []string{pw.scopedSystem},
 		RootPath: pw.root,
 		Reason:   reason,
+		// Only code entities answer to this root; a docs source sharing the
+		// project keys its documents by a path relative to its own root (#286).
+		PathPredicate: semsourceast.CodePath,
 	}
 }
 

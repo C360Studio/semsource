@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/graph"
+	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
 // The absent-set oracle exists for sources whose artifacts are not files. An
@@ -12,7 +13,7 @@ import (
 // it is better evidence than a stat, not worse.
 
 func TestLivenessOracle_NoOracleWhenNeitherIsGiven(t *testing.T) {
-	stat, err := livenessOracle(graph.LifecycleRunRequest{Org: "acme", Systems: []string{"s"}})
+	stat, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath, Org: "acme", Systems: []string{"s"}})
 	if err != nil {
 		t.Fatalf("livenessOracle: %v", err)
 	}
@@ -24,7 +25,7 @@ func TestLivenessOracle_NoOracleWhenNeitherIsGiven(t *testing.T) {
 }
 
 func TestLivenessOracle_RejectsTwoOracles(t *testing.T) {
-	_, err := livenessOracle(graph.LifecycleRunRequest{
+	_, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath,
 		Org:      "acme",
 		Systems:  []string{"s"},
 		RootPath: "/docs",
@@ -36,7 +37,7 @@ func TestLivenessOracle_RejectsTwoOracles(t *testing.T) {
 }
 
 func TestLivenessOracle_AbsentSetAnswersLiveness(t *testing.T) {
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath,
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/q4.md", "reports/old.md"},
@@ -63,7 +64,7 @@ func TestLivenessOracle_AbsentSetAnswersLiveness(t *testing.T) {
 // missing omitempty protects. "My listing completed and nothing is gone" must
 // not decay into "mark everything in scope".
 func TestLivenessOracle_EmptyAbsentSetIsAnAssertion(t *testing.T) {
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath,
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{},
@@ -86,7 +87,7 @@ func TestLivenessOracle_EmptyAbsentSetIsAnAssertion(t *testing.T) {
 func TestAbsentSet_MarksParentAndPassagesTogether(t *testing.T) {
 	fx := docFixture{path: "reports/q4.md", count: 3, passages: 3}
 
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath,
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/q4.md"},
@@ -121,7 +122,7 @@ func TestAbsentSet_LeavesPresentObjectsAlone(t *testing.T) {
 	gone := docFixture{path: "reports/q4.md", count: 2, passages: 2}
 	entities := append(present.build(), gone.build()...)
 
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath,
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/q4.md"},
@@ -170,7 +171,7 @@ func TestAbsentSet_ReappearedArtifactIsCleared(t *testing.T) {
 
 	// The bucket now holds it again, so the completed pass names something
 	// else as absent — or nothing at all.
-	stat, err := livenessOracle(graph.LifecycleRunRequest{
+	stat, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath,
 		Org:     "acme",
 		Systems: []string{"s"},
 		Absent:  []string{"reports/some-other-doc.md"},

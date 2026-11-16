@@ -536,6 +536,9 @@ func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string
 		Systems:  []string{system},
 		RootPath: root,
 		Reason:   reason,
+		// Only documents answer to this root; an AST source sharing the
+		// project keys its code by a path relative to its own root (#286).
+		PathPredicate: source.DocFilePath,
 	}
 	c.workers.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)

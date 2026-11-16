@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semsource/graph"
+	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
 func TestDeleteTriggersLifecycleRun(t *testing.T) {
@@ -38,6 +39,10 @@ func TestLifecycleRunRequestFor(t *testing.T) {
 	}
 	if req.Reason != graph.LifecycleReasonFileDeleted {
 		t.Errorf("Reason = %q, want %q", req.Reason, graph.LifecycleReasonFileDeleted)
+	}
+	// Only code entities answer to an AST root (#286).
+	if req.PathPredicate != semsourceast.CodePath {
+		t.Errorf("PathPredicate = %q, want %q", req.PathPredicate, semsourceast.CodePath)
 	}
 }
 

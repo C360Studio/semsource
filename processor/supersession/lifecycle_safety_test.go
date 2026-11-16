@@ -97,7 +97,7 @@ func TestSourceRemovedStickyAcrossLegacyOracles(t *testing.T) {
 			t.Fatalf("legacy changed source_removed: %v %v", m, c)
 		}
 	}
-	oracle, err := livenessOracle(graph.LifecycleRunRequest{Absent: []string{}})
+	oracle, err := livenessOracle(graph.LifecycleRunRequest{PathPredicate: source.DocFilePath, Absent: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -969,7 +969,7 @@ func (h *harness) queries(stage string) {
 }
 func (h *harness) lifecycle(stage string) {
 	h.check(stage+"_lifecycle_pass", 20*time.Second, func() (any, error) {
-		raw, err := h.rpc("graph.lifecycle.run", map[string]any{"org": "setup03a", "systems": []string{"setup03a-corpus-v1"}, "root_path": h.source, "reason": "path_missing"})
+		raw, err := h.rpc("graph.lifecycle.run", map[string]any{"org": "setup03a", "systems": []string{"setup03a-corpus-v1"}, "root_path": h.source, "reason": "path_missing", "path_predicate": "code.artifact.path"})
 		return json.RawMessage(raw), err
 	})
 }
