@@ -30,7 +30,7 @@ const response = {
 };
 
 describe("parseFusionResponse", () => {
-  // spec: qualify-semengine-tier0 / Adopt Fusion Contract v2 and Exact Seed Resolution
+  // spec: openspec/specs/source-workbench/spec.md#Requirement: The workbench tolerates every legitimate backend state
   it("parses semengine fusion v2 while ignoring additive unknown fields", () => {
     expect(parseFusionResponse(response)).toMatchObject({
       contract_version: "2",
