@@ -28,21 +28,28 @@ consumer contracts; raw KV reads must not silently replace a failed public query
 ## Correctness before interface choice
 
 - Exact entity state (`ENTITY_STATES`), materialized indexes (`PREDICATE_INDEX`, `INCOMING_INDEX`,
-  `SPATIAL_INDEX`, `TEMPORAL_INDEX`), and neural/lexical search (`EMBEDDING_INDEX`, `KEYWORD_INDEX`) have
-  different freshness signals. A source being ready does not establish that its indexes are ready. When a
+  `SPATIAL_INDEX`, `TEMPORAL_INDEX`), word search (graph-lexical's in-memory index, readiness at
+  `GRAPH_STATUS/graph-lexical`), and neural search (`EMBEDDING_INDEX`, tier 1) have different freshness
+  signals. A source being ready does not establish that its indexes are ready. When a
   caller has a write revision (`ENTITY_STATES` KV revision from `entity.create`/`entity.patch`), pass
   `min_revision` on enveloped `graph.query.*` requests (`byName`, `predicate`, `entityByAlias`,
   `relationships`, `pathSearch`, `localSearch`, `globalSearch`, `searchGraph`, `summary`); an index behind it
-  refuses transient `revision_not_reached` (never waits) so the caller retries.
+  refuses transient `revision_not_reached` (never waits) so the caller retries. The search verbs pass it to
+  the word index.
 - Unavailable providers, transport errors, partial hydration, or `Deferred` are not absence findings.
-  When `graph-query`'s `embedding_enabled` is `false` (no-embedder composition), `semantic` and `similar` are
-  refused with class `invalid` and code `not_enabled`.
+  Unless `graph-query`'s `embedding_enabled` is `true` (it is `false` when left out, as in every SemSource
+  composition on this pin), `semantic` and `similar` are refused with class `invalid` and code `not_enabled`.
+- `localSearch`, `globalSearch` and `searchGraph` find entities by their words through graph-lexical (BM25,
+  quoted phrases, `-` exclusions), not by meaning; entities without text (telemetry) gain nothing. With no
+  word index composed they are refused transient `internal`. `globalSearch` reports unapplied question
+  hints in `hints`; check `honoured` before trusting one.
 - Apply source/taxonomy scope before result limits. Under ADR-102, taxonomy is segment four; a wildcard
   is not a literal prefix. Use complete admitted scopes, not broad search followed by post-limit filtering.
 - Code/doc fusion and `graph.query.searchGraph` (`localSearch`/`globalSearch` in SemEngine) are distinct
   paths; qualify both when a consumer needs both.
 - MCP does not automatically wrap GraphQL, provide durable audit, or admit generation. SemSource's
-  semembed profile provides neural retrieval; optional generation has a separate qualification contract.
+  neural retrieval (semembed) returns with 04C (#234); optional generation has a separate qualification
+  contract.
 
 ## Verify against the pinned implementation
 

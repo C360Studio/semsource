@@ -46,7 +46,7 @@ func TestGraph_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
 func TestGraph_EmbedderTypeIsRetiredAtEveryValue(t *testing.T) {
 	// SemEngine refuses embedder_type whatever its value, so every former value
 	// must fail at load with the migration, not at boot.
-	for _, value := range []string{`"bm25"`, `"none"`, `"http"`, `""`, `"bogus"`} {
+	for _, value := range []string{`"bm25"`, `"none"`, `"http"`, `""`, `"bogus"`, `null`} {
 		_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":`+value+`}}`)
 		if err == nil {
 			t.Fatalf("embedder_type %s should be refused", value)

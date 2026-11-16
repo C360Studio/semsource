@@ -265,7 +265,8 @@ func (c *Config) validateGraph() error {
 	if len(c.Graph.EntityIDEdges) > 0 && string(c.Graph.EntityIDEdges) != "null" {
 		return fmt.Errorf("config: graph.entity_id_edges is retired in SemEngine (ADR-099 groups communities by entity-ID prefix); remove graph.entity_id_edges")
 	}
-	if len(c.Graph.EmbedderType) > 0 && string(c.Graph.EmbedderType) != "null" {
+	// Any presence is refused, null included: the key has no meaning on SemEngine.
+	if len(c.Graph.EmbedderType) > 0 {
 		return fmt.Errorf("config: graph.embedder_type is retired in SemEngine: tier 0 word search is graph-lexical, on by default " +
 			"(set graph.lexical_search to false for a structural-only graph), and the HTTP embedder returns with tier 1 (#234) — remove graph.embedder_type")
 	}
