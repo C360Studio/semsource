@@ -109,6 +109,7 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 		text := reply.Data.Text
 		matches, total, truncated := deriveMatches(text)
 		communities := deriveCommunities(text)
+		entity, path, hints := deriveHintAnswers(&reply.Data)
 		result = graphSearchResult{
 			Retrieval:          deriveDisclosure(&reply.Data, communities),
 			Answer:             text.Answer,
@@ -116,7 +117,9 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 			TotalMatches:       total,
 			Truncated:          truncated,
 			CommunitySummaries: communities,
-			Hints:              reply.Data.Hints,
+			Entity:             entity,
+			Path:               path,
+			Hints:              hints,
 		}
 	}
 	// An unreadable payload reports the unknown rung rather than failing the

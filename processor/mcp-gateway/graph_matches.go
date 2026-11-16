@@ -251,5 +251,54 @@ type graphSearchResult struct {
 	TotalMatches       int                       `json:"total_matches"`
 	Truncated          bool                      `json:"truncated"`
 	CommunitySummaries []communitySummary        `json:"community_summaries,omitempty"`
+	Entity             *graphMatch               `json:"entity,omitempty"`
+	Path               *gtypes.PathSearchData    `json:"path,omitempty"`
 	Hints              []gtypes.GlobalSearchHint `json:"hints,omitempty"`
+}
+
+// Hint kinds whose answer the substrate carries beside the word matches.
+const (
+	hintEntity = "entity"
+	hintPath   = "path"
+)
+
+// gatewayUnreadableCode marks a hint the gateway downgraded because it could
+// not deliver the substrate's answer for it. The code is the gateway's own, so
+// a consumer can tell it from a substrate refusal.
+const gatewayUnreadableCode = "mcp_gateway_answer_unreadable"
+
+// deriveHintAnswers carries the answers behind honoured entity and path hints.
+// The substrate marks a hint honoured only when its reply holds the answer —
+// for a one-word reference or a path question that answer may be the whole
+// reply, with no word matches at all — so dropping it would leave an honoured
+// claim with nothing behind it. The entity renders as a bounded match (no
+// triples); the path is the substrate's own walk, already bounded by its
+// depth and node limits and carrying IDs and edges only.
+//
+// Invariant: no hint leaves here honoured without its answer. A hint whose
+// answer is absent or unreadable is reported not honoured, with the gateway's
+// own code and reason so it is never mistaken for a substrate refusal.
+func deriveHintAnswers(data *gtypes.GlobalSearchData) (*graphMatch, *gtypes.PathSearchData, []gtypes.GlobalSearchHint) {
+	var entity *graphMatch
+	var e substrateEntity
+	if len(data.Entity) > 0 && json.Unmarshal(data.Entity, &e) == nil && e.ID != "" {
+		entity = &graphMatch{
+			ID: e.ID, Type: entityTypeSegment(e.ID), Label: entityTitle(e), Properties: entityProperties(e),
+		}
+	}
+	hints := make([]gtypes.GlobalSearchHint, len(data.Hints))
+	copy(hints, data.Hints)
+	for i := range hints {
+		h := &hints[i]
+		if !h.Honoured {
+			continue
+		}
+		missing := (h.Hint == hintEntity && entity == nil) || (h.Hint == hintPath && data.Path == nil)
+		if missing {
+			h.Honoured = false
+			h.Code = gatewayUnreadableCode
+			h.Reason = "the substrate honoured this hint, but the gateway could not read its answer"
+		}
+	}
+	return entity, data.Path, hints
 }

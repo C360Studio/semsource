@@ -256,3 +256,63 @@ func TestTotalMatchesHonestyInvariant(t *testing.T) {
 		t.Errorf("cap: matches=%d total=%d truncated=%v, want %d/%d/true", len(matches), total, truncated, maxGraphMatches, len(many))
 	}
 }
+
+// TestHonouredHintsKeepTheirAnswers pins the review finding on #292: a
+// one-word reference or a path question can be answered entirely beside the
+// word matches, with none of them. The honoured hint's answer must reach the
+// agent, and no honoured claim may survive without it.
+// spec: openspec/specs/graphrag-access/spec.md#Requirement: An answer discloses how far it escalated
+func TestHonouredHintsKeepTheirAnswers(t *testing.T) {
+	const id = "acme.semsource.repo.config.dependency.guava"
+	entity, err := json.Marshal(entityWithTriples(id, source.DcTitle, "guava", source.ConfigDepVersion, "33.0.0-jre"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := &gtypes.PathSearchData{
+		Entities: []gtypes.PathEntity{{EntityID: id}, {EntityID: "acme.semsource.repo.config.gomod.app", Depth: 1}},
+		Edges:    []gtypes.RelationshipEdge{{Predicate: source.ConfigRequires, FromEntityID: "acme.semsource.repo.config.gomod.app", ToEntityID: id}},
+	}
+	empty := &gtypes.TextSearchData{}
+
+	t.Run("entity with zero word matches", func(t *testing.T) {
+		data := &gtypes.GlobalSearchData{Text: empty, Entity: entity,
+			Hints: []gtypes.GlobalSearchHint{{Hint: hintEntity, Detail: "guava", Honoured: true}}}
+		got, _, hints := deriveHintAnswers(data)
+		if got == nil || got.ID != id || got.Label != "guava" || got.Properties[source.ConfigDepVersion] != "33.0.0-jre" {
+			t.Fatalf("entity answer = %+v, want the honoured entity rendered as a bounded match", got)
+		}
+		if !hints[0].Honoured {
+			t.Errorf("a delivered answer's hint was downgraded: %+v", hints[0])
+		}
+	})
+
+	t.Run("path with zero word matches", func(t *testing.T) {
+		data := &gtypes.GlobalSearchData{Text: empty, Path: path,
+			Hints: []gtypes.GlobalSearchHint{{Hint: hintPath, Detail: id, Honoured: true}}}
+		_, got, hints := deriveHintAnswers(data)
+		if !jsonEqual(got, path) || !hints[0].Honoured {
+			t.Errorf("path = %+v hint = %+v, want the substrate's walk carried and the hint honoured", got, hints[0])
+		}
+	})
+
+	t.Run("no honoured claim without its answer", func(t *testing.T) {
+		data := &gtypes.GlobalSearchData{Text: empty, Entity: json.RawMessage(`"not an entity"`),
+			Hints: []gtypes.GlobalSearchHint{
+				{Hint: hintEntity, Detail: "guava", Honoured: true},
+				{Hint: hintPath, Detail: id, Honoured: true},
+				{Hint: "time_range", Detail: "last week", Reason: "words only"},
+			}}
+		_, _, hints := deriveHintAnswers(data)
+		for _, h := range hints[:2] {
+			if h.Honoured || h.Code != gatewayUnreadableCode || h.Reason == "" {
+				t.Errorf("hint %+v survived honoured without its answer, or lost the gateway's attribution", h)
+			}
+		}
+		if hints[2].Code != "" || hints[2].Reason != "words only" {
+			t.Errorf("an unhonoured substrate hint was rewritten: %+v", hints[2])
+		}
+		if !data.Hints[0].Honoured {
+			t.Error("the substrate's reply was mutated in place")
+		}
+	})
+}

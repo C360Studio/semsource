@@ -178,6 +178,43 @@ func TestIntegration_GraphSearchUnreadableReplyDisclosesUnknown(t *testing.T) {
 	}
 }
 
+// TestIntegration_GraphSearchCarriesHonouredEntityAnswer drives the tool end
+// to end on a one-word reference the substrate answered beside zero word
+// matches: the entity reaches the agent, honoured, with no triples leaked.
+func TestIntegration_GraphSearchCarriesHonouredEntityAnswer(t *testing.T) {
+	ctx := context.Background()
+	tc := natstest.New(t)
+	const reply = `{"data":{"text":{"level":0,"groups":[],"matches":[],"matched":0,"missing":0,
+		"bodies_not_indexed":0,"truncated":false,"unreadable_groups":0,"answer":"Found 0 matching entities in 0 groups."},
+		"entity":{"id":"acme.semsource.repo.config.dependency.guava","triples":[
+			{"subject":"acme.semsource.repo.config.dependency.guava","predicate":"dc.terms.title","object":"guava"}]},
+		"hints":[{"hint":"entity","detail":"guava","honoured":true}]},
+		"indexed_revision":3,"producer":"graph-query"}`
+	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.searchGraph",
+		func(context.Context, []byte) ([]byte, error) { return []byte(reply), nil })
+	if err != nil {
+		t.Fatalf("subscribe stub: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	cs := connect(t, graphToolComponent(t, tc.Client))
+	res := callTool(t, cs, "graph_search", map[string]any{"query": "guava"})
+	raw := res.Content[0].(*mcp.TextContent).Text
+	var out graphSearchResult
+	if res.IsError || json.Unmarshal([]byte(raw), &out) != nil {
+		t.Fatalf("graph_search failed: %s", raw)
+	}
+	if out.Entity == nil || out.Entity.ID != "acme.semsource.repo.config.dependency.guava" || out.Entity.Label != "guava" {
+		t.Fatalf("honoured entity answer lost: %s", raw)
+	}
+	if len(out.Hints) != 1 || !out.Hints[0].Honoured || len(out.Matches) != 0 {
+		t.Errorf("hints=%+v matches=%d, want the honoured hint beside zero matches", out.Hints, len(out.Matches))
+	}
+	if strings.Contains(raw, `"triples"`) {
+		t.Errorf("the entity answer leaked raw triples: %s", raw)
+	}
+}
+
 // startLifecycle creates, initializes, and starts a substrate component, and
 // stops it at cleanup.
 func startLifecycle(t *testing.T, name string, create func() (component.Discoverable, error)) {

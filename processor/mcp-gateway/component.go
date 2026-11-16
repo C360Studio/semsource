@@ -123,7 +123,7 @@ func (c *Component) buildServer() *mcp.Server {
 	// summarize_graph works because its roster has query_by_type; ours does not.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "graph_search",
-		Description: "Corpus-wide word search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Matches are id/type/label/relevance plus allowlisted value properties (versions, kinds); follow up with a deterministic tool on IDs of interest. Every result carries a `retrieval` block disclosing whether matches are community-backed (clustering on) or word hits only; the answer text is a template, never LLM-synthesized. `hints` lists what the question asked beyond its words (time range, area, count) and that it was not applied",
+		Description: "Corpus-wide word search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Matches are id/type/label/relevance plus allowlisted value properties (versions, kinds); follow up with a deterministic tool on IDs of interest. Every result carries a `retrieval` block disclosing whether matches are community-backed (clustering on) or word hits only; the answer text is a template, never LLM-synthesized. `hints` lists what the question asked beyond its words and whether it was applied; an applied entity reference or path walk comes back as `entity` / `path`",
 	}, c.graphSearch)
 	return s
 }
