@@ -86,6 +86,7 @@ type Publisher struct {
 	maxRetryBackoff time.Duration
 
 	// Metrics
+	accepted  atomic.Int64
 	published atomic.Int64
 	dropped   atomic.Int64
 	failed    atomic.Int64
@@ -104,6 +105,11 @@ type Publisher struct {
 	// 34,871 per-entity WARN lines; a flood is one transition, not N lines —
 	// exact counts live on the failed counter and metrics.
 	publishFailing degraded.Condition
+
+	// settledMu guards settledCh, the channel WaitSettled blocks on. It is
+	// closed on every transition to zero entities in flight (#284).
+	settledMu sync.Mutex
+	settledCh chan struct{}
 
 	// Lifecycle
 	cancel   context.CancelFunc
@@ -268,12 +274,18 @@ func (p *Publisher) Send(payload *graph.EntityPayload) error {
 		p.logger.Warn("entitypub: dropping unrepresentable entity", "error", err)
 		return fmt.Errorf("entitypub: cannot own queued payload: %w", err)
 	}
+	// Admission is counted before the write: the drain loop can publish the
+	// entity before Write returns, and an outcome counted ahead of its
+	// admission would read as nothing in flight.
+	p.accepted.Add(1)
 	if tw, ok := p.buf.(timeoutWriter); ok {
 		err = tw.WriteWithTimeout(owned, p.sendTimeout)
 	} else {
 		err = p.buf.Write(owned)
 	}
 	if err != nil {
+		p.accepted.Add(-1)
+		p.noteOutcome()
 		p.dropped.Add(1)
 		p.metrics.incDropped()
 		p.logger.Warn("entitypub: dropping entity after bounded backpressure",
@@ -301,6 +313,55 @@ func (p *Publisher) Lost() int64 { return p.dropped.Load() + p.failed.Load() }
 
 // Retries returns the number of circuit-breaker backoff retries.
 func (p *Publisher) Retries() int64 { return p.retries.Load() }
+
+// inFlight is the number of accepted entities with no terminal outcome yet:
+// buffered, or read by the drain loop and not yet published or failed.
+// Outcomes are read before admissions: a Send racing this read can only make
+// the result too high (wait longer), never a false zero.
+func (p *Publisher) inFlight() int64 {
+	settled := p.published.Load() + p.failed.Load()
+	return p.accepted.Load() - settled
+}
+
+// noteOutcome wakes WaitSettled callers when the last in-flight entity
+// settles. The caller has already updated its counter, so whichever update
+// makes inFlight zero observes it here.
+func (p *Publisher) noteOutcome() {
+	if p.inFlight() != 0 {
+		return
+	}
+	p.settledMu.Lock()
+	if p.settledCh != nil {
+		close(p.settledCh)
+		p.settledCh = nil
+	}
+	p.settledMu.Unlock()
+}
+
+// WaitSettled blocks until every entity accepted by Send has been published
+// or has failed terminally, or until ctx ends. Pending alone cannot answer
+// this: the drain loop removes a batch from the buffer before publishing it.
+// A source calls it after its seed so the status it reports next carries the
+// seed's delivered figures rather than a snapshot taken mid-drain.
+func (p *Publisher) WaitSettled(ctx context.Context) error {
+	for {
+		p.settledMu.Lock()
+		if p.inFlight() == 0 {
+			p.settledMu.Unlock()
+			return nil
+		}
+		if p.settledCh == nil {
+			p.settledCh = make(chan struct{})
+		}
+		ch := p.settledCh
+		p.settledMu.Unlock()
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
 
 // Pending returns the current number of entities waiting in the buffer.
 func (p *Publisher) Pending() int { return p.buf.Size() }
@@ -373,6 +434,7 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 			// Cancellation is a terminal outcome for each remaining entity too;
 			// returning here silently discarded the rest of the accepted batch.
 			p.failed.Add(1)
+			p.noteOutcome()
 			p.metrics.incFailed()
 			// Edge-triggered: the first failure names itself at the default
 			// level, the flood behind it counts on the failed counter, and
@@ -407,10 +469,14 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
 		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
-			p.published.Add(1)
-			p.metrics.incPublished()
+			// Recovery state settles before the delivery counter moves: a
+			// WaitSettled caller can return the moment published advances, and
+			// its report must not pair full delivery with stale backpressure.
 			p.clearBackpressure()
 			p.publishFailing.Clear(p.logger, "entity publishing recovered")
+			p.published.Add(1)
+			p.noteOutcome()
+			p.metrics.incPublished()
 			return nil
 		}
 
@@ -466,6 +532,7 @@ func (p *Publisher) flush(ctx context.Context) {
 		for _, payload := range batch {
 			if err := p.publishOne(ctx, payload); err != nil {
 				p.failed.Add(1)
+				p.noteOutcome()
 				p.metrics.incFailed()
 				// Shutdown flush keeps one summary-shaped line per entity at
 				// Debug; the edge-triggered condition covers the transition.
