@@ -17,6 +17,7 @@ func TestDeleteTriggersLifecycleRun(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
 func TestRootsForPath(t *testing.T) {
 	c := &Component{config: Config{Paths: []string{"/workspace/docs", "/workspace/specs"}}}
 

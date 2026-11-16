@@ -18,6 +18,7 @@ func TestDeleteTriggersLifecycleRun(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
 func TestLifecycleRunRequestFor(t *testing.T) {
 	pw := &pathWatcher{
 		root:         "/workspace/github-com-acme-repo",
