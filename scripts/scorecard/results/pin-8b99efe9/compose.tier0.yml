@@ -1,0 +1,5 @@
+services:
+  semsource:
+    depends_on: !override
+      nats:
+        condition: service_healthy

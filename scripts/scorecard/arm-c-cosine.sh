@@ -78,6 +78,8 @@ echo "ready — total_entities=$entities"
 # --- vectors: one dump per run ---------------------------------------------
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+# Answers go to jq through a file: a full answer can exceed ARG_MAX.
+tmp_answer="$tmp/answer"
 # Built once so the per-question latency measures the retrieval procedure,
 # not `go run`'s per-invocation staleness check on the same source.
 echo "building armc-dump ..."
@@ -151,11 +153,12 @@ for i in $(seq 0 $((n - 1))); do
 	printf '%-5s %-14s %-10s k=%-3s ctx=%-8s %s\n' \
 		"$id" "$band" "$verdict" "$kids" "$context_bytes" "$reason"
 
+	printf '%s' "$answer" > "$tmp_answer"
 	jq --arg id "$id" --arg band "$band" --arg v "$verdict" --arg r "$reason" \
 	   --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "$context_bytes" \
 	   --argjson lat "$lat" \
-	   --arg a "$answer" \
+	   --rawfile a "$tmp_answer" \
 	   '. += [{id:$id, band:$band, tool:"cosine", verdict:$v, reason:$r, nodes:$n,
 	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb,
 	           latency_ms:$lat, latency_samples:[$lat], answer:$a}]' \

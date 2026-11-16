@@ -127,3 +127,26 @@ a `*natsclient.Client` built with `NewClient`/`Connect`, the recipe SemEngine do
 - **semvocab & CCO v2.2 class reconciliation ([#257](https://github.com/C360Studio/semsource/issues/257)) — completed consumer-side (`source/ontology/ontology.go`, `source/ast/vocabulary.go`, `source/vocabulary/predicates.go`):**
   - Uses `bfo.Namespace + "BFO_0000176"` (`continuant part of`) from `github.com/c360studio/semvocab/catalog/bfo` and CCO v2.2 constants from `github.com/c360studio/semvocab/catalog/cco` so `cco.Parents(iri)` returns the full BFO 2020 + CCO v2.2 superclass chain for `fusionvocab.New(cco.Parents)`.
   - Optional future shared pack: once SemSource and SemTeams agree on shared software/code & agentic vocabularies (#208), propose a C360-local pack in `semvocab` anchored via `superclasses` to `bfo-2020` and `cco-2.2`.
+
+## Retrieval Acceptance Floor ([#230](https://github.com/C360Studio/semsource/issues/230))
+
+These are scorecard results for the last pre-cutover SemSource, `bbfb3c6` on SemStreams
+`8b99efe9`. They were graded with the #269 grader and run on 2026-11-16 on an M3 Pro. The full
+record, with image digests, embedder identity, corpus hashes and commands, is in
+[`SUMMARY-pin-8b99efe9.md`](../../scripts/scorecard/results/SUMMARY-pin-8b99efe9.md).
+#233 part 2 reruns the same corpora, question sets and configs on SemEngine.
+
+| corpus (set) | tier 0 arm B | tier 1 arm B | R1 rank-identical (tier 0 / tier 1) |
+| --- | --- | --- | --- |
+| dogfood (`questions.json` v7) | 23/36 | 32/36 | 10/36 / 36/36 |
+| OSH (`questions-osh.json` v2) | 8/13 | 9/13 | not run |
+
+The gate for milestones 3 and 4 has three conditions:
+
+- No band regresses on either tier or corpus.
+- The lexical band (LX01–LX03) flips at tier 0; today only LX01 passes.
+- R1 at tier 0 becomes rank-stable.
+
+OSH I01 and P02 miss at every tier because their answers exist only as relation file paths,
+which the #269 grader does not count. They need a question repair or a grader ruling before
+#233 grades them.

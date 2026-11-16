@@ -58,6 +58,11 @@ echo "ready — total_entities=$entities"
 
 # --- MCP session -----------------------------------------------------------
 hdrs=$(mktemp); body=$(mktemp)
+
+# Answers and accumulated nodes go to jq through files: a full answer can
+# exceed ARG_MAX, and jq then fails to start.
+tmp_answer=$(mktemp)
+trap 'rm -f "$tmp_answer"' EXIT
 curl -sS --max-time 10 -o "$body" -D "$hdrs" -X POST \
 	-H 'Content-Type: application/json' \
 	-H 'Accept: application/json, text/event-stream' \
@@ -190,11 +195,12 @@ for i in $(seq 0 $((n - 1))); do
 	printf '%-5s %-10s %-13s %-10s nodes=%-3s body=%-7s top=%-7s %s\n' \
 		"$id" "$band" "$tool" "$verdict" "$nodes" "$bodybytes" "$topbytes" "$reason"
 
+	printf '%s' "$answer" > "$tmp_answer"
 	jq --arg id "$id" --arg band "$band" --arg tool "$tool" --arg v "$verdict" \
 	   --arg r "$reason" --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "${first_cb:-0}" \
 	   --argjson lat "$lat_samples" \
-	   --arg a "$answer" \
+	   --rawfile a "$tmp_answer" \
 	   '. += [{id:$id, band:$band, tool:$tool, verdict:$v, reason:$r, nodes:$n, body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb, latency_ms:($lat[0] // null), latency_samples:$lat, answer:$a}]' \
 	   "$out.tmp" > "$out.tmp2" && mv "$out.tmp2" "$out.tmp"
 done
