@@ -139,7 +139,7 @@ record, with image digests, embedder identity, corpus hashes and commands, is in
 | corpus (set) | tier 0 arm B | tier 1 arm B | R1 rank-identical (tier 0 / tier 1) |
 | --- | --- | --- | --- |
 | dogfood (`questions.json` v7) | 23/36 | 32/36 | 10/36 / 36/36 |
-| OSH (`questions-osh.json` v2) | 8/13 | 9/13 | not run |
+| OSH (`questions-osh.json` v3) | 10/13 | 11/13 | not run |
 
 The gate for milestones 3 and 4 has three conditions:
 
@@ -147,6 +147,5 @@ The gate for milestones 3 and 4 has three conditions:
 - The lexical band (LX01–LX03) flips at tier 0; today only LX01 passes.
 - R1 at tier 0 becomes rank-stable.
 
-OSH I01 and P02 miss at every tier because their answers exist only as relation file paths,
-which the #269 grader does not count. They need a question repair or a grader ruling before
-#233 grades them.
+OSH I01 and P02 grade the file names of related symbols (`grade_relation_files`). In Java the
+expected class names reach the answer only as callers' files.

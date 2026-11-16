@@ -255,7 +255,16 @@ quoted as evidence that anything is stable. The run prints that caveat itself.
 
 ### Matchers
 
-`expect_all`, `expect_any` and `expect_none` match against the **whole answer**.
+`expect_all`, `expect_any` and `expect_none` match against the answer's **content**:
+node names and bodies, related symbol names, and graph match labels and property
+values (#269). A question that sets `"grade_relation_files": true` also matches the
+file stems of related symbols. OSH I01 and P02 use it because a Java class name
+reaches the answer only as a caller's file. The answer's own node paths are never
+content.
+
+`regrade.sh <results.json> [questions.json]` regrades a results file from its
+retained answers after a grader or question change, without rerunning the stack.
+
 `expect_top_all` and `expect_top_none` match against the **top-ranked node's body
 only** — see the discrimination band below for why that distinction is the whole
 point.
@@ -530,6 +539,10 @@ rendering itself is unit-tested and was live-verified 13/13 under the
 threshold-0 experiment (`results/166-pass-after-osh-B.json`, preserved). Only
 configurations the regex parser ingests exist in the graph — see
 `handler/cfgfile/parsers.go`.
+
+**Version 3 adds `grade_relation_files` to I01 and P02** (#230). It does not compare
+with v2: both questions missed on every arm under the #269 grader even though
+retrieval was right.
 
 ## Arm-D readiness — dormant LLM-cost fields
 

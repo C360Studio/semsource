@@ -127,6 +127,27 @@ v=$(grade "$p02" "$(jq -c '{nodes: [. + {relations: {caller: [{name: "initialize
 v=$(grade "$p02" "$(jq -c '{nodes: [.]}' <<<"$seed")")
 [ "$v" = "miss" ] && ok "P02 misses on the seed body alone" || fail "P02 on the seed alone graded $v"
 
+# Relation file stems count only for a question that opts in (OSH I01/P02:
+# in Java the class is the file), and never the answer's own node path.
+rel='{"nodes":[{"name":"checkDataStreamKey","path":"lib/DataStoreUtils.java","relations":{"caller":[{"name":"checkKey","path":"impl/InMemoryDataStreamStore.java"}]}}]}'
+v=$(grade '{"expect_any":["InMemoryDataStreamStore"],"grade_relation_files":true}' "$rel")
+[ "$v" = "correct" ] && ok "an opted-in question matches a related symbol's file stem" || fail "opted-in relation file graded $v"
+v=$(grade '{"expect_any":["InMemoryDataStreamStore"]}' "$rel")
+[ "$v" = "miss" ] && ok "relation file stems are not content without the opt-in" || fail "relation file without opt-in graded $v"
+v=$(grade '{"expect_any":["DataStoreUtils"],"grade_relation_files":true}' "$rel")
+[ "$v" = "miss" ] && ok "the opt-in never reads the answer's own node path" || fail "own node path graded $v"
+v=$(grade '{"expect_any":["impl"],"grade_relation_files":true}' "$rel")
+[ "$v" = "miss" ] && ok "the opt-in reads the file stem, not the directory" || fail "relation directory graded $v"
+
+# A hit at the start of a large answer must pass under pipefail (this file
+# runs with pipefail, like every arm).
+# The hit sits on the first line of 2 MB of later lines, so grep -q stops
+# reading long before its writer finishes.
+big=$({ printf 'needle-at-start\n'; head -c 2000000 /dev/zero | tr '\0' 'x' | fold -w 100; } \
+	| jq -Rsc '{nodes:[{name:"n",body:.}]}')
+v=$(grade '{"expect_all":["needle-at-start"]}' "$big")
+[ "$v" = "correct" ] && ok "an early hit in a large answer passes under pipefail" || fail "early hit in a large answer graded $v"
+
 echo "6. gateway, transport, and non-JSON failures grade error, never miss or correct (#269)"
 v=$(grade '{"expect_any":["sources"]}' '{"isError":true,"error":"fusion query failed: semantic is not enabled"}')
 [ "$v" = "error" ] && ok "a gateway refusal grades error" || fail "gateway refusal graded $v"

@@ -1,5 +1,5 @@
 {
- "version": 2,
+ "version": 3,
  "corpus": "Open Sensor Hub core (github.com/opensensorhub/osh-core) at pin 235c0eabf24b6d6137b499b4402943d2794b70e6 — build with corpus-osh.sh",
  "comparability": "own domain: OSH scores NEVER compare with dogfood (questions.json) scores; compare.sh's questions_version guard enforces this mechanically",
  "grading": "deterministic substring matching, case-insensitive; see README.md",
@@ -78,7 +78,8 @@
     "InMemoryDataStreamStore",
     "MVDataStreamStoreImpl"
    ],
-   "why": "Impact must NAME dependents. checkDataStreamKey (DataStoreUtils) is called from the in-memory store (sensorhub-core) and the H2 store (sensorhub-datastore-h2) — 7 call sites, inside the 12-per-role cap. expect_any: naming EITHER store proves the caller edge; the composition band is where naming BOTH is required."
+   "why": "Impact must NAME dependents. checkDataStreamKey (DataStoreUtils) is called from the in-memory store (sensorhub-core) and the H2 store (sensorhub-datastore-h2) — 7 call sites, inside the 12-per-role cap. expect_any: naming EITHER store proves the caller edge; the composition band is where naming BOTH is required. v3 (#230): grade_relation_files, because the expected class names reach the answer only as the callers' file names (Java class = file) and the #269 grader reads no paths otherwise.",
+   "grade_relation_files": true
   },
   {
    "id": "N01",
@@ -128,7 +129,8 @@
     "SystemDataProvider",
     "SystemTaskingConnector"
    ],
-   "why": "Impact closure across the SOS and SPS service planes. addIOsFromDataStore (SystemUtils, sensorhub-core) is called from SystemDataProvider (impl/service/sos) and SystemTaskingConnector (impl/service/sps); the names never co-occur. 2 call sites. Like the dogfood band, OSH composition is impact-closure-only: dependency entities carry titles since #157, but property values stay unreachable on the default response path until semstreams#958 (see config_band), so cross-source joins remain inadmissible, and the archive corpus has no .git for version composition."
+   "why": "Impact closure across the SOS and SPS service planes. addIOsFromDataStore (SystemUtils, sensorhub-core) is called from SystemDataProvider (impl/service/sos) and SystemTaskingConnector (impl/service/sps); the names never co-occur. 2 call sites. Like the dogfood band, OSH composition is impact-closure-only: dependency entities carry titles since #157, but property values stay unreachable on the default response path until semstreams#958 (see config_band), so cross-source joins remain inadmissible, and the archive corpus has no .git for version composition. v3 (#230): grade_relation_files, because the expected class names reach the answer only as the callers' file names (Java class = file) and the #269 grader reads no paths otherwise.",
+   "grade_relation_files": true
   },
   {
    "id": "G01",

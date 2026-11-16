@@ -6,10 +6,21 @@ with the #269 grader (content-only matching, failed calls grade `error`). #233 p
 the same corpora, question sets and configs on SemEngine and compares band by band.
 
 **Date:** 2026-11-16. **Machine:** M3 Pro (arm64/Darwin). **Sets:** dogfood `questions.json`
-v7 (adds the lexical band), OSH `questions-osh.json` v2. Repeats = 3. Both corpora pass
+v7 (adds the lexical band), OSH `questions-osh.json` v3 (I01 and P02 opt in to relation-file grading). Repeats = 3. Both corpora pass
 `check-composition.py` and `check-discrimination.py`. Across every arm on both corpora there
 are zero `error` and zero `UNSTABLE` verdicts; the one FABRICATED is LX03, which is
 expected red (see below).
+
+Every result file here was regraded with `regrade.sh` after two grader changes made during
+this PR. Regrading reads the retained first-call answers and never reruns the stack:
+
+- **OSH I01 and P02 opt in to relation-file grading** (see the OSH section).
+- **A pipefail bug is fixed.** The grader matched literals with `printf | grep -q`. On a large
+  answer, grep stops at the first hit, printf then dies of SIGPIPE, and under `pipefail` the hit
+  graded as a miss. Only arm A's whole-file answers are large enough to trigger it. Arm A
+  regains dogfood D07, L02 and L07, and OSH D02, C03 and G01.
+  - Arm A results recorded before this fix, in earlier `SUMMARY-*.md` files, may be undercounted
+    the same way.
 
 ## What ran
 
@@ -41,12 +52,12 @@ read (2 MB for dogfood, 4.4 MB for OSH), and arm A is a pure function of the cor
 | composition | 0/4 | 3/4 | 3/4 | 0/4 |
 | discrimination | 1/2 | 1/2 | 2/2 | 2/2 |
 | doc-early | 3/3 | 2/3 | 3/3 | 3/3 |
-| doc-late | 3/7 | 7/7 | 7/7 | 7/7 |
+| doc-late | 4/7 | 7/7 | 7/7 | 7/7 |
 | impact | 2/2 | 2/2 | 2/2 | 2/2 |
 | lexical | 0/3 | 1/3 | 2/3 | 2/3 |
-| loose | 5/7 | 2/7 | 5/7 | 7/7 |
+| loose | 7/7 | 2/7 | 5/7 | 7/7 |
 | negative | 2/2 | 2/2 | 2/2 | 2/2 |
-| **TOTAL** | **22/36 · 1,702 KB** | **23/36 · 349 KB** | **32/36 · 563 KB** | **31/36 · 632 KB** |
+| **TOTAL** | **25/36 · 1,702 KB** | **23/36 · 349 KB** | **32/36 · 563 KB** | **31/36 · 632 KB** |
 | latency median / p95 | 812 / 1,405 ms | 80 / 200 ms | 70 / 190 ms | 2,332 / 2,399 ms |
 
 Misses, by run:
@@ -65,30 +76,33 @@ ScopedSystemSlug` lists 12 callers but omits `initializeWatchers`. The graph hol
 `code_context initializeWatchers` lists `ScopedSystemSlug` as a callee. So the impact closure
 at this pin truncates or filters callers. The misses come from retrieval, not from the question.
 
-## OSH (v2, 13 questions)
+## OSH (v3, 13 questions)
 
 | band | A (grep) | B tier 0 | B tier 1 | C tier 1 (cosine) |
 |---|---|---|---|---|
-| code | 2/3 | 2/3 | 3/3 | 3/3 |
-| composition | 0/2 | 1/2 | 1/2 | 0/2 |
-| config | 0/3 | 1/3 | 1/3 | 0/3 |
-| doc | 1/2 | 2/2 | 2/2 | 2/2 |
-| impact | 1/1 | 0/1 | 0/1 | 0/1 |
+| code | 3/3 | 2/3 | 3/3 | 3/3 |
+| composition | 0/2 | 2/2 | 2/2 | 0/2 |
+| config | 1/3 | 1/3 | 1/3 | 0/3 |
+| doc | 2/2 | 2/2 | 2/2 | 2/2 |
+| impact | 1/1 | 1/1 | 1/1 | 0/1 |
 | negative | 2/2 | 2/2 | 2/2 | 2/2 |
-| **TOTAL** | **6/13 · 4,095 KB** | **8/13 · 190 KB** | **9/13 · 187 KB** | **7/13 · 197 KB** |
+| **TOTAL** | **9/13 · 4,095 KB** | **10/13 · 190 KB** | **11/13 · 187 KB** | **7/13 · 197 KB** |
 | latency median / p95 | 1,306 / 2,789 ms | 73 / 180 ms | 89 / 258 ms | 8,537 / 12,014 ms |
 
-**I01 and P02 miss on every arm B run because of the #269 grader, not retrieval.** Both
-expect class names (`InMemoryDataStreamStore`, `SystemDataProvider`). The correct answer
-carries them only as the caller's file:
+**I01 and P02 opt in to relation-file grading** (`"grade_relation_files": true`, owner
+ruling on #230). Both expect class names (`InMemoryDataStreamStore`, `SystemDataProvider`).
+A correct answer carries those only as a caller's file:
 
 - `checkKey` at `.../InMemoryDataStreamStore.java`
 - `getProcedureDescriptions` at `.../SystemDataProvider.java`
 
-#269 stopped grading paths. In Java the class is the file, so these two questions are
-unanswerable under content-only grading as written. They need either a question repair or a
-grader ruling on relation paths before #233 grades them. They count as misses here, and #233
-must grade them the same way.
+In Java the class is the file. Under #269's content-only rule both questions missed on every
+arm B run even though retrieval was right.
+
+For these two questions only, the grader also reads the file stem (basename without extension)
+of every related symbol. It never reads the answer's own node path, which is where the vacuous
+I02 hit came from. Every other question keeps the content-only rule. Arm C answers carry no
+relations, so arm C is unchanged.
 
 G02 and G03 remain red, as the config band always has been since v2: `graph_search`'s
 compact shape carries no dependency versions (semstreams#958).
@@ -133,7 +147,7 @@ admitted SHA, with each tier's equivalent composition:
 
 - **No band regresses**, judged per tier and corpus against the B columns above.
   - Dogfood tier 0 is 23/36 and tier 1 is 32/36.
-  - OSH tier 0 is 8/13 and tier 1 is 9/13.
+  - OSH tier 0 is 10/13 and tier 1 is 11/13.
 - **The lexical band flips at tier 0**: at least LX02 and LX03 go from red to green.
 - **R1 at tier 0 becomes RANK-STABLE**, against 10/36 here.
 - Comparisons hold only on the same machine class for latency. Recall and bytes compare
