@@ -37,11 +37,14 @@ command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 # index.ready covers NAME_INDEX (code_context / code_impact), embedding.ready
 # covers the semantic pipeline (code_search / doc_context). Waiting on a fixed
 # sleep instead would be guessing at something the product reports exactly.
-echo "waiting for phase=ready + index.ready + embedding.ready ..."
+# A composition without the semantic/word index reports embedding.state
+# "disabled" (structural-only, graph.lexical_search:false); waiting for
+# embedding.ready there would never end, so disabled counts as settled.
+echo "waiting for phase=ready + index.ready + embedding (ready or disabled) ..."
 deadline=$(( $(date +%s) + ${SCORECARD_READY_TIMEOUT:-1800} ))
 while :; do
 	s=$(curl -sS --max-time 5 "$status_url" 2>/dev/null || echo '{}')
-	gate=$(printf '%s' "$s" | jq -r '[(.phase == "ready"), (.index.ready == true), (.embedding.ready == true)] | all' 2>/dev/null || echo false)
+	gate=$(printf '%s' "$s" | jq -r '[(.phase == "ready"), (.index.ready == true), (.embedding.ready == true or .embedding.state == "disabled")] | all' 2>/dev/null || echo false)
 	[ "$gate" = "true" ] && break
 	[ "$(date +%s)" -lt "$deadline" ] || {
 		echo "stack never became fully ready: $(printf '%s' "$s" | jq -c '{phase, index:.index.ready, embedding:.embedding.ready, total_entities}')" >&2
@@ -89,7 +92,10 @@ schema_tools=$(printf '%s' "$tools_json" | jq '.result.tools | length' 2>/dev/nu
 
 # Returns the tool's inner result as parseable JSON. The MCP frame carries it
 # escaped inside content[0].text; decode it properly rather than stripping
-# backslashes, so evidence can be measured and not merely grepped.
+# backslashes, so evidence can be measured and not merely grepped. A gateway
+# refusal (isError), a JSON-RPC error, a non-JSON result, or no frame at all
+# comes back as {"isError":true,"error":...} so it grades as an error, never
+# as an empty answer: refusals once graded "miss", and N02 passed on one (#269).
 mcp_call() {
 	curl -sS --max-time "${SCORECARD_CALL_TIMEOUT:-30}" -X POST \
 		-H 'Content-Type: application/json' \
@@ -98,8 +104,13 @@ mcp_call() {
 		-H "Mcp-Session-Id: $session" \
 		-d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" \
 		"$mcp_url" | sed -n 's/^data: //p' \
-		| jq -c 'if .result.content[0].text then (.result.content[0].text | fromjson) else . end' 2>/dev/null \
-		|| echo '{}'
+		| jq -c '
+			if .result.isError == true then {isError: true, error: (.result.content[0].text // "isError")}
+			elif .error then {isError: true, error: (.error.message // "json-rpc error")}
+			elif (.result.content[0].text | type) == "string" then
+				(.result.content[0].text as $t | $t | try fromjson catch {isError: true, error: ("non-JSON result: " + $t[0:200])})
+			else {isError: true, error: "no tool result"} end' 2>/dev/null \
+		| grep . || echo '{"isError":true,"error":"transport failure: no MCP frame"}'
 }
 
 # Grading lives in grade.sh, shared verbatim with the other arms
@@ -183,7 +194,7 @@ for i in $(seq 0 $((n - 1))); do
 	   --arg r "$reason" --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "${first_cb:-0}" \
 	   --argjson lat "$lat_samples" \
-	   --arg a "$(printf '%s' "$answer" | head -c 6000)" \
+	   --arg a "$answer" \
 	   '. += [{id:$id, band:$band, tool:$tool, verdict:$v, reason:$r, nodes:$n, body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb, latency_ms:($lat[0] // null), latency_samples:$lat, answer:$a}]' \
 	   "$out.tmp" > "$out.tmp2" && mv "$out.tmp2" "$out.tmp"
 done

@@ -3,9 +3,11 @@
 #
 # Extracted verbatim from run.sh so arm scripts (arm-a-grep.sh, arm-c-cosine.sh)
 # grade with the SAME matcher semantics by construction, not by copy. The
-# contract: caller sets $q (the question JSON) and $answer (a JSON object
-# whose .nodes[].body strings hold the evidence, .nodes[0] being the top
-# node); grade_answer sets $verdict, $reason, $nodes, $bodybytes, $topbytes.
+# contract: caller sets $q (the question JSON) and $answer (a JSON object:
+# fusion .nodes[] or graph_search .matches[], .nodes[0] being the top node, or
+# {isError, error} for a failed call); grade_answer matches only the content
+# answer_content extracts and sets $verdict, $reason, $nodes, $bodybytes,
+# $topbytes.
 # Changing this file changes every arm at once — which is the point.
 
 # Grades one answer for one question. Reads $q and $answer; sets $verdict,
@@ -14,8 +16,23 @@
 #
 # Always returns 0: the body ends in conditionals whose natural exit status is
 # "no match", which under `set -e` would abort the run rather than record a miss.
+# answer_content prints the evidence an answer carries and nothing else: each
+# node's name and body and the names of its related symbols (fusion tools), and
+# each graph match's label and property values (graph_search). Keys, paths,
+# handles, fragments and envelope blocks are never content. Matching the whole
+# answer JSON passed questions on vacuous hits (#269): L05's "ast" only inside
+# the key "last_synced", D09's "index" in the envelope's index block, I02's
+# "doc" in the anchor's own path. An answer that is not JSON has no content.
+answer_content() {
+	printf '%s' "$answer" | jq -r '
+		[ ((.nodes // [])[] | (.name // ""), (.body // ""),
+		    ((.relations // {}) | to_entries[] | .value[]? | (.name // ""))),
+		  ((.matches // [])[] | (.label // ""), ((.properties // {}) | .[] | tostring)) ]
+		| map(select(type == "string" and . != "")) | join("\n")' 2>/dev/null || true
+}
+
 grade_answer() {
-	lower=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
+	lower=$(answer_content | tr '[:upper:]' '[:lower:]')
 
 	# Evidence precision is the measure that actually separates whole-file
 	# retrieval from passage retrieval. Fact-presence alone cannot: a whole-file
@@ -29,9 +46,11 @@ grade_answer() {
 	toplower=$(printf '%s' "$topbody" | tr '[:upper:]' '[:lower:]')
 
 	verdict="correct"; reason=""
-	# isError is a failed call, never a graded answer.
-	if printf '%s' "$answer" | grep -q '"isError":true'; then
-		verdict="error"; reason="tool returned isError"
+	# isError is a failed call, never a graded answer: a refusal is not a miss,
+	# and on a negative-band question it must not pass as a correct "nothing".
+	# The callers record gateway, transport and non-JSON results as isError.
+	if [ "$(printf '%s' "$answer" | jq -r '.isError == true' 2>/dev/null)" != "false" ]; then
+		verdict="error"; reason="tool error: $(printf '%s' "$answer" | jq -r '.error // "unreadable answer"' 2>/dev/null | head -c 200)"
 	fi
 	if [ "$verdict" = "correct" ]; then
 		for want in $(jq -r '(.expect_all // [])[]' <<<"$q" | tr ' ' '\001'); do
@@ -92,6 +111,7 @@ grade_answer() {
 	fi
 	# A fabrication is graded separately from a miss: they are different failures
 	# and conflating them hides the one that actually matters.
+	[ "$verdict" = "error" ] && return 0
 	for bad in $(jq -r '(.expect_none // [])[]' <<<"$q" | tr ' ' '\001'); do
 		b=$(printf '%s' "$bad" | tr '\001' ' ' | tr '[:upper:]' '[:lower:]')
 		printf '%s' "$lower" | grep -qF -- "$b" && { verdict="FABRICATED"; reason="asserted: $b"; break; }

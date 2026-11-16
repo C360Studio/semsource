@@ -30,6 +30,9 @@ Window semantics mirror what the INGESTER makes retrievable, erring strict:
     than the doc rule: two facts 9 KB apart in one Go file still FAIL, because
     a single function body could legally span them.
 
+Every expect_all literal must also occur somewhere in the corpus: a fact the
+corpus lacks fails the question on every arm and reads as a retrieval result.
+
 A composition question must also carry at least TWO expect_all literals: with
 fewer, "the facts do not co-occur" is vacuously true of every corpus and the
 question is not measuring composition at all.
@@ -126,6 +129,14 @@ def check_question(q, texts, window):
     if len(literals) < 2:
         return ("FATAL", "composition question needs >= 2 expect_all literals "
                 f"(has {len(literals)}); a single fact cannot require a join")
+
+    # A fact the corpus never contains makes the question unanswerable on every
+    # arm: it fails everywhere and reads as a retrieval result. P02 expected a
+    # caller deleted in 5334716 and the gate stayed CLEAN (#269).
+    absent = [lit for lit in literals if not any(lit in text for _, _, text in texts)]
+    if absent:
+        return ("FATAL", "fact(s) absent from the corpus: " + ", ".join(absent)
+                + " (the question cannot be answered by any arm)")
 
     worst = None  # (path, kind, span) for the tightest co-occurrence anywhere
     for path, kind, text in texts:

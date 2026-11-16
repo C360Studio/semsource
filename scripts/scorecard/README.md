@@ -42,6 +42,16 @@ same reason: every v4 question is retained verbatim and the unchanged bands stil
 grade identically, but the totals include seven new questions. Per-band
 comparisons across v4/v5 stay valid for the unchanged bands; totals do not.
 
+**Version 6 is a grader change and does not compare to version 5** (#269). The
+grader now matches only answer *content* — node names and bodies, related symbol
+names, graph match labels and property values — never keys, paths, handles, or
+the envelope's `index` block. Matching the whole answer JSON passed L05 ("ast"
+inside the key `last_synced`), D09 ("index" in the envelope), and I02 ("doc" in
+the anchor's own path) on vacuous hits. Gateway, transport, and non-JSON results
+now grade `error` (an `isError` refusal used to become `{}` and passed N02).
+D10 tracks the SemEngine pin and P02 tracks the current callers of
+`PublishLifecycleTrigger`; both rot with the code they cite.
+
 **Two more comparability rules ship with v4:**
 
 - **Corpora never compare.** The OSH question set (`questions-osh.json`) is its
@@ -217,7 +227,9 @@ agent citing the first result will state it as fact. Until version 3 this state 
 unreachable: the answer-side check short-circuited to `miss` before the confusable
 check ever ran, so the most damaging outcome was scored as the most innocuous one.
 
-An `isError` result is recorded as `error`, never graded as an answer.
+An `isError` result is recorded as `error`, never graded as an answer — including
+a result that is not JSON, a JSON-RPC error, and a transport failure with no MCP
+frame. Every arm retains each answer in full in its results file.
 
 ### Repeats — why a question is asked more than once
 
