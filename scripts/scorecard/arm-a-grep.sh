@@ -146,7 +146,7 @@ for i in $(seq 0 $((n - 1))); do
 	   --argjson tb "${topbytes:-0}" --argjson cb "$context_bytes" \
 	   --argjson lat "$lat" \
 	   --argjson files "$files_json" \
-	   --arg a "$(printf '%s' "$answer" | head -c 6000)" \
+	   --arg a "$answer" \
 	   '. += [{id:$id, band:$band, tool:"grep", verdict:$v, reason:$r, nodes:$n,
 	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb,
 	           latency_ms:$lat, latency_samples:[$lat],

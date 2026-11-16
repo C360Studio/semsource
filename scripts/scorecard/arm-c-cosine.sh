@@ -34,7 +34,8 @@ port="${SEMSOURCE_HTTP_PORT:-28080}"
 host="${SEMSOURCE_HOST:-127.0.0.1}"
 status_url="http://${host}:${port}/source-manifest/status"
 embed_url="${SEMEMBED_URL:-http://127.0.0.1:28081}/v1/embeddings"
-nats_url="${SCORECARD_NATS:-nats://127.0.0.1:24222}"
+# 25222: semdev's A/B harness owns 24222 on shared machines.
+nats_url="${SCORECARD_NATS:-nats://127.0.0.1:25222}"
 model="${SCORECARD_EMBED_MODEL:-Snowflake/snowflake-arctic-embed-s}"
 prefix="${SCORECARD_QUERY_PREFIX:-Represent this sentence for searching relevant passages: }"
 topk="${SCORECARD_ARM_C_TOPK:-20}"
@@ -45,6 +46,18 @@ out="$outdir/${label}.json"
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 command -v go >/dev/null || { echo "go is required (armc-dump)" >&2; exit 1; }
+
+# Arm C ranks DENSE vectors by cosine. Without a dense embedder it measures
+# nothing: at SemEngine alpha.4 the BM25 index stored 384-dimension sparse
+# vectors, the same width as arctic-embed-s, so this arm ran and produced
+# meaningless cosines without complaint (#269). The status payload cannot tell
+# a word index from a dense one, so the operator states the dense embedder the
+# stack was built with; no shipped composition has one until 04C (#234).
+[ -n "${SCORECARD_DENSE_EMBEDDER:-}" ] || {
+	echo "arm C refused: set SCORECARD_DENSE_EMBEDDER to the dense embedding model this stack indexes with." >&2
+	echo "A Tier 0 (BM25 / word search) or structural-only stack has no dense vectors to rank." >&2
+	exit 2
+}
 
 . "$here/grade.sh"
 . "$here/timing.sh"
@@ -142,7 +155,7 @@ for i in $(seq 0 $((n - 1))); do
 	   --argjson n "${nodes:-0}" --argjson bb "${bodybytes:-0}" \
 	   --argjson tb "${topbytes:-0}" --argjson cb "$context_bytes" \
 	   --argjson lat "$lat" \
-	   --arg a "$(printf '%s' "$answer" | head -c 6000)" \
+	   --arg a "$answer" \
 	   '. += [{id:$id, band:$band, tool:"cosine", verdict:$v, reason:$r, nodes:$n,
 	           body_bytes:$bb, top_body_bytes:$tb, context_bytes:$cb,
 	           latency_ms:$lat, latency_samples:[$lat], answer:$a}]' \

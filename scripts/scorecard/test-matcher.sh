@@ -61,8 +61,10 @@ echo "4. the composition gate fires on co-location and stays quiet past the wind
 # still FAIL because a single body could span them.
 corpus="$(mktemp -d)"
 printf 'placeholder\n' > "$corpus/README.md"
+# The real question set's facts are absent from this placeholder corpus, so the
+# gate must refuse it — an absent fact is unanswerable, not "clean" (#269).
 python3 "$here/check-composition.py" "$corpus" >/dev/null 2>&1
-[ $? -eq 0 ] && ok "composition gate passes on a clean corpus" || fail "composition gate rejected a clean corpus"
+[ $? -eq 1 ] && ok "composition gate refuses a corpus missing the questions' facts" || fail "composition gate passed a corpus missing every fact"
 python3 "$here/check-composition.py" "$corpus" --simulate >/dev/null 2>&1
 [ $? -eq 1 ] && ok "composition gate fires under --simulate" || fail "composition gate did NOT fire under --simulate"
 
@@ -91,6 +93,61 @@ cat > "$qfile" <<'JSON'
 JSON
 python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "single-fact composition question FAILS" || fail "single-fact composition question passed"
+rm -rf "$corpus"
+
+echo "5. the grader matches answer content, never keys, paths, or envelope blocks (#269)"
+. "$here/grade.sh"
+grade() { # $1 = question JSON, $2 = answer JSON; prints the verdict
+	q="$1"; answer="$2"; grade_answer; printf '%s' "$verdict"
+}
+# L05: "ast" only inside the key "last_synced".
+v=$(grade '{"expect_all":["ast"]}' '{"index":{"last_synced":"t"},"nodes":[{"name":"Docker Compose","body":"C360_PORT=3000"}]}')
+[ "$v" = "miss" ] && ok "a fact present only in a key does not pass (L05)" || fail "key-only 'ast' graded $v"
+# D09: "index" only in the envelope's index block.
+v=$(grade '{"expect_any":["index"]}' '{"index":{"ready":true},"nodes":[{"name":"x","body":"unrelated"}]}')
+[ "$v" = "miss" ] && ok "a fact present only in the envelope block does not pass (D09)" || fail "envelope-only 'index' graded $v"
+# I02: "doc" only in the anchor's own path.
+v=$(grade '{"expect_any":["doc"]}' '{"nodes":[{"name":"splitPassages","path":"handler/doc/splitter.go","handle":"a.b.doc.c"}]}')
+[ "$v" = "miss" ] && ok "a fact present only in a path or handle does not pass (I02)" || fail "path-only 'doc' graded $v"
+# Content still passes: body, node name, related symbol name, graph match.
+v=$(grade '{"expect_all":["ast"]}' '{"nodes":[{"name":"Source Types","body":"ast, docs, config"}]}')
+[ "$v" = "correct" ] && ok "a fact in a node body passes" || fail "body fact graded $v"
+v=$(grade '{"expect_any":["ingestFileEntityStates"]}' '{"nodes":[{"name":"splitPassages","relations":{"caller":[{"name":"ingestFileEntityStates","path":"handler/doc/entities.go"}]}}]}')
+[ "$v" = "correct" ] && ok "a related symbol name passes" || fail "relation name graded $v"
+v=$(grade '{"expect_all":["32.1.3-jre"]}' '{"matches":[{"id":"a.b.c.d.dependency.x","label":"guava","properties":{"source.config.dependency.version":"32.1.3-jre"}}]}')
+[ "$v" = "correct" ] && ok "a graph match property value passes" || fail "graph match property graded $v"
+
+# P02 is answerable from what code_impact returns: the seed's body plus its
+# direct callers' names, never a caller's body (the shape of the audit frames).
+p02=$(jq -c '.questions[] | select(.id == "P02")' "$here/questions.json")
+seed=$(jq -nc --arg q "$(jq -r '.args.query' <<<"$p02")" '{name: $q, path: "graph/lifecycle.go",
+	body: "func LifecycleOwner(instance, root string) string {\n\tsum := sha256.Sum256([]byte(root))\n\treturn instance + \"/\" + hex.EncodeToString(sum[:6])\n}"}')
+v=$(grade "$p02" "$(jq -c '{nodes: [. + {relations: {caller: [{name: "initializeWatchers"}, {name: "ownerFor"}, {name: "owner"}]}}]}' <<<"$seed")")
+[ "$v" = "correct" ] && ok "P02 passes on the seed body plus direct caller names" || fail "P02 on a correct code_impact shape graded $v"
+v=$(grade "$p02" "$(jq -c '{nodes: [.]}' <<<"$seed")")
+[ "$v" = "miss" ] && ok "P02 misses on the seed body alone" || fail "P02 on the seed alone graded $v"
+
+echo "6. gateway, transport, and non-JSON failures grade error, never miss or correct (#269)"
+v=$(grade '{"expect_any":["sources"]}' '{"isError":true,"error":"fusion query failed: semantic is not enabled"}')
+[ "$v" = "error" ] && ok "a gateway refusal grades error" || fail "gateway refusal graded $v"
+# N02 passed on a refusal: a negative-band question must not read an error as "nothing found".
+v=$(grade '{"expect_none":["quantum entanglement subsystem is"]}' '{"isError":true,"error":"refused"}')
+[ "$v" = "error" ] && ok "a refusal on a negative question grades error, not correct" || fail "negative refusal graded $v"
+v=$(grade '{"expect_any":["x"]}' 'fusion query failed: plain text')
+[ "$v" = "error" ] && ok "a non-JSON answer grades error" || fail "non-JSON answer graded $v"
+v=$(grade '{"expect_none":["anything"]}' '{"nodes":[]}')
+[ "$v" = "correct" ] && ok "an honest empty answer still passes a negative question" || fail "empty negative graded $v"
+
+echo "7. the composition gate fails on a fact the corpus does not contain (#269)"
+corpus="$(mktemp -d)"
+qfile="$corpus/questions-synth.json"
+cat > "$qfile" <<'JSON'
+{"version": 0, "questions": [{"id": "S3", "band": "composition",
+  "expect_all": ["synthetic-fact-alpha", "synthetic-fact-gone"]}]}
+JSON
+printf 'synthetic-fact-alpha\n' > "$corpus/a.md"
+python3 "$here/check-composition.py" "$corpus" "$qfile" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "an absent fact FAILS the gate" || fail "an absent fact passed the gate"
 rm -rf "$corpus"
 
 echo
