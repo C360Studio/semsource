@@ -69,7 +69,7 @@ SEMSOURCE_TARGET=../semdev-test docker compose up -d --build --wait
 
 No config file is needed: the default [`configs/mvp.json`](../configs/mvp.json)
 indexes whatever `SEMSOURCE_TARGET` mounts (code, docs, and config files,
-namespace `c360`) with in-process Tier 0 BM25 search (`embedder_type: "bm25"`).
+namespace `c360`) with in-process Tier 0 BM25 word search (`graph-lexical`).
 (Neural HTTP embeddings via the opt-in `semantic` profile are tracked for Slice
 04C in [#234](https://github.com/C360Studio/semsource/issues/234).)
 
@@ -322,7 +322,7 @@ what it means, and what to do.
 | `phase: "degraded"`, every source `watching`/`idle`, some source's `seed_lost` > 0 | A seed finished but entities it offered never reached the graph — the corpus is incomplete | Check that source's `last_error` and NATS stream limits. The graph re-derives from source: fix the cause, then re-seed. `degraded` clears only when a pass completes with `seed_lost: 0` |
 | `phase: "degraded"`, some source not `watching`/`idle` | The seed timeout fired before every source reported | Find the source whose `phase` is not `watching`/`idle`; its `last_error` says why. Fix and restart |
 | `phase: "ready"` but `code_context` misses a symbol you can see, `index.ready: false` | Sources finished, structural index still catching up | Wait for `index.ready: true`, then re-query — structural queries gate on it |
-| `code_search` results weak or empty, `embedding.ready: false` (or `available: false`) | Semantic ranking not caught up (or not configured — native default is BM25) | Wait for `embedding.ready`; for semantic search natively, configure `graph.embedder_type: "http"` + a `model_registry` (the compose stack does this for you) |
+| `code_search` results weak or empty, `embedding.ready: false` (or `available: false`) | Semantic ranking not caught up (or not configured — native default is BM25) | Wait for `embedding.ready`; for semantic search natively, wait for 04C ([#234](https://github.com/C360Studio/semsource/issues/234)): tier 1 has no embedder on this SemEngine pin |
 | A source's `phase: "errored"` or `error_count` > 0 | That source hit parse/publish failures; entities may be missing | Read `last_error.code` — bad paths and unreadable files are config-side; publish errors are transport-side |
 | A submodule path's `state` ≠ `materialized` | Declared submodule code is not in the graph | See the state table above — each state names its fix |
 | `total_entities: 0` and never leaves `seeding` | Sources registered but nothing ingests (wrong paths, empty target) | `GET /source-manifest/sources` shows exactly what was registered; `semsource validate` checks the config without starting |

@@ -16,90 +16,46 @@ func loadJSON(t *testing.T, jsonStr string) (*config.Config, error) {
 
 const baseSource = `"sources":[{"type":"ast","path":"/tmp/x","language":"go"}]`
 
-func TestModelRegistry_Tier0_NoRegistry_OK(t *testing.T) {
-	// bm25 (or unset) needs no registry — the common tier-0 case must stay valid.
-	cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"bm25"}}`)
-	if err != nil {
-		t.Fatalf("tier-0 bm25 config should be valid: %v", err)
-	}
-	if cfg.ModelRegistry != nil {
-		t.Fatalf("expected nil ModelRegistry, got %+v", cfg.ModelRegistry)
+func TestGraph_LexicalSearchDefaultsOn(t *testing.T) {
+	for name, graph := range map[string]string{"no graph block": "", "empty graph block": `,"graph":{}`} {
+		cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+graph+`}`)
+		if err != nil {
+			t.Fatalf("%s: tier 0 config should be valid: %v", name, err)
+		}
+		if !cfg.Graph.LexicalSearchEnabled() {
+			t.Fatalf("%s: lexical search should default on", name)
+		}
+		if cfg.ModelRegistry != nil {
+			t.Fatalf("%s: expected nil ModelRegistry, got %+v", name, cfg.ModelRegistry)
+		}
 	}
 }
 
 // spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
-func TestModelRegistry_Tier0_None_NoRegistry_OK(t *testing.T) {
-	cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"none"}}`)
+func TestGraph_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
+	cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"lexical_search":false}}`)
 	if err != nil {
-		t.Fatalf("tier-0 none config should be valid without model_registry: %v", err)
+		t.Fatalf("structural-only config should be valid without model_registry: %v", err)
 	}
-	if cfg.Graph == nil || cfg.Graph.EmbedderType != "none" {
-		t.Fatalf("expected Graph.EmbedderType == \"none\", got %+v", cfg.Graph)
-	}
-	if cfg.ModelRegistry != nil {
-		t.Fatalf("expected nil ModelRegistry, got %+v", cfg.ModelRegistry)
+	if cfg.Graph.LexicalSearchEnabled() {
+		t.Fatal("lexical_search false must disable lexical search")
 	}
 }
 
 // spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
-func TestModelRegistry_InvalidEmbedderType_Rejected(t *testing.T) {
-	_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"bogus"}}`)
-	if err == nil {
-		t.Fatal("unknown embedder_type should fail validation")
-	}
-	if !strings.Contains(err.Error(), "embedder_type") {
-		t.Fatalf("error should mention embedder_type, got: %v", err)
-	}
-}
-
-func TestModelRegistry_Tier1_HTTP_RequiresEmbeddingCapability(t *testing.T) {
-	_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":"http"}}`)
-	if err == nil {
-		t.Fatal("http embedder without a model_registry should fail validation")
-	}
-	if !strings.Contains(err.Error(), "embedding") {
-		t.Fatalf("error should mention the embedding capability, got: %v", err)
-	}
-}
-
-func TestModelRegistry_Tier1_HTTP_WithRegistry_OK(t *testing.T) {
-	cfg, err := loadJSON(t, `{
-		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"http"},
-		"model_registry":{
-			"endpoints":{"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"}},
-			"capabilities":{"embedding":{"preferred":["semembed"]}}
+func TestGraph_EmbedderTypeIsRetiredAtEveryValue(t *testing.T) {
+	// SemEngine refuses embedder_type whatever its value, so every former value
+	// must fail at load with the migration, not at boot.
+	for _, value := range []string{`"bm25"`, `"none"`, `"http"`, `""`, `"bogus"`, `null`} {
+		_, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"embedder_type":`+value+`}}`)
+		if err == nil {
+			t.Fatalf("embedder_type %s should be refused", value)
 		}
-	}`)
-	if err != nil {
-		t.Fatalf("http embedder with a valid embedding registry should validate: %v", err)
-	}
-	// Passthrough must survive load so run.go can hand it to ssCfg.ModelRegistry.
-	if cfg.ModelRegistry == nil {
-		t.Fatal("ModelRegistry should be populated after load")
-	}
-	if got := cfg.ModelRegistry.Resolve(model.CapabilityEmbedding); got != "semembed" {
-		t.Fatalf("embedding capability should resolve to semembed, got %q", got)
-	}
-}
-
-func TestModelRegistry_Tier1_HTTP_RegistryMissingEmbedding_Fails(t *testing.T) {
-	// A registry that exists but resolves no embedding endpoint must be caught
-	// at load, not deferred to a silent runtime degrade.
-	_, err := loadJSON(t, `{
-		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"http"},
-		"model_registry":{
-			"endpoints":{"other":{"provider":"openai","url":"http://x/v1","model":"m"}},
-			"capabilities":{"community_summary":{"preferred":["other"]}},
-			"defaults":{}
+		for _, want := range []string{"graph.embedder_type", "graph.lexical_search"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("embedder_type %s: error should name %s, got: %v", value, want, err)
+			}
 		}
-	}`)
-	if err == nil {
-		t.Fatal("http embedder with a registry lacking an embedding endpoint should fail")
-	}
-	if !strings.Contains(err.Error(), "embedding") {
-		t.Fatalf("error should mention embedding, got: %v", err)
 	}
 }
 
@@ -107,7 +63,7 @@ func TestModelRegistry_Tier2_RetiredClusteringLLM_Rejected(t *testing.T) {
 	// clustering_llm is retired in SemEngine (semengine#485 tracks LLM community summaries).
 	_, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"http","enable_clustering":true,"clustering_llm":true},
+		"graph":{"enable_clustering":true,"clustering_llm":true},
 		"model_registry":{
 			"endpoints":{"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"}},
 			"capabilities":{"embedding":{"preferred":["semembed"]}}
@@ -124,7 +80,7 @@ func TestModelRegistry_Tier2_RetiredClusteringLLM_Rejected(t *testing.T) {
 func TestModelRegistry_Tier2_Full_OK(t *testing.T) {
 	cfg, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"http","enable_clustering":true},
+		"graph":{"enable_clustering":true},
 		"model_registry":{
 			"endpoints":{
 				"semembed":{"provider":"openai","url":"http://localhost:8081/v1","model":"arctic-s"},
@@ -149,7 +105,6 @@ func TestModelRegistry_InvalidRegistry_Rejected(t *testing.T) {
 	// semstreams' own Registry.Validate, surfaced through our config load.
 	_, err := loadJSON(t, `{
 		"namespace":"acme",`+baseSource+`,
-		"graph":{"embedder_type":"bm25"},
 		"model_registry":{
 			"endpoints":{"semembed":{"provider":"openai","url":"http://x/v1","model":"m"}},
 			"capabilities":{"embedding":{"preferred":["does-not-exist"]}},

@@ -19,7 +19,7 @@ import (
 // TestIntegration_DomainScopedRetrieval_OnTheWire proves ask #16 end to end over
 // REAL NATS: a code-context / doc-context component driving the REAL fusion
 // engine and REAL fusionnats client emits the per-lens default Scope onto the
-// actual graph.query.semantic request — and honors a caller-provided scope
+// actual graph.lexical.query.search request — and honors a caller-provided scope
 // verbatim.
 //
 // The scope FILTER itself (candidate prefix-matching via graph.MatchesAnyIDPrefix
@@ -35,7 +35,7 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 
 	var mu sync.Mutex
 	var lastScope []string
-	semanticSub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.semantic",
+	semanticSub, err := tc.Client.SubscribeForRequests(ctx, "graph.lexical.query.search",
 		func(_ context.Context, body []byte) ([]byte, error) {
 			var req struct {
 				Scope []string `json:"scope"`
@@ -44,7 +44,7 @@ func TestIntegration_DomainScopedRetrieval_OnTheWire(t *testing.T) {
 			mu.Lock()
 			lastScope = req.Scope
 			mu.Unlock()
-			return []byte(`{"producer":"graph-embedding","data":{"results":[]}}`), nil
+			return []byte(`{"producer":"graph-lexical","data":{"results":[],"matched":0,"bodies_not_indexed":0}}`), nil
 		})
 	if err != nil {
 		t.Fatalf("subscribe semantic: %v", err)

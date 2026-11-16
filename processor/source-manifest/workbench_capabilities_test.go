@@ -15,8 +15,8 @@ import (
 
 func TestWorkbenchCapabilities_ReadyHeadlessContract(t *testing.T) {
 	c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
-		"graph-index":     {status: readyIndexStatus(42)},
-		"graph-embedding": {status: readyIndexStatus(42)},
+		"graph-index":   {status: readyIndexStatus(42)},
+		"graph-lexical": {status: readyIndexStatus(42)},
 	})
 	mux := http.NewServeMux()
 	c.RegisterHTTPHandlers("/source-manifest", mux)
@@ -136,8 +136,8 @@ func TestWorkbenchCapabilities_PartialAndUnavailableSignals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := newCapabilityTestComponent(t, tt.phase, true, map[string]capabilityStatusResult{
-				"graph-index":     tt.structural,
-				"graph-embedding": tt.semantic,
+				"graph-index":   tt.structural,
+				"graph-lexical": tt.semantic,
 			})
 			rec := httptest.NewRecorder()
 			c.handleWorkbenchCapabilities(rec,
@@ -177,8 +177,8 @@ func TestWorkbenchCapabilities_PartialAndUnavailableSignals(t *testing.T) {
 
 func TestWorkbenchCapabilities_MalformedStatusAndUnavailableActions(t *testing.T) {
 	c := newCapabilityTestComponent(t, PhaseReady, false, map[string]capabilityStatusResult{
-		"graph-index":     {status: readyIndexStatus(7)},
-		"graph-embedding": {raw: []byte(`{"ready":`)},
+		"graph-index":   {status: readyIndexStatus(7)},
+		"graph-lexical": {raw: []byte(`{"ready":`)},
 	})
 	rec := httptest.NewRecorder()
 	c.handleWorkbenchCapabilities(rec,

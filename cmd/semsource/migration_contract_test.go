@@ -78,12 +78,18 @@ func TestDefaultComposeConfigDeclaresComponents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig(configs/mvp.json): %v", err)
 	}
-	if cfg.Graph == nil || cfg.Graph.EmbedderType != "bm25" {
-		t.Fatalf("configs/mvp.json graph.embedder_type = %v, want \"bm25\"", cfg.Graph)
+	if !cfg.Graph.LexicalSearchEnabled() {
+		t.Fatal("configs/mvp.json must run tier 0 word search")
 	}
 	ssCfg, err := buildSemstreamsConfig(cfg, cfg.Namespace)
 	if err != nil {
 		t.Fatalf("buildSemstreamsConfig(configs/mvp.json): %v", err)
+	}
+	if _, ok := ssCfg.Components["graph-lexical"]; !ok {
+		t.Fatal("configs/mvp.json must compose graph-lexical")
+	}
+	if _, ok := ssCfg.Components["graph-embedding"]; ok {
+		t.Fatal("configs/mvp.json must not compose graph-embedding: it has no tier 0 embedder")
 	}
 	registry := component.NewRegistry()
 	if err := registerComponentFactories(registry); err != nil {

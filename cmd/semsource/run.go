@@ -26,6 +26,7 @@ import (
 	"github.com/c360studio/semengine/component"
 	semconfig "github.com/c360studio/semengine/config"
 	graphgateway "github.com/c360studio/semengine/gateway/graph-gateway"
+	"github.com/c360studio/semengine/graph/entitytext"
 	"github.com/c360studio/semengine/graph/inference"
 	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semengine/metric"
@@ -33,9 +34,9 @@ import (
 	"github.com/c360studio/semengine/output/websocket"
 	"github.com/c360studio/semengine/payloadregistry"
 	graphclustering "github.com/c360studio/semengine/processor/graph-clustering"
-	graphembedding "github.com/c360studio/semengine/processor/graph-embedding"
 	graphindex "github.com/c360studio/semengine/processor/graph-index"
 	graphingest "github.com/c360studio/semengine/processor/graph-ingest"
+	graphlexical "github.com/c360studio/semengine/processor/graph-lexical"
 	graphquery "github.com/c360studio/semengine/processor/graph-query"
 	"github.com/c360studio/semengine/service"
 	"github.com/c360studio/semengine/storage/objectstore"
@@ -311,7 +312,7 @@ func registerComponentFactories(registry *component.Registry, wiring ...componen
 	for name, register := range map[string]func(*component.Registry) error{
 		"graph-ingest":     graphingest.Register,
 		"graph-index":      graphindex.Register,
-		"graph-embedding":  graphembedding.Register,
+		"graph-lexical":    graphlexical.Register,
 		"graph-query":      graphquery.Register,
 		"graph-gateway":    graphgateway.Register,
 		"graph-clustering": graphclustering.Register,
@@ -535,8 +536,9 @@ func wrapNATSConnError(err error, url string) error {
 // so a release that changes what buildSemstreamsConfig generates must bump
 // this, or deployments keep running the previous wiring; the fingerprint test
 // fails until it does. 2 was the beta.160 foundation cutover (typed ports,
-// defaults-deferral, no ownership), 3 the SETUP 03A lifecycle baseline.
-const compositionGeneration = 3
+// defaults-deferral, no ownership), 3 the SETUP 03A lifecycle baseline, 4 the
+// alpha.5 move from graph-embedding to graph-lexical.
+const compositionGeneration = 4
 
 // buildSemstreamsConfig constructs a semstreams config.Config from the semsource
 // config: source components, the manifest, the full graph subsystem, the
@@ -620,11 +622,9 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		},
 		Services:   svcs,
 		Components: components,
-		// Tier 1/2 enablement: passed straight through so the ComponentManager
-		// injects it into deps.ModelRegistry (verified: component_manager.go
-		// buildComponentDependencies). graph-embedding's HTTP embedder resolves
-		// "embedding" (→ semembed); graph-clustering's summarizer resolves
-		// "community_summary" (→ seminstruct). Nil = tier 0 (BM25).
+		// Passed straight through so the ComponentManager injects it into
+		// deps.ModelRegistry. Nothing at tier 0 resolves from it; the tier 1
+		// embedder that will is #234.
 		ModelRegistry: cfg.ModelRegistry,
 	}
 
@@ -705,7 +705,7 @@ func mcpGatewayComponentConfig(cfg *config.Config) (types.ComponentConfig, error
 		"allowed_roots": cfg.SourceRoots,
 		"instance_name": "mcp-gateway",
 	}
-	if cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
+	if !cfg.Graph.LexicalSearchEnabled() {
 		cfgMap["semantic_enabled"] = false
 	}
 	raw, err := json.Marshal(cfgMap)
@@ -751,7 +751,7 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 		"sources":               manifestSources,
 		"expected_source_count": sourceCount,
 	}
-	if cfg.Graph != nil && cfg.Graph.EmbedderType == "none" {
+	if !cfg.Graph.LexicalSearchEnabled() {
 		cfgMap["semantic_enabled"] = false
 	}
 	raw, err := json.Marshal(cfgMap)
@@ -766,19 +766,26 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	}, nil
 }
 
+// graphTextSuffixes is the predicate-suffix list graph-lexical and
+// graph-clustering read an entity's text from. A non-empty list replaces
+// SemEngine's defaults, so it restates them and adds the code doc predicates
+// (code.doc.signature, code.doc.comment): without them a code entity's text is
+// its name alone. Clustering keywords use the same list so they and word
+// search select the same values.
+func graphTextSuffixes() []string {
+	return append(entitytext.DefaultSuffixes(), ".signature", ".comment")
+}
+
 // graphSubsystemComponents returns the built-in semengine graph components:
-// ingest, index, query, and gateway (plus graph-embedding when embedder_type != "none").
+// ingest, index, query, and gateway, plus graph-lexical unless
+// graph.lexical_search is false and graph-clustering when enabled.
 func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, error) {
 	// Resolve graph config with defaults.
-	embedderType := "bm25"
 	coalesceMs := 200
 	indexWorkers := 0 // 0 → semengine graph-index default (1)
 	enableClustering := false
 
 	if g := cfg.Graph; g != nil {
-		if g.EmbedderType != "" {
-			embedderType = g.EmbedderType
-		}
 		if g.CoalesceMs > 0 {
 			coalesceMs = g.CoalesceMs
 		}
@@ -788,11 +795,10 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		enableClustering = g.EnableClustering
 	}
 
+	// embedding_enabled is left out: it reads false, the tier 0 answer, so
+	// graph-query refuses semantic and similar as not_enabled.
 	graphQueryConfig := map[string]any{
 		"ports": graphquery.DefaultConfig().Ports,
-	}
-	if embedderType == "none" {
-		graphQueryConfig["embedding_enabled"] = false
 	}
 
 	graphIngestPorts := graphingest.DefaultConfig().Ports
@@ -867,32 +873,18 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 		},
 	}
 
-	if embedderType != "none" {
-		configs["graph-embedding"] = struct {
+	if cfg.Graph.LexicalSearchEnabled() {
+		configs["graph-lexical"] = struct {
 			name      string
 			compType  types.ComponentType
 			configMap map[string]any
 		}{
-			name:     "graph-embedding",
+			name:     "graph-lexical",
 			compType: types.ComponentTypeProcessor,
-			configMap: map[string]any{
-				"coalesce_ms":   coalesceMs,
-				"embedder_type": embedderType,
-				// graph-embedding embeds a triple's value only when its predicate
-				// ends with a text_suffix. A non-empty list REPLACES the built-in
-				// defaults, so we restate them and add the code doc predicates
-				// (code.doc.signature, code.doc.comment) — otherwise code entities
-				// embed dc.terms.title (the symbol name) ALONE, and signatures /
-				// docstrings never enter the semantic index.
-				"text_suffixes": []string{
-					".title", ".content", ".description", ".summary", ".text",
-					".name", ".body", ".abstract", ".subject",
-					".signature", ".comment",
-				},
-				// Ports come from graph-embedding's DefaultConfig (entity watch +
-				// content_store read); its durable writes are direct bucket
-				// writes at Start, never ports.
-			},
+			// Ports come from graph-lexical's DefaultConfig (the
+			// ENTITY_STATES watch); it reads offloaded bodies from the
+			// shared object store itself.
+			configMap: map[string]any{"text_suffixes": graphTextSuffixes()},
 		}
 	}
 
@@ -901,6 +893,7 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 	if enableClustering {
 		clusteringConfig := map[string]any{
 			"detection_interval": "30s",
+			"text_suffixes":      graphTextSuffixes(),
 			// Ports come from graph-clustering's DefaultConfig (entity watch).
 		}
 		configs["graph-clustering"] = struct {

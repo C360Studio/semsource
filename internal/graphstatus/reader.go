@@ -34,8 +34,10 @@ const (
 	// byName, code_context, and code_impact.
 	KeyGraphIndex = "graph-index"
 
-	// KeyGraphEmbedding is the semantic index: it backs code_search.
-	KeyGraphEmbedding = "graph-embedding"
+	// KeyGraphLexical is the tier 0 word index: it backs code_search and
+	// doc_context's natural-language resolve. The tier 1 embedder (#234) will
+	// publish under graph-embedding.
+	KeyGraphLexical = "graph-lexical"
 
 	// KeyGraphIngest is the entity-state writer. Its envelope carries
 	// bootstrap_scope, so `bootstrap_complete && bootstrap_scope == 0` is an

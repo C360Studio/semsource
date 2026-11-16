@@ -38,10 +38,10 @@ const (
 	guideEdited = `[{"type": "docs", "paths": ["./guide", "./more"]}]`
 )
 
-// semanticMembers is a tier 1 composition whose embedding endpoint is at url.
+// semanticMembers is a composition whose model registry's embedding endpoint is
+// at url. Nothing at tier 0 resolves it; it gives a revision a registry to change.
 func semanticMembers(url string) string {
-	return `"graph": {"embedder_type": "http"},
-	  "model_registry": {"endpoints": {"semembed": {"provider": "openai", "url": "` + url + `", "model": "embed-s"}},
+	return `"model_registry": {"endpoints": {"semembed": {"provider": "openai", "url": "` + url + `", "model": "embed-s"}},
 	                     "capabilities": {"embedding": {"preferred": ["semembed"]}}},`
 }
 
@@ -177,7 +177,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 			name:         "unchanged file is silent",
 			initial:      revisionFile("", guideSource),
 			edit:         func(*testing.T, string) {},
-			wantVersion:  "3.0.0",
+			wantVersion:  fmt.Sprintf("%d.0.0", compositionGeneration),
 			wantPaths:    []string{"./guide"},
 			wantManifest: []string{"docs"},
 		},
@@ -188,7 +188,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 				writeFile(t, path, revisionFile("", guideEdited))
 			},
 			wantDrift:    []string{"components.doc-source-guide", "components.source-manifest"},
-			wantVersion:  "3.0.0",
+			wantVersion:  fmt.Sprintf("%d.0.0", compositionGeneration),
 			wantPaths:    []string{"./guide"},
 			wantManifest: []string{"docs"},
 		},
@@ -198,7 +198,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 			edit: func(t *testing.T, path string) {
 				writeFile(t, path, revisionFile(`"config_revision": 1,`, guideEdited))
 			},
-			wantVersion:  "3.1.0",
+			wantVersion:  fmt.Sprintf("%d.1.0", compositionGeneration),
 			wantPaths:    []string{"./guide", "./more"},
 			wantPushed:   true,
 			wantManifest: []string{"docs"},
@@ -209,7 +209,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 			edit: func(t *testing.T, path string) {
 				addWithCLI(t, path, "ast", "--path", "./wsB", "--language", "go")
 			},
-			wantVersion:  "3.1.0",
+			wantVersion:  fmt.Sprintf("%d.1.0", compositionGeneration),
 			wantPaths:    []string{"./guide"},
 			wantPushed:   true,
 			wantManifest: []string{"docs", "ast"},
@@ -218,7 +218,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 			name:         "unchanged file with a model registry is silent",
 			initial:      revisionFile(semanticMembers("http://old:8081/v1"), guideSource),
 			edit:         func(*testing.T, string) {},
-			wantVersion:  "3.0.0",
+			wantVersion:  fmt.Sprintf("%d.0.0", compositionGeneration),
 			wantPaths:    []string{"./guide"},
 			wantManifest: []string{"docs"},
 			wantURL:      "http://old:8081/v1",
@@ -230,7 +230,7 @@ func TestIntegrationConfigRevisionArbitration(t *testing.T) {
 				writeFile(t, path, revisionFile(semanticMembers("http://new:9999/v1"), guideSource))
 			},
 			wantDrift:    []string{"model_registry"},
-			wantVersion:  "3.0.0",
+			wantVersion:  fmt.Sprintf("%d.0.0", compositionGeneration),
 			wantPaths:    []string{"./guide"},
 			wantManifest: []string{"docs"},
 			wantURL:      "http://old:8081/v1",

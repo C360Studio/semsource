@@ -1,4 +1,5 @@
-export type FusionProvenance = "deterministic" | "embedding" | "llm";
+export type FusionProvenance =
+  "deterministic" | "lexical" | "embedding" | "llm";
 import { parseGraphProjection, type GraphProjection } from "./graph";
 export type FusionDeferReason =
   "index_not_ready" | "all_seeds_unhydrated" | (string & {});
@@ -268,7 +269,9 @@ export function parseFusionResponse(value: unknown): FusionResponse {
     );
   }
   if (
-    !["deterministic", "embedding", "llm"].includes(String(item.provenance))
+    !["deterministic", "lexical", "embedding", "llm"].includes(
+      String(item.provenance),
+    )
   ) {
     throw new Error("Invalid fusion response: malformed provenance");
   }

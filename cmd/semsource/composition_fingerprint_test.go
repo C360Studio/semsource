@@ -17,6 +17,7 @@ import (
 // generations' entries: they are the history of the generated wiring.
 var compositionFingerprints = map[int]string{
 	3: "0a998ae19901b05af18e26f70fbbb105aa49f94817485dfb7eb8e3268ed4ca08",
+	4: "7115044e7482f2710561d33dcb41b11b31e33dba9a8eea31776aa00e31575075",
 }
 
 // fingerprintFixture is a fixed configuration with every field the generator
@@ -26,7 +27,7 @@ var compositionFingerprints = map[int]string{
 // without I/O, on the default graph subsystem.
 //
 // shortcut: one fixture on the default branches; a generator change reached
-// only through embedder_type none, clustering, metrics, stream overrides, or
+// only through lexical_search false, clustering, metrics, stream overrides, or
 // s3/media sources passes unseen. Add a fixture when one of those changes.
 func fingerprintFixture() *config.Config {
 	return &config.Config{
@@ -103,9 +104,9 @@ func TestBuildSemstreamsConfigVersion(t *testing.T) {
 		revision int
 		want     string
 	}{
-		{name: "no revision keeps the generation's version", revision: 0, want: "3.0.0"},
-		{name: "revision is the minor position", revision: 2, want: "3.2.0"},
-		{name: "multi-digit revision", revision: 12, want: "3.12.0"},
+		{name: "no revision keeps the generation's version", revision: 0, want: "4.0.0"},
+		{name: "revision is the minor position", revision: 2, want: "4.2.0"},
+		{name: "multi-digit revision", revision: 12, want: "4.12.0"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

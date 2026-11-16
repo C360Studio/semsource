@@ -5,14 +5,20 @@ enrichment layer is running. The layers stack; each adds capability on top of th
 
 | Tier | Adds | `code_search` (NL) | External service | Runnable in semsource today |
 |------|------|--------------------|------------------|------------------------------|
-| **Structural** | graph-ingest / index / query / gateway | — (byName / prefix / relations / impact only) | none | ✅ |
-| **0 — Statistical** | graph-embedding (**BM25**) | keyword-statistical: good for term overlap, weak for paraphrase | none | ✅ (`tier0-statistical.json`) |
-| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | true semantic similarity, paraphrase-robust (needs `query_prefix` — beats BM25 once set) | **semembed** (:8081, OpenAI-compatible embeddings) | ✅ (`tier1-semantic.json`) |
-| **2 — Semantic + Instruct** | graph-clustering (LPA + **LLM → seminstruct**), GraphRAG/community summaries | + community/summary reasoning (`local`/`global`/`summary` search) | **seminstruct** (:8083, inference proxy) | ✅ (`tier2-semantic-instruct.json`) |
+| **Structural** | graph-ingest / index / query / gateway | — (byName / prefix / relations / impact only) | none | ✅ (`tier0-foundation.json`, `graph.lexical_search: false`) |
+| **0 — Statistical** | graph-lexical (**BM25** word index) | keyword-statistical: good for term overlap, weak for paraphrase | none | ✅ (`tier0-statistical.json`) |
+| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | true semantic similarity, paraphrase-robust (needs `query_prefix` — beats BM25 once set) | **semembed** (:8081, OpenAI-compatible embeddings) | returns with 04C ([#234](https://github.com/C360Studio/semsource/issues/234)) |
+| **2 — Semantic + Instruct** | graph-clustering (LPA + **LLM → seminstruct**), GraphRAG/community summaries | + community/summary reasoning (`local`/`global`/`summary` search) | **seminstruct** (:8083, inference proxy) | returns with 04C ([#234](https://github.com/C360Studio/semsource/issues/234)) |
 
 The other query verbs — `code_context`, `code_impact`, `doc_context`, and byName/prefix resolution —
 are **structural** and work at every tier (they don't depend on the embedder). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
+
+> **On `semengine v0.1.0-alpha.5` only Structural and Tier 0 run.** Tier 0 word search is
+> `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. SemEngine has
+> no tier 1 embedder until Slice 04C, so the tier 1 and tier 2 configs and the tier 2 dev overlay
+> were removed and return with [#234](https://github.com/C360Studio/semsource/issues/234). The
+> Tier 1 and Tier 2 sections below describe that wiring as it stood and are kept until then.
 
 > **Paths in these files are Docker-container paths** (`/workspace`) — exactly the mount the shipped
 > compose stack creates (`SEMSOURCE_TARGET` on the host → `/workspace` in the container, defaulting to
@@ -37,7 +43,7 @@ semsource run --config configs/tiers/tier0-statistical.json
 > `code_search` (`index.ready` gates the structural tools; the old "total_entities is stable"
 > heuristic is retired — counts are no longer a readiness proxy).
 
-## Tier 1 — Semantic (semembed) — wired (`tier1-semantic.json`)
+## Tier 1 — Semantic (semembed) — returns with 04C (#234)
 
 Tier 1 swaps the embedder to `http`, which resolves the `model_registry` **`embedding`** capability
 (graph-embedding). semstreams centralizes endpoints in a `model_registry` (ADR-0002 / alpha.29 — it
@@ -136,7 +142,7 @@ would invent coverage.
 > whiffs those (no lexical overlap). Omit the prefix and tier-1 ranks *below* BM25. A code-specialized
 > or larger embedder is a complementary product-side lever.
 
-## Tier 2 — Semantic + Instruct (seminstruct) — wired (`tier2-semantic-instruct.json`)
+## Tier 2 — Semantic + Instruct (seminstruct) — returns with 04C (#234)
 
 > **Ships OFF, and is not part of the MVP.** `enable_clustering` and `clustering_llm` are both
 > `false` in this config, and it names **no compose service** — you bring your own seminstruct.
@@ -178,7 +184,7 @@ the only config in this repo that enables clustering, so it is what you need to 
 community-summary path at all.
 
 ```bash
-SEMSOURCE_CONFIG=tiers/tier2-compose-dev.json \
+SEMSOURCE_CONFIG=tiers/<tier-2 config>.json \
   docker compose -f docker-compose.yml -f docker-compose.tier2-dev.yml up -d
 ```
 

@@ -55,6 +55,13 @@ describe("parseFusionResponse", () => {
     });
   });
 
+  // spec: openspec/specs/source-workbench/spec.md#Requirement: The workbench tolerates every legitimate backend state
+  it("accepts the lexical provenance a word question carries on semengine alpha.5", () => {
+    expect(
+      parseFusionResponse({ ...response, provenance: "lexical" }).provenance,
+    ).toBe("lexical");
+  });
+
   it.each([
     [{ ...response, contract_version: "1" }, "contract version"],
     [{ ...response, provenance: "guessed" }, "provenance"],

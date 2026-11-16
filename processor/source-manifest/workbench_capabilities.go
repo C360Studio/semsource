@@ -28,7 +28,7 @@ const (
 // `ready: true`. See internal/graphstatus.
 const (
 	structuralReadinessKey = graphstatus.KeyGraphIndex
-	semanticReadinessKey   = graphstatus.KeyGraphEmbedding
+	semanticReadinessKey   = graphstatus.KeyGraphLexical
 )
 
 // readinessRequestFunc fetches one producer's raw readiness envelope by
