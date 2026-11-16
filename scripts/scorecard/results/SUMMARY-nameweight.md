@@ -8,7 +8,7 @@ whether weighting real names helps. This sweep runs it on SemSource's real entit
 **Verdict:** keep 2.
 - Weight 1 is the worst on both corpora.
 - Weights 2 and 3 are within one question of each other.
-- Weight 5 trades a top-1 hit for top-5 recall.
+- Weight 5 trades a dogfood top-1 hit for top-5 recall.
 - No weight changes a dogfood verdict.
 
 The differences are small: at most one question at rank 1 per corpus.
@@ -65,32 +65,38 @@ move. The movement shifts which passage comes first, but it doesn't change a ver
 | 3 | **13/13** | 0.853 | 9 | 10 | **11** | 6/13 (repeat: 12/13) |
 | 5 | **13/13** | **0.854** | 9 | 10 | **11** | 6/13 |
 
-At weights 3 and 5, C03 (`code_search`) passes, but only because its first hit lands at rank 20,
-the last slot returned. That is the only OSH score change, and it is fragile: one more competing
-name would push it out.
+At weights 3 and 5, C03 (`code_search`) passes; at weights 1 and 2 no returned node holds the
+expected fact. That is the only OSH score change. At weight 3 the first hit lands at rank 20, the
+last of the 20 slots returned, in both runs, so one more competing name would push it out. At
+weight 5 it lands at rank 16.
 
 ## Reading it
 
 - **Down-weighting names (1) is worse on both corpora.** It loses a rank-1 hit on dogfood and has
   the lowest MRR on each. On real entity names, a Name word is better evidence than a Body word.
   That is the effect upstream's heading-name set could not show.
-- **Weights 2 and 3 are a wash.** Dogfood favours 2 by 0.005 MRR. OSH favours 3 by 0.005 MRR and
-  one rank-20 hit.
-- **Weight 5 over-weights names.** It loses a dogfood rank-1 hit (19 → 18) while lifting hits@5
-  (27 → 29). That is a precision-for-recall trade, not a clear improvement.
+- **Weights 2 and 3 are a wash.** On dogfood, 3 moves two first hits down (D02 3 → 5, L03 6 → 7)
+  and none up; hits@k are unchanged. On OSH, 3 gains C03 at rank 20.
+- **Weight 5 over-weights names.** On dogfood it loses a rank-1 hit (D04 1 → 3) and moves D02
+  down (3 → 4), while lifting L01 (8 → 5) and L03 (6 → 4) into the top 5, so hits@5 goes 27 → 29.
+  On OSH it gains C03 at rank 16. That is a precision-for-recall trade, not a clear improvement.
 
-The measured case supports keeping 2: a change to 3 would buy one fragile rank-20 hit on OSH at
-the cost of dogfood's top rank. The measurement has a scope limit: 43 graded questions on two
-corpora, at one machine and one SemEngine revision.
+No weight dominates 2 on both corpora: 3 is slightly worse on dogfood for one last-slot hit on
+OSH, and 5 lowers dogfood MRR (0.705 → 0.686) and top-1 for top-5 recall. The measured case
+supports keeping 2. The measurement has a scope limit: 43 graded questions on two corpora, at one
+machine and one SemEngine revision. Per-question ranks come from `first-hit.sh`'s `ranks` field.
 
 ## Replay
 
 ```sh
 # From this checkout, with the #230 corpora at /tmp/base230/corpus-{dogfood,osh}
+set -euo pipefail
 m=$(go list -m -f '{{.Dir}}' github.com/c360studio/semengine)
+mkdir -p /tmp/nw
 for w in 1 2 3 5; do
   cp -R "$m" /tmp/nw/semengine-w$w && chmod -R u+w /tmp/nw/semengine-w$w
   sed -i '' "s/^const NameWeight = 2$/const NameWeight = $w/" /tmp/nw/semengine-w$w/graph/lexical/index.go
+  grep -q "^const NameWeight = $w$" /tmp/nw/semengine-w$w/graph/lexical/index.go
   d=/tmp/nw/src-w$w; mkdir -p $d && git archive 28295c7 | tar -x -C $d
   (cd $d && go mod edit -replace github.com/c360studio/semengine=/tmp/nw/semengine-w$w \
      && go build -o /tmp/nw/semsource-w$w ./cmd/semsource)

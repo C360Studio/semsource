@@ -23,5 +23,5 @@ jq -n --slurpfile q "$q" --slurpfile r "$r" '
 	| {n: length,
 	   mrr: (([.[] | if .rank then 1 / .rank else 0 end] | add) / length * 1000 | round / 1000),
 	   at1: ([.[] | select(.rank == 1)] | length), at5: ([.[] | select(.rank != null and .rank <= 5)] | length),
-	   at20: ([.[] | select(.rank != null)] | length),
+	   at20: ([.[] | select(.rank != null and .rank <= 20)] | length),
 	   ranks: (map("\(.id)=\(.rank // "-")") | join(" "))}'

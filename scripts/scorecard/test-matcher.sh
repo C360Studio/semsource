@@ -206,6 +206,15 @@ res "$rd/anonm.json" 'Q1|{"matches":[{"label":"x"}]}'
 [ "$(rdiff "$rd/anonm.json" "$rd/anonm.json")" = 2 ] && ok "matches without an id are refused" || fail "anonymous matches were ranked"
 rm -rf "$rd"
 
+echo "9. first-hit counts hits@20 only within rank 20"
+fh="$(mktemp -d)"
+echo '{"questions":[{"id":"R20","expect_any":["needle"]},{"id":"R21","expect_any":["needle"]},{"id":"NONE","expect_any":["needle"]}]}' > "$fh/q.json"
+pad() { jq -cn --argjson k "$1" '{nodes: ([range($k) | {name: "hay"}] + [{name: "needle"}])}'; }
+res "$fh/r.json" "R20|$(pad 19)" "R21|$(pad 20)" 'NONE|{"nodes":[{"name":"hay"}]}'
+got="$("$here/first-hit.sh" "$fh/q.json" "$fh/r.json" | jq -c '{at20, ranks}')"
+[ "$got" = '{"at20":1,"ranks":"R20=20 R21=21 NONE=-"}' ] && ok "rank 20 counts, rank 21 and no match do not" || fail "first-hit hits@20: $got"
+rm -rf "$fh"
+
 echo
 if [ "$fails" -eq 0 ]; then
 	echo "matcher tests passed"
