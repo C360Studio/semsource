@@ -2,8 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Obtain owner approval of `proposal.md` and `design.md`.
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Obtain owner approval of `proposal.md` and `design.md`.
 
 ## 2. Contract
 

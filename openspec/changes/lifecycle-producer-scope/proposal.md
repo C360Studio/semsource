@@ -1,6 +1,6 @@
 # Scope a lifecycle sweep to the root that produced the entity
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-16) sha256:2c15ba2d8aae
 
 Track: design (adds a spec Requirement, changes the exported `graph.LifecycleRunRequest` wire
 contract, and adds a graph fact every sweeping source writes).
