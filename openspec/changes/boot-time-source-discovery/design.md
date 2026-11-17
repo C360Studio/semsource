@@ -88,8 +88,7 @@ discovery: { restart_required, sources: [{ source, state, error?,
   pending: [{ kind: branch|submodule, name, change: added|removed|changed }] }] }
 ```
 
-It writes nothing and creates no worktrees. Its Start context is the source-manifest
-component's.
+It writes nothing, creates no worktrees, and runs under source-manifest's Start context.
 
 ### D6. Dead code
 
