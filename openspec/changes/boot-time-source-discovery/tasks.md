@@ -68,7 +68,11 @@
   its components gone. `TestE2E_DiscoveryAcrossRestarts` (~130s, local git fixtures, one
   retained store), added to CI `e2e-local`. With boot reconcile disabled it fails at the second
   boot (branch and submodule never ingested).
-- [ ] 6.2 Operator docs (README sources section, `docs/QUICKSTART.md` if it mentions branches)
-  and `docs/testing/setup-03a` admission ledger updated.
+- [x] 6.2 Operator docs (README sources section, `docs/QUICKSTART.md` if it mentions branches)
+  and `docs/testing/setup-03a` admission ledger updated. README gains a "Branch and submodule
+  discovery" section (its own heading keeps the doc passage under the splitter's 6,000-byte hard
+  max, `TestSplitPassages_NeverExceedsHardMax`); QUICKSTART's pre-expand hold becomes the boot
+  contract; `compatibility.md` marks both blocked rows resolved by #216. `review.md` and
+  `merge-readiness.md` are dated records superseded by that ledger and stay unchanged.
 - [ ] 6.3 Independent review: go-component-reviewer and graph-event-reviewer, plus the PR review
   record.
