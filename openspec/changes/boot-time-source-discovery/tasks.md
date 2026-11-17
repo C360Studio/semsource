@@ -82,4 +82,4 @@
   retired (now always admitted), a branch whose worktree failed pending forever (`Skipped`), and
   an overclaiming test. Filed: #303 (remote branch listing), #304 (disabled entries accumulate),
   #305 (pin move re-enables a removed submodule), #306 (expected count recount). Owner
-  re-approval of the amended D2 is pending; the PR review record follows.
+  re-approved the amended D2 on 2026-11-18 (sha256:d4c8b4cb1297); the PR review record follows.

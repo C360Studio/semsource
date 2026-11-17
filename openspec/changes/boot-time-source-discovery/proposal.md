@@ -1,6 +1,6 @@
 # Discover branches and submodules at boot, and say when a restart would find more
 
-Approved-by: Coby Leuschke (2026-11-17) sha256:c2e1c508976b
+Approved-by: Coby Leuschke (2026-11-18) sha256:d4c8b4cb1297
 
 Track: design (adds spec Requirements, touches the boot path, and changes what the retained
 configuration holds).
