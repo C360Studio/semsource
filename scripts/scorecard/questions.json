@@ -131,8 +131,8 @@
     "query": "what version of semengine does semsource target"
    },
    "expect_any": [
-    "v0.1.0-alpha.5",
-    "alpha.5"
+    "v0.1.0-alpha.6",
+    "alpha.6"
    ],
    "why": "Doc reach to the pinned substrate version (configs/tiers/README.md). Was the SemStreams version until the SemEngine cutover (#269). Rots with the pin by construction: move expect_any with every semengine pin bump."
   },

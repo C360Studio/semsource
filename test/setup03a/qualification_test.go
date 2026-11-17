@@ -381,7 +381,7 @@ func (h *harness) configure(profile string) {
 	case "foundation":
 		cfgPath = "../../configs/tiers/tier0-foundation.json"
 	case "neural":
-		h.t.Fatal("the neural profile has no config on semengine v0.1.0-alpha.5: the tier 1 embedder returns with 04C (#234)")
+		h.t.Fatal("the neural profile has no config on this pin: the tier 1 composition returns with 04C (#234)")
 	}
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
