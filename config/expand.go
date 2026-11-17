@@ -2,7 +2,10 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/c360studio/semsource/workspace"
@@ -23,12 +26,36 @@ type BranchWatcherRef struct {
 	Project            string
 	Watch              bool
 	Org                string // needed for component config building
+	// Source is the multi-branch repo entry this ref was expanded from.
+	Source SourceEntry
+}
+
+// Discovery states a discovering source reports (source-discovery spec).
+const (
+	DiscoveryOK               = "ok"
+	DiscoveryAwaitingCheckout = "awaiting_checkout"
+	DiscoveryListingFailed    = "listing_failed"
+	DiscoveryCapped           = "capped"
+)
+
+// DiscoveryState is one discovering source's boot-time discovery outcome.
+type DiscoveryState struct {
+	Source      string // the repo URL or path
+	Kind        string // "branch" or "submodule"
+	State       string
+	Error       string
+	NotAdmitted int // matches left out by max_branches (capped)
 }
 
 // ExpandResult holds the output of ExpandRepoSources.
 type ExpandResult struct {
 	Sources  []SourceEntry
 	Watchers []BranchWatcherRef
+	// Discovered are the Sources entries branch discovery produced; boot
+	// reconciliation admits them whatever retained arbitration decided.
+	Discovered []SourceEntry
+	// Discovery holds one state per multi-branch source.
+	Discovery []DiscoveryState
 }
 
 // ExpandRepoSources expands any "repo" meta-source entries into their
@@ -48,8 +75,9 @@ type ExpandResult struct {
 //
 // workspaceDir is the base directory where repos will be cloned.
 func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir string) (*ExpandResult, error) {
-	var expanded []SourceEntry
+	var expanded, discovered []SourceEntry
 	var watchers []BranchWatcherRef
+	var states []DiscoveryState
 
 	for _, src := range sources {
 		if src.Type != "repo" {
@@ -62,14 +90,14 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 		}
 
 		if len(src.Branches) > 0 {
-			entries, watcher, err := expandMultiBranch(ctx, src, workspaceDir)
-			if err != nil {
-				return nil, fmt.Errorf("multi-branch expansion: %w", err)
-			}
+			// Discovery never fails boot: a failure is the source's state.
+			entries, watcher, state := expandMultiBranch(ctx, src, workspaceDir)
 			expanded = append(expanded, entries...)
-			if watcher != nil {
-				watchers = append(watchers, *watcher)
+			if state.State == DiscoveryOK || state.State == DiscoveryCapped {
+				discovered = append(discovered, entries...)
 			}
+			watchers = append(watchers, *watcher)
+			states = append(states, state)
 			continue
 		}
 
@@ -82,7 +110,7 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 		expanded = append(expanded, entries...)
 	}
 
-	return &ExpandResult{Sources: expanded, Watchers: watchers}, nil
+	return &ExpandResult{Sources: expanded, Watchers: watchers, Discovered: discovered, Discovery: states}, nil
 }
 
 // expandSingleBranch expands a repo source with a single branch (existing behavior).
@@ -150,8 +178,10 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 }
 
 // expandMultiBranch discovers matching branches and expands each into a set
-// of 4 source entries with branch-scoped paths and slugs.
-func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string) ([]SourceEntry, *BranchWatcherRef, error) {
+// of 4 source entries with branch-scoped paths and slugs. A remote source with
+// no checkout yet expands to its git source alone, which clones it; a listing
+// failure expands to nothing. Either is reported in the returned state.
+func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string) ([]SourceEntry, *BranchWatcherRef, DiscoveryState) {
 	repoPath := src.Path
 	if repoPath == "" && src.URL != "" {
 		slug := workspace.URLToSlug(src.URL)
@@ -164,26 +194,6 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 		worktreeBase = filepath.Join(filepath.Dir(src.Path), ".semsource-worktrees")
 	}
 
-	// Initial discovery of matching branches.
-	bw := workspace.NewBranchWatcher(workspace.BranchWatcherConfig{
-		RepoPath:     repoPath,
-		Patterns:     src.Branches,
-		WorktreeBase: worktreeBase,
-		MaxBranches:  src.MaxBranches,
-	})
-	added, _, err := bw.Discover(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("initial branch discovery for %s: %w", repoPath, err)
-	}
-
-	// Expand each discovered branch into 4 source entries.
-	var entries []SourceEntry
-	for _, bs := range added {
-		branchEntries := expandBranchSources(src, bs)
-		entries = append(entries, branchEntries...)
-	}
-
-	// Return watcher ref so run.go can start the poll loop.
 	ref := &BranchWatcherRef{
 		RepoPath:           repoPath,
 		Patterns:           src.Branches,
@@ -195,9 +205,58 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 		Version:            src.Version,
 		Project:            src.Project,
 		Watch:              src.Watch,
+		Source:             src,
+	}
+	state := DiscoveryState{Source: src.URL + src.Path, Kind: "branch", State: DiscoveryOK}
+
+	if _, err := os.Stat(repoPath); errors.Is(err, fs.ErrNotExist) && src.URL != "" {
+		state.State = DiscoveryAwaitingCheckout
+		return []SourceEntry{ParentCloneEntry(src)}, ref, state
+	}
+	branches, err := workspace.ListBranches(ctx, repoPath)
+	if err != nil {
+		state.State, state.Error = DiscoveryListingFailed, err.Error()
+		return nil, ref, state
+	}
+	matched := len(workspace.MatchBranches(branches, src.Branches))
+
+	bw := workspace.NewBranchWatcher(workspace.BranchWatcherConfig{
+		RepoPath:     repoPath,
+		Patterns:     src.Branches,
+		WorktreeBase: worktreeBase,
+		MaxBranches:  src.MaxBranches,
+	})
+	added, _, err := bw.Discover(ctx)
+	if err != nil {
+		state.State, state.Error = DiscoveryListingFailed, err.Error()
+		return nil, ref, state
+	}
+	limit := src.MaxBranches
+	if limit <= 0 {
+		limit = workspace.DefaultMaxBranches
+	}
+	if len(added) >= limit && matched > len(added) {
+		state.State, state.NotAdmitted = DiscoveryCapped, matched-len(added)
 	}
 
-	return entries, ref, nil
+	var entries []SourceEntry
+	for _, bs := range added {
+		entries = append(entries, expandBranchSources(src, bs)...)
+	}
+	return entries, ref, state
+}
+
+// ParentCloneEntry is the git source that clones a remote multi-branch
+// source's base checkout, admitted while the checkout does not exist yet.
+func ParentCloneEntry(src SourceEntry) SourceEntry {
+	return SourceEntry{Type: "git", URL: src.URL, Branch: src.Branch, Watch: src.Watch}
+}
+
+// BranchEntries expands one branch of a multi-branch source into its four
+// source entries; exported so boot reconciliation derives the component
+// names a branch owns.
+func BranchEntries(src SourceEntry, bs workspace.BranchState) []SourceEntry {
+	return expandBranchSources(src, bs)
 }
 
 // expandBranchSources creates 4 source entries for a single branch.

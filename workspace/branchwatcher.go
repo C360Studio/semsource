@@ -37,11 +37,14 @@ type BranchWatcherConfig struct {
 	Logger       *slog.Logger
 }
 
+// DefaultMaxBranches is the branch cap when a source sets none.
+const DefaultMaxBranches = 50
+
 // NewBranchWatcher creates a new BranchWatcher.
 func NewBranchWatcher(cfg BranchWatcherConfig) *BranchWatcher {
 	limit := cfg.MaxBranches
 	if limit <= 0 {
-		limit = 50
+		limit = DefaultMaxBranches
 	}
 	logger := cfg.Logger
 	if logger == nil {

@@ -230,3 +230,50 @@ func TestTick_MissingCheckoutIsQuietAndRetriable(t *testing.T) {
 		t.Errorf("tick on missing checkout mutated state: %v %v", store.puts, store.deletes)
 	}
 }
+
+// TestExpand_MatchesTickAndOwnership pins the boot-time path (task 3.1/3.3):
+// Expand yields the entries whose components Tick would publish, and OwnedBy
+// claims exactly those names for the parent and no operator or other parent's.
+func TestExpand_MatchesTickAndOwnership(t *testing.T) {
+	clone, _, _, _ := dualPinClone(t)
+	store := newFakeStore()
+	w := watcherFor(clone, store)
+	w.Tick(context.Background())
+
+	opts := sourcespawn.Options{Org: "acme", WorkspaceDir: "/tmp/ws"}
+	entries, err := subwatch.Expand(context.Background(), subwatch.Config{
+		RepoPath: clone, ParentSlug: "parentproj", Languages: []string{"go"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, entry := range entries {
+		built, err := sourcespawn.Build(entry, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name := range built {
+			got[name] = true
+		}
+	}
+	if len(got) != len(store.puts) {
+		t.Fatalf("Expand built %d components, Tick published %d", len(got), len(store.puts))
+	}
+	for name := range store.puts {
+		if !got[name] {
+			t.Errorf("Tick published %s, Expand did not build it", name)
+		}
+		if !subwatch.OwnedBy(name, "parentproj") {
+			t.Errorf("%s is not owned by its parent", name)
+		}
+		if subwatch.OwnedBy(name, "otherproj") {
+			t.Errorf("%s is owned by another parent", name)
+		}
+	}
+	for _, name := range []string{"ast-source-parentproj", "doc-source-guide", "git-source-x-via-parentproj-sub"} {
+		if subwatch.OwnedBy(name, "parentproj") {
+			t.Errorf("%s is owned; want only submodule-expanded ast/docs/config names", name)
+		}
+	}
+}

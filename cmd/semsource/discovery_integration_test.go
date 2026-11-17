@@ -6,10 +6,14 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	semconfig "github.com/c360studio/semengine/config"
 	"github.com/c360studio/semengine/service"
 
 	"github.com/c360studio/semsource/internal/natstest"
@@ -72,5 +76,108 @@ func TestIntegrationDiscoveryBootSeam(t *testing.T) {
 	}
 	if _, ok := cm.GetComponentStatus()["doc-source-discovered"]; !ok {
 		t.Fatal("a component put before the service manager is built was not created for this boot")
+	}
+}
+
+// bootWithDiscovery runs the boot path through discovery reconciliation and
+// returns the components the service manager would be built from.
+func bootWithDiscovery(ctx context.Context, t *testing.T, natsURL, path string) semconfig.ComponentConfigs {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg, expand, err := loadAndExpandConfig(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nc, ssCfg, err := setupNATS(ctx, natsURL, cfg, logger, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = nc.Close(ctx) }()
+	configMgr, err := startConfigManager(ctx, ssCfg, nc, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = configMgr.Stop(ctx) }()
+	if err := admitDiscovered(ctx, cfg, expand, ssCfg.Components, configMgr, logger); err != nil {
+		t.Fatal(err)
+	}
+	return configMgr.GetConfig().Get().Components
+}
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e.com",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e.com", "GIT_ALLOW_PROTOCOL=file")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func newGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitIn(t, dir, "init", "-b", "main")
+	writeFile(t, filepath.Join(dir, "README.md"), "# fixture\n")
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "init")
+	return dir
+}
+
+func hasPrefixed(components semconfig.ComponentConfigs, want string) bool {
+	for name, cc := range components {
+		if cc.Enabled && strings.Contains(name, want) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestIntegrationDiscoveryAcrossRestarts is the #216 regression on a retained
+// store at an equal version: a branch created between boots is admitted, a
+// deleted one leaves the composition, and a materialized submodule expands at
+// boot, none of which needs a config_revision bump.
+//
+// spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
+func TestIntegrationDiscoveryAcrossRestarts(t *testing.T) {
+	broker := natstest.New(t, natstest.WithJetStream())
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+
+	repo := newGitRepo(t)
+	gitIn(t, repo, "branch", "feature/a")
+	sub := newGitRepo(t)
+	app := newGitRepo(t)
+	gitIn(t, app, "-c", "protocol.file.allow=always", "submodule", "add", sub, "libs/sub")
+	gitIn(t, app, "commit", "-m", "add submodule")
+
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	writeFile(t, path, revisionFile("", `[
+		{"type": "repo", "path": "`+repo+`", "branches": ["feature/*"]},
+		{"type": "repo", "path": "`+app+`"}]`))
+
+	first := bootWithDiscovery(ctx, t, broker.URL, path)
+	if !hasPrefixed(first, "feature-a") {
+		t.Fatal("first boot did not admit feature/a")
+	}
+	if !hasPrefixed(first, "-via-") {
+		t.Fatal("first boot did not expand the submodule")
+	}
+
+	gitIn(t, repo, "branch", "feature/b")
+	second := bootWithDiscovery(ctx, t, broker.URL, path)
+	if !hasPrefixed(second, "feature-b") {
+		t.Fatal("a branch created between boots was not admitted on the retained store")
+	}
+
+	gitIn(t, repo, "worktree", "remove", "--force", filepath.Join(filepath.Dir(repo), ".semsource-worktrees", "feature-a"))
+	gitIn(t, repo, "branch", "-D", "feature/a")
+	third := bootWithDiscovery(ctx, t, broker.URL, path)
+	if hasPrefixed(third, "feature-a") {
+		t.Fatal("a deleted branch's components were still admitted")
+	}
+	if !hasPrefixed(third, "feature-b") || !hasPrefixed(third, "-via-") {
+		t.Fatal("unrelated discovered components were lost")
 	}
 }

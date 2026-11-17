@@ -18,16 +18,25 @@
 
 ## 3. Boot reconcile (additive)
 
-- [ ] 3.1 Discovery-owned name derivation for branches and submodules, from a parent source.
-  Unit test: names match `sourcespawn` and subwatch output, and an operator component is never
-  derived.
-- [ ] 3.2 Boot reconcile: put the missing components, delete the stale derived names, and skip
-  any component disabled by a runtime removal (D3). Unit tests with a fake store for added,
-  removed, parent-removed, retained-disabled and foreign-name cases.
-- [ ] 3.3 Submodule build at boot through subwatch's build logic. Integration test:
-  `processor/ast-source/submodule_expansion_integration_test.go` drives a boot instead of `Run`.
-- [ ] 3.4 Typed discovery states (D4); boot never fails on discovery. Unit tests per state;
-  `listing_failed` keeps the admitted children.
+- [x] 3.1 Discovery-owned name derivation for branches and submodules, from a parent source.
+  `TestBranchOwner` (cmd/semsource): a branch's names are owned even after the branch is gone,
+  operator names are not. `TestExpand_MatchesTickAndOwnership` (internal/subwatch): Expand
+  builds exactly what Tick publishes, and `OwnedBy` claims only that parent's names.
+- [x] 3.2 Boot reconcile (`cmd/semsource/discovery.go`, called before `prepareComponentRegistry`
+  so the fusion source scopes see discovered systems): put the missing components, delete stale
+  derived names, skip runtime-disabled components (Q1), and rewrite the next-boot manifest
+  (`sourcemanifest.RewriteDesiredManifest`). `TestReconcileDiscovery` covers added, stale,
+  retained-disabled, failed-parent, file-generated and foreign names, plus idempotence. Each
+  rule fails the test when it is reverted.
+- [x] 3.3 Submodule build at boot through subwatch's build logic (`subwatch.Expand`).
+  `TestIntegrationDiscoveryAcrossRestarts` (cmd/semsource, real NATS): a materialized submodule
+  expands at boot, a branch created between boots is admitted on a retained store at an equal
+  version, and a deleted branch leaves at the next boot. The runtime `Tick` test stays until
+  task 5 removes `Run`.
+- [x] 3.4 Typed discovery states (D4); boot never fails on discovery.
+  `TestExpandRepoSources_DiscoveryStates` covers ok, awaiting_checkout (clone-only git source),
+  listing_failed (nothing expanded) and capped. The reconcile keeps a failed parent's names
+  (`TestReconcileDiscovery`).
 
 ## 4. Runtime check and status
 

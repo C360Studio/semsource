@@ -412,7 +412,24 @@ func (c *Component) removeSource(ctx context.Context, instanceName, actor string
 // component writes. Callers expose committed components on partial failure so
 // deterministic retries can repair it. Live manifest and status stay unchanged.
 func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandlerConfig, added *config.SourceEntry, removed string) error {
-	snapshot := cfg.Store.GetConfig().Get()
+	var removedNames []string
+	var adds []config.SourceEntry
+	if added != nil {
+		adds = []config.SourceEntry{*added}
+	} else {
+		removedNames = []string{removed}
+	}
+	return RewriteDesiredManifest(ctx, cfg.Store, cfg.Spawn, adds, removedNames)
+}
+
+// RewriteDesiredManifest updates the next-boot source-manifest config in store
+// after its source components changed: added entries join its sources,
+// removed instances leave them (an expansion's entry only once its last
+// enabled instance is gone), and the expected source count is recounted from
+// the enabled source components. Boot-time discovery reconciliation and the
+// add/remove handlers share it.
+func RewriteDesiredManifest(ctx context.Context, store sourcespawn.ConfigStore, opts sourcespawn.Options, added []config.SourceEntry, removed []string) error {
+	snapshot := store.GetConfig().Get()
 	envelope, ok := snapshot.Components["source-manifest"]
 	if !ok {
 		return errors.New("source components committed but next-boot source-manifest config is absent")
@@ -422,10 +439,11 @@ func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandle
 		return fmt.Errorf("decode desired source-manifest: %w", err)
 	}
 	view := &Component{manifestSources: append([]ManifestSource(nil), desired.Sources...)}
-	if added != nil {
-		view.appendManifestSources(*added, cfg.Spawn)
-	} else {
-		view.removeManifestSourceByInstance(removed, cfg.Spawn, cfg.Store)
+	for _, src := range added {
+		view.appendManifestSources(src, opts)
+	}
+	for _, name := range removed {
+		view.removeManifestSourceByInstance(name, opts, store)
 	}
 	desired.Sources = view.manifestSources
 	desired.ExpectedSourceCount = enabledSourceComponentCount(snapshot.Components)
@@ -435,7 +453,7 @@ func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandle
 		return fmt.Errorf("encode desired source-manifest: %w", err)
 	}
 	envelope.Config = raw
-	if err := cfg.Store.PutComponentToKV(ctx, "source-manifest", envelope); err != nil {
+	if err := store.PutComponentToKV(ctx, "source-manifest", envelope); err != nil {
 		return fmt.Errorf("source components committed but next-boot manifest write failed: %w", err)
 	}
 	return nil

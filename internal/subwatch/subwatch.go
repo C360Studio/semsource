@@ -23,6 +23,7 @@ import (
 	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semsource/workspace"
 )
@@ -200,23 +201,86 @@ func (w *Watcher) Tick(ctx context.Context) {
 // spawn builds and publishes the ast/docs/config component configs for one
 // materialized submodule pin.
 func (w *Watcher) spawn(ctx context.Context, s workspace.SubmoduleInfo) (*spawned, error) {
+	built, err := buildPin(w.cfg, s)
+	if err != nil {
+		return nil, err
+	}
+	tr := &spawned{sha: s.SHA}
+	for name, compCfg := range built {
+		if err := w.cfg.Store.PutComponentToKV(ctx, name, compCfg); err != nil {
+			return nil, err
+		}
+		tr.names = append(tr.names, name)
+	}
+	return tr, nil
+}
+
+// Expand returns the source entries of every materialized submodule of the
+// parent checkout at cfg.RepoPath, for boot-time discovery; Store and Opts are
+// unused. A checkout that cannot be listed returns the inventory error.
+func Expand(ctx context.Context, cfg Config) ([]config.SourceEntry, error) {
+	inv, err := workspace.ListSubmodules(ctx, cfg.RepoPath)
+	if err != nil {
+		return nil, err
+	}
+	var out []config.SourceEntry
+	for _, s := range inv.Submodules {
+		if s.Materialized && len(s.SHA) >= shaPrefixLen {
+			out = append(out, pinEntries(cfg, s)...)
+		}
+	}
+	return out, nil
+}
+
+// OwnedBy reports whether a component instance name is one submodule
+// expansion derives for the parent with this slug: an ast, docs or config
+// source carrying that parent's link suffix.
+func OwnedBy(name, parentSlug string) bool {
+	marker := "-" + entityid.SystemSlug("via-"+parentSlug) + "-"
+	for _, prefix := range []string{"ast-source-", "doc-source-", "cfgfile-source-"} {
+		if strings.HasPrefix(name, prefix) && strings.Contains(name[len(prefix):], marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildPin builds the ast/docs/config component configs for one materialized
+// submodule pin.
+func buildPin(cfg Config, s workspace.SubmoduleInfo) (map[string]types.ComponentConfig, error) {
+	out := map[string]types.ComponentConfig{}
+	for _, entry := range pinEntries(cfg, s) {
+		built, err := sourcespawn.Build(entry, cfg.Opts)
+		if err != nil {
+			return nil, err
+		}
+		for name, compCfg := range built {
+			out[name] = compCfg
+		}
+	}
+	return out, nil
+}
+
+// pinEntries are the ast/docs/config source entries for one materialized
+// submodule pin.
+func pinEntries(cfg Config, s workspace.SubmoduleInfo) []config.SourceEntry {
 	project := workspace.URLToSlug(s.ResolvedURL)
 	sha12 := s.SHA[:shaPrefixLen]
-	abs := filepath.Join(w.cfg.RepoPath, filepath.FromSlash(s.Path))
+	abs := filepath.Join(cfg.RepoPath, filepath.FromSlash(s.Path))
 	// The suffix is parent+link scoped, not merely parent scoped: one parent
 	// can link the same submodule at the same SHA under two paths, and a
 	// name shared between those links would make removing one link tear
 	// down the other's instance. Entity identity is untouched either way.
-	suffix := "via-" + w.cfg.ParentSlug + "-" + strings.ReplaceAll(s.Path, "/", "-")
+	suffix := "via-" + cfg.ParentSlug + "-" + strings.ReplaceAll(s.Path, "/", "-")
 
-	entries := []config.SourceEntry{
+	return []config.SourceEntry{
 		{
 			Type:           "ast",
 			Path:           abs,
 			Project:        project,
 			Version:        sha12,
-			Languages:      w.cfg.Languages,
-			Watch:          w.cfg.Watch,
+			Languages:      cfg.Languages,
+			Watch:          cfg.Watch,
 			InstanceSuffix: suffix,
 		},
 		// docs/config have no separate version surface; the pin rides the
@@ -227,32 +291,17 @@ func (w *Watcher) spawn(ctx context.Context, s workspace.SubmoduleInfo) (*spawne
 			Type:           "docs",
 			Paths:          []string{abs},
 			Project:        project + "-" + sha12,
-			Watch:          w.cfg.Watch,
+			Watch:          cfg.Watch,
 			InstanceSuffix: suffix,
 		},
 		{
 			Type:           "config",
 			Paths:          []string{abs},
 			Project:        project + "-" + sha12,
-			Watch:          w.cfg.Watch,
+			Watch:          cfg.Watch,
 			InstanceSuffix: suffix,
 		},
 	}
-
-	tr := &spawned{sha: s.SHA}
-	for _, entry := range entries {
-		built, err := sourcespawn.Build(entry, w.cfg.Opts)
-		if err != nil {
-			return nil, err
-		}
-		for name, compCfg := range built {
-			if err := w.cfg.Store.PutComponentToKV(ctx, name, compCfg); err != nil {
-				return nil, err
-			}
-			tr.names = append(tr.names, name)
-		}
-	}
-	return tr, nil
 }
 
 // removeInstances deletes one pin's spawned component configs.
