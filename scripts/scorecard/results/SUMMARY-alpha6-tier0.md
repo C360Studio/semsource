@@ -55,6 +55,14 @@ A direct `graph.query.searchGraph` request against the OSH stack answered with `
 apply only with `embedding_enabled` true, as the release notes say, so `graph_search` needs no
 change on this pin. The three OSH `graph_search` questions stay correct.
 
+The exact request and the raw reply are retained in
+`processor/mcp-gateway/testdata/searchgraph-alpha6-tier0.{request,reply}.json`, recorded with
+`nats request` against the stack above (SemSource `a35e4ac`, the OSH corpus). The gateway's own
+decoder reads that reply in `TestRecordedAlpha6TierZeroReplyDecodes`. A `null` `data.text`
+(the word index was not read) cannot be produced with embeddings off, so
+`TestNullWordListIsNotAnEmptyResult` uses a hand-written reply after the upstream migration
+note, and says so.
+
 ## Replay
 
 As in `SUMMARY-alpha5-tier0.md` "Replay", with `sem301`/`SEM301_*` for `sem233`/`SEM233_*`,
