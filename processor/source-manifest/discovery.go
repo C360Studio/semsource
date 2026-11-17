@@ -60,6 +60,14 @@ func checkDiscovery(ctx context.Context, watches []DiscoveryWatch) *DiscoverySta
 	out := &DiscoveryStatus{Sources: []DiscoverySourceStatus{}}
 	for _, w := range watches {
 		src := DiscoverySourceStatus{Source: w.Source, Kind: w.Kind, State: config.DiscoveryOK}
+		if w.State == config.DiscoveryListingFailed {
+			// Boot kept this parent's names without knowing them, so there is
+			// no boot set to compare: report the boot failure, never a pending
+			// list or restart_required (owner ruling Q2).
+			src.State, src.Error = w.State, w.Error
+			out.Sources = append(out.Sources, src)
+			continue
+		}
 		var now map[string]string
 		var err error
 		if _, statErr := os.Stat(w.RepoPath); errors.Is(statErr, fs.ErrNotExist) {
@@ -81,10 +89,11 @@ func checkDiscovery(ctx context.Context, watches []DiscoveryWatch) *DiscoverySta
 			continue
 		}
 		src.Pending = diffAdmitted(w.Kind, w.Admitted, now)
-		// A source that booted before its checkout existed admitted only the
-		// clone placeholder, which the next boot retires: a restart changes
-		// the admitted set even when no branch matches yet.
-		bootAwaiting := w.State == config.DiscoveryAwaitingCheckout
+		// A branch source that booted before its checkout existed admitted
+		// only the clone placeholder, which the next boot retires: a restart
+		// changes the admitted set even when no branch matches yet. A
+		// submodule parent has no placeholder; its pins alone decide.
+		bootAwaiting := w.Kind == "branch" && w.State == config.DiscoveryAwaitingCheckout
 		out.RestartRequired = out.RestartRequired || len(src.Pending) > 0 || bootAwaiting
 		out.Sources = append(out.Sources, src)
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -201,5 +202,50 @@ func TestRuntimeDiscoveryPathsStayDeleted(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestReconcileDiscovery_AwaitingCheckoutKeepsBranches: a remote multi-branch
+// source whose checkout is gone (a wiped workspace on a retained store) keeps
+// the branch components admitted before and gets its clone placeholder back,
+// so the next boot can rediscover; nothing is deleted.
+func TestReconcileDiscovery_AwaitingCheckoutKeepsBranches(t *testing.T) {
+	src := config.SourceEntry{Type: "repo", URL: "https://example.com/acme/app.git", Branches: []string{"feature/*"}}
+	cfg := &config.Config{Namespace: "acme", WorkspaceDir: t.TempDir(), Sources: []config.SourceEntry{src}}
+	expand, err := config.ExpandRepoSources(context.Background(), cfg.Sources, cfg.WorkspaceDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expand.Discovery[0].State != config.DiscoveryAwaitingCheckout {
+		t.Fatalf("state = %s; want awaiting_checkout", expand.Discovery[0].State)
+	}
+	cfg.Sources = []config.SourceEntry{src}
+	plan, err := planDiscovery(context.Background(), cfg, expand, reconcileOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kept := semconfig.ComponentConfigs{"source-manifest": {Name: "source-manifest", Type: types.ComponentTypeProcessor, Enabled: true, Config: json.RawMessage(`{"namespace":"acme"}`)}}
+	entries := config.BranchEntries(src, workspace.BranchState{Branch: "feature/a", Slug: "feature-a",
+		WorktreePath: filepath.Join(expand.Watchers[0].WorktreeBase, "feature-a")})
+	for _, entry := range entries {
+		built, err := sourcespawn.Build(entry, reconcileOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		maps.Copy(kept, built)
+	}
+	store := &reconcileStore{components: maps.Clone(kept)}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := reconcileDiscovery(context.Background(), store, plan, semconfig.ComponentConfigs{}, reconcileOpts, logger); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.dels) != 0 {
+		t.Errorf("deleted %v; want the admitted branch kept while the checkout is missing", store.dels)
+	}
+	for name := range instanceNames([]config.SourceEntry{config.ParentCloneEntry(src)}, reconcileOpts) {
+		if _, ok := store.components[name]; !ok {
+			t.Errorf("clone placeholder %s not admitted", name)
+		}
 	}
 }

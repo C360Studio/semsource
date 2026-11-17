@@ -101,7 +101,19 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 		}
 	}
 	for i, ref := range expand.Watchers {
-		failed := i < len(expand.Discovery) && expand.Discovery[i].State == config.DiscoveryListingFailed
+		var state string
+		if i < len(expand.Discovery) {
+			state = expand.Discovery[i].State
+		}
+		// A missing checkout lists nothing, which says nothing about the
+		// branches: keep the names admitted before, and admit the clone
+		// placeholder whatever arbitration chose so the checkout returns.
+		failed := state == config.DiscoveryListingFailed || state == config.DiscoveryAwaitingCheckout
+		if state == config.DiscoveryAwaitingCheckout {
+			if err := plan.add(config.ParentCloneEntry(ref.Source), opts); err != nil {
+				return nil, fmt.Errorf("clone placeholder for %s: %w", ref.Source.URL, err)
+			}
+		}
 		plan.owners = append(plan.owners, discoveryOwner{owns: branchOwner(ref, opts), failed: failed})
 		if i < len(expand.Discovery) {
 			plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{
@@ -132,6 +144,7 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 		owner := discoveryOwner{owns: func(name string) bool { return subwatch.OwnedBy(name, parentSlug) }}
 		if _, err := os.Stat(repoPath); errors.Is(err, fs.ErrNotExist) {
 			state.State = config.DiscoveryAwaitingCheckout
+			owner.failed = true // nothing listed; keep the children admitted before
 		} else if entries, pins, err := subwatch.Expand(ctx, subwatch.Config{
 			RepoPath: repoPath, ParentSlug: parentSlug, Languages: src.EffectiveLanguages(), Watch: src.Watch,
 		}); err != nil {

@@ -126,6 +126,23 @@ func TestCheckDiscovery(t *testing.T) {
 			t.Fatalf("got %+v; want restart_required once the checkout exists, even with no match", got)
 		}
 	})
+	t.Run("submodule parent whose checkout arrived with no pins", func(t *testing.T) {
+		w := DiscoveryWatch{RepoPath: repo, DiscoveryState: config.DiscoveryState{
+			Source: repo, Kind: "submodule", State: config.DiscoveryAwaitingCheckout,
+		}}
+		if got := checkDiscovery(ctx, []DiscoveryWatch{w}); got.RestartRequired {
+			t.Fatalf("got %+v; want no restart for a checkout without submodules", got)
+		}
+	})
+	t.Run("boot listing failure reports state only", func(t *testing.T) {
+		w := branchWatch(repo)
+		w.State, w.Error, w.Admitted = config.DiscoveryListingFailed, "boot: for-each-ref failed", nil
+		got := checkDiscovery(ctx, []DiscoveryWatch{w})
+		src := got.Sources[0]
+		if got.RestartRequired || len(src.Pending) != 0 || src.State != config.DiscoveryListingFailed || src.Error != w.Error {
+			t.Fatalf("got %+v; want the boot failure with nothing pending", got)
+		}
+	})
 	t.Run("listing failure does not require a restart", func(t *testing.T) {
 		got := checkDiscovery(ctx, []DiscoveryWatch{branchWatch(t.TempDir(), "feature/a")})
 		src := got.Sources[0]
