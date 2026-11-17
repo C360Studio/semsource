@@ -45,6 +45,9 @@ type DiscoveryState struct {
 	State       string
 	Error       string
 	NotAdmitted int // matches left out by max_branches (capped)
+	// Admitted is what this boot admitted: branch name to "" for branches,
+	// submodule path to gitlink SHA for submodules.
+	Admitted map[string]string
 }
 
 // ExpandResult holds the output of ExpandRepoSources.
@@ -240,7 +243,9 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 	}
 
 	var entries []SourceEntry
+	state.Admitted = map[string]string{}
 	for _, bs := range added {
+		state.Admitted[bs.Branch] = ""
 		entries = append(entries, expandBranchSources(src, bs)...)
 	}
 	return entries, ref, state

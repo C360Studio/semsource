@@ -3,6 +3,7 @@ package subwatch_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -241,11 +242,14 @@ func TestExpand_MatchesTickAndOwnership(t *testing.T) {
 	w.Tick(context.Background())
 
 	opts := sourcespawn.Options{Org: "acme", WorkspaceDir: "/tmp/ws"}
-	entries, err := subwatch.Expand(context.Background(), subwatch.Config{
+	entries, pins, err := subwatch.Expand(context.Background(), subwatch.Config{
 		RepoPath: clone, ParentSlug: "parentproj", Languages: []string{"go"},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if listed, err := subwatch.Pins(context.Background(), clone); err != nil || !maps.Equal(listed, pins) || len(pins) != 2 {
+		t.Fatalf("Pins = %v, %v; Expand built from %v (want the two pins)", listed, err, pins)
 	}
 	got := map[string]bool{}
 	for _, entry := range entries {

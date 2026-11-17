@@ -47,6 +47,11 @@ type IngestHandlerConfig struct {
 	// registration over HTTP (ADR-0007 §3). Empty rejects path-based HTTP adds.
 	// Unused by the NATS path (in-mesh trusted).
 	AllowedRoots []string
+	// Discovery is the discovering sources boot admitted from; when set,
+	// Start runs the read-only runtime discovery check on DiscoveryInterval
+	// (0 = DefaultDiscoveryInterval) and serves its discovery status block.
+	Discovery         []DiscoveryWatch
+	DiscoveryInterval time.Duration
 }
 
 // RegisterIngestHandlers subscribes the component to graph.ingest.add and

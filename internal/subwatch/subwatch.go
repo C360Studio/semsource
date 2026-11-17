@@ -216,20 +216,49 @@ func (w *Watcher) spawn(ctx context.Context, s workspace.SubmoduleInfo) (*spawne
 }
 
 // Expand returns the source entries of every materialized submodule of the
-// parent checkout at cfg.RepoPath, for boot-time discovery; Store and Opts are
-// unused. A checkout that cannot be listed returns the inventory error.
-func Expand(ctx context.Context, cfg Config) ([]config.SourceEntry, error) {
+// parent checkout at cfg.RepoPath, for boot-time discovery, and the pins they
+// were built from (path to gitlink SHA); Store and Opts are unused. A checkout
+// that cannot be listed returns the inventory error.
+func Expand(ctx context.Context, cfg Config) ([]config.SourceEntry, map[string]string, error) {
 	inv, err := workspace.ListSubmodules(ctx, cfg.RepoPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	var out []config.SourceEntry
+	for _, s := range materialized(inv) {
+		out = append(out, pinEntries(cfg, s)...)
+	}
+	return out, pinSHAs(inv), nil
+}
+
+// Pins lists the materialized submodule pins of the checkout at repoPath
+// (path to gitlink SHA) without building or writing anything: the read-only
+// runtime discovery check compares it with what boot admitted.
+func Pins(ctx context.Context, repoPath string) (map[string]string, error) {
+	inv, err := workspace.ListSubmodules(ctx, repoPath)
 	if err != nil {
 		return nil, err
 	}
-	var out []config.SourceEntry
+	return pinSHAs(inv), nil
+}
+
+// materialized is the ingestable pins: a populated tree with a real gitlink.
+func materialized(inv *workspace.SubmoduleInventory) []workspace.SubmoduleInfo {
+	var out []workspace.SubmoduleInfo
 	for _, s := range inv.Submodules {
 		if s.Materialized && len(s.SHA) >= shaPrefixLen {
-			out = append(out, pinEntries(cfg, s)...)
+			out = append(out, s)
 		}
 	}
-	return out, nil
+	return out
+}
+
+func pinSHAs(inv *workspace.SubmoduleInventory) map[string]string {
+	out := map[string]string{}
+	for _, s := range materialized(inv) {
+		out[s.Path] = s.SHA
+	}
+	return out
 }
 
 // OwnedBy reports whether a component instance name is one submodule

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	semconfig "github.com/c360studio/semengine/config"
 
@@ -37,6 +38,8 @@ type discoveryPlan struct {
 	entries map[string]config.SourceEntry
 	owners  []discoveryOwner
 	states  []config.DiscoveryState
+	// watches is what the runtime check compares, one per state.
+	watches []sourcemanifest.DiscoveryWatch
 }
 
 func (p *discoveryPlan) add(entry config.SourceEntry, opts sourcespawn.Options) error {
@@ -53,8 +56,8 @@ func (p *discoveryPlan) add(entry config.SourceEntry, opts sourcespawn.Options) 
 
 // admitDiscovered plans boot-time discovery, reports each discovering source's
 // state, and reconciles the discovered components into the configuration in
-// effect.
-func admitDiscovered(ctx context.Context, cfg *config.Config, expand *config.ExpandResult, file semconfig.ComponentConfigs, store sourcespawn.ConfigStore, logger *slog.Logger) error {
+// effect. It returns what the runtime check compares against this boot.
+func admitDiscovered(ctx context.Context, cfg *config.Config, expand *config.ExpandResult, file semconfig.ComponentConfigs, store sourcespawn.ConfigStore, logger *slog.Logger) ([]sourcemanifest.DiscoveryWatch, error) {
 	opts := sourcespawn.Options{
 		Org:           cfg.Namespace,
 		WorkspaceDir:  cfg.WorkspaceDir,
@@ -63,13 +66,13 @@ func admitDiscovered(ctx context.Context, cfg *config.Config, expand *config.Exp
 	}
 	plan, err := planDiscovery(ctx, cfg, expand, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, st := range plan.states {
 		logger.Info("source discovery", "source", st.Source, "kind", st.Kind, "state", st.State,
 			"error", st.Error, "not_admitted", st.NotAdmitted)
 	}
-	return reconcileDiscovery(ctx, store, plan, file, opts, logger)
+	return plan.watches, reconcileDiscovery(ctx, store, plan, file, opts, logger)
 }
 
 // owned reports whether a working parent's discovery derives name; protected
@@ -100,6 +103,11 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 	for i, ref := range expand.Watchers {
 		failed := i < len(expand.Discovery) && expand.Discovery[i].State == config.DiscoveryListingFailed
 		plan.owners = append(plan.owners, discoveryOwner{owns: branchOwner(ref, opts), failed: failed})
+		if i < len(expand.Discovery) {
+			plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{
+				DiscoveryState: expand.Discovery[i], RepoPath: ref.RepoPath, Patterns: ref.Patterns, MaxBranches: ref.MaxBranches,
+			})
+		}
 	}
 
 	for _, src := range cfg.Sources {
@@ -124,12 +132,13 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 		owner := discoveryOwner{owns: func(name string) bool { return subwatch.OwnedBy(name, parentSlug) }}
 		if _, err := os.Stat(repoPath); errors.Is(err, fs.ErrNotExist) {
 			state.State = config.DiscoveryAwaitingCheckout
-		} else if entries, err := subwatch.Expand(ctx, subwatch.Config{
+		} else if entries, pins, err := subwatch.Expand(ctx, subwatch.Config{
 			RepoPath: repoPath, ParentSlug: parentSlug, Languages: src.EffectiveLanguages(), Watch: src.Watch,
 		}); err != nil {
 			state.State, state.Error = config.DiscoveryListingFailed, err.Error()
 			owner.failed = true
 		} else {
+			state.Admitted = pins
 			for _, entry := range entries {
 				if err := plan.add(entry, opts); err != nil {
 					return nil, fmt.Errorf("submodule source %s: %w", entry.Path, err)
@@ -138,6 +147,7 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 		}
 		plan.owners = append(plan.owners, owner)
 		plan.states = append(plan.states, state)
+		plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{DiscoveryState: state, RepoPath: repoPath})
 	}
 	return plan, nil
 }
@@ -246,4 +256,22 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 	}
 	logger.Info("discovery reconciled", "admitted", len(added), "retired", removed)
 	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, added, removed)
+}
+
+// discoveryInterval is how often the runtime check runs: the shortest
+// branch_poll_interval a multi-branch source sets, else the default.
+func discoveryInterval(cfg *config.Config) time.Duration {
+	var interval time.Duration
+	for _, src := range cfg.Sources {
+		if len(src.Branches) == 0 {
+			continue
+		}
+		if d, err := time.ParseDuration(src.BranchPollInterval); err == nil && d > 0 && (interval == 0 || d < interval) {
+			interval = d
+		}
+	}
+	if interval == 0 {
+		return sourcemanifest.DefaultDiscoveryInterval
+	}
+	return interval
 }

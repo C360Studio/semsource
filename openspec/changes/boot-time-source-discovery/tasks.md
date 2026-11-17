@@ -40,10 +40,16 @@
 
 ## 4. Runtime check and status
 
-- [ ] 4.1 Read-only check (`ListBranches`+`MatchBranches`, `ListSubmodules`) against the boot set.
-  Unit test asserts no worktree is created and no store write happens.
-- [ ] 4.2 `discovery` block on `/source-manifest/status` and `source_status`. Payload test and
-  MCP schema-budget check (`advertised-surface-coverage`).
+- [x] 4.1 Read-only check (`ListBranches`+`MatchBranches`, `subwatch.Pins`) against the boot set
+  (`processor/source-manifest/discovery.go`; boot records it in `DiscoveryState.Admitted`).
+  `TestCheckDiscovery` covers added/removed, ok, capped, awaiting_checkout, a checkout that
+  arrived after an awaiting boot, and listing_failed without `restart_required` (Q2), and asserts
+  the filesystem and worktree list are unchanged; `TestCheckDiscovery_Submodules` covers
+  changed/removed pins. Reverting the Q2 rule fails the test.
+- [x] 4.2 `discovery` block on the served status, which `/source-manifest/status` returns at the
+  top level and `source_status` under `status`. `TestDiscoveryStatusBlock` (block present from
+  the running check, absent with no discovering source, store write-refusing);
+  `TestToolsListSchemaBudget` 7,602 of 8,192 bytes with the `source_status` description update.
 
 ## 5. Removal of dead paths
 

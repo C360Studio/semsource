@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/c360studio/semengine/service"
 
 	"github.com/c360studio/semsource/internal/natstest"
+	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
 
 // TestIntegrationDiscoveryBootSeam proves the seam boot-time discovery uses
@@ -80,8 +82,9 @@ func TestIntegrationDiscoveryBootSeam(t *testing.T) {
 }
 
 // bootWithDiscovery runs the boot path through discovery reconciliation and
-// returns the components the service manager would be built from.
-func bootWithDiscovery(ctx context.Context, t *testing.T, natsURL, path string) semconfig.ComponentConfigs {
+// returns the components the service manager would be built from, and what
+// the runtime check would compare against.
+func bootWithDiscovery(ctx context.Context, t *testing.T, natsURL, path string) (semconfig.ComponentConfigs, []sourcemanifest.DiscoveryWatch) {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg, expand, err := loadAndExpandConfig(ctx, path)
@@ -98,10 +101,11 @@ func bootWithDiscovery(ctx context.Context, t *testing.T, natsURL, path string) 
 		t.Fatal(err)
 	}
 	defer func() { _ = configMgr.Stop(ctx) }()
-	if err := admitDiscovered(ctx, cfg, expand, ssCfg.Components, configMgr, logger); err != nil {
+	watches, err := admitDiscovered(ctx, cfg, expand, ssCfg.Components, configMgr, logger)
+	if err != nil {
 		t.Fatal(err)
 	}
-	return configMgr.GetConfig().Get().Components
+	return configMgr.GetConfig().Get().Components, watches
 }
 
 func gitIn(t *testing.T, dir string, args ...string) {
@@ -157,23 +161,28 @@ func TestIntegrationDiscoveryAcrossRestarts(t *testing.T) {
 		{"type": "repo", "path": "`+repo+`", "branches": ["feature/*"]},
 		{"type": "repo", "path": "`+app+`"}]`))
 
-	first := bootWithDiscovery(ctx, t, broker.URL, path)
+	first, watches := bootWithDiscovery(ctx, t, broker.URL, path)
 	if !hasPrefixed(first, "feature-a") {
 		t.Fatal("first boot did not admit feature/a")
+	}
+	// The runtime check compares against exactly what this boot admitted.
+	if len(watches) != 2 || !maps.Equal(watches[0].Admitted, map[string]string{"feature/a": ""}) ||
+		watches[1].Kind != "submodule" || len(watches[1].Admitted) != 1 || watches[1].Admitted["libs/sub"] == "" {
+		t.Fatalf("boot set = %+v; want feature/a and the libs/sub pin", watches)
 	}
 	if !hasPrefixed(first, "-via-") {
 		t.Fatal("first boot did not expand the submodule")
 	}
 
 	gitIn(t, repo, "branch", "feature/b")
-	second := bootWithDiscovery(ctx, t, broker.URL, path)
+	second, _ := bootWithDiscovery(ctx, t, broker.URL, path)
 	if !hasPrefixed(second, "feature-b") {
 		t.Fatal("a branch created between boots was not admitted on the retained store")
 	}
 
 	gitIn(t, repo, "worktree", "remove", "--force", filepath.Join(filepath.Dir(repo), ".semsource-worktrees", "feature-a"))
 	gitIn(t, repo, "branch", "-D", "feature/a")
-	third := bootWithDiscovery(ctx, t, broker.URL, path)
+	third, _ := bootWithDiscovery(ctx, t, broker.URL, path)
 	if hasPrefixed(third, "feature-a") {
 		t.Fatal("a deleted branch's components were still admitted")
 	}

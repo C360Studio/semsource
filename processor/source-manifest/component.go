@@ -87,6 +87,9 @@ type Component struct {
 	// deregistered components resurrecting phantom status entries. Cleared
 	// per-instance on re-add. Guarded by statusMu.
 	removedSources map[string]struct{}
+	// discovery is the latest runtime discovery check, served on every
+	// status snapshot. Nil when no source discovers. Guarded by statusMu.
+	discovery *DiscoveryStatus
 
 	// Predicate schema
 	predicatesQuerySub *natsclient.Subscription
@@ -161,6 +164,12 @@ func (c *Component) Start(ctx context.Context) error {
 	if c.ingestCfg != nil {
 		if err := c.RegisterIngestHandlers(ctx, *c.ingestCfg); err != nil {
 			return fmt.Errorf("start source management: %w", err)
+		}
+		if len(c.ingestCfg.Discovery) > 0 {
+			cancel := c.startDiscoveryCheck(ctx, c.ingestCfg.Discovery, c.ingestCfg.DiscoveryInterval)
+			c.mu.Lock()
+			c.cancelFuncs = append(c.cancelFuncs, cancel)
+			c.mu.Unlock()
 		}
 	}
 	return nil
@@ -461,6 +470,7 @@ func (c *Component) updateStatusData(status *StatusPayload) {
 // newer one: the heartbeat and a source's periodic report tick together, and
 // the stale figures were then served until the next tick (#268).
 func (c *Component) storeStatusLocked(status *StatusPayload) {
+	status.Discovery = c.discovery
 	data, err := json.Marshal(status)
 	if err != nil {
 		c.logger.Warn("failed to marshal status", "error", err)

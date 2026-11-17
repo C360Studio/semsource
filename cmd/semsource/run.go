@@ -174,11 +174,12 @@ func runCmd(args []string) (runErr error) {
 
 	// Discovered branches and submodules enter this boot's composition here,
 	// after retained arbitration and before the service manager snapshots it.
-	if err := admitDiscovered(ctx, semsourceCfg, expandResult, ssCfg.Components, configMgr, logger); err != nil {
+	watches, err := admitDiscovered(ctx, semsourceCfg, expandResult, ssCfg.Components, configMgr, logger)
+	if err != nil {
 		return err
 	}
 
-	registry, err := prepareComponentRegistry(ctx, semsourceCfg, configMgr, nc)
+	registry, err := prepareComponentRegistry(ctx, semsourceCfg, configMgr, nc, watches...)
 	if err != nil {
 		return err
 	}
