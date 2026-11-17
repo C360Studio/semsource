@@ -12,9 +12,6 @@ import (
 	"testing"
 	"time"
 
-	semconfig "github.com/c360studio/semengine/config"
-	"github.com/c360studio/semengine/types"
-
 	"github.com/c360studio/semsource/config"
 )
 
@@ -44,6 +41,17 @@ func discoveryRepo(t *testing.T) string {
 	discoveryGit(t, dir, "add", ".")
 	discoveryGit(t, dir, "commit", "-m", "init")
 	return dir
+}
+
+func (s *DiscoveryStatus) pending(name, change string) bool {
+	for _, src := range s.Sources {
+		for _, p := range src.Pending {
+			if p.Name == name && p.Change == change {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // treeOf lists every path under root, so a test can assert a check left the
@@ -120,10 +128,23 @@ func TestCheckDiscovery(t *testing.T) {
 	})
 	t.Run("checkout arrived after an awaiting boot", func(t *testing.T) {
 		w := branchWatch(repo)
-		w.State, w.Patterns = config.DiscoveryAwaitingCheckout, []string{"release/*"}
+		w.State = config.DiscoveryAwaitingCheckout
 		got := checkDiscovery(ctx, []DiscoveryWatch{w})
-		if !got.RestartRequired || got.Sources[0].State != config.DiscoveryOK {
-			t.Fatalf("got %+v; want restart_required once the checkout exists, even with no match", got)
+		if !got.RestartRequired || !got.pending("feature/a", "added") || got.Sources[0].State != config.DiscoveryOK {
+			t.Fatalf("got %+v; want the matching branches pending once the checkout exists", got)
+		}
+		w.Patterns = []string{"release/*"}
+		if got := checkDiscovery(ctx, []DiscoveryWatch{w}); got.RestartRequired {
+			t.Fatalf("got %+v; want no restart when nothing matches (the clone component stays)", got)
+		}
+	})
+	t.Run("a branch boot could not check out is not pending", func(t *testing.T) {
+		w := branchWatch(repo, "feature/b")
+		w.MaxBranches, w.Skipped, w.Error = 1, []string{"feature/a"}, "no worktree could be created for feature/a"
+		got := checkDiscovery(ctx, []DiscoveryWatch{w})
+		src := got.Sources[0]
+		if got.RestartRequired || len(src.Pending) != 0 || src.State != config.DiscoveryOK || src.Error != w.Error {
+			t.Fatalf("got %+v; want feature/b still admitted, nothing pending, and the boot error shown", got)
 		}
 	})
 	t.Run("submodule parent whose checkout arrived with no pins", func(t *testing.T) {
@@ -187,27 +208,11 @@ func TestCheckDiscovery_Submodules(t *testing.T) {
 	}
 }
 
-// writeRefusingStore fails the test on any configuration write.
-type writeRefusingStore struct{ t *testing.T }
-
-func (s writeRefusingStore) GetConfig() *semconfig.SafeConfig {
-	return semconfig.NewSafeConfig(&semconfig.Config{})
-}
-
-func (s writeRefusingStore) PutComponentToKV(context.Context, string, types.ComponentConfig) error {
-	s.t.Error("the runtime discovery check wrote a component")
-	return nil
-}
-
-func (s writeRefusingStore) DeleteComponentFromKV(context.Context, string) error {
-	s.t.Error("the runtime discovery check deleted a component")
-	return nil
-}
-
 // TestDiscoveryStatusBlock pins task 4.2: the running check's result is the
 // discovery block on the served status (which /source-manifest/status and
-// source_status both return), it writes no configuration, and the block is
-// absent when no source discovers.
+// source_status both return), and the block is absent when no source
+// discovers. The check holds no configuration store, so it cannot write one;
+// TestCheckDiscovery proves it leaves the filesystem and worktrees alone.
 //
 // spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Runtime discovery is read-only and reports what a restart would change
 func TestDiscoveryStatusBlock(t *testing.T) {
@@ -217,7 +222,6 @@ func TestDiscoveryStatusBlock(t *testing.T) {
 	c := &Component{
 		logger:     slog.Default(),
 		aggregator: newStatusAggregator(0),
-		ingestCfg:  &IngestHandlerConfig{Store: writeRefusingStore{t}},
 		statusBuilt: func() {
 			select {
 			case stored <- struct{}{}:

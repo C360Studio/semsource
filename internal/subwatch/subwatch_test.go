@@ -168,8 +168,8 @@ func TestExpand_MovedGitlinkIsAVersionTransition(t *testing.T) {
 	for name := range before {
 		if _, ok := after[name]; !ok {
 			gone++
-			if !subwatch.OwnedBy(name, "parentproj") {
-				t.Errorf("retired %q is not a parent-owned submodule instance", name)
+			if !strings.Contains(name, "via-parentproj-nested-sub") {
+				t.Errorf("retired %q is not the moved pin's instance", name)
 			}
 		}
 	}
@@ -194,26 +194,17 @@ func TestExpand_MissingCheckoutExpandsNothing(t *testing.T) {
 	}
 }
 
-// TestExpand_PinsAndOwnership pins the boot-time path (task 3.1/3.3): Pins
-// lists exactly the pins Expand built from, and OwnedBy claims exactly the
-// expanded names for the parent and no operator or other parent's.
-func TestExpand_PinsAndOwnership(t *testing.T) {
+// TestExpand_Pins pins the boot-time path (task 3.3): Pins lists exactly the
+// pins Expand built from, and every expanded name carries the parent link.
+func TestExpand_Pins(t *testing.T) {
 	clone, _, _, _ := dualPinClone(t)
 	built, pins := expandBuilt(t, clone)
 	if listed, err := subwatch.Pins(context.Background(), clone); err != nil || !maps.Equal(listed, pins) || len(pins) != 2 {
 		t.Fatalf("Pins = %v, %v; Expand built from %v (want the two pins)", listed, err, pins)
 	}
 	for name := range built {
-		if !subwatch.OwnedBy(name, "parentproj") {
-			t.Errorf("%s is not owned by its parent", name)
-		}
-		if subwatch.OwnedBy(name, "otherproj") {
-			t.Errorf("%s is owned by another parent", name)
-		}
-	}
-	for _, name := range []string{"ast-source-parentproj", "doc-source-guide", "git-source-x-via-parentproj-sub"} {
-		if subwatch.OwnedBy(name, "parentproj") {
-			t.Errorf("%s is owned; want only submodule-expanded ast/docs/config names", name)
+		if !strings.Contains(name, "via-parentproj-") {
+			t.Errorf("%s lacks the parent link suffix", name)
 		}
 	}
 }

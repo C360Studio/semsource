@@ -2,7 +2,7 @@
 
 ### Requirement: Discovery takes effect at the boot that finds it
 
-At boot, before the service manager is built, SemSource SHALL reconcile the configuration in effect so that it holds a component set for each branch that matches a multi-branch source's patterns and each materialized submodule of a repo or git source, and holds no discovery-owned component whose branch, submodule, or parent source is gone. This SHALL hold whether the file or the retained configuration won arbitration. Reconciliation SHALL put or delete only component names that discovery derives from a parent source in the configuration in effect. It SHALL NOT re-enable a discovery-owned component that a runtime removal disabled.
+At boot, before the service manager is built, SemSource SHALL reconcile the configuration in effect so that it holds a component set for each branch that matches a multi-branch source's patterns and each materialized submodule of a repo or git source, and holds no discovery-owned component whose branch, submodule, or parent source is gone. This SHALL hold whether the file or the retained configuration won arbitration. Each boot SHALL record the component names discovery admitted per parent in the next-boot manifest, and reconciliation SHALL delete only recorded names, including those of a parent that left the configuration. It SHALL NOT re-enable a discovery-owned component that a runtime removal disabled.
 
 #### Scenario: A branch created between boots is admitted on a retained store
 
@@ -15,7 +15,7 @@ At boot, before the service manager is built, SemSource SHALL reconcile the conf
 - **GIVEN** a boot that admitted `feature/a`
 - **WHEN** the branch is deleted and SemSource restarts
 - **THEN** `feature/a`'s components are not admitted
-- **AND** components whose names discovery does not derive are unchanged
+- **AND** components that no boot recorded are unchanged, even when a branch could produce their names
 
 #### Scenario: A materialized submodule expands at boot
 
@@ -47,14 +47,14 @@ While running, SemSource SHALL periodically compare each discovering source's cu
 
 ### Requirement: Discovery failures are typed status and never fail boot
 
-A discovery failure SHALL NOT fail boot. Each discovering source SHALL report a discovery `state`: `ok`, `awaiting_checkout` (a remote source with no checkout yet), `listing_failed` (with the error), or `capped` (with the number of matches not admitted). On `listing_failed`, the previously admitted discovery-owned components SHALL be kept. Discovery SHALL NOT be reported only as a log warning.
+A discovery failure SHALL NOT fail boot. Each discovering source SHALL report a discovery `state`: `ok`, `awaiting_checkout` (a remote source with no checkout yet), `listing_failed` (with the error), or `capped` (with the number of matches not admitted). On `listing_failed` or `awaiting_checkout`, the previously recorded discovery-owned components SHALL be kept. Discovery SHALL NOT be reported only as a log warning.
 
 #### Scenario: First boot of a remote multi-branch source
 
 - **GIVEN** a remote multi-branch source whose checkout does not exist yet
 - **WHEN** SemSource boots
-- **THEN** boot succeeds, the parent source is admitted, and its discovery state is `awaiting_checkout`
-- **AND** once the clone exists the runtime check reports `restart_required: true`
+- **THEN** boot succeeds, the clone component is admitted, and its discovery state is `awaiting_checkout`
+- **AND** once the clone exists the runtime check reports the matching branches as pending
 
 #### Scenario: A listing failure keeps admitted branches
 

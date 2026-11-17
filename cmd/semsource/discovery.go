@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,12 +25,14 @@ import (
 	"github.com/c360studio/semsource/workspace"
 )
 
-// discoveryOwner is one discovering parent source: which component names its
-// discovery derives, and whether its discovery failed this boot, in which case
-// the names it owns are kept rather than deleted (source-discovery spec).
+// discoveryOwner is one discovering parent source and the component names
+// its discovery admits this boot. When its discovery failed (a listing error
+// or a missing checkout), the names recorded for it at the previous boot are
+// kept rather than deleted (source-discovery spec).
 type discoveryOwner struct {
-	owns   func(name string) bool
-	failed bool
+	parent, kind string
+	failed       bool
+	names        map[string]bool
 }
 
 // discoveryPlan is what boot-time discovery found: the components it admits
@@ -36,13 +41,19 @@ type discoveryOwner struct {
 type discoveryPlan struct {
 	desired semconfig.ComponentConfigs
 	entries map[string]config.SourceEntry
-	owners  []discoveryOwner
+	owners  []*discoveryOwner
 	states  []config.DiscoveryState
 	// watches is what the runtime check compares, one per state.
 	watches []sourcemanifest.DiscoveryWatch
 }
 
-func (p *discoveryPlan) add(entry config.SourceEntry, opts sourcespawn.Options) error {
+func (p *discoveryPlan) owner(parent, kind string, failed bool) *discoveryOwner {
+	o := &discoveryOwner{parent: parent, kind: kind, failed: failed, names: map[string]bool{}}
+	p.owners = append(p.owners, o)
+	return o
+}
+
+func (p *discoveryPlan) add(o *discoveryOwner, entry config.SourceEntry, opts sourcespawn.Options) error {
 	built, err := sourcespawn.Build(entry, opts)
 	if err != nil {
 		return err
@@ -50,6 +61,7 @@ func (p *discoveryPlan) add(entry config.SourceEntry, opts sourcespawn.Options) 
 	for name, cc := range built {
 		p.desired[name] = cc
 		p.entries[name] = entry
+		o.names[name] = true
 	}
 	return nil
 }
@@ -75,51 +87,35 @@ func admitDiscovered(ctx context.Context, cfg *config.Config, expand *config.Exp
 	return plan.watches, reconcileDiscovery(ctx, store, plan, file, opts, logger)
 }
 
-// owned reports whether a working parent's discovery derives name; protected
-// whether a failed parent's does.
-func (p *discoveryPlan) owned(name string) (owned, protected bool) {
-	for _, o := range p.owners {
-		if o.owns(name) {
-			if o.failed {
-				return true, true
-			}
-			owned = true
-		}
-	}
-	return owned, false
-}
-
-// planDiscovery collects the branch components expansion already found and
-// expands the materialized submodules of every single-branch repo or git
-// source. It fails only when a found source cannot be built; a discovery
-// failure is a state, never an error.
+// planDiscovery collects the branch components expansion found, the clone
+// component of every remote multi-branch source, and the materialized
+// submodules of every single-branch repo or git source. It fails only when a
+// found source cannot be built; a discovery failure is a state, never an
+// error.
 func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.ExpandResult, opts sourcespawn.Options) (*discoveryPlan, error) {
 	plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}, states: expand.Discovery}
-	for _, entry := range expand.Discovered {
-		if err := plan.add(entry, opts); err != nil {
-			return nil, fmt.Errorf("discovered branch source %s: %w", entry.Path, err)
-		}
-	}
 	for i, ref := range expand.Watchers {
-		var state string
-		if i < len(expand.Discovery) {
-			state = expand.Discovery[i].State
+		if i >= len(expand.Discovery) {
+			break
 		}
-		// A missing checkout lists nothing, which says nothing about the
-		// branches: keep the names admitted before, and admit the clone
-		// placeholder whatever arbitration chose so the checkout returns.
-		failed := state == config.DiscoveryListingFailed || state == config.DiscoveryAwaitingCheckout
-		if state == config.DiscoveryAwaitingCheckout {
-			if err := plan.add(config.ParentCloneEntry(ref.Source), opts); err != nil {
-				return nil, fmt.Errorf("clone placeholder for %s: %w", ref.Source.URL, err)
+		state := expand.Discovery[i]
+		failed := state.State == config.DiscoveryListingFailed || state.State == config.DiscoveryAwaitingCheckout
+		o := plan.owner(ref.Source.URL+ref.Source.Path, "branch", failed)
+		entries := ref.Entries
+		if ref.Source.URL != "" {
+			// The clone keeps the checkout current and ingests the default
+			// branch; a shallow clone lists no other branch (owner ruling
+			// 2026-11-18, remote branch listing is a follow-up).
+			entries = append([]config.SourceEntry{config.ParentCloneEntry(ref.Source)}, entries...)
+		}
+		for _, entry := range entries {
+			if err := plan.add(o, entry, opts); err != nil {
+				return nil, fmt.Errorf("discovered branch source %s: %w", entry.URL+entry.Path, err)
 			}
 		}
-		plan.owners = append(plan.owners, discoveryOwner{owns: branchOwner(ref, opts), failed: failed})
-		if i < len(expand.Discovery) {
-			plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{
-				DiscoveryState: expand.Discovery[i], RepoPath: ref.RepoPath, Patterns: ref.Patterns, MaxBranches: ref.MaxBranches,
-			})
-		}
+		plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{
+			DiscoveryState: state, RepoPath: ref.RepoPath, Patterns: ref.Patterns, MaxBranches: ref.MaxBranches,
+		})
 	}
 
 	for _, src := range cfg.Sources {
@@ -141,94 +137,85 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 			parentSlug = entityid.SystemSlug(src.Project)
 		}
 		state := config.DiscoveryState{Source: src.URL + src.Path, Kind: "submodule", State: config.DiscoveryOK}
-		owner := discoveryOwner{owns: func(name string) bool { return subwatch.OwnedBy(name, parentSlug) }}
+		var entries []config.SourceEntry
 		if _, err := os.Stat(repoPath); errors.Is(err, fs.ErrNotExist) {
 			state.State = config.DiscoveryAwaitingCheckout
-			owner.failed = true // nothing listed; keep the children admitted before
-		} else if entries, pins, err := subwatch.Expand(ctx, subwatch.Config{
+		} else if expanded, pins, err := subwatch.Expand(ctx, subwatch.Config{
 			RepoPath: repoPath, ParentSlug: parentSlug, Languages: src.EffectiveLanguages(), Watch: src.Watch,
 		}); err != nil {
 			state.State, state.Error = config.DiscoveryListingFailed, err.Error()
-			owner.failed = true
 		} else {
-			state.Admitted = pins
-			for _, entry := range entries {
-				if err := plan.add(entry, opts); err != nil {
-					return nil, fmt.Errorf("submodule source %s: %w", entry.Path, err)
-				}
+			state.Admitted, entries = pins, expanded
+		}
+		o := plan.owner(state.Source, "submodule", state.State != config.DiscoveryOK)
+		for _, entry := range entries {
+			if err := plan.add(o, entry, opts); err != nil {
+				return nil, fmt.Errorf("submodule source %s: %w", entry.Path, err)
 			}
 		}
-		plan.owners = append(plan.owners, owner)
 		plan.states = append(plan.states, state)
 		plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{DiscoveryState: state, RepoPath: repoPath})
 	}
 	return plan, nil
 }
 
-// branchOwner derives the component names a multi-branch source's discovery
-// owns: those any branch of the source would produce, whether or not the
-// branch still exists, plus the clone placeholder admitted while the checkout
-// did not. A deleted branch leaves no worktree or ref to enumerate, so the
-// candidate branch slug is read back from the name itself: every run of its
-// dash-separated words is tried, and the name is owned only when rebuilding
-// that branch's entries yields exactly this name.
-func branchOwner(ref config.BranchWatcherRef, opts sourcespawn.Options) func(string) bool {
-	placeholder := map[string]bool{}
-	if ref.Source.URL != "" {
-		for name := range instanceNames([]config.SourceEntry{config.ParentCloneEntry(ref.Source)}, opts) {
-			placeholder[name] = true
+// record is the ownership record this boot writes, and the names discovery
+// owns and must keep, given the previous boot's record: every recorded name
+// is owned; a failed parent keeps its recorded names and records them again.
+func (p *discoveryPlan) record(prev []sourcemanifest.DiscoveredRecord) (next []sourcemanifest.DiscoveredRecord, owned, protected map[string]bool) {
+	owned, protected = map[string]bool{}, map[string]bool{}
+	prevBy := map[string][]string{}
+	for _, r := range prev {
+		prevBy[r.Kind+" "+r.Parent] = append(prevBy[r.Kind+" "+r.Parent], r.Components...)
+		for _, name := range r.Components {
+			owned[name] = true
 		}
 	}
-	return func(name string) bool {
-		if placeholder[name] {
-			return true
-		}
-		for _, prefix := range []string{"git-source-", "ast-source-", "doc-source-", "cfgfile-source-"} {
-			tail, ok := strings.CutPrefix(name, prefix)
-			if !ok {
-				continue
-			}
-			words := strings.Split(tail, "-")
-			for i := range words {
-				for j := i + 1; j <= len(words); j++ {
-					slug := strings.Join(words[i:j], "-")
-					entries := config.BranchEntries(ref.Source, workspace.BranchState{
-						Branch: slug, Slug: slug, WorktreePath: filepath.Join(ref.WorktreeBase, slug),
-					})
-					if _, ok := instanceNames(entries, opts)[name]; ok {
-						return true
-					}
-				}
+	for _, o := range p.owners {
+		names := maps.Clone(o.names)
+		if o.failed {
+			for _, name := range prevBy[o.kind+" "+o.parent] {
+				names[name], protected[name] = true, true
 			}
 		}
-		return false
+		if len(names) > 0 {
+			next = append(next, sourcemanifest.DiscoveredRecord{Parent: o.parent, Kind: o.kind, Components: slices.Sorted(maps.Keys(names))})
+		}
 	}
+	slices.SortFunc(next, func(a, b sourcemanifest.DiscoveredRecord) int {
+		return strings.Compare(a.Kind+" "+a.Parent, b.Kind+" "+b.Parent)
+	})
+	return next, owned, protected
 }
 
-// instanceNames is the set of component names the entries build.
-func instanceNames(entries []config.SourceEntry, opts sourcespawn.Options) map[string]struct{} {
-	out := map[string]struct{}{}
-	for _, entry := range entries {
-		built, err := sourcespawn.InstanceNames(entry, opts)
-		if err != nil {
-			continue
-		}
-		for name := range built {
-			out[name] = struct{}{}
-		}
+// previousRecord reads the ownership record the previous boot wrote into the
+// next-boot manifest; none before the first discovering boot.
+func previousRecord(effective semconfig.ComponentConfigs) ([]sourcemanifest.DiscoveredRecord, error) {
+	envelope, ok := effective["source-manifest"]
+	if !ok {
+		return nil, nil
 	}
-	return out
+	var m sourcemanifest.Config
+	if err := json.Unmarshal(envelope.Config, &m); err != nil {
+		return nil, fmt.Errorf("decode next-boot source-manifest: %w", err)
+	}
+	return m.Discovered, nil
 }
 
 // reconcileDiscovery makes the configuration in effect hold exactly the
 // discovered components, before the service manager snapshots it. It puts a
 // discovered component that is missing or differs, unless a runtime removal
-// disabled it (owner ruling Q1). It deletes an enabled component a working
-// parent's discovery derives that nothing discovered or the file generates,
-// unless a failed parent also derives it. It then rewrites the next-boot
-// manifest so its sources and expected count match. It touches no other name.
+// disabled it (owner ruling Q1). It deletes an enabled component the previous
+// boot's record names that nothing discovered or the file generates, unless
+// its parent's discovery failed. It then rewrites the next-boot manifest so
+// its sources, expected count and record match. It touches no other name.
 func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan *discoveryPlan, file semconfig.ComponentConfigs, opts sourcespawn.Options, logger *slog.Logger) error {
 	effective := store.GetConfig().Get().Components
+	prev, err := previousRecord(effective)
+	if err != nil {
+		return err
+	}
+	next, owned, protected := plan.record(prev)
 	var added []config.SourceEntry
 	addedEntry := map[string]bool{}
 	for name, want := range plan.desired {
@@ -247,7 +234,7 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 	}
 	var removed []string
 	for name, have := range effective {
-		if !have.Enabled {
+		if !have.Enabled || !owned[name] || protected[name] {
 			continue
 		}
 		if _, ok := plan.desired[name]; ok {
@@ -256,19 +243,16 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 		if _, ok := file[name]; ok {
 			continue
 		}
-		if owned, protected := plan.owned(name); !owned || protected {
-			continue
-		}
 		if err := store.DeleteComponentFromKV(ctx, name); err != nil {
 			return fmt.Errorf("retire discovered component %s: %w", name, err)
 		}
 		removed = append(removed, name)
 	}
-	if len(added) == 0 && len(removed) == 0 {
+	if len(added) == 0 && len(removed) == 0 && reflect.DeepEqual(prev, next) {
 		return nil
 	}
 	logger.Info("discovery reconciled", "admitted", len(added), "retired", removed)
-	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, added, removed)
+	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, added, removed, &next)
 }
 
 // discoveryInterval is how often the runtime check runs: the shortest

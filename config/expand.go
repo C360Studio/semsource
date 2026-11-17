@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/c360studio/semsource/workspace"
 )
@@ -28,6 +29,10 @@ type BranchWatcherRef struct {
 	Org                string // needed for component config building
 	// Source is the multi-branch repo entry this ref was expanded from.
 	Source SourceEntry
+	// Entries are the branch sources this boot admitted for Source (empty
+	// unless discovery succeeded); boot reconciliation admits them whatever
+	// retained arbitration decided.
+	Entries []SourceEntry
 }
 
 // Discovery states a discovering source reports (source-discovery spec).
@@ -48,15 +53,15 @@ type DiscoveryState struct {
 	// Admitted is what this boot admitted: branch name to "" for branches,
 	// submodule path to gitlink SHA for submodules.
 	Admitted map[string]string
+	// Skipped are matching branches within the cap whose worktree could not
+	// be created at boot; no restart admits them until the cause is fixed.
+	Skipped []string
 }
 
 // ExpandResult holds the output of ExpandRepoSources.
 type ExpandResult struct {
 	Sources  []SourceEntry
 	Watchers []BranchWatcherRef
-	// Discovered are the Sources entries branch discovery produced; boot
-	// reconciliation admits them whatever retained arbitration decided.
-	Discovered []SourceEntry
 	// Discovery holds one state per multi-branch source.
 	Discovery []DiscoveryState
 }
@@ -78,7 +83,7 @@ type ExpandResult struct {
 //
 // workspaceDir is the base directory where repos will be cloned.
 func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir string) (*ExpandResult, error) {
-	var expanded, discovered []SourceEntry
+	var expanded []SourceEntry
 	var watchers []BranchWatcherRef
 	var states []DiscoveryState
 
@@ -97,7 +102,7 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 			entries, watcher, state := expandMultiBranch(ctx, src, workspaceDir)
 			expanded = append(expanded, entries...)
 			if state.State == DiscoveryOK || state.State == DiscoveryCapped {
-				discovered = append(discovered, entries...)
+				watcher.Entries = entries
 			}
 			watchers = append(watchers, *watcher)
 			states = append(states, state)
@@ -113,7 +118,7 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 		expanded = append(expanded, entries...)
 	}
 
-	return &ExpandResult{Sources: expanded, Watchers: watchers, Discovered: discovered, Discovery: states}, nil
+	return &ExpandResult{Sources: expanded, Watchers: watchers, Discovery: states}, nil
 }
 
 // expandSingleBranch expands a repo source with a single branch (existing behavior).
@@ -221,7 +226,8 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 		state.State, state.Error = DiscoveryListingFailed, err.Error()
 		return nil, ref, state
 	}
-	matched := len(workspace.MatchBranches(branches, src.Branches))
+	matchedNames := workspace.MatchBranches(branches, src.Branches)
+	matched := len(matchedNames)
 
 	bw := workspace.NewBranchWatcher(workspace.BranchWatcherConfig{
 		RepoPath:     repoPath,
@@ -248,7 +254,27 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 		state.Admitted[bs.Branch] = ""
 		entries = append(entries, expandBranchSources(src, bs)...)
 	}
+	state.Skipped = skippedBranches(matchedNames, state.Admitted, limit)
+	if len(state.Skipped) > 0 {
+		state.Error = fmt.Sprintf("no worktree could be created for %s", strings.Join(state.Skipped, ", "))
+	}
 	return entries, ref, state
+}
+
+// skippedBranches replays the cap the branch watcher applied over matched
+// local branches: a branch reached before the cap filled that was not
+// admitted failed its worktree.
+func skippedBranches(matched []string, admitted map[string]string, limit int) []string {
+	var skipped []string
+	count := 0
+	for _, b := range matched {
+		if _, ok := admitted[b]; ok {
+			count++
+		} else if count < limit {
+			skipped = append(skipped, b)
+		}
+	}
+	return skipped
 }
 
 // ParentCloneEntry is the git source that clones a remote multi-branch

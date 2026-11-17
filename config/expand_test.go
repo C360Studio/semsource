@@ -193,9 +193,9 @@ func TestExpandRepoSources_DiscoveryStates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if res.Discovery[0].State != DiscoveryOK || len(res.Discovered) != 4 || len(res.Sources) != 4 {
+		if res.Discovery[0].State != DiscoveryOK || len(res.Watchers[0].Entries) != 4 || len(res.Sources) != 4 {
 			t.Fatalf("state %+v, discovered %d, sources %d; want ok with one branch's four entries",
-				res.Discovery[0], len(res.Discovered), len(res.Sources))
+				res.Discovery[0], len(res.Watchers[0].Entries), len(res.Sources))
 		}
 	})
 	t.Run("awaiting_checkout", func(t *testing.T) {
@@ -204,8 +204,8 @@ func TestExpandRepoSources_DiscoveryStates(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expansion failed boot: %v", err)
 		}
-		if res.Discovery[0].State != DiscoveryAwaitingCheckout || len(res.Discovered) != 0 {
-			t.Fatalf("state %+v, discovered %d; want awaiting_checkout with nothing discovered", res.Discovery[0], len(res.Discovered))
+		if res.Discovery[0].State != DiscoveryAwaitingCheckout || len(res.Watchers[0].Entries) != 0 {
+			t.Fatalf("state %+v, discovered %d; want awaiting_checkout with nothing discovered", res.Discovery[0], len(res.Watchers[0].Entries))
 		}
 		if len(res.Sources) != 1 || res.Sources[0].Type != "git" || res.Sources[0].URL != src.URL {
 			t.Fatalf("sources = %+v; want only the clone's git source", res.Sources)
@@ -227,8 +227,19 @@ func TestExpandRepoSources_DiscoveryStates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st := res.Discovery[0]; st.State != DiscoveryCapped || st.NotAdmitted != 2 || len(res.Discovered) != 4 {
-			t.Fatalf("state %+v, discovered %d; want capped with 2 not admitted and one branch expanded", st, len(res.Discovered))
+		if st := res.Discovery[0]; st.State != DiscoveryCapped || st.NotAdmitted != 2 || len(res.Watchers[0].Entries) != 4 {
+			t.Fatalf("state %+v, discovered %d; want capped with 2 not admitted and one branch expanded", st, len(res.Watchers[0].Entries))
 		}
 	})
+}
+
+// TestSkippedBranches: a matching branch reached before the cap filled that
+// boot did not admit failed its worktree; one beyond the cap was capped.
+func TestSkippedBranches(t *testing.T) {
+	matched := []string{"feature/a", "feature/b", "feature/c", "feature/d"}
+	admitted := map[string]string{"feature/a": "", "feature/c": ""}
+	got := skippedBranches(matched, admitted, 2)
+	if len(got) != 1 || got[0] != "feature/b" {
+		t.Fatalf("skipped = %v; want [feature/b] (feature/d is beyond the cap)", got)
+	}
 }

@@ -89,12 +89,10 @@ func checkDiscovery(ctx context.Context, watches []DiscoveryWatch) *DiscoverySta
 			continue
 		}
 		src.Pending = diffAdmitted(w.Kind, w.Admitted, now)
-		// A branch source that booted before its checkout existed admitted
-		// only the clone placeholder, which the next boot retires: a restart
-		// changes the admitted set even when no branch matches yet. A
-		// submodule parent has no placeholder; its pins alone decide.
-		bootAwaiting := w.Kind == "branch" && w.State == config.DiscoveryAwaitingCheckout
-		out.RestartRequired = out.RestartRequired || len(src.Pending) > 0 || bootAwaiting
+		if len(w.Skipped) > 0 {
+			src.Error = w.Error // boot could not create these worktrees
+		}
+		out.RestartRequired = out.RestartRequired || len(src.Pending) > 0
 		out.Sources = append(out.Sources, src)
 	}
 	return out
@@ -105,13 +103,18 @@ func checkDiscovery(ctx context.Context, watches []DiscoveryWatch) *DiscoverySta
 // them, and how many matches the cap leaves out.
 //
 // shortcut: externally created worktrees boot also admits are not counted,
-// so they can show as pending removals; upgrade if an operator relies on them.
+// so they can show as pending removals, and a skipped branch whose cause was
+// fixed is not reported; upgrade if an operator relies on either.
 func restartBranches(ctx context.Context, w DiscoveryWatch) (map[string]string, int, error) {
 	branches, err := workspace.ListBranches(ctx, w.RepoPath)
 	if err != nil {
 		return nil, 0, err
 	}
-	matched := workspace.MatchBranches(branches, w.Patterns)
+	// A branch boot could not create a worktree for takes no slot, as at
+	// boot, and is not pending: a restart does not admit it either.
+	matched := slices.DeleteFunc(workspace.MatchBranches(branches, w.Patterns), func(b string) bool {
+		return slices.Contains(w.Skipped, b)
+	})
 	limit := w.MaxBranches
 	if limit <= 0 {
 		limit = workspace.DefaultMaxBranches

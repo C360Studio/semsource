@@ -18,10 +18,11 @@
 
 ## 3. Boot reconcile (additive)
 
-- [x] 3.1 Discovery-owned name derivation for branches and submodules, from a parent source.
-  `TestBranchOwner` (cmd/semsource): a branch's names are owned even after the branch is gone,
-  operator names are not. `TestExpand_MatchesTickAndOwnership` (internal/subwatch): Expand
-  builds exactly what Tick publishes, and `OwnedBy` claims only that parent's names.
+- [x] 3.1 Discovery-owned names come from an ownership record (D2, amended 2026-11-18 after the
+  #300 review): each boot writes the names it admitted per parent into the next-boot manifest
+  (`discovered`), and the next boot owns exactly those. `TestReconcileDiscovery` covers a removed
+  parent's names retired, a failed parent's names kept, and an unrecorded sibling name
+  (`git-source-github-com-acme-app-v2`) untouched; `TestExpand_Pins` (internal/subwatch).
 - [x] 3.2 Boot reconcile (`cmd/semsource/discovery.go`, called before `prepareComponentRegistry`
   so the fusion source scopes see discovered systems): put the missing components, delete stale
   derived names, skip runtime-disabled components (Q1), and rewrite the next-boot manifest
@@ -75,4 +76,10 @@
   contract; `compatibility.md` marks both blocked rows resolved by #216. `review.md` and
   `merge-readiness.md` are dated records superseded by that ledger and stay unchanged.
 - [ ] 6.3 Independent review: go-component-reviewer and graph-event-reviewer, plus the PR review
-  record.
+  record. Both specialists ran 2026-11-17. Fixed in this PR: false `restart_required` (submodule
+  parent after its first clone; boot `listing_failed`), deletes on `awaiting_checkout`, name-based
+  ownership (now the record), removed-parent children not retired, the remote clone component
+  retired (now always admitted), a branch whose worktree failed pending forever (`Skipped`), and
+  an overclaiming test. Filed: #303 (remote branch listing), #304 (disabled entries accumulate),
+  #305 (pin move re-enables a removed submodule), #306 (expected count recount). Owner
+  re-approval of the amended D2 is pending; the PR review record follows.

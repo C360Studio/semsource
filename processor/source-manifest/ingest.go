@@ -424,16 +424,17 @@ func (c *Component) persistDesiredManifest(ctx context.Context, cfg IngestHandle
 	} else {
 		removedNames = []string{removed}
 	}
-	return RewriteDesiredManifest(ctx, cfg.Store, cfg.Spawn, adds, removedNames)
+	return RewriteDesiredManifest(ctx, cfg.Store, cfg.Spawn, adds, removedNames, nil)
 }
 
 // RewriteDesiredManifest updates the next-boot source-manifest config in store
 // after its source components changed: added entries join its sources,
 // removed instances leave them (an expansion's entry only once its last
 // enabled instance is gone), and the expected source count is recounted from
-// the enabled source components. Boot-time discovery reconciliation and the
+// the enabled source components. A non-nil discovered replaces the discovery
+// ownership record; nil keeps it. Boot-time discovery reconciliation and the
 // add/remove handlers share it.
-func RewriteDesiredManifest(ctx context.Context, store sourcespawn.ConfigStore, opts sourcespawn.Options, added []config.SourceEntry, removed []string) error {
+func RewriteDesiredManifest(ctx context.Context, store sourcespawn.ConfigStore, opts sourcespawn.Options, added []config.SourceEntry, removed []string, discovered *[]DiscoveredRecord) error {
 	snapshot := store.GetConfig().Get()
 	envelope, ok := snapshot.Components["source-manifest"]
 	if !ok {
@@ -452,6 +453,9 @@ func RewriteDesiredManifest(ctx context.Context, store sourcespawn.ConfigStore, 
 	}
 	desired.Sources = view.manifestSources
 	desired.ExpectedSourceCount = enabledSourceComponentCount(snapshot.Components)
+	if discovered != nil {
+		desired.Discovered = *discovered
+	}
 
 	raw, err := json.Marshal(desired)
 	if err != nil {

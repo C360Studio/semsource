@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/workspace"
 )
 
@@ -87,19 +86,6 @@ func pinSHAs(inv *workspace.SubmoduleInventory) map[string]string {
 		out[s.Path] = s.SHA
 	}
 	return out
-}
-
-// OwnedBy reports whether a component instance name is one submodule
-// expansion derives for the parent with this slug: an ast, docs or config
-// source carrying that parent's link suffix.
-func OwnedBy(name, parentSlug string) bool {
-	marker := "-" + entityid.SystemSlug("via-"+parentSlug) + "-"
-	for _, prefix := range []string{"ast-source-", "doc-source-", "cfgfile-source-"} {
-		if strings.HasPrefix(name, prefix) && strings.Contains(name[len(prefix):], marker) {
-			return true
-		}
-	}
-	return false
 }
 
 // pinEntries are the ast/docs/config source entries for one materialized

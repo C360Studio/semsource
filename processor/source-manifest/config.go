@@ -35,6 +35,21 @@ type Config struct {
 	// semantic_index as disabled (not_enabled) and code_search as unsupported
 	// (not_enabled) without polling GRAPH_STATUS/graph-lexical.
 	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
+
+	// Discovered records the component names boot-time discovery admitted,
+	// per discovering parent. The next boot owns exactly these names: it
+	// retires the ones nothing discovers any more, including those of a
+	// parent that left the configuration (source-discovery spec).
+	Discovered []DiscoveredRecord `json:"discovered,omitempty" schema:"type:array,description:Component names admitted by boot-time discovery per parent,category:advanced"`
+}
+
+// DiscoveredRecord is the component names one discovering parent's
+// discovery admitted: Kind "branch" or "submodule", Parent the source's URL
+// or path.
+type DiscoveredRecord struct {
+	Parent     string   `json:"parent"`
+	Kind       string   `json:"kind"`
+	Components []string `json:"components"`
 }
 
 func (c *Config) semanticEnabled() bool {

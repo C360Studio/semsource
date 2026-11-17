@@ -41,16 +41,15 @@ reports `restart_required`; failures are typed status. Non-goals are in `proposa
 
 ### D2. Which components discovery owns
 
-A component is discovery-owned only if its name is one discovery derives from a parent source
-in the current effective configuration:
+Each boot records, in the next-boot `source-manifest` config (`discovered`), the component names
+discovery admitted, per parent (kind plus URL or path). The next boot owns exactly the recorded
+names. It deletes a recorded name that nothing discovers or the file generates, including every
+name of a parent that left the configuration. A parent whose discovery failed (`listing_failed`
+or `awaiting_checkout`) keeps and re-records its names. Reconcile never deletes an unrecorded
+name. A remote multi-branch source always admits its clone component (owner, 2026-11-18; #303).
 
-- a branch component name for one of that parent's patterns' branches, or
-- a subwatch name for one of that parent's submodules.
-
-Reconcile never reads, puts or deletes any other name. When a parent leaves the configuration,
-its derived names are deleted at the next boot, together with the parent.
-
-Rejected: a marker field in the component config, because retained entries written earlier lack it.
+Rejected: rebuilding ownership from names (review of #300: a sibling repo `app-v2` reads as
+branch `v2` of `app`), and a marker field in component configs (earlier entries lack it).
 
 ### D3. Runtime removals win over rediscovery (owner question Q1)
 
@@ -67,7 +66,7 @@ Boot never fails because of discovery. Each parent source gets a typed discovery
 | state | when | effect |
 |---|---|---|
 | `ok` | listing succeeded | children reconciled |
-| `awaiting_checkout` | remote source with no checkout yet | parent only; the runtime check flips `restart_required` once the clone exists |
+| `awaiting_checkout` | remote source with no checkout yet | clone only; recorded children kept |
 | `listing_failed` | git error | previously admitted children are kept, not deleted; `error` holds the message |
 | `capped` | `max_branches` reached | count of matches not admitted |
 
@@ -75,7 +74,7 @@ Boot never fails because of discovery. Each parent source gets a typed discovery
 
 ### D5. Runtime check
 
-One goroutine per parent with discovery enabled, on `branch_poll_interval` (default 15s):
+One goroutine for all parents, on the shortest `branch_poll_interval` (default 15s):
 
 - **Branches:** `ListBranches` plus `MatchBranches`.
 - **Submodules:** `ListSubmodules` on the checkout.
@@ -98,8 +97,8 @@ which D1 calls at boot. The two `capability: blocked` warnings are deleted with 
 
 ## Risks / Trade-offs
 
-- **Retained growth** is bounded: stale derived names are deleted each boot, and a recreated
-  branch gets the same names and IDs. **Boot latency:** one worktree per new branch, bounded by
+- **Retained growth:** stale recorded names are deleted each boot; disabled ones stay (#304). A
+  recreated branch gets the same names and IDs. **Boot latency:** one worktree per new branch, bounded by
   `max_branches`.
 - **Entities from deleted branches stay in the graph** until #215. Status lists the removal as
   pending, so nothing claims they are gone.
@@ -109,8 +108,8 @@ which D1 calls at boot. The two `capability: blocked` warnings are deleted with 
 
 ## Migration Plan
 
-Additive: explicit `branch:` sources and `submodules: false` are unchanged; the first boot after
-upgrade keeps admitted branch names and adds submodule components.
+Additive: explicit `branch:` sources and `submodules: false` are unchanged. Names admitted before
+the first recording boot are unowned, so that boot neither retires nor records them.
 
 ## Open Questions
 
