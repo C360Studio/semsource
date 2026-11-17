@@ -155,7 +155,8 @@ jobs:
   #
   # This job runs the tests that need only Docker-backed NATS and a locally
   # built binary — no external repository is cloned, so nothing here depends on
-  # a third-party host being up. Measured at ~26s of test time.
+  # a third-party host being up. Measured at ~26s of test time, plus ~130s for
+  # TestE2E_DiscoveryAcrossRestarts (three boots against local git fixtures).
   #
   # Deliberately excluded, and where they run instead:
   #   TestE2E_OSH_JavaMavenIngest  clones github.com/opensensorhub/osh-core, a
@@ -186,7 +187,7 @@ jobs:
       - name: Black-box e2e (no external clones)
         run: |
           go test -tags=e2e -v -timeout 10m ./test/e2e/ \
-            -run 'TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal'
+            -run 'TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal|TestE2E_DiscoveryAcrossRestarts'
 
 
       - name: Desired source lifecycle without private recovery

@@ -63,9 +63,11 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Real-process restart test (`test/e2e`): boot, create a branch and a submodule, see
+- [x] 6.1 Real-process restart test (`test/e2e`): boot, create a branch and a submodule, see
   `restart_required: true`, restart, see both ingested; then delete the branch, restart, and see
-  its components gone.
+  its components gone. `TestE2E_DiscoveryAcrossRestarts` (~130s, local git fixtures, one
+  retained store), added to CI `e2e-local`. With boot reconcile disabled it fails at the second
+  boot (branch and submodule never ingested).
 - [ ] 6.2 Operator docs (README sources section, `docs/QUICKSTART.md` if it mentions branches)
   and `docs/testing/setup-03a` admission ledger updated.
 - [ ] 6.3 Independent review: go-component-reviewer and graph-event-reviewer, plus the PR review
