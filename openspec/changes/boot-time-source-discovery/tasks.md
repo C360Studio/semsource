@@ -7,12 +7,14 @@
 
 ## 2. Evidence before code
 
-- [ ] 2.1 Measure today's behaviour in an integration test against a local git fixture:
+- [x] 2.1 Measure today's behaviour in an integration test against a local git fixture:
   - first boot of a remote multi-branch source with no checkout;
   - a branch created between boots on a retained store at an equal version.
-  Record the before results in the PR (expected: boot error; branch not admitted).
-- [ ] 2.2 Prove the D1 seam: a `PutComponentToKV` between `startConfigManager` and
-  `createServiceManager` is admitted at that boot. Integration test in `cmd/semsource`.
+  Record the before results in the PR (expected: boot error; branch not admitted). Measured
+  2026-11-17 at `86626c0`: both as expected (results in PR #300).
+- [x] 2.2 Prove the D1 seam: a `PutComponentToKV` between `startConfigManager` and
+  `createServiceManager` is admitted at that boot. `TestIntegrationDiscoveryBootSeam`
+  (`cmd/semsource/discovery_integration_test.go`); fails when the put moves after the build.
 
 ## 3. Boot reconcile (additive)
 
