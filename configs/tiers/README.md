@@ -14,9 +14,9 @@ The other query verbs — `code_context`, `code_impact`, `doc_context`, and byNa
 are **structural** and work at every tier (they don't depend on the embedder). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
 
-> **On `semengine v0.1.0-alpha.5` only Structural and Tier 0 run.** Tier 0 word search is
-> `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. SemEngine has
-> no tier 1 embedder until Slice 04C, so the tier 1 and tier 2 configs and the tier 2 dev overlay
+> **On `semengine v0.1.0-alpha.6` only Structural and Tier 0 run.** Tier 0 word search is
+> `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. SemSource
+> composes no tier 1 embedder on this pin, so the tier 1 and tier 2 configs and the tier 2 dev overlay
 > were removed and return with [#234](https://github.com/C360Studio/semsource/issues/234). The
 > Tier 1 and Tier 2 sections below describe that wiring as it stood and are kept until then.
 
