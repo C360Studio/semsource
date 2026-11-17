@@ -28,11 +28,13 @@ import (
 // discoveryOwner is one discovering parent source and the component names
 // its discovery admits this boot. When its discovery failed (a listing error
 // or a missing checkout), the names recorded for it at the previous boot are
-// kept rather than deleted (source-discovery spec).
+// kept rather than deleted (source-discovery spec); keep names the recorded
+// components of a branch whose worktree failed this boot, kept the same way.
 type discoveryOwner struct {
 	parent, kind string
 	failed       bool
 	names        map[string]bool
+	keep         map[string]bool
 }
 
 // discoveryPlan is what boot-time discovery found: the components it admits
@@ -48,7 +50,7 @@ type discoveryPlan struct {
 }
 
 func (p *discoveryPlan) owner(parent, kind string, failed bool) *discoveryOwner {
-	o := &discoveryOwner{parent: parent, kind: kind, failed: failed, names: map[string]bool{}}
+	o := &discoveryOwner{parent: parent, kind: kind, failed: failed, names: map[string]bool{}, keep: map[string]bool{}}
 	p.owners = append(p.owners, o)
 	return o
 }
@@ -113,14 +115,31 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 				return nil, fmt.Errorf("discovered branch source %s: %w", entry.URL+entry.Path, err)
 			}
 		}
+		// A worktree failure says nothing about whether the branch still
+		// exists: keep what it had (a transient git error must not flap it).
+		for _, branch := range state.Skipped {
+			slug := workspace.BranchSlug(branch)
+			for name := range instanceNames(config.BranchEntries(ref.Source, workspace.BranchState{
+				Branch: branch, Slug: slug, WorktreePath: filepath.Join(ref.WorktreeBase, slug),
+			}), opts) {
+				o.keep[name] = true
+			}
+		}
 		plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{
 			DiscoveryState: state, RepoPath: ref.RepoPath, Patterns: ref.Patterns, MaxBranches: ref.MaxBranches,
 		})
 	}
 
+	watched := map[string]bool{}
+	for _, ref := range expand.Watchers {
+		watched[ref.Source.URL+ref.Source.Path] = true
+	}
 	for _, src := range cfg.Sources {
 		if (src.Type != "repo" && src.Type != "git") || src.BranchSlug != "" {
 			continue // per-branch submodule expansion is a non-goal
+		}
+		if watched[src.URL+src.Path] {
+			continue // a multi-branch source's clone component, not a submodule parent
 		}
 		if src.Submodules != nil && !*src.Submodules {
 			continue
@@ -173,8 +192,8 @@ func (p *discoveryPlan) record(prev []sourcemanifest.DiscoveredRecord) (next []s
 	}
 	for _, o := range p.owners {
 		names := maps.Clone(o.names)
-		if o.failed {
-			for _, name := range prevBy[o.kind+" "+o.parent] {
+		for _, name := range prevBy[o.kind+" "+o.parent] {
+			if o.failed || o.keep[name] {
 				names[name], protected[name] = true, true
 			}
 		}
@@ -186,6 +205,28 @@ func (p *discoveryPlan) record(prev []sourcemanifest.DiscoveredRecord) (next []s
 		return strings.Compare(a.Kind+" "+a.Parent, b.Kind+" "+b.Parent)
 	})
 	return next, owned, protected
+}
+
+// pendingRecord is prev with next's names added: the record to hold while
+// this boot's puts and deletes are in flight.
+func pendingRecord(prev, next []sourcemanifest.DiscoveredRecord) []sourcemanifest.DiscoveredRecord {
+	by := map[string]map[string]bool{}
+	keyed := map[string]sourcemanifest.DiscoveredRecord{}
+	for _, r := range append(slices.Clone(prev), next...) {
+		k := r.Kind + " " + r.Parent
+		if by[k] == nil {
+			by[k], keyed[k] = map[string]bool{}, r
+		}
+		for _, name := range r.Components {
+			by[k][name] = true
+		}
+	}
+	var out []sourcemanifest.DiscoveredRecord
+	for _, k := range slices.Sorted(maps.Keys(by)) {
+		r := keyed[k]
+		out = append(out, sourcemanifest.DiscoveredRecord{Parent: r.Parent, Kind: r.Kind, Components: slices.Sorted(maps.Keys(by[k]))})
+	}
+	return out
 }
 
 // previousRecord reads the ownership record the previous boot wrote into the
@@ -216,6 +257,13 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 		return err
 	}
 	next, owned, protected := plan.record(prev)
+	// Record what this boot is about to put before putting it, so a boot that
+	// fails partway leaves no component that no record names.
+	if pending := pendingRecord(prev, next); !reflect.DeepEqual(pending, prev) {
+		if err := sourcemanifest.RewriteDesiredManifest(ctx, store, opts, nil, nil, &pending); err != nil {
+			return err
+		}
+	}
 	var added []config.SourceEntry
 	addedEntry := map[string]bool{}
 	for name, want := range plan.desired {
@@ -253,6 +301,21 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 	}
 	logger.Info("discovery reconciled", "admitted", len(added), "retired", removed)
 	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, added, removed, &next)
+}
+
+// instanceNames is the set of component names the entries build.
+func instanceNames(entries []config.SourceEntry, opts sourcespawn.Options) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, entry := range entries {
+		built, err := sourcespawn.InstanceNames(entry, opts)
+		if err != nil {
+			continue
+		}
+		for name := range built {
+			out[name] = struct{}{}
+		}
+	}
+	return out
 }
 
 // discoveryInterval is how often the runtime check runs: the shortest

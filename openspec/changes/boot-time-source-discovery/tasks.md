@@ -82,4 +82,9 @@
   retired (now always admitted), a branch whose worktree failed pending forever (`Skipped`), and
   an overclaiming test. Filed: #303 (remote branch listing), #304 (disabled entries accumulate),
   #305 (pin move re-enables a removed submodule), #306 (expected count recount). Owner
-  re-approved the amended D2 on 2026-11-18 (sha256:d4c8b4cb1297); the PR review record follows.
+  re-approved the amended D2 on 2026-11-18 (sha256:d4c8b4cb1297). graph-event re-review of the
+  record (2026-11-18): its file-wins finding does not occur, because `pruneRetainedComponents`
+  deletes the stale keys (`TestIntegrationDiscoveryAcrossFileWinsBoot`, which fails with the prune
+  off); fixed a skipped branch's names retired, a partial reconcile leaving unrecorded names, the
+  clone treated as a submodule parent, and the capped count including skipped branches; the Q1
+  file-wins limit is #307. The PR review record follows.

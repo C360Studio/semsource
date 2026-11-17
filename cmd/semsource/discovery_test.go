@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"maps"
@@ -127,8 +128,8 @@ func TestReconcileDiscovery(t *testing.T) {
 	if err := reconcileDiscovery(context.Background(), store, plan, file, reconcileOpts, logger); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(store.puts, []string{newName, "source-manifest"}) {
-		t.Errorf("puts = %v; want the new component, then the manifest", store.puts)
+	if !slices.Equal(store.puts, []string{"source-manifest", newName, "source-manifest"}) {
+		t.Errorf("puts = %v; want the pending record, the new component, then the manifest", store.puts)
 	}
 	slices.Sort(store.dels)
 	if want := slices.Sorted(slices.Values([]string{staleName, goneName})); !slices.Equal(store.dels, want) {
@@ -201,19 +202,116 @@ func TestPlanDiscovery_RemoteCloneComponentStays(t *testing.T) {
 	}
 }
 
-// instanceNames is the set of component names the entries build.
-func instanceNames(entries []config.SourceEntry, opts sourcespawn.Options) map[string]struct{} {
-	out := map[string]struct{}{}
-	for _, entry := range entries {
-		built, err := sourcespawn.InstanceNames(entry, opts)
-		if err != nil {
-			continue
-		}
-		for name := range built {
-			out[name] = struct{}{}
+// failingPutStore fails every component put after the first n.
+type failingPutStore struct {
+	*reconcileStore
+	n int
+}
+
+func (s *failingPutStore) PutComponentToKV(ctx context.Context, name string, cfg types.ComponentConfig) error {
+	if s.n == 0 {
+		return errors.New("kv unavailable")
+	}
+	s.n--
+	return s.reconcileStore.PutComponentToKV(ctx, name, cfg)
+}
+
+// TestReconcileDiscovery_PartialFailureLeavesNoUnrecordedName: a boot that
+// fails after putting a discovered component has already recorded it, so a
+// later boot that no longer discovers it retires it.
+func TestReconcileDiscovery_PartialFailureLeavesNoUnrecordedName(t *testing.T) {
+	aName, aEntry, _ := docComponent(t, "a")
+	_, bEntry, _ := docComponent(t, "b")
+	inner := &reconcileStore{components: semconfig.ComponentConfigs{"source-manifest": manifestWith(t, nil, nil)}}
+	plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+	o := plan.owner("/r", "branch", false)
+	for _, entry := range []config.SourceEntry{aEntry, bEntry} {
+		if err := plan.add(o, entry, reconcileOpts); err != nil {
+			t.Fatal(err)
 		}
 	}
-	return out
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// The pending-record write and one component put succeed, the next fails.
+	if err := reconcileDiscovery(context.Background(), &failingPutStore{inner, 2}, plan, nil, reconcileOpts, logger); err == nil {
+		t.Fatal("want the failed put to fail the reconcile")
+	}
+	recorded := map[string]bool{}
+	for _, r := range recordOf(t, inner) {
+		for _, name := range r.Components {
+			recorded[name] = true
+		}
+	}
+	for name := range inner.components {
+		if name != "source-manifest" && !recorded[name] {
+			t.Errorf("%s was put but no record names it", name)
+		}
+	}
+	if !recorded[aName] {
+		t.Errorf("record = %+v; want both pending names recorded before the puts", recordOf(t, inner))
+	}
+}
+
+// TestReconcileDiscovery_SkippedBranchKeepsItsComponents: a branch whose
+// worktree could not be created this boot keeps the components recorded for
+// it, rather than being retired on a transient git error.
+func TestReconcileDiscovery_SkippedBranchKeepsItsComponents(t *testing.T) {
+	repo := t.TempDir()
+	src := config.SourceEntry{Type: "repo", Path: repo, Branches: []string{"feature/*"}}
+	base := filepath.Join(filepath.Dir(repo), ".semsource-worktrees")
+	kept := semconfig.ComponentConfigs{}
+	for _, entry := range config.BranchEntries(src, workspace.BranchState{Branch: "feature/a", Slug: "feature-a", WorktreePath: filepath.Join(base, "feature-a")}) {
+		built, err := sourcespawn.Build(entry, reconcileOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		maps.Copy(kept, built)
+	}
+	kept["source-manifest"] = manifestWith(t, nil, []sourcemanifest.DiscoveredRecord{
+		{Parent: repo, Kind: "branch", Components: slices.Sorted(maps.Keys(kept))},
+	})
+	expand := &config.ExpandResult{
+		Watchers:  []config.BranchWatcherRef{{RepoPath: repo, WorktreeBase: base, Source: src}},
+		Discovery: []config.DiscoveryState{{Source: repo, Kind: "branch", State: config.DiscoveryOK, Skipped: []string{"feature/a"}}},
+	}
+	plan, err := planDiscovery(context.Background(), &config.Config{Namespace: "acme"}, expand, reconcileOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &reconcileStore{components: maps.Clone(kept)}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.dels) != 0 {
+		t.Errorf("deleted %v; want a skipped branch's components kept", store.dels)
+	}
+	if got := recordOf(t, store); len(got) != 1 || len(got[0].Components) != len(kept)-1 {
+		t.Errorf("record = %+v; want the skipped branch's names recorded again", got)
+	}
+}
+
+// TestPlanDiscovery_CloneComponentIsNotASubmoduleParent: during an awaiting
+// boot the clone component of a remote multi-branch source is a configured
+// source too; it must not become a submodule parent (a non-goal), even when
+// the source set submodules: false.
+func TestPlanDiscovery_CloneComponentIsNotASubmoduleParent(t *testing.T) {
+	off := false
+	src := config.SourceEntry{Type: "repo", URL: "https://example.com/acme/app.git", Branches: []string{"feature/*"}, Submodules: &off}
+	cfg := &config.Config{Namespace: "acme", WorkspaceDir: t.TempDir()}
+	expand, err := config.ExpandRepoSources(context.Background(), []config.SourceEntry{src}, cfg.WorkspaceDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Sources = expand.Sources // as loadAndExpandConfig does: holds the clone entry
+	plan, err := planDiscovery(context.Background(), cfg, expand, reconcileOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range plan.states {
+		if st.Kind == "submodule" {
+			t.Errorf("state %+v; want no submodule discovery for a multi-branch source's clone", st)
+		}
+	}
 }
 
 // TestRuntimeDiscoveryPathsStayDeleted is the task 5.1 grep gate: the runtime

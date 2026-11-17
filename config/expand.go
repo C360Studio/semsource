@@ -255,6 +255,9 @@ func expandMultiBranch(ctx context.Context, src SourceEntry, workspaceDir string
 		entries = append(entries, expandBranchSources(src, bs)...)
 	}
 	state.Skipped = skippedBranches(matchedNames, state.Admitted, limit)
+	if state.State == DiscoveryCapped {
+		state.NotAdmitted -= len(state.Skipped)
+	}
 	if len(state.Skipped) > 0 {
 		state.Error = fmt.Sprintf("no worktree could be created for %s", strings.Join(state.Skipped, ", "))
 	}

@@ -190,3 +190,49 @@ func TestIntegrationDiscoveryAcrossRestarts(t *testing.T) {
 		t.Fatal("unrelated discovered components were lost")
 	}
 }
+
+// TestIntegrationDiscoveryAcrossFileWinsBoot: a boot where the file wins
+// arbitration (a config_revision bump) rewrites the next-boot manifest from
+// the file and so starts the ownership record over. A branch deleted before
+// that boot must still leave for good: the prune that follows the push
+// (pruneRetainedComponents) deletes every bucket component the file lacks, so
+// the next, bucket-wins boot has no stale key to run. Discovered children the
+// file never generates (submodules) are pruned and re-admitted the same boot.
+func TestIntegrationDiscoveryAcrossFileWinsBoot(t *testing.T) {
+	broker := natstest.New(t, natstest.WithJetStream())
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+
+	repo := newGitRepo(t)
+	gitIn(t, repo, "branch", "feature/a")
+	gitIn(t, repo, "branch", "feature/b")
+	sub := newGitRepo(t)
+	app := newGitRepo(t)
+	gitIn(t, app, "-c", "protocol.file.allow=always", "submodule", "add", sub, "libs/sub")
+	gitIn(t, app, "commit", "-m", "add submodule")
+	sources := `[
+		{"type": "repo", "path": "` + repo + `", "branches": ["feature/*"]},
+		{"type": "repo", "path": "` + app + `"}]`
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	writeFile(t, path, revisionFile("", sources))
+
+	if first, _ := bootWithDiscovery(ctx, t, broker.URL, path); !hasPrefixed(first, "feature-a") || !hasPrefixed(first, "-via-") {
+		t.Fatal("first boot did not admit feature/a and the submodule")
+	}
+
+	gitIn(t, repo, "worktree", "remove", "--force", filepath.Join(filepath.Dir(repo), ".semsource-worktrees", "feature-a"))
+	gitIn(t, repo, "branch", "-D", "feature/a")
+	writeFile(t, path, revisionFile(`"config_revision": 1,`, sources))
+	second, _ := bootWithDiscovery(ctx, t, broker.URL, path) // the file wins
+	if hasPrefixed(second, "feature-a") || !hasPrefixed(second, "feature-b") || !hasPrefixed(second, "-via-") {
+		t.Fatal("file-wins boot: want feature/b and the submodule admitted, feature/a gone")
+	}
+
+	third, _ := bootWithDiscovery(ctx, t, broker.URL, path) // the bucket wins
+	if hasPrefixed(third, "feature-a") {
+		t.Fatal("a branch deleted before a file-wins boot came back from the bucket")
+	}
+	if !hasPrefixed(third, "feature-b") || !hasPrefixed(third, "-via-") {
+		t.Fatal("bucket-wins boot after a file-wins boot lost discovered components")
+	}
+}

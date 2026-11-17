@@ -17,9 +17,8 @@
   `ListBranches` plus `MatchBranches` are side-effect free.
 - **Submodules:** `internal/subwatch` builds parent-scoped components per materialized submodule
   (project = URL slug, version = 12-hex gitlink SHA) through the same Put/Delete store.
-- **A remote multi-branch source with no checkout yet** reaches `ListBranches` on a missing
-  path, which returns an error. `loadAndExpandConfig` turns that into a boot error. This is from
-  reading the code, not measured; task 2.1 confirms it.
+- **A remote multi-branch source with no checkout yet** fails boot: `ListBranches` errors on the
+  missing path (measured in task 2.1).
 
 ## Goals / Non-Goals
 
@@ -46,7 +45,10 @@ discovery admitted, per parent (kind plus URL or path). The next boot owns exact
 names. It deletes a recorded name that nothing discovers or the file generates, including every
 name of a parent that left the configuration. A parent whose discovery failed (`listing_failed`
 or `awaiting_checkout`) keeps and re-records its names. Reconcile never deletes an unrecorded
-name. A remote multi-branch source always admits its clone component (owner, 2026-11-18; #303).
+name. A remote multi-branch source always admits its clone component (owner, 2026-11-18; #303);
+it ingests the default branch's commits, which a matching default-branch component repeats under
+its own system. A branch whose worktree fails keeps its recorded names, and the record is written
+before the puts, so a boot that fails partway leaves nothing unrecorded.
 
 Rejected: rebuilding ownership from names (review of #300: a sibling repo `app-v2` reads as
 branch `v2` of `app`), and a marker field in component configs (earlier entries lack it).
@@ -57,7 +59,8 @@ A discovery-owned component that an operator removed at run time is held retaine
 (#271). Reconcile SHALL NOT re-enable it, so the next boot keeps it removed. Re-adding it takes an
 explicit add.
 
-Recommended: otherwise every restart silently undoes an operator's removal.
+Recommended: otherwise every restart silently undoes an operator's removal. Limit: a file-wins
+boot rewrites or prunes the disabled entry, so its removal is undone (#307).
 
 ### D4. Unsupported or failed discovery
 
@@ -102,9 +105,9 @@ which D1 calls at boot. The two `capability: blocked` warnings are deleted with 
   `max_branches`.
 - **Entities from deleted branches stay in the graph** until #215. Status lists the removal as
   pending, so nothing claims they are gone.
-- **SemEngine #646** (keys a newer file lacks return on the next boot): a discovery-owned name
-  that reconcile deleted could reappear after a newer-file push. Reconcile runs on every boot and
-  deletes it again, so the effect is bounded to one boot step.
+- **SemEngine #646** (a file push deletes no key): a file-wins boot starts the record over, and
+  `pruneRetainedComponents` deletes every bucket component the file lacks, so no stale name returns
+  (`TestIntegrationDiscoveryAcrossFileWinsBoot`). A failed prune leaves them until the next bump.
 
 ## Migration Plan
 
@@ -113,7 +116,5 @@ the first recording boot are unowned, so that boot neither retires nor records t
 
 ## Open Questions
 
-- **Q1 (owner):** D3, whether a runtime removal beats rediscovery. Recommended: yes.
-- **Q2:** whether `listing_failed` should also set `restart_required` when the boot set may be
-  stale. Recommended: no; report the state, and let `restart_required` mean "a restart would
-  change the set".
+Answered 2026-11-17: **Q1** (D3) a runtime removal beats rediscovery; **Q2** `listing_failed`
+does not set `restart_required`, which means "a restart would change the set".
