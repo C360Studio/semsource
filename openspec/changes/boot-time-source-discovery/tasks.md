@@ -2,9 +2,8 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Obtain owner approval of `proposal.md` and `design.md`, including Q1 (runtime removal
-  beats rediscovery).
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Obtain owner approval of `proposal.md` and `design.md` (2026-11-17). Q1: a runtime
+  removal beats rediscovery. Q2: `listing_failed` does not set `restart_required`.
 
 ## 2. Evidence before code
 
