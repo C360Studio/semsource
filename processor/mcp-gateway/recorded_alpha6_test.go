@@ -10,6 +10,7 @@ import (
 // on semengine v0.1.0-alpha.6 with embedding_enabled unset, against the OSH
 // corpus of the #301 regrade (scripts/scorecard/results/SUMMARY-alpha6-tier0.md).
 // The request beside it is the exact payload sent.
+// spec: openspec/specs/graphrag-access/spec.md#Requirement: An answer discloses how far it escalated
 func TestRecordedAlpha6TierZeroReplyDecodes(t *testing.T) {
 	raw, err := os.ReadFile("testdata/searchgraph-alpha6-tier0.reply.json")
 	if err != nil {
@@ -54,6 +55,7 @@ func TestRecordedAlpha6TierZeroReplyDecodes(t *testing.T) {
 // is not reachable with embeddings off, so this reply is written by hand from
 // processor/graph-query/MIGRATION.md, not recorded. It must read as "matches
 // unknown", never as "no matches".
+// spec: openspec/specs/graphrag-access/spec.md#Requirement: An answer discloses how far it escalated
 func TestNullWordListIsNotAnEmptyResult(t *testing.T) {
 	r := decodeReply(t, `{"data":{"text":null,"hints":[]},"indexed_revision":1,"producer":"graph-query"}`)
 	if r.Data.Text != nil {
