@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -42,11 +41,9 @@ import (
 	"github.com/c360studio/semengine/storage/objectstore"
 	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	semgovernance "github.com/c360studio/semsource/internal/governance"
 	"github.com/c360studio/semsource/internal/sourcespawn"
-	"github.com/c360studio/semsource/internal/subwatch"
 	astsource "github.com/c360studio/semsource/processor/ast-source"
 	audiosource "github.com/c360studio/semsource/processor/audio-source"
 	cfgfilesource "github.com/c360studio/semsource/processor/cfgfile-source"
@@ -61,7 +58,6 @@ import (
 	urlsource "github.com/c360studio/semsource/processor/url-source"
 	videosource "github.com/c360studio/semsource/processor/video-source"
 	"github.com/c360studio/semsource/storage/filestore"
-	"github.com/c360studio/semsource/workspace"
 )
 
 // runFlags holds the parsed `semsource run` command-line flags.
@@ -194,36 +190,17 @@ func runCmd(args []string) (runErr error) {
 		return err
 	}
 
-	return serveUntilSignal(signalCtx, manager, configMgr, semsourceCfg, expandResult, logger)
+	return serveUntilSignal(signalCtx, manager, logger)
 }
 
-// serveUntilSignal starts all services, wires runtime ingest handlers and
-// branch watchers, then blocks until signalCtx is cancelled (shutdown signal
-// or broker-loss watchdog) and drains the manager. The caller's deferred
-// cleanups (config manager + NATS) run after this returns.
-func serveUntilSignal(
-	signalCtx context.Context,
-	manager *service.Manager,
-	configMgr *semconfig.Manager,
-	cfg *config.Config,
-	expandResult *config.ExpandResult,
-	logger *slog.Logger,
-) error {
+// serveUntilSignal starts all services, then blocks until signalCtx is
+// cancelled (shutdown signal or broker-loss watchdog) and drains the manager.
+// Discovery happened at boot (admitDiscovered); nothing is admitted here. The
+// caller's deferred cleanups (config manager + NATS) run after this returns.
+func serveUntilSignal(signalCtx context.Context, manager *service.Manager, logger *slog.Logger) error {
 	if err := manager.StartAll(signalCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
-
-	// Pinned ADR094/100 have boot-only component admission. Runtime discovery
-	// cannot safely keep desired manifest counts and producer admission aligned.
-	if len(expandResult.Watchers) > 0 {
-		logger.Warn("dynamic branch discovery unavailable on this migration pin; use pre-expanded boot sources", "watchers", len(expandResult.Watchers), "capability", "blocked")
-	}
-	for _, src := range cfg.Sources {
-		if (src.Type == "repo" || src.Type == "git") && (src.Submodules == nil || *src.Submodules) {
-			logger.Warn("dynamic submodule discovery unavailable on this migration pin; pre-expand local pinned submodules before boot", "source", src.Path+src.URL, "capability", "blocked")
-		}
-	}
-	_ = configMgr
 
 	logger.Info("semsource running — waiting for shutdown signal")
 	<-signalCtx.Done()
@@ -1085,186 +1062,4 @@ func ingestHandlerConfig(cfg *config.Config, store *semconfig.Manager) sourceman
 		Spawn:    sourcespawn.Options{Org: cfg.Namespace, WorkspaceDir: cfg.WorkspaceDir, GitToken: cfg.GitToken, MediaStoreDir: cfg.MediaStoreDir},
 		APIToken: os.Getenv("SEMSOURCE_API_TOKEN"), AllowedRoots: cfg.SourceRoots,
 	}
-}
-
-// startSubmoduleWatchers starts a poll goroutine per boot repo/git source
-// that materializes submodules (default on; `submodules: false` opts out).
-// Discovery must run AFTER git-source's clone materializes the checkout, so
-// like branch watchers this polls: ticks before the checkout exists find no
-// inventory and try again. Discovered pins expand into scoped ast/docs/config
-// components via the ConfigManager KV store (internal/subwatch).
-func startSubmoduleWatchers(
-	ctx context.Context,
-	cfg *config.Config,
-	configMgr *semconfig.Manager,
-	logger *slog.Logger,
-) {
-	for _, src := range cfg.Sources {
-		if src.Type != "repo" && src.Type != "git" {
-			continue
-		}
-		if src.Submodules != nil && !*src.Submodules {
-			continue
-		}
-		if len(src.Branches) > 0 {
-			// Multi-branch sources track worktrees per branch; per-worktree
-			// submodule expansion is not covered yet. Say so rather than
-			// silently ingesting nothing from their submodules.
-			logger.Info("submodule expansion does not cover multi-branch sources yet",
-				"repo", src.URL+src.Path)
-			continue
-		}
-		repoPath := src.Path
-		if repoPath == "" && src.URL != "" {
-			repoPath = filepath.Join(cfg.WorkspaceDir, workspace.URLToSlug(src.URL))
-		}
-		if repoPath == "" {
-			continue
-		}
-		parentSlug := entityid.SystemSlug(repoPath)
-		if src.Project != "" {
-			parentSlug = entityid.SystemSlug(src.Project)
-		}
-
-		w := subwatch.New(subwatch.Config{
-			RepoPath:   repoPath,
-			ParentSlug: parentSlug,
-			Languages:  src.EffectiveLanguages(),
-			Watch:      src.Watch,
-			Opts: sourcespawn.Options{
-				Org:           cfg.Namespace,
-				WorkspaceDir:  cfg.WorkspaceDir,
-				GitToken:      cfg.GitToken,
-				MediaStoreDir: cfg.MediaStoreDir,
-			},
-			Store:  configMgr,
-			Logger: logger,
-		})
-		interval := parseBranchPollInterval(src.PollInterval)
-		logger.Info("starting submodule watcher", "repo", repoPath, "interval", interval)
-		go w.Run(ctx, interval)
-	}
-}
-
-// startBranchWatchers starts a poll goroutine for each multi-branch repo.
-// When new branches are discovered, component configs are pushed to the
-// ConfigManager's KV store, which triggers the ServiceManager to create
-// and start the corresponding components reactively.
-func startBranchWatchers(
-	ctx context.Context,
-	watchers []config.BranchWatcherRef,
-	cfg *config.Config,
-	configMgr *semconfig.Manager,
-	logger *slog.Logger,
-) {
-	for _, ref := range watchers {
-		bw := workspace.NewBranchWatcher(workspace.BranchWatcherConfig{
-			RepoPath:     ref.RepoPath,
-			Patterns:     ref.Patterns,
-			WorktreeBase: ref.WorktreeBase,
-			MaxBranches:  ref.MaxBranches,
-			Logger:       logger,
-		})
-
-		interval := parseBranchPollInterval(ref.BranchPollInterval)
-		logger.Info("starting branch watcher",
-			"repo", ref.RepoPath,
-			"patterns", ref.Patterns,
-			"interval", interval)
-
-		go bw.Run(ctx, interval, func(added []workspace.BranchState, removed []string) {
-			for _, bs := range added {
-				logger.Info("branch discovered",
-					"branch", bs.Branch,
-					"worktree", bs.WorktreePath)
-				publishBranchComponents(ctx, bs, ref, cfg, configMgr, logger)
-			}
-			for _, branch := range removed {
-				logger.Info("branch removed", "branch", branch)
-				removeBranchComponents(ctx, branch, ref, configMgr, logger)
-			}
-		})
-	}
-}
-
-// publishBranchComponents pushes 4 component configs (git, ast, doc, config)
-// for a discovered branch to the ConfigManager KV store.
-func publishBranchComponents(
-	ctx context.Context,
-	bs workspace.BranchState,
-	ref config.BranchWatcherRef,
-	cfg *config.Config,
-	configMgr *semconfig.Manager,
-	logger *slog.Logger,
-) {
-	opts := sourcespawn.Options{
-		Org:           cfg.Namespace,
-		WorkspaceDir:  cfg.WorkspaceDir,
-		GitToken:      cfg.GitToken,
-		MediaStoreDir: cfg.MediaStoreDir,
-	}
-	// A discovered branch expands to a "repo" entry pinned to the worktree;
-	// sourcespawn handles the per-branch git/ast/docs/config split.
-	repoEntry := config.SourceEntry{
-		Type:       "repo",
-		Path:       bs.WorktreePath,
-		Branch:     bs.Branch,
-		BranchSlug: bs.Slug,
-		Watch:      ref.Watch,
-		Language:   ref.Language,
-		Languages:  ref.Languages,
-		Version:    ref.Version,
-		Project:    ref.Project,
-	}
-	componentConfigs, err := sourcespawn.Build(repoEntry, opts)
-	if err != nil {
-		logger.Warn("failed to build branch component configs",
-			"branch", bs.Branch,
-			"error", err)
-		return
-	}
-	for name, compCfg := range componentConfigs {
-		if err := configMgr.PutComponentToKV(ctx, name, compCfg); err != nil {
-			logger.Warn("failed to publish branch component config",
-				"component", name,
-				"branch", bs.Branch,
-				"error", err)
-		}
-	}
-}
-
-// removeBranchComponents removes 4 component configs for a deleted branch
-// from the ConfigManager KV store.
-func removeBranchComponents(
-	ctx context.Context,
-	branch string,
-	ref config.BranchWatcherRef,
-	configMgr *semconfig.Manager,
-	logger *slog.Logger,
-) {
-	slug := workspace.BranchSlug(branch)
-	repoSlug := entityid.SystemSlug(ref.RepoPath)
-
-	prefixes := []string{"git-source-", "ast-source-", "doc-source-", "cfgfile-source-"}
-	for _, prefix := range prefixes {
-		name := prefix + entityid.BranchScopedSlug(repoSlug, slug)
-		if err := configMgr.DeleteComponentFromKV(ctx, name); err != nil {
-			logger.Warn("failed to remove branch component config",
-				"component", name,
-				"branch", branch,
-				"error", err)
-		}
-	}
-}
-
-// parseBranchPollInterval parses the poll interval string with a default of 15s.
-func parseBranchPollInterval(s string) time.Duration {
-	if s == "" {
-		return 15 * time.Second
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil || d <= 0 {
-		return 15 * time.Second
-	}
-	return d
 }

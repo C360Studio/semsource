@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/c360studio/semengine/types"
@@ -18,32 +18,6 @@ import (
 	"github.com/c360studio/semsource/internal/subwatch"
 	"github.com/c360studio/semsource/workspace"
 )
-
-type fakeStore struct {
-	mu       sync.Mutex
-	puts     map[string]types.ComponentConfig
-	putCalls int
-	deletes  []string
-}
-
-func newFakeStore() *fakeStore {
-	return &fakeStore{puts: map[string]types.ComponentConfig{}}
-}
-
-func (f *fakeStore) PutComponentToKV(_ context.Context, name string, cfg types.ComponentConfig) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.puts[name] = cfg
-	f.putCalls++
-	return nil
-}
-
-func (f *fakeStore) DeleteComponentFromKV(_ context.Context, name string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.deletes = append(f.deletes, name)
-	return nil
-}
 
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -103,38 +77,43 @@ func dualPinClone(t *testing.T) (clone, sub, shaV1, shaV2 string) {
 	return clone, sub, shaV1, shaV2
 }
 
-func watcherFor(clone string, store *fakeStore) *subwatch.Watcher {
-	return subwatch.New(subwatch.Config{
-		RepoPath:   clone,
-		ParentSlug: "parentproj",
-		Languages:  []string{"go"},
-		Watch:      false,
-		Opts:       sourcespawn.Options{Org: "acme", WorkspaceDir: "/tmp/ws"},
-		Store:      store,
+var expandOpts = sourcespawn.Options{Org: "acme", WorkspaceDir: "/tmp/ws"}
+
+// expandBuilt runs boot-time expansion for the clone and builds every entry
+// into its component configs, as boot reconcile does.
+func expandBuilt(t *testing.T, clone string) (map[string]types.ComponentConfig, map[string]string) {
+	t.Helper()
+	entries, pins, err := subwatch.Expand(context.Background(), subwatch.Config{
+		RepoPath: clone, ParentSlug: "parentproj", Languages: []string{"go"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]types.ComponentConfig{}
+	for _, entry := range entries {
+		built, err := sourcespawn.Build(entry, expandOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		maps.Copy(out, built)
+	}
+	return out, pins
 }
 
-func TestTick_ExpandsDualPinWithCanonicalIdentityAndScopedInstances(t *testing.T) {
+func TestExpand_DualPinWithCanonicalIdentityAndScopedInstances(t *testing.T) {
 	clone, sub, shaV1, shaV2 := dualPinClone(t)
-	store := newFakeStore()
-	w := watcherFor(clone, store)
-
-	w.Tick(context.Background())
+	built, _ := expandBuilt(t, clone)
 
 	// Two pins × three families.
-	if len(store.puts) != 6 {
-		names := make([]string, 0, len(store.puts))
-		for n := range store.puts {
-			names = append(names, n)
-		}
-		t.Fatalf("got %d component configs %v, want 6", len(store.puts), names)
+	if len(built) != 6 {
+		t.Fatalf("got %d component configs %v, want 6", len(built), slices.Sorted(maps.Keys(built)))
 	}
 
 	// The stored project goes through entityid slugification (long slugs are
 	// hash-capped), so expectations must apply the same transform.
 	project := entityid.SystemSlug(workspace.URLToSlug(sub))
 	var astSeen int
-	for name, cc := range store.puts {
+	for name, cc := range built {
 		if !strings.Contains(name, "via-parentproj") {
 			t.Errorf("instance %q lacks the parent-scope suffix", name)
 		}
@@ -167,107 +146,64 @@ func TestTick_ExpandsDualPinWithCanonicalIdentityAndScopedInstances(t *testing.T
 	if astSeen != 2 {
 		t.Errorf("got %d ast instances, want 2 (one per pin)", astSeen)
 	}
-
-	// Second tick: no new instances, but ONE confirm re-put per component
-	// (defense against the framework watcher dropping a burst event).
-	before, callsBefore := len(store.puts), store.putCalls
-	w.Tick(context.Background())
-	if len(store.puts) != before || len(store.deletes) != 0 {
-		t.Errorf("no-change tick mutated instances: puts %d→%d deletes %v",
-			before, len(store.puts), store.deletes)
-	}
-	if store.putCalls != callsBefore+before {
-		t.Errorf("confirm tick made %d re-puts, want %d", store.putCalls-callsBefore, before)
-	}
-
-	// Third tick: fully quiet.
-	callsBefore = store.putCalls
-	w.Tick(context.Background())
-	if store.putCalls != callsBefore {
-		t.Errorf("post-confirm tick still re-putting (%d calls)", store.putCalls-callsBefore)
-	}
 }
 
-func TestTick_MovedGitlinkIsAVersionTransition(t *testing.T) {
+// TestExpand_MovedGitlinkIsAVersionTransition: a moved pin expands to new
+// instance names and drops the old version's, so the next boot's reconcile
+// admits the new version and retires the old one (both are parent-owned).
+func TestExpand_MovedGitlinkIsAVersionTransition(t *testing.T) {
 	clone, _, _, shaV2 := dualPinClone(t)
-	store := newFakeStore()
-	w := watcherFor(clone, store)
-	w.Tick(context.Background())
-	store.mu.Lock()
-	initial := len(store.puts)
-	store.mu.Unlock()
+	before, _ := expandBuilt(t, clone)
 
 	// Move the nested pin v1 → v2 in the clone (what a pull sync produces).
 	gitIn(t, filepath.Join(clone, "nested/sub"), "fetch", "origin")
 	gitIn(t, filepath.Join(clone, "nested/sub"), "checkout", shaV2)
 	gitIn(t, clone, "add", "nested/sub")
 
-	w.Tick(context.Background())
-
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if len(store.deletes) != 3 {
-		t.Errorf("deletes = %v, want the 3 old-version instances removed", store.deletes)
+	after, pins := expandBuilt(t, clone)
+	if pins["nested/sub"] != shaV2 {
+		t.Fatalf("pins = %v; want nested/sub at %s", pins, shaV2)
 	}
-	for _, name := range store.deletes {
-		if !strings.Contains(name, "via-parentproj") {
-			t.Errorf("deleted %q is not a parent-scoped submodule instance", name)
+	var gone, added int
+	for name := range before {
+		if _, ok := after[name]; !ok {
+			gone++
+			if !subwatch.OwnedBy(name, "parentproj") {
+				t.Errorf("retired %q is not a parent-owned submodule instance", name)
+			}
 		}
 	}
-	if len(store.puts) <= initial {
-		t.Errorf("no new-version instances spawned (puts %d → %d)", initial, len(store.puts))
+	for name := range after {
+		if _, ok := before[name]; !ok {
+			added++
+		}
+	}
+	if gone != 3 || added != 3 {
+		t.Errorf("moved pin: %d names gone, %d added; want the 3 old-version instances replaced", gone, added)
 	}
 }
 
-func TestTick_MissingCheckoutIsQuietAndRetriable(t *testing.T) {
-	store := newFakeStore()
-	w := subwatch.New(subwatch.Config{
-		RepoPath: filepath.Join(t.TempDir(), "not-cloned-yet"),
-		Opts:     sourcespawn.Options{Org: "acme"},
-		Store:    store,
-	})
-	w.Tick(context.Background())
-	if len(store.puts) != 0 || len(store.deletes) != 0 {
-		t.Errorf("tick on missing checkout mutated state: %v %v", store.puts, store.deletes)
-	}
-}
-
-// TestExpand_MatchesTickAndOwnership pins the boot-time path (task 3.1/3.3):
-// Expand yields the entries whose components Tick would publish, and OwnedBy
-// claims exactly those names for the parent and no operator or other parent's.
-func TestExpand_MatchesTickAndOwnership(t *testing.T) {
-	clone, _, _, _ := dualPinClone(t)
-	store := newFakeStore()
-	w := watcherFor(clone, store)
-	w.Tick(context.Background())
-
-	opts := sourcespawn.Options{Org: "acme", WorkspaceDir: "/tmp/ws"}
+// TestExpand_MissingCheckoutExpandsNothing: a checkout that does not exist
+// yet has no submodules (boot reports it as awaiting_checkout).
+func TestExpand_MissingCheckoutExpandsNothing(t *testing.T) {
 	entries, pins, err := subwatch.Expand(context.Background(), subwatch.Config{
-		RepoPath: clone, ParentSlug: "parentproj", Languages: []string{"go"},
+		RepoPath: filepath.Join(t.TempDir(), "not-cloned-yet"),
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || len(entries) != 0 || len(pins) != 0 {
+		t.Errorf("Expand on a missing checkout = %v, %v, %v; want nothing", entries, pins, err)
 	}
+}
+
+// TestExpand_PinsAndOwnership pins the boot-time path (task 3.1/3.3): Pins
+// lists exactly the pins Expand built from, and OwnedBy claims exactly the
+// expanded names for the parent and no operator or other parent's.
+func TestExpand_PinsAndOwnership(t *testing.T) {
+	clone, _, _, _ := dualPinClone(t)
+	built, pins := expandBuilt(t, clone)
 	if listed, err := subwatch.Pins(context.Background(), clone); err != nil || !maps.Equal(listed, pins) || len(pins) != 2 {
 		t.Fatalf("Pins = %v, %v; Expand built from %v (want the two pins)", listed, err, pins)
 	}
-	got := map[string]bool{}
-	for _, entry := range entries {
-		built, err := sourcespawn.Build(entry, opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for name := range built {
-			got[name] = true
-		}
-	}
-	if len(got) != len(store.puts) {
-		t.Fatalf("Expand built %d components, Tick published %d", len(got), len(store.puts))
-	}
-	for name := range store.puts {
-		if !got[name] {
-			t.Errorf("Tick published %s, Expand did not build it", name)
-		}
+	for name := range built {
 		if !subwatch.OwnedBy(name, "parentproj") {
 			t.Errorf("%s is not owned by its parent", name)
 		}

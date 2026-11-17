@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	semconfig "github.com/c360studio/semengine/config"
@@ -161,5 +163,43 @@ func TestBranchOwner(t *testing.T) {
 				t.Errorf("%s: %s is owned; want only branch components", src.URL+src.Path, name)
 			}
 		}
+	}
+}
+
+// TestRuntimeDiscoveryPathsStayDeleted is the task 5.1 grep gate: the runtime
+// branch and submodule watchers and their "capability: blocked" warnings are
+// gone, and no Go file reintroduces them. Discovery happens at boot only
+// (source-discovery spec). The needles are split so this file does not match.
+func TestRuntimeDiscoveryPathsStayDeleted(t *testing.T) {
+	needles := []string{
+		"start" + "BranchWatchers", "start" + "SubmoduleWatchers",
+		"publish" + "BranchComponents", "remove" + "BranchComponents",
+		"subwatch" + ".New(", "parse" + "BranchPollInterval",
+		"dynamic branch discovery " + "unavailable", "dynamic submodule discovery " + "unavailable",
+	}
+	root := filepath.Join("..", "..")
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && (d.Name() == ".worktrees" || d.Name() == "node_modules" || d.Name() == ".git") {
+			return filepath.SkipDir
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, n := range needles {
+			if strings.Contains(string(body), n) {
+				t.Errorf("%s reintroduces %q", path, n)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

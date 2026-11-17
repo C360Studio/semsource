@@ -53,9 +53,13 @@
 
 ## 5. Removal of dead paths
 
-- [ ] 5.1 Delete `startBranchWatchers`, `startSubmoduleWatchers`, `publishBranchComponents`,
+- [x] 5.1 Delete `startBranchWatchers`, `startSubmoduleWatchers`, `publishBranchComponents`,
   `removeBranchComponents`, subwatch `Run`, and the two `capability: blocked` warnings.
-  `go build ./...` and a grep gate that none remain.
+  `go build ./...` and a grep gate that none remain. Also deleted: subwatch's whole runtime
+  `Watcher` (`New`, `Tick`, the confirm re-put) and `parseBranchPollInterval`; its tests now run on
+  `Expand`. Grep gate: `TestRuntimeDiscoveryPathsStayDeleted` (cmd/semsource) fails on any Go
+  file naming them; it caught the e2e test, whose blocked-warning assertion now waits for the
+  first-boot `awaiting_checkout` submodule state (`TestE2E_SubmoduleIngest`, passing).
 
 ## 6. Verification
 

@@ -11,9 +11,9 @@ import (
 	"github.com/c360studio/semsource/workspace"
 )
 
-// BranchWatcherRef captures the configuration needed to start a BranchWatcher
-// at runtime for dynamic branch discovery. Returned by ExpandRepoSources when
-// a repo source has Branches set.
+// BranchWatcherRef describes one multi-branch source's discovery: what boot
+// reconcile derives ownership from and the read-only runtime check lists.
+// Returned by ExpandRepoSources when a repo source has Branches set.
 type BranchWatcherRef struct {
 	RepoPath           string
 	Patterns           []string

@@ -512,14 +512,7 @@ func TestServeUntilSignal_CancellingSignalContextInterruptsBlockedStart(t *testi
 	done := make(chan error, 1)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	go func() {
-		done <- serveUntilSignal(
-			signalCtx,
-			mgr,
-			nil,
-			&config.Config{},
-			&config.ExpandResult{},
-			logger,
-		)
+		done <- serveUntilSignal(signalCtx, mgr, logger)
 	}()
 
 	select {
