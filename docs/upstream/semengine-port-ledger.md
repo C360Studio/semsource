@@ -165,3 +165,10 @@ Every tier 0 condition holds:
 - setup03a BM25 lane **65/65**
 
 The tier 1 floor carries to 04C (#234).
+
+### Tier 0 regrade on SemEngine alpha.6 ([#301](https://github.com/C360Studio/semsource/issues/301))
+
+The pin moved to alpha.6 with embeddings off and the run above was repeated. Every band and
+every miss is identical: dogfood 32/36, OSH 12/13, R1 36/36 RANK-STABLE, setup03a BM25 lane
+passing. The record is in
+[`SUMMARY-alpha6-tier0.md`](../../scripts/scorecard/results/SUMMARY-alpha6-tier0.md).
