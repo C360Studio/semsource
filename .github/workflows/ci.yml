@@ -187,8 +187,9 @@ jobs:
   e2e-local:
     runs-on: ubuntu-latest
     # The Tier 0 gate (known-answer corpus x2, core:smoke with a cold image
-    # build) adds about six minutes to the black-box and lifecycle steps.
-    timeout-minutes: 25
+    # build) measured 2m20s on top of about 3 minutes of black-box and
+    # lifecycle steps; 20 leaves room for a slow image build.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
