@@ -186,7 +186,9 @@ jobs:
   # beta.161 bump and nobody saw it, because no e2e job ran in CI.
   e2e-local:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The Tier 0 gate (known-answer corpus x2, core:smoke with a cold image
+    # build) adds about six minutes to the black-box and lifecycle steps.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
 
@@ -222,6 +224,37 @@ jobs:
           name: desired-source-lifecycle-${{ github.sha }}
           path: ${{ runner.temp }}/source-lifecycle-qualification/evidence/**
           if-no-files-found: ignore
+
+      # Tier 0 gate (#265): the tag ships Tier 0, so both Tier 0 compositions
+      # answer the known-answer corpus — foundation (no search index) and
+      # statistical (graph-lexical) — and the shipped default boots under
+      # compose. Keyed by profile name, not by which components run.
+      - name: Tier 0 known-answer corpus
+        env:
+          SETUP03A_NATS_IMAGE: nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66
+        run: |
+          docker pull "$SETUP03A_NATS_IMAGE"
+          corpus_dir="$RUNNER_TEMP/tier0-corpus"
+          mkdir -p "$corpus_dir"
+          go build -o "$corpus_dir/semsource" ./cmd/semsource
+          for profile in foundation bm25; do
+            SETUP03A_BINARY="$corpus_dir/semsource" \
+              SETUP03A_OUT="$corpus_dir/evidence-$profile" \
+              SETUP03A_IDENTITY=governed SETUP03A_PROFILE="$profile" \
+              go test -tags=qualification -count=1 -v -timeout 10m ./test/setup03a \
+                -run '^TestKnownAnswerCorpus$'
+          done
+
+      - name: Preserve Tier 0 corpus failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tier0-known-answer-corpus-${{ github.sha }}
+          path: ${{ runner.temp }}/tier0-corpus/evidence-*/**
+          if-no-files-found: ignore
+
+      - name: Core profile smoke (shipped default and Tier 0 statistical configs)
+        run: ./scripts/core-profile-smoke.sh
 
   build-and-push:
     needs: [test, lint, test-integration]

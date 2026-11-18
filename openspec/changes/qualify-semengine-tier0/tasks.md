@@ -78,5 +78,8 @@
   guard test, and `StreamOverride.Subjects` validation).
 - [x] Cut `main` over to SemEngine for Tier 0 (`none`) and statistical (`bm25`) compositions while
   retaining Tier 0 as a lower-profile regression gate for 04B/04C (`semengine#489`, `semengine#485`).
+  The gate is CI `e2e-local` (#265): `TestKnownAnswerCorpus` on `foundation` and `bm25`, and
+  `scripts/core-profile-smoke.sh` booting the shipped default (`mvp.json`) and
+  `tiers/tier0-statistical.json`.
 
 Current stop point: independent review sign-off on PR #222 at the updated HEAD and merge to `main`.

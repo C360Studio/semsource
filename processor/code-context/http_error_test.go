@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semengine/component"
 	semgraph "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semengine/pkg/errs"
@@ -348,4 +349,25 @@ func assertHTTPError(t *testing.T, rec *httptest.ResponseRecorder, status int, c
 		body.Error.Message == "" || body.Error.Retryable != retryable {
 		t.Fatalf("error envelope = %+v", body.Error)
 	}
+}
+
+// TestSearchRefusesWhenTheCompositionRunsNoSearchIndex: at Tier 0 foundation
+// no search index runs, so the lexical seed has no responder and the
+// substrate reports a transient outage. The search verb must refuse as
+// not_enabled (501, non-retryable) instead, matching what the capabilities
+// route advertises (#265).
+//
+// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestSearchRefusesWhenTheCompositionRunsNoSearchIndex(t *testing.T) {
+	disc, err := NewComponent(json.RawMessage(`{"lens":"code","semantic_enabled":false}`), component.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewComponent: %v", err)
+	}
+	c := newTestComponent("code", fusiontest.NewMemGraph(), fusiontest.NewMemStore())
+	c.searchDisabled = disc.(*Component).searchDisabled
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/code-context/search", strings.NewReader(`{"query":"cobalt lantern routing"}`))
+	c.handleHTTP(rec, req, "search")
+	assertHTTPError(t, rec, http.StatusNotImplemented, semgraph.ErrorCodeNotEnabled, "invalid", false)
 }
