@@ -2,6 +2,8 @@ package config
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"testing"
 )
 
@@ -157,5 +159,87 @@ func TestExpandRepoSources_LocalRepoPath(t *testing.T) {
 	}
 	if expanded[1].Path != "/home/user/projects/my-app" {
 		t.Errorf("ast path = %q, want /home/user/projects/my-app", expanded[1].Path)
+	}
+}
+
+func gitRepoWithBranches(t *testing.T, branches ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e.com",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e.com")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	run("commit", "--allow-empty", "-m", "init")
+	for _, b := range branches {
+		run("branch", b)
+	}
+	return dir
+}
+
+// TestExpandRepoSources_DiscoveryStates pins task 3.4: discovery never fails
+// expansion; each multi-branch source reports a typed state.
+func TestExpandRepoSources_DiscoveryStates(t *testing.T) {
+	ctx := context.Background()
+	t.Run("ok", func(t *testing.T) {
+		repo := gitRepoWithBranches(t, "feature/a")
+		res, err := ExpandRepoSources(ctx, []SourceEntry{{Type: "repo", Path: repo, Branches: []string{"feature/*"}}}, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Discovery[0].State != DiscoveryOK || len(res.Watchers[0].Entries) != 4 || len(res.Sources) != 4 {
+			t.Fatalf("state %+v, discovered %d, sources %d; want ok with one branch's four entries",
+				res.Discovery[0], len(res.Watchers[0].Entries), len(res.Sources))
+		}
+	})
+	t.Run("awaiting_checkout", func(t *testing.T) {
+		src := SourceEntry{Type: "repo", URL: "https://example.invalid/acme/r.git", Branches: []string{"feature/*"}}
+		res, err := ExpandRepoSources(ctx, []SourceEntry{src}, t.TempDir())
+		if err != nil {
+			t.Fatalf("expansion failed boot: %v", err)
+		}
+		if res.Discovery[0].State != DiscoveryAwaitingCheckout || len(res.Watchers[0].Entries) != 0 {
+			t.Fatalf("state %+v, discovered %d; want awaiting_checkout with nothing discovered", res.Discovery[0], len(res.Watchers[0].Entries))
+		}
+		if len(res.Sources) != 1 || res.Sources[0].Type != "git" || res.Sources[0].URL != src.URL {
+			t.Fatalf("sources = %+v; want only the clone's git source", res.Sources)
+		}
+	})
+	t.Run("listing_failed", func(t *testing.T) {
+		res, err := ExpandRepoSources(ctx, []SourceEntry{{Type: "repo", Path: t.TempDir(), Branches: []string{"feature/*"}}}, t.TempDir())
+		if err != nil {
+			t.Fatalf("expansion failed boot: %v", err)
+		}
+		st := res.Discovery[0]
+		if st.State != DiscoveryListingFailed || st.Error == "" || len(res.Sources) != 0 {
+			t.Fatalf("state %+v, sources %d; want listing_failed with an error and nothing expanded", st, len(res.Sources))
+		}
+	})
+	t.Run("capped", func(t *testing.T) {
+		repo := gitRepoWithBranches(t, "feature/a", "feature/b", "feature/c")
+		res, err := ExpandRepoSources(ctx, []SourceEntry{{Type: "repo", Path: repo, Branches: []string{"feature/*"}, MaxBranches: 1}}, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st := res.Discovery[0]; st.State != DiscoveryCapped || st.NotAdmitted != 2 || len(res.Watchers[0].Entries) != 4 {
+			t.Fatalf("state %+v, discovered %d; want capped with 2 not admitted and one branch expanded", st, len(res.Watchers[0].Entries))
+		}
+	})
+}
+
+// TestSkippedBranches: a matching branch reached before the cap filled that
+// boot did not admit failed its worktree; one beyond the cap was capped.
+func TestSkippedBranches(t *testing.T) {
+	matched := []string{"feature/a", "feature/b", "feature/c", "feature/d"}
+	admitted := map[string]string{"feature/a": "", "feature/c": ""}
+	got := skippedBranches(matched, admitted, 2)
+	if len(got) != 1 || got[0] != "feature/b" {
+		t.Fatalf("skipped = %v; want [feature/b] (feature/d is beyond the cap)", got)
 	}
 }

@@ -19,6 +19,9 @@ type StatusPayload struct {
 	Sources       []SourceStatus `json:"sources"`
 	TotalEntities int64          `json:"total_entities"`
 	Timestamp     time.Time      `json:"timestamp"`
+	// Discovery reports what a restart would admit or retire among
+	// discovered branches and submodules. Absent when no source discovers.
+	Discovery *DiscoveryStatus `json:"discovery,omitempty"`
 }
 
 // SourceStatus reports the status of a single source instance.

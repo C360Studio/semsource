@@ -413,7 +413,8 @@ identity** — on by default for `repo`/`git` sources:
   a submodule (or any embedded foreign repo) under a watch path no longer
   blends into the parent's identity.
 
-Submodule expansion runs for sources configured in `semsource.json` at boot;
+Submodule expansion runs for sources configured in `semsource.json` at boot
+(see [Branch and submodule discovery](#branch-and-submodule-discovery));
 sources added at runtime via `add_source` materialize and report submodule
 state but are not yet auto-expanded.
 
@@ -442,6 +443,16 @@ Validate without starting the engine:
 ```bash
 semsource validate
 ```
+
+### Branch and submodule discovery
+
+Submodules and the branches of a multi-branch source (`branches` patterns)
+are discovered **at boot**: each boot admits what exists now and retires what
+is gone. A remote source's submodules arrive at the boot after its first clone.
+While running, `discovery` on `/source-manifest/status` (`status.discovery` on
+`source_status`) reports `restart_required: true` and the pending branches or
+submodules when a restart would change them; a source whose listing fails
+reports `listing_failed` and keeps what it had.
 
 ### Changing configuration on an existing deployment
 

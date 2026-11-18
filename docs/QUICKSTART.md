@@ -171,13 +171,14 @@ entity ID is six parts — `{org}.{platform}.{system}.{domain}.{type}.{instance}
   revision. Registering the *same* `project` at two `version`s is what
   lights up version diffs (`code_changes`).
 
-On the SETUP 03A migration pin, dynamic branch discovery and automatic admission of
-submodules that appear only after a remote clone remain unqualified. Pre-materialize and
-register pinned child sources before boot. The example below includes an explicit local child;
-it does not prove automatic remote submodule discovery. See the
-[migration hold ledger](testing/setup-03a/compatibility.md).
+Branches and submodules are discovered **at boot**. Each boot admits the branches that match a
+source's `branches` patterns (local refs, up to `max_branches`) and the submodules materialized in
+its checkout, and retires those that are gone. A remote source's first boot happens before its
+clone exists, so its submodules arrive at the next boot. While SemSource runs, `discovery` on
+`/source-manifest/status` (and `status.discovery` on `source_status`) reports
+`restart_required: true` with the pending changes when a restart would admit or retire any.
 
-Within a pre-expanded boot configuration: a submodule's code is scoped to
+A submodule's code is scoped to
 its **own** project (from its resolved URL) at a version derived from the
 pinned gitlink SHA — never blended into the parent's identity. The same pin
 ingested via any number of parents (or registered standalone, as below)

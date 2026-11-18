@@ -90,9 +90,11 @@ the owner retains/drains/joins it. Client Close does not discover or stop its ch
 - Remove retired `watch_config` and flow-builder composition. Preserve clustering controls still supported
   by the selected implementation; ADR-099 retirement has not fully landed at this pin.
   Source add/remove requests persist desired configuration and report restart required; the current
-  boot's manifest/status and producers stay unchanged. Existing file watches remain live. Dynamic
-  branch discovery and remote submodule discovery are blocked with warnings; their changes are not
-  automatically persisted for the next boot. Operators must pre-expand supported sources before boot.
+  boot's manifest/status and producers stay unchanged. Existing file watches remain live. At this pin,
+  dynamic branch discovery and remote submodule discovery were blocked with warnings. Resolved by
+  boot-time discovery ([#216](https://github.com/C360Studio/semsource/issues/216)): matching branches
+  and materialized submodules are reconciled into the effective configuration before composition
+  seals, and the `discovery` status block reports `restart_required` when a restart would change them.
   Removal persists a disabled component envelope rather than deleting its retained key. The upstream
   manager merges retained keys over the original file, so deleting a key lets that file source return
   on restart ([SemStreams #1443](https://github.com/C360Studio/semstreams/issues/1443)). The disabled
@@ -314,8 +316,8 @@ result ledgers and block qualification.
 | Effective platform minted and retained | Intended ADR-104 | Config authority and restart |
 | Dependencies injected before Start | Intended ADR-096/100 | Wiring tests and real startup |
 | Source add/remove changes next boot only | Intended ADR-094/100 | Desired/live separation tests |
-| Dynamic branch discovery blocked | Unsupported migration path | Warning; pre-expand boot sources |
-| Remote submodule discovery blocked | Unsupported migration path | Warning; pre-expand boot sources |
+| Branch discovery moves to boot (was blocked) | Intended ADR-094; resolved #216 | `TestE2E_DiscoveryAcrossRestarts` |
+| Submodule discovery moves to boot (was blocked) | Intended ADR-094; resolved #216 | Same; first boot of a remote source is `awaiting_checkout` |
 | Explicit boot payload registry | Intended ADR-103 | Registry tests and entity birth |
 | Datatypes/category grammar change | Intended ADR-103/107 | Schema/manifest tests and startup |
 | Runtime context preserved until drain | Intended ADR-094/095 | Join and settlement tests |

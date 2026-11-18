@@ -1,29 +1,22 @@
-// Package subwatch discovers the submodules of a repo source's checkout at
-// runtime and expands each materialized one into scoped ast/docs/config
-// component configs, following the branch-watcher precedent: discovery
-// cannot happen at spawn time because a remote repo's checkout — and with it
-// .gitmodules and the gitlink SHAs — does not exist until git-source clones
-// it, and moving the clone into the spawn path would block boot on a
-// monorepo-sized fetch (design D1).
+// Package subwatch expands the materialized submodules of a repo source's
+// checkout into scoped ast/docs/config source entries at boot, and lists the
+// pins the read-only runtime discovery check compares against (#216: on the
+// SemEngine pin composition seals at boot, so nothing is admitted at run
+// time).
 //
 // Identity is canonical, instances are parent-scoped (design D2/D3): the
-// spawned entries carry project = URLToSlug(resolved submodule URL) and
-// version = the 12-hex gitlink SHA prefix, so the same (URL, SHA) linked from
-// any parent yields byte-identical entity IDs, while instance names carry a
-// per-parent suffix so two parents' registrations never overwrite each other.
+// entries carry project = URLToSlug(resolved submodule URL) and version = the
+// 12-hex gitlink SHA prefix, so the same (URL, SHA) linked from any parent
+// yields byte-identical entity IDs, while instance names carry a per-parent
+// suffix so two parents' registrations never overwrite each other.
 package subwatch
 
 import (
 	"context"
-	"log/slog"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/config"
-	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semsource/workspace"
 )
 
@@ -32,17 +25,9 @@ import (
 // abbreviation, so IDs are reproducible across repos and git versions).
 const shaPrefixLen = 12
 
-// ConfigStore is the minimal ConfigManager surface subwatch needs.
-type ConfigStore interface {
-	PutComponentToKV(ctx context.Context, name string, cfg types.ComponentConfig) error
-	DeleteComponentFromKV(ctx context.Context, name string) error
-}
-
-// Config configures one Watcher (one per repo source).
+// Config describes one parent repo source whose submodules expand.
 type Config struct {
-	// RepoPath is the parent repo's local checkout path. It may not exist
-	// yet — git-source clones it asynchronously; ticks before that resolve
-	// to an empty inventory and the watcher just keeps polling.
+	// RepoPath is the parent repo's local checkout path.
 	RepoPath string
 
 	// ParentSlug is the instance-name discriminator for this parent (its
@@ -50,173 +35,83 @@ type Config struct {
 	ParentSlug string
 
 	// Languages are the parent's declared languages, inherited by the
-	// spawned ast entries.
+	// expanded ast entries.
 	Languages []string
 
-	// Watch propagates the parent's watch mode to spawned entries.
+	// Watch propagates the parent's watch mode to expanded entries.
 	Watch bool
-
-	// Opts carries deployment-wide sourcespawn options (org, workspace dir,
-	// token, media dir).
-	Opts sourcespawn.Options
-
-	// Store receives the spawned component configs.
-	Store ConfigStore
-
-	// Logger may be nil (slog.Default is used).
-	Logger *slog.Logger
 }
 
-// spawned tracks the component instances one submodule pin produced.
-type spawned struct {
-	sha   string
-	names []string
-
-	// confirmed marks that the configs were re-put once on a tick AFTER the
-	// spawning one. The framework's reactive config watcher has been observed
-	// to drop one event out of a same-instant write burst (semstreams ask
-	// 2026-08-17: 6 puts in ~20ms deployed 5 components; an identical re-put
-	// at a later revision deployed the sixth immediately). A single quiet
-	// re-put per pin is cheap insurance until the watcher is fixed.
-	confirmed bool
-}
-
-// Watcher polls one parent repo's checkout and reconciles spawned
-// per-submodule components against the current gitlink pins.
-type Watcher struct {
-	cfg    Config
-	logger *slog.Logger
-
-	// tracked maps submodule root-relative path → its spawned components.
-	tracked map[string]*spawned
-}
-
-// New creates a Watcher.
-func New(cfg Config) *Watcher {
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &Watcher{cfg: cfg, logger: logger, tracked: map[string]*spawned{}}
-}
-
-// Run polls until ctx is done. interval must be positive.
-func (w *Watcher) Run(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	// Immediate first tick so a local (pre-existing) checkout expands
-	// without waiting a full interval.
-	w.Tick(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			w.Tick(ctx)
-		}
-	}
-}
-
-// Tick runs one inventory-and-reconcile pass. Exported for tests and for
-// callers that want an on-demand pass.
-func (w *Watcher) Tick(ctx context.Context) {
-	inv, err := workspace.ListSubmodules(ctx, w.cfg.RepoPath)
+// Expand returns the source entries of every materialized submodule of the
+// parent checkout at cfg.RepoPath, for boot-time discovery, and the pins they
+// were built from (path to gitlink SHA). A checkout that cannot be listed
+// returns the inventory error.
+func Expand(ctx context.Context, cfg Config) ([]config.SourceEntry, map[string]string, error) {
+	inv, err := workspace.ListSubmodules(ctx, cfg.RepoPath)
 	if err != nil {
-		// Expected before git-source's clone materializes the checkout;
-		// debug, not warn — the loudness surface for missing trees is the
-		// git-source status report, not this loop.
-		w.logger.Debug("submodule inventory unavailable",
-			"repo", w.cfg.RepoPath, "error", err)
-		return
+		return nil, nil, err
 	}
-
-	desired := map[string]workspace.SubmoduleInfo{}
-	for _, s := range inv.Submodules {
-		// Only materialized pins with a real gitlink are ingestable;
-		// unmaterialized and stale declarations stay loud on status.
-		if s.Materialized && len(s.SHA) >= shaPrefixLen {
-			desired[s.Path] = s
-		}
+	var out []config.SourceEntry
+	for _, s := range materialized(inv) {
+		out = append(out, pinEntries(cfg, s)...)
 	}
-
-	// Remove: tracked pins that vanished or moved (a moved gitlink is a
-	// version transition — spawn-new-then-remove-old, design D8).
-	for path, tr := range w.tracked {
-		cur, ok := desired[path]
-		if ok && cur.SHA == tr.sha {
-			continue
-		}
-		if ok {
-			// Pin moved: spawn the new version first so the graph never
-			// has a window with neither version registered.
-			if newTr, err := w.spawn(ctx, cur); err == nil {
-				w.removeInstances(ctx, path, tr)
-				w.tracked[path] = newTr
-			} else {
-				w.logger.Warn("submodule respawn failed; keeping old version",
-					"path", path, "error", err)
-			}
-			continue
-		}
-		w.removeInstances(ctx, path, tr)
-		delete(w.tracked, path)
-	}
-
-	// Confirm: one idempotent re-put for pins spawned on an earlier tick
-	// (see spawned.confirmed).
-	for path, tr := range w.tracked {
-		if tr.confirmed {
-			continue
-		}
-		if cur, ok := desired[path]; ok && cur.SHA == tr.sha {
-			if _, err := w.spawn(ctx, cur); err != nil {
-				w.logger.Warn("submodule confirm re-put failed",
-					"path", path, "error", err)
-				continue
-			}
-			tr.confirmed = true
-		}
-	}
-
-	// Add: new pins.
-	for path, cur := range desired {
-		if _, ok := w.tracked[path]; ok {
-			continue
-		}
-		tr, err := w.spawn(ctx, cur)
-		if err != nil {
-			w.logger.Warn("submodule expansion failed",
-				"path", path, "error", err)
-			continue
-		}
-		w.logger.Info("submodule expanded",
-			"path", path, "project", workspace.URLToSlug(cur.ResolvedURL),
-			"version", cur.SHA[:shaPrefixLen], "components", len(tr.names))
-		w.tracked[path] = tr
-	}
+	return out, pinSHAs(inv), nil
 }
 
-// spawn builds and publishes the ast/docs/config component configs for one
-// materialized submodule pin.
-func (w *Watcher) spawn(ctx context.Context, s workspace.SubmoduleInfo) (*spawned, error) {
+// Pins lists the materialized submodule pins of the checkout at repoPath
+// (path to pin fingerprint) without building or writing anything: the
+// read-only runtime discovery check compares it with what boot admitted.
+func Pins(ctx context.Context, repoPath string) (map[string]string, error) {
+	inv, err := workspace.ListSubmodules(ctx, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	return pinSHAs(inv), nil
+}
+
+// materialized is the ingestable pins: a populated tree with a real gitlink.
+func materialized(inv *workspace.SubmoduleInventory) []workspace.SubmoduleInfo {
+	var out []workspace.SubmoduleInfo
+	for _, s := range inv.Submodules {
+		if s.Materialized && len(s.SHA) >= shaPrefixLen {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// pinSHAs maps each materialized pin's path to its fingerprint: everything
+// its components' identity derives from, the gitlink SHA and the project the
+// resolved URL names, so a URL-only move (a fork at the same commit) is a
+// change too.
+func pinSHAs(inv *workspace.SubmoduleInventory) map[string]string {
+	out := map[string]string{}
+	for _, s := range materialized(inv) {
+		out[s.Path] = s.SHA + " " + workspace.URLToSlug(s.ResolvedURL)
+	}
+	return out
+}
+
+// pinEntries are the ast/docs/config source entries for one materialized
+// submodule pin.
+func pinEntries(cfg Config, s workspace.SubmoduleInfo) []config.SourceEntry {
 	project := workspace.URLToSlug(s.ResolvedURL)
 	sha12 := s.SHA[:shaPrefixLen]
-	abs := filepath.Join(w.cfg.RepoPath, filepath.FromSlash(s.Path))
+	abs := filepath.Join(cfg.RepoPath, filepath.FromSlash(s.Path))
 	// The suffix is parent+link scoped, not merely parent scoped: one parent
 	// can link the same submodule at the same SHA under two paths, and a
 	// name shared between those links would make removing one link tear
 	// down the other's instance. Entity identity is untouched either way.
-	suffix := "via-" + w.cfg.ParentSlug + "-" + strings.ReplaceAll(s.Path, "/", "-")
+	suffix := "via-" + cfg.ParentSlug + "-" + strings.ReplaceAll(s.Path, "/", "-")
 
-	entries := []config.SourceEntry{
+	return []config.SourceEntry{
 		{
 			Type:           "ast",
 			Path:           abs,
 			Project:        project,
 			Version:        sha12,
-			Languages:      w.cfg.Languages,
-			Watch:          w.cfg.Watch,
+			Languages:      cfg.Languages,
+			Watch:          cfg.Watch,
 			InstanceSuffix: suffix,
 		},
 		// docs/config have no separate version surface; the pin rides the
@@ -227,40 +122,15 @@ func (w *Watcher) spawn(ctx context.Context, s workspace.SubmoduleInfo) (*spawne
 			Type:           "docs",
 			Paths:          []string{abs},
 			Project:        project + "-" + sha12,
-			Watch:          w.cfg.Watch,
+			Watch:          cfg.Watch,
 			InstanceSuffix: suffix,
 		},
 		{
 			Type:           "config",
 			Paths:          []string{abs},
 			Project:        project + "-" + sha12,
-			Watch:          w.cfg.Watch,
+			Watch:          cfg.Watch,
 			InstanceSuffix: suffix,
 		},
-	}
-
-	tr := &spawned{sha: s.SHA}
-	for _, entry := range entries {
-		built, err := sourcespawn.Build(entry, w.cfg.Opts)
-		if err != nil {
-			return nil, err
-		}
-		for name, compCfg := range built {
-			if err := w.cfg.Store.PutComponentToKV(ctx, name, compCfg); err != nil {
-				return nil, err
-			}
-			tr.names = append(tr.names, name)
-		}
-	}
-	return tr, nil
-}
-
-// removeInstances deletes one pin's spawned component configs.
-func (w *Watcher) removeInstances(ctx context.Context, path string, tr *spawned) {
-	for _, name := range tr.names {
-		if err := w.cfg.Store.DeleteComponentFromKV(ctx, name); err != nil {
-			w.logger.Warn("failed to remove submodule component",
-				"path", path, "component", name, "error", err)
-		}
 	}
 }

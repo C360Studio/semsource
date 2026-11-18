@@ -10,16 +10,18 @@ import (
 	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
+	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 	"strings"
 )
 
-func prepareComponentRegistry(ctx context.Context, cfg *config.Config, manager *semconfig.Manager, nc *natsclient.Client) (*component.Registry, error) {
+func prepareComponentRegistry(ctx context.Context, cfg *config.Config, manager *semconfig.Manager, nc *natsclient.Client, discovery ...sourcemanifest.DiscoveryWatch) (*component.Registry, error) {
 	registry := component.NewRegistry()
 	scopes, err := sourceScopeSystems(manager.GetConfig().Get().Components)
 	if err != nil {
 		return nil, err
 	}
 	ingest := ingestHandlerConfig(cfg, manager)
+	ingest.Discovery = discovery
 	ingest.ReadDesired, err = readDesiredConfig(ctx, nc, cfg.Namespace, cfg.PlatformStem())
 	if err != nil {
 		return nil, err

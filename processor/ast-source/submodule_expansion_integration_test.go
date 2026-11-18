@@ -5,12 +5,12 @@ package astsource
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,20 +24,6 @@ import (
 	"github.com/c360studio/semsource/internal/sourcespawn"
 	"github.com/c360studio/semsource/internal/subwatch"
 )
-
-type recordingStore struct {
-	mu   sync.Mutex
-	puts map[string]types.ComponentConfig
-}
-
-func (r *recordingStore) PutComponentToKV(_ context.Context, name string, cfg types.ComponentConfig) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.puts[name] = cfg
-	return nil
-}
-
-func (r *recordingStore) DeleteComponentFromKV(context.Context, string) error { return nil }
 
 func gitRun(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -94,16 +80,23 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	clone := filepath.Join(t.TempDir(), "clone")
 	gitRun(t, filepath.Dir(clone), "clone", "--recurse-submodules", parent, clone)
 
-	// Expansion.
-	store := &recordingStore{puts: map[string]types.ComponentConfig{}}
-	w := subwatch.New(subwatch.Config{
+	// Expansion, built as boot reconcile builds it.
+	entries, _, err := subwatch.Expand(context.Background(), subwatch.Config{
 		RepoPath:   clone,
 		ParentSlug: "parentproj",
 		Languages:  []string{"go"},
-		Opts:       sourcespawn.Options{Org: "acme"},
-		Store:      store,
 	})
-	w.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	puts := map[string]types.ComponentConfig{}
+	for _, entry := range entries {
+		built, err := sourcespawn.Build(entry, sourcespawn.Options{Org: "acme"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		maps.Copy(puts, built)
+	}
 
 	tc := natstest.New(t,
 		natstest.WithStreams(natstest.Stream{
@@ -114,7 +107,7 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 
 	// Boot every spawned ast instance from its EXACT spawned bytes.
 	var booted int
-	for name, cc := range store.puts {
+	for name, cc := range puts {
 		if cc.Name != "ast-source" {
 			continue
 		}
@@ -157,7 +150,7 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	// Identity: each pin's spawned scope is the submodule's own project at its
 	// gitlink SHA, and the emitted symbols land under exactly those scopes.
 	scopeBySHA := map[string]string{}
-	for name, cc := range store.puts {
+	for name, cc := range puts {
 		if cc.Name != "ast-source" {
 			continue
 		}
@@ -200,8 +193,8 @@ func TestIntegration_SubmoduleExpansionSeedsScopedEntities(t *testing.T) {
 	}
 
 	// The two spawned instance names carry the two distinct version scopes.
-	names := make([]string, 0, len(store.puts))
-	for n := range store.puts {
+	names := make([]string, 0, len(puts))
+	for n := range puts {
 		names = append(names, n)
 	}
 	joined := strings.Join(names, " ")

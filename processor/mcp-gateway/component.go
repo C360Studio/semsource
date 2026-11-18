@@ -82,7 +82,7 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.removeSource)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "source_status",
-		Description: "Report semsource graph readiness: the source-manifest ingest phase + per-source counts, the graph-index structural readiness (index), and the graph-embedding semantic readiness (embedding), plus a note. Readiness is honest (semstreams ADR-066): status.phase 'ready' means every configured source finished its initial seed, and index/embedding 'ready' mean caught up to the latest committed write. Gate structural queries (byName / code_context / code_impact) on phase ready AND index.ready; code_search reliability tracks embedding.ready. A miss is a genuine absence only once both gates hold.",
+		Description: "Report semsource graph readiness: the source-manifest ingest phase + per-source counts, the graph-index structural readiness (index), and the graph-embedding semantic readiness (embedding), plus a note. Readiness is honest (semstreams ADR-066): status.phase 'ready' means every configured source finished its initial seed, and index/embedding 'ready' mean caught up to the latest committed write. Gate structural queries (byName / code_context / code_impact) on phase ready AND index.ready; code_search reliability tracks embedding.ready. A miss is a genuine absence only once both gates hold. status.discovery.restart_required means a restart would admit or retire discovered branches or submodules (listed per source under pending).",
 	}, c.sourceStatus)
 
 	// Fused query tools (ADR-0004 read side over MCP). Readiness is honest
