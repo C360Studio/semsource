@@ -141,11 +141,14 @@ func initCmd(args []string) error {
 func addCmd(args []string) error {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
-	// Parse only the --config flag; remaining args are passed to Add.
-	// We need to find --config before the source type argument.
-	remaining := parseGlobalFlag(args, fs)
+	// --config comes before the source type. Parsing stops at the type, so
+	// the type and its own flags reach Add untouched; a flag this set does
+	// not know is an error, not a warning followed by a write (#267).
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	term := cli.NewTerm(os.Stdin, os.Stdout)
-	return cli.Add(term, *configPath, remaining)
+	return cli.Add(term, *configPath, fs.Args())
 }
 
 // removeCmd removes a source from the config.
@@ -198,29 +201,4 @@ func buildLogger(level string) *slog.Logger {
 		l = slog.LevelInfo
 	}
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: l}))
-}
-
-// parseGlobalFlag parses flags from args that are defined in fs, returning
-// any positional args and non-flag args that appear before the first flag.
-// This allows: semsource add --config foo.json ast --path ./src
-func parseGlobalFlag(args []string, fs *flag.FlagSet) []string {
-	// Collect flags for fs, stop at first non-flag arg.
-	var remaining []string
-	i := 0
-	for i < len(args) {
-		arg := args[i]
-		if len(arg) > 0 && arg[0] == '-' {
-			// It's a flag — feed it to fs.
-			if err := fs.Parse(args[i:]); err == nil {
-				remaining = append(remaining, fs.Args()...)
-				return remaining
-			}
-			i++
-		} else {
-			// Non-flag (e.g., source type like "ast") — collect as remaining.
-			remaining = append(remaining, arg)
-			i++
-		}
-	}
-	return remaining
 }
