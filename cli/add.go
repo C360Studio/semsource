@@ -149,6 +149,19 @@ func endpointLabel(endpoint string) string {
 }
 
 // addNonInteractive dispatches to a type-specific flag parser.
+// parseFlags parses a source type's flags and refuses anything left over: a
+// stray positional argument means a flag was mistyped or misplaced, and
+// silently dropping it writes a source the operator did not ask for (#267).
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("%s: unexpected argument %q", fs.Name(), fs.Arg(0))
+	}
+	return nil
+}
+
 func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, error) {
 	switch typeKey {
 	case "ast":
@@ -196,7 +209,7 @@ func parseS3Flags(args []string) (*config.SourceEntry, error) {
 	// bucket, byte-for-byte.
 	project := fs.String("project", "", "explicit project identity (overrides the bucket-derived slug)")
 	version := fs.String("version", "", "explicit version for this registration")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *bucket == "" {
@@ -226,7 +239,7 @@ func parseASTFlags(args []string) (*config.SourceEntry, error) {
 	// path-derived identity.
 	project := fs.String("project", "", "explicit project identity (overrides path-derived)")
 	version := fs.String("version", "", "explicit version for this registration")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	return &config.SourceEntry{
@@ -244,7 +257,7 @@ func parseGitFlags(args []string) (*config.SourceEntry, error) {
 	url := fs.String("url", "", "repository path or URL")
 	branch := fs.String("branch", "main", "branch to track")
 	watch := fs.Bool("watch", true, "watch for new commits")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *url == "" {
@@ -268,7 +281,7 @@ func parseRepoFlags(args []string) (*config.SourceEntry, error) {
 	// config-file declaration would be; omission keeps URL-derived identity.
 	project := fs.String("project", "", "explicit project identity (overrides URL-derived)")
 	version := fs.String("version", "", "explicit version for this registration")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *url == "" {
@@ -289,7 +302,7 @@ func parseDocsFlags(args []string) (*config.SourceEntry, error) {
 	fs := flag.NewFlagSet("add docs", flag.ContinueOnError)
 	paths := fs.String("paths", "", "comma-separated list of paths")
 	watch := fs.Bool("watch", true, "watch for changes")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *paths == "" {
@@ -306,7 +319,7 @@ func parseConfigFlags(args []string) (*config.SourceEntry, error) {
 	fs := flag.NewFlagSet("add config", flag.ContinueOnError)
 	paths := fs.String("paths", "", "comma-separated list of config file paths")
 	watch := fs.Bool("watch", true, "watch for changes")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *paths == "" {
@@ -323,7 +336,7 @@ func parseURLFlags(args []string) (*config.SourceEntry, error) {
 	fs := flag.NewFlagSet("add url", flag.ContinueOnError)
 	urls := fs.String("urls", "", "comma-separated list of URLs")
 	poll := fs.String("poll-interval", "5m", "poll interval")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *urls == "" {
@@ -341,7 +354,7 @@ func parseImageFlags(args []string) (*config.SourceEntry, error) {
 	paths := fs.String("paths", "", "comma-separated list of paths to scan")
 	watch := fs.Bool("watch", true, "watch for changes")
 	maxSize := fs.String("max-file-size", "50MB", "maximum file size")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *paths == "" {
@@ -362,7 +375,7 @@ func parseVideoFlags(args []string) (*config.SourceEntry, error) {
 	keyframeMode := fs.String("keyframe-mode", "interval", "keyframe extraction mode: interval, scene, or iframes")
 	keyframeInterval := fs.String("keyframe-interval", "30s", "interval between keyframe extractions (e.g. 30s)")
 	maxSize := fs.String("max-file-size", "2GB", "maximum file size")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *paths == "" {
@@ -383,7 +396,7 @@ func parseAudioFlags(args []string) (*config.SourceEntry, error) {
 	paths := fs.String("paths", "", "comma-separated list of paths to scan")
 	watch := fs.Bool("watch", true, "watch for changes")
 	maxSize := fs.String("max-file-size", "500MB", "maximum file size")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return nil, err
 	}
 	if *paths == "" {
