@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semsource/config"
+	"github.com/c360studio/semsource/internal/subwatch"
 )
 
 func discoveryGit(t *testing.T, dir string, args ...string) string {
@@ -181,17 +182,22 @@ func TestCheckDiscovery(t *testing.T) {
 }
 
 // TestCheckDiscovery_Submodules pins the submodule side: a pin added, moved,
-// or removed since boot is pending as added, changed, or removed.
+// or removed since boot is pending as added, changed, or removed, and so is
+// a URL-only move (a fork at the same commit), which changes the project
+// the submodule's components carry.
 func TestCheckDiscovery_Submodules(t *testing.T) {
 	sub := discoveryRepo(t)
 	parent := discoveryRepo(t)
 	discoveryGit(t, parent, "-c", "protocol.file.allow=always", "submodule", "add", sub, "libs/sub")
 	discoveryGit(t, parent, "commit", "-m", "add submodule")
-	sha := discoveryGit(t, parent, "rev-parse", "HEAD:libs/sub")
+	boot, err := subwatch.Pins(context.Background(), parent)
+	if err != nil || len(boot) != 1 {
+		t.Fatalf("boot pins = %v, %v", boot, err)
+	}
 
 	w := DiscoveryWatch{RepoPath: parent, DiscoveryState: config.DiscoveryState{
 		Source: parent, Kind: "submodule", State: config.DiscoveryOK,
-		Admitted: map[string]string{"libs/sub": strings.Repeat("0", len(sha)), "libs/gone": sha},
+		Admitted: map[string]string{"libs/sub": "0000000000000000 other", "libs/gone": boot["libs/sub"]},
 	}}
 	got := checkDiscovery(context.Background(), []DiscoveryWatch{w})
 	want := []DiscoveryChange{
@@ -202,9 +208,17 @@ func TestCheckDiscovery_Submodules(t *testing.T) {
 		t.Fatalf("got %+v; want %+v", got, want)
 	}
 
-	w.Admitted = map[string]string{"libs/sub": sha}
+	w.Admitted = boot
 	if got := checkDiscovery(context.Background(), []DiscoveryWatch{w}); got.RestartRequired {
 		t.Fatalf("got %+v; want nothing pending at the boot pin", got)
+	}
+
+	fork := filepath.Join(filepath.Dir(sub), "fork")
+	discoveryGit(t, filepath.Dir(sub), "clone", "-q", sub, fork)
+	discoveryGit(t, parent, "config", "--file", ".gitmodules", "submodule.libs/sub.url", fork)
+	got = checkDiscovery(context.Background(), []DiscoveryWatch{w})
+	if !got.RestartRequired || !reflect.DeepEqual(got.Sources[0].Pending, []DiscoveryChange{{Kind: "submodule", Name: "libs/sub", Change: "changed"}}) {
+		t.Fatalf("URL-only move: got %+v; want libs/sub pending as changed", got)
 	}
 }
 

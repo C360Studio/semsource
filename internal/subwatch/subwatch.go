@@ -59,8 +59,8 @@ func Expand(ctx context.Context, cfg Config) ([]config.SourceEntry, map[string]s
 }
 
 // Pins lists the materialized submodule pins of the checkout at repoPath
-// (path to gitlink SHA) without building or writing anything: the read-only
-// runtime discovery check compares it with what boot admitted.
+// (path to pin fingerprint) without building or writing anything: the
+// read-only runtime discovery check compares it with what boot admitted.
 func Pins(ctx context.Context, repoPath string) (map[string]string, error) {
 	inv, err := workspace.ListSubmodules(ctx, repoPath)
 	if err != nil {
@@ -80,10 +80,14 @@ func materialized(inv *workspace.SubmoduleInventory) []workspace.SubmoduleInfo {
 	return out
 }
 
+// pinSHAs maps each materialized pin's path to its fingerprint: everything
+// its components' identity derives from, the gitlink SHA and the project the
+// resolved URL names, so a URL-only move (a fork at the same commit) is a
+// change too.
 func pinSHAs(inv *workspace.SubmoduleInventory) map[string]string {
 	out := map[string]string{}
 	for _, s := range materialized(inv) {
-		out[s.Path] = s.SHA
+		out[s.Path] = s.SHA + " " + workspace.URLToSlug(s.ResolvedURL)
 	}
 	return out
 }

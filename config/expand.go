@@ -51,7 +51,8 @@ type DiscoveryState struct {
 	Error       string
 	NotAdmitted int // matches left out by max_branches (capped)
 	// Admitted is what this boot admitted: branch name to "" for branches,
-	// submodule path to gitlink SHA for submodules.
+	// submodule path to pin fingerprint (gitlink SHA and project) for
+	// submodules.
 	Admitted map[string]string
 	// Skipped are matching branches within the cap whose worktree could not
 	// be created at boot; no restart admits them until the cause is fixed.

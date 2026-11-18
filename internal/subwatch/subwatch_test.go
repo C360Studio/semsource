@@ -161,7 +161,7 @@ func TestExpand_MovedGitlinkIsAVersionTransition(t *testing.T) {
 	gitIn(t, clone, "add", "nested/sub")
 
 	after, pins := expandBuilt(t, clone)
-	if pins["nested/sub"] != shaV2 {
+	if !strings.HasPrefix(pins["nested/sub"], shaV2+" ") {
 		t.Fatalf("pins = %v; want nested/sub at %s", pins, shaV2)
 	}
 	var gone, added int
