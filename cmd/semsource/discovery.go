@@ -191,8 +191,12 @@ func (p *discoveryPlan) record(prev []sourcemanifest.DiscoveredRecord) (next []s
 		names := maps.Clone(o.names)
 		if o.failed {
 			for _, name := range prevBy[o.kind+" "+o.parent] {
+				// A recorded name this boot admits anyway (the clone) is
+				// known membership; only the others make the set partial.
+				if !o.names[name] {
+					o.keptPrior = true
+				}
 				names[name], protected[name] = true, true
-				o.keptPrior = true
 			}
 		}
 		if len(names) > 0 {

@@ -481,4 +481,14 @@ func TestReconcileDiscovery_AwaitingCheckoutKeepsBranches(t *testing.T) {
 	if len(watches) != 1 || watches[0].Partial {
 		t.Errorf("first-clone watches = %+v; want a complete watch", watches)
 	}
+	// A second boot before the clone exists has only the clone recorded: its
+	// membership is still known, so the watch stays complete and the
+	// branches the clone brings are still reported pending.
+	watches, err = admitDiscovered(context.Background(), cfg, expand, semconfig.ComponentConfigs{}, fresh, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(watches) != 1 || watches[0].Partial {
+		t.Errorf("second pre-clone boot watches = %+v; want a complete watch", watches)
+	}
 }
