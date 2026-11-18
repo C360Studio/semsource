@@ -40,11 +40,21 @@ jobs:
       # way; ubuntu-latest runners ship Docker, so no service-container
       # choreography is needed here.
       #
-      # This list is maintained by hand rather than being ./... — a package
-      # missing from it has integration tests that compile, pass locally, and
-      # never run. Add new ones as they land.
+      # The package list is derived from the files that carry the integration
+      # build tag, not kept by hand: a hand list silently dropped six packages
+      # whose tests compiled, passed locally, and never ran here (#254). Not
+      # ./..., which would rerun every unit test the test job already ran.
       - name: Integration tests
-        run: go test -tags=integration ./cmd/semsource/ ./internal/governance/ ./internal/natstest/ ./internal/sourcespawn/ ./processor/ast-source/ ./processor/supersession/ ./processor/mcp-gateway/ ./processor/code-context/ ./storage/s3store/ ./handler/objectstore/ ./processor/objectstore-source/
+        run: |
+          pkgs=$(grep -rlE --exclude-dir=node_modules --include='*_test.go' '^//go:build integration( |$)' . \
+            | xargs -n1 dirname | sed 's|^\./||; s|^|./|' | sort -u)
+          if [ -z "$pkgs" ]; then
+            echo "no integration-tagged test files found; the discovery pattern is broken" >&2
+            exit 1
+          fi
+          echo "Integration packages:"
+          echo "$pkgs"
+          go test -tags=integration $pkgs
 
   lint:
     runs-on: ubuntu-latest
