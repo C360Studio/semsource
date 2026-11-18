@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	semconfig "github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourceauthority"
 	"github.com/c360studio/semsource/internal/workerjoin"
@@ -125,10 +126,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	h := githandler.New(githandler.Config{
-		PollInterval:   pollInterval,
-		MaxCommits:     config.MaxCommits,
-		WorkspaceDir:   config.WorkspaceDir,
-		Token:          config.GitToken,
+		PollInterval: pollInterval,
+		MaxCommits:   config.MaxCommits,
+		WorkspaceDir: config.WorkspaceDir,
+		// Read here, never carried in the configuration (#272).
+		Token:          semconfig.GitToken(),
 		Authority:      authority,
 		BranchSlug:     config.BranchSlug,
 		SkipSubmodules: config.Submodules != nil && !*config.Submodules,

@@ -1,6 +1,6 @@
 # Resolve the git token from the environment, never persist it
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-18) sha256:746457fa7516
 
 Track: design (adds spec Requirements and touches the boot path).
 

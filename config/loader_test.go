@@ -870,3 +870,20 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 		t.Fatalf("expected complete default streams.GRAPH.subjects to pass validation: %v", err)
 	}
 }
+
+// TestLoadConfig_RejectsGitTokenInFile: the token is environment-only; a file
+// that still carries it fails with the variable named (#272).
+//
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: The git token is resolved from the environment, never persisted into configuration
+func TestLoadConfig_RejectsGitTokenInFile(t *testing.T) {
+	_, err := config.LoadConfigFromReader(strings.NewReader(`{"namespace":"acme","git_token":"secret","sources":[{"type":"docs","paths":["README.md"]}]}`))
+	if err == nil {
+		t.Fatal("a file with git_token loaded")
+	}
+	if !strings.Contains(err.Error(), config.EnvGitToken) {
+		t.Fatalf("error does not name %s: %v", config.EnvGitToken, err)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("error echoes the token value: %v", err)
+	}
+}

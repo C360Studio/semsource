@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/c360studio/semsource/config"
@@ -52,13 +50,8 @@ func Remove(term *Term, configPath string, index int) error {
 	// file's revision is higher, so the removal applies on the next boot.
 	cfg.ConfigRevision++
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, append(data, '\n'), 0644); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
+	if err := config.WriteSources(configPath, cfg.Sources, cfg.ConfigRevision); err != nil {
+		return err
 	}
 
 	term.Success(fmt.Sprintf("Removed %s source from %s", removed.Type, configPath))

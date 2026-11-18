@@ -77,7 +77,6 @@ func admitDiscovered(ctx context.Context, cfg *config.Config, expand *config.Exp
 	opts := sourcespawn.Options{
 		Org:           cfg.Namespace,
 		WorkspaceDir:  cfg.WorkspaceDir,
-		GitToken:      cfg.GitToken,
 		MediaStoreDir: cfg.MediaStoreDir,
 	}
 	plan, err := planDiscovery(ctx, cfg, expand, opts)

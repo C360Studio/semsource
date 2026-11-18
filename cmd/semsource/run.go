@@ -521,8 +521,10 @@ func wrapNATSConnError(err error, url string) error {
 // this, or deployments keep running the previous wiring; the fingerprint test
 // fails until it does. 2 was the beta.160 foundation cutover (typed ports,
 // defaults-deferral, no ownership), 3 the SETUP 03A lifecycle baseline, 4 the
-// alpha.5 move from graph-embedding to graph-lexical.
-const compositionGeneration = 4
+// alpha.5 move from graph-embedding to graph-lexical, 5 the removal of
+// git_token from git-source configurations, which rewrites retained keys
+// without the token (#272).
+const compositionGeneration = 5
 
 // buildSemstreamsConfig constructs a semstreams config.Config from the semsource
 // config: source components, the manifest, the full graph subsystem, the
@@ -624,7 +626,6 @@ func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfig
 	opts := sourcespawn.Options{
 		Org:           org,
 		WorkspaceDir:  cfg.WorkspaceDir,
-		GitToken:      cfg.GitToken,
 		MediaStoreDir: cfg.MediaStoreDir,
 	}
 
@@ -1059,7 +1060,7 @@ func serviceConfigs(cfg *config.Config) (types.ServiceConfigs, error) {
 func ingestHandlerConfig(cfg *config.Config, store *semconfig.Manager) sourcemanifest.IngestHandlerConfig {
 	return sourcemanifest.IngestHandlerConfig{
 		Namespace: cfg.Namespace, Store: store,
-		Spawn:    sourcespawn.Options{Org: cfg.Namespace, WorkspaceDir: cfg.WorkspaceDir, GitToken: cfg.GitToken, MediaStoreDir: cfg.MediaStoreDir},
+		Spawn:    sourcespawn.Options{Org: cfg.Namespace, WorkspaceDir: cfg.WorkspaceDir, MediaStoreDir: cfg.MediaStoreDir},
 		APIToken: os.Getenv("SEMSOURCE_API_TOKEN"), AllowedRoots: cfg.SourceRoots,
 	}
 }

@@ -38,10 +38,6 @@ type Config struct {
 	// repositories (required when RepoURL is set and RepoPath is empty).
 	WorkspaceDir string `json:"workspace_dir" schema:"type:string,description:Base directory for cloning remote repositories,category:advanced"`
 
-	// GitToken is a personal access token for authenticating HTTPS clones
-	// of private repositories. SSH URLs ignore this field.
-	GitToken string `json:"git_token" schema:"type:string,description:Personal access token for private HTTPS repositories,category:advanced"`
-
 	// WatchEnabled controls whether the component polls for new commits.
 	// Defaults to true.
 	WatchEnabled *bool `json:"watch_enabled,omitempty" schema:"type:bool,description:Enable polling for new commits,category:advanced,default:true"`

@@ -167,7 +167,7 @@ func gitComponentConfig(ctx context.Context, src config.SourceEntry, org string,
 	// --branch, and git uses the remote's actual default.
 	branch := src.Branch
 	if branch == "" && src.URL != "" && !opts.skipRemoteResolution {
-		if resolved, err := workspace.ResolveDefaultBranch(ctx, src.URL, opts.GitToken); err == nil {
+		if resolved, err := workspace.ResolveDefaultBranch(ctx, src.URL, config.GitToken()); err == nil {
 			branch = resolved
 			slog.Debug("resolved remote default branch", "url", src.URL, "branch", resolved)
 		} else {
@@ -190,7 +190,6 @@ func gitComponentConfig(ctx context.Context, src config.SourceEntry, org string,
 		"poll_interval": pollInterval,
 		"watch_enabled": src.Watch,
 		"workspace_dir": opts.WorkspaceDir,
-		"git_token":     opts.GitToken,
 		"branch_slug":   src.BranchSlug,
 		"instance_name": instanceName,
 	}

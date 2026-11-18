@@ -2,10 +2,8 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -80,13 +78,8 @@ func Add(term *Term, configPath string, args []string) error {
 	// file's revision is higher, so the added source applies on the next boot.
 	cfg.ConfigRevision++
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, append(data, '\n'), 0644); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
+	if err := config.WriteSources(configPath, cfg.Sources, cfg.ConfigRevision); err != nil {
+		return err
 	}
 
 	term.Success(fmt.Sprintf("Added %s source to %s", entry.Type, configPath))
