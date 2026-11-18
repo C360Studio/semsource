@@ -102,11 +102,6 @@ type Config struct {
 	// cloned. Defaults to ~/.semsource/repos when empty.
 	WorkspaceDir string `json:"workspace_dir,omitempty"`
 
-	// GitToken is a personal access token or GitHub App installation token
-	// for authenticating HTTPS clones of private repositories.
-	// Can also be set via the SEMSOURCE_GIT_TOKEN environment variable.
-	GitToken string `json:"git_token,omitempty"`
-
 	// MediaStoreDir is the root directory used by media source components
 	// (image, video, audio) to store binary content on the local filesystem.
 	// When empty, media processors operate in metadata-only mode.
@@ -156,6 +151,19 @@ type Config struct {
 	Streams map[string]StreamOverride `json:"streams,omitempty"`
 }
 
+// EnvGitToken is the environment variable holding the access token for
+// authenticated HTTPS clones of private repositories.
+const EnvGitToken = "SEMSOURCE_GIT_TOKEN"
+
+// GitToken returns the git access token from the environment. It is read
+// where it is used and is never part of a configuration: component
+// configurations are replicated through the config bucket, and the file is
+// rewritten by the CLI, so a token held in either would be persisted in
+// plaintext (#272).
+func GitToken() string {
+	return os.Getenv(EnvGitToken)
+}
+
 // applyDefaults fills in omitted fields with their documented defaults.
 func (c *Config) applyDefaults() {
 	if c.PlatformID == "" {
@@ -165,10 +173,6 @@ func (c *Config) applyDefaults() {
 		if home, err := os.UserHomeDir(); err == nil {
 			c.WorkspaceDir = filepath.Join(home, ".semsource", "repos")
 		}
-	}
-	// Allow token to be set via environment variable (avoids putting secrets in config files).
-	if c.GitToken == "" {
-		c.GitToken = os.Getenv("SEMSOURCE_GIT_TOKEN")
 	}
 	// WebSocket bind: env var takes precedence, then config, then default.
 	if v := os.Getenv("SEMSOURCE_WS_BIND"); v != "" {

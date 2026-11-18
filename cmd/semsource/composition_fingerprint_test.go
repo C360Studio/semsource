@@ -18,6 +18,7 @@ import (
 var compositionFingerprints = map[int]string{
 	3: "0a998ae19901b05af18e26f70fbbb105aa49f94817485dfb7eb8e3268ed4ca08",
 	4: "7115044e7482f2710561d33dcb41b11b31e33dba9a8eea31776aa00e31575075",
+	5: "cb3737fb36bdc0d16cf26b02c85b79c5f584b958ffd4a1e1a438ff87e3d0bad9",
 }
 
 // fingerprintFixture is a fixed configuration with every field the generator
@@ -98,15 +99,15 @@ func TestCompositionFingerprintMatchesGeneration(t *testing.T) {
 
 // spec: openspec/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
 func TestBuildSemstreamsConfigVersion(t *testing.T) {
-	// Generation 3. A generation bump updates these expectations with it.
+	// Generation 5. A generation bump updates these expectations with it.
 	tests := []struct {
 		name     string
 		revision int
 		want     string
 	}{
-		{name: "no revision keeps the generation's version", revision: 0, want: "4.0.0"},
-		{name: "revision is the minor position", revision: 2, want: "4.2.0"},
-		{name: "multi-digit revision", revision: 12, want: "4.12.0"},
+		{name: "no revision keeps the generation's version", revision: 0, want: "5.0.0"},
+		{name: "revision is the minor position", revision: 2, want: "5.2.0"},
+		{name: "multi-digit revision", revision: 12, want: "5.12.0"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

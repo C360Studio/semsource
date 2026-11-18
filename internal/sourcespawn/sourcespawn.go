@@ -81,10 +81,6 @@ type Options struct {
 	// WorkspaceDir is the base directory where git sources clone repos.
 	WorkspaceDir string
 
-	// GitToken is an optional auth token forwarded to git sources for
-	// private-repo access.
-	GitToken string
-
 	// MediaStoreDir is the base directory where media (image/video/audio)
 	// content is stored. When empty, media components fall back to their
 	// component-level default.
@@ -420,7 +416,7 @@ func buildSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]co
 // Multi-branch (Branches set) is rejected earlier with CodeUnsupportedType.
 // ExpandRepoSources only fans the entry out; ctx flows on into buildSpecs →
 // the git leaf, where ResolveDefaultBranch runs the `git ls-remote --symref`
-// (authenticated with opts.GitToken) that resolves the remote's default
+// (authenticated with config.GitToken()) that resolves the remote's default
 // branch when src.Branch is empty.
 func repoSpecs(ctx context.Context, src config.SourceEntry, opts Options) ([]componentSpec, error) {
 	expanded, err := config.ExpandRepoSources(ctx, []config.SourceEntry{src}, opts.WorkspaceDir)

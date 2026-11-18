@@ -870,3 +870,41 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 		t.Fatalf("expected complete default streams.GRAPH.subjects to pass validation: %v", err)
 	}
 }
+
+// TestLoadConfig_RejectsGitTokenInFile: the token is environment-only; a file
+// that still carries it fails with the variable named (#272).
+//
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: The git token is resolved from the environment, never persisted into configuration
+func TestLoadConfig_RejectsGitTokenInFile(t *testing.T) {
+	_, err := config.LoadConfigFromReader(strings.NewReader(`{"namespace":"acme","git_token":"secret","sources":[{"type":"docs","paths":["README.md"]}]}`))
+	if err == nil {
+		t.Fatal("a file with git_token loaded")
+	}
+	if !strings.Contains(err.Error(), config.EnvGitToken) {
+		t.Fatalf("error does not name %s: %v", config.EnvGitToken, err)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("error echoes the token value: %v", err)
+	}
+}
+
+// TestWriteSources_ReplacesCaseVariantKeys: strict decoding accepts "Sources"
+// for sources, so the write must replace it rather than add a twin.
+//
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Source commands write back only the file's own content
+func TestWriteSources_ReplacesCaseVariantKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	if err := os.WriteFile(path, []byte(`{"namespace":"acme","Sources":[{"type":"docs","paths":["old"]}],"Config_Revision":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteSources(path, []config.SourceEntry{{Type: "docs", Paths: []string{"new"}}}, 2); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "Sources") || strings.Contains(string(data), "Config_Revision") || strings.Contains(string(data), "old") {
+		t.Fatalf("a case-variant key survived the write:\n%s", data)
+	}
+}

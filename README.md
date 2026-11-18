@@ -434,7 +434,6 @@ Optional top-level fields:
 | `websocket_bind`          | `"0.0.0.0:7890"`     | `ENTITY_STATES` KV-watch WebSocket bind address (`put`/`delete`/`poisoned`/`synced` frames, ADR-0001)                                                                                               |
 | `websocket_path`          | `"/ws"`              | `ENTITY_STATES` KV-watch WebSocket path (`/ws` is the default and documented contract path)                                                                                                         |
 | `workspace_dir`           | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths)                                                                                                     |
-| `git_token`               | —                    | Token for authenticated remote repo cloning                                                                                                                                                         |
 | `media_store_dir`         | —                    | Local directory for media binary storage                                                                                                                                                            |
 | `streams`                 | —                    | Optional JetStream stream overrides for the external service                                                                                                                                        |
 
@@ -443,6 +442,14 @@ Validate without starting the engine:
 ```bash
 semsource validate
 ```
+
+### Private repository credentials
+
+The token for cloning private repositories over HTTPS is read only from the
+`SEMSOURCE_GIT_TOKEN` environment variable, where it is used. It is never
+written to `semsource.json` or the config bucket; a file that still has
+`git_token` fails to load. Changing the variable takes effect on the next
+restart.
 
 ### Branch and submodule discovery
 
@@ -461,15 +468,17 @@ A deployment keeps the configuration it booted with in its config bucket
 `semsource.json` is newer. The file is newer when its `config_revision` is
 higher than that of the file the bucket was last written from, or when an
 upgrade changes the generated composition. Environment overrides that feed the
-configuration (`SEMSOURCE_HTTP_PORT`, `SEMSOURCE_WS_BIND`, `SEMSOURCE_WS_PATH`,
-`SEMSOURCE_GIT_TOKEN`) are retained the same way.
+configuration (`SEMSOURCE_HTTP_PORT`, `SEMSOURCE_WS_BIND`, `SEMSOURCE_WS_PATH`)
+are retained the same way.
 
 - After editing `semsource.json` by hand, or changing one of those environment
   variables, set `config_revision` higher than the retained one, then restart.
   One more than the file's usually is; a restored or older copy of the file can
   need more.
 - `semsource add`, `semsource remove`, and `semsource init` over an existing
-  file raise it for you.
+  file raise it for you. `add` and `remove` change only `sources` and
+  `config_revision`; defaults and environment values are not written to the
+  file.
 - When the file differs from the retained configuration and is not newer, the
   boot logs a warning naming the differing entries (for example
   `components.source-manifest` or `model_registry`) and runs the retained

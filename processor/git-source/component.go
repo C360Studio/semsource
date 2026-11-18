@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semengine/pkg/retry"
 	"github.com/c360studio/semengine/types"
 
+	srcconfig "github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
@@ -125,10 +126,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	h := githandler.New(githandler.Config{
-		PollInterval:   pollInterval,
-		MaxCommits:     config.MaxCommits,
-		WorkspaceDir:   config.WorkspaceDir,
-		Token:          config.GitToken,
+		PollInterval: pollInterval,
+		MaxCommits:   config.MaxCommits,
+		WorkspaceDir: config.WorkspaceDir,
+		// Read here, never carried in the configuration (#272).
+		Token:          srcconfig.GitToken(),
 		Authority:      authority,
 		BranchSlug:     config.BranchSlug,
 		SkipSubmodules: config.Submodules != nil && !*config.Submodules,
