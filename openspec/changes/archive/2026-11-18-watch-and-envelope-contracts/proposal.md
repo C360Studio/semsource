@@ -1,6 +1,6 @@
 # Name the git-watch and published-envelope contracts that #270's tests verify
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-18) sha256:73faeecb181a
 
 Track: design (adds spec Requirements; test-only otherwise).
 
