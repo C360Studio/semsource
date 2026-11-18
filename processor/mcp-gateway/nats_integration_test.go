@@ -148,6 +148,67 @@ func TestIntegration_SourceStatusMergesSignals(t *testing.T) {
 	}
 }
 
+// TestIntegration_SourceStatusReportsDisabledSearchIndex: with semantic search
+// off in the composition, source_status must report the search index as
+// disabled, as the HTTP surface does, even when a graph-lexical readiness
+// envelope says ready. Reporting it ready tells an agent code_search is
+// reliable, which it then refuses (#270).
+// spec: openspec/specs/ingestion-readiness/spec.md#Requirement: Readiness sub-signals are present and honest on every surface
+func TestIntegration_SourceStatusReportsDisabledSearchIndex(t *testing.T) {
+	ctx := context.Background()
+	tc := natstest.New(t, natstest.WithJetStream())
+
+	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status",
+		func(_ context.Context, _ []byte) ([]byte, error) {
+			return []byte(`{"namespace":"ss","phase":"ready","total_entities":42}`), nil
+		})
+	if err != nil {
+		t.Fatalf("subscribe status: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	statusKV, err := kvcatalog.EnsureCatalogBucket(ctx, tc.Client, semgraph.BucketGraphStatus)
+	if err != nil {
+		t.Fatalf("ensure %s: %v", semgraph.BucketGraphStatus, err)
+	}
+	if _, err := statusKV.PutString(ctx, "graph-lexical", `{"ready":true,"state":"ready"}`); err != nil {
+		t.Fatalf("seed graph-lexical readiness: %v", err)
+	}
+
+	disabled := false
+	c := &Component{
+		name:        "mcp-gateway",
+		config:      Config{Namespace: "ss", RequestTimeoutMs: 3000, SemanticEnabled: &disabled},
+		client:      tc.Client,
+		graphStatus: graphstatus.New(tc.Client),
+		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	c.server = c.buildServer()
+	cs := connect(t, c)
+
+	res := callTool(t, cs, "source_status", map[string]any{})
+	if res.IsError {
+		t.Fatalf("source_status errored: %+v", res)
+	}
+	var merged struct {
+		Embedding struct {
+			Available bool   `json:"available"`
+			Ready     bool   `json:"ready"`
+			State     string `json:"state"`
+			Reason    *struct {
+				Code string `json:"code"`
+			} `json:"reason"`
+		} `json:"embedding"`
+	}
+	body := res.Content[0].(*mcp.TextContent).Text
+	if err := json.Unmarshal([]byte(body), &merged); err != nil {
+		t.Fatalf("decode merged status: %v; body=%s", err, body)
+	}
+	emb := merged.Embedding
+	if emb.Available || emb.Ready || emb.State != "disabled" || emb.Reason == nil || emb.Reason.Code != "not_enabled" {
+		t.Fatalf("embedding = %+v, want available=false ready=false state=disabled reason=not_enabled; body=%s", emb, body)
+	}
+}
+
 // TestIntegration_QueryToolsTranslateToNATS proves the read-side MCP tools are
 // real NATS-backed facades, not just advertised names. Each tool call is routed
 // to its owned request/reply subject and returns the responder payload verbatim.

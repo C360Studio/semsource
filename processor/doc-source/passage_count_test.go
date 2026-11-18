@@ -401,3 +401,27 @@ func TestHandleChangeEventOnBareComponentSurvivesNilPassageMap(t *testing.T) {
 		t.Error("a bare-literal component did not detect a shrink after initialising its own map")
 	}
 }
+
+// --- delete triggers a file_deleted run ------------------------------------
+
+// TestHandleChangeEvent_DeleteTriggersFileDeletedRun: a watched document that
+// is deleted must announce its root to the lifecycle pass, or the deleted
+// prose keeps being served as current. TestDeleteTriggersLifecycleRun covers
+// only the predicate; this asserts the trigger fires (#270).
+//
+// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: Delete and rename events publish typed state changes
+func TestHandleChangeEvent_DeleteTriggersFileDeletedRun(t *testing.T) {
+	root := docRoot(t)
+	path := filepath.Join(root, "guide.md")
+	c, rec := passageComponent(t, true, root)
+
+	c.handleChangeEvent(context.Background(), handler.ChangeEvent{Path: path, Operation: handler.OperationDelete})
+
+	trigger := rec.waitFor(t, isTriggerRecord, "the lifecycle trigger fired by the delete")
+	if reason, _ := triggerReason(trigger); reason != graph.LifecycleReasonFileDeleted {
+		t.Errorf("lifecycle run triggered with reason %q, want %q", reason, graph.LifecycleReasonFileDeleted)
+	}
+	if got := trigger.attrs["root"]; got != root {
+		t.Errorf("lifecycle run scoped to root %v, want %q", got, root)
+	}
+}

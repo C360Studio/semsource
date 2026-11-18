@@ -4,6 +4,7 @@ package git_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -293,6 +294,54 @@ func TestGitHandler_Watch_DetectsNewCommit(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Error("timed out waiting for watch event after new commit")
+	}
+}
+
+// TestGitHandler_Watch_CarriesEntityStates: git-source publishes a watch
+// event's EntityStates, not its legacy Entities, so a watch event without them
+// means commits made after startup never reach the graph (#270). Commits are
+// added until an event arrives, because the poll loop records its baseline
+// HEAD asynchronously and a commit made before that is not a change.
+//
+// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: Git watch changes carry typed entity state
+func TestGitHandler_Watch_CarriesEntityStates(t *testing.T) {
+	repoDir := initTempRepo(t)
+	cfg := githandler.DefaultConfig()
+	cfg.PollInterval = 50 * time.Millisecond
+	cfg.Authority = testAuthority("acme")
+	h := githandler.New(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ch, err := h.Watch(ctx, &srcCfg{typ: "git", path: repoDir, watch: true})
+	if err != nil {
+		t.Fatalf("Watch() error = %v", err)
+	}
+
+	commit := time.NewTicker(200 * time.Millisecond)
+	defer commit.Stop()
+	for n := 0; ; n++ {
+		select {
+		case ev := <-ch:
+			var commits int
+			for _, s := range ev.EntityStates {
+				if findPredicate(s.Triples, "source.git.commit-sha") == nil {
+					continue
+				}
+				commits++
+				if !strings.HasPrefix(s.ID, "acme.test-platform.") {
+					t.Errorf("commit state %q is not under the configured authority", s.ID)
+				}
+			}
+			if commits == 0 {
+				t.Fatalf("watch event after a new commit carries no commit EntityStates (%d states)", len(ev.EntityStates))
+			}
+			return
+		case <-commit.C:
+			addCommit(t, repoDir, fmt.Sprintf("watched-%d.go", n), "watch trigger commit")
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for a watch event after new commits")
+		}
 	}
 }
 
