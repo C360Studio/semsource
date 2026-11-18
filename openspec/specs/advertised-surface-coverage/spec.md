@@ -283,3 +283,13 @@ exercised the contested subject started the substrate component alone, so no han
 - **WHEN** the declared graph-query input-port list omits a subject the pinned substrate serves
 - **THEN** the omission is a known limit of the gate, recorded as an upstream ask, and the list is
   corrected when discovered
+
+### Requirement: Published envelopes decode through the bootstrap registry
+
+Every payload type SemSource publishes as a typed message envelope MUST be registered in the
+payload registry `buildPayloadRegistry()` returns, so the envelope decodes to its concrete type.
+
+#### Scenario: A broadcast payload's registration is removed
+
+- **WHEN** the registration for the manifest, predicate-schema or status payload is removed
+- **THEN** a test decoding that broadcast through the bootstrap registry fails

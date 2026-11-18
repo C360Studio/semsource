@@ -15,9 +15,7 @@ error/health counters rather than accept the event or fall back to `RawEntity`. 
 periodic-reindex loops (ast-source's `handleWatchEvent`/`performFullIndex`, doc-source's watch
 path) additionally treat a detected deletion or rename as a first-class event that triggers the
 staleness-lifecycle pass (`graph.PublishLifecycleTrigger`) instead of one silently dropped.
-
 ## Requirements
-
 ### Requirement: Doc and URL watch changes publish typed entity state
 
 Doc and URL handlers used by their source processors MUST emit canonical EntityStates for create and
@@ -117,3 +115,15 @@ rather than proportional, and it looks exactly like a legitimate empty bucket.
 - **WHEN** a completed pass over a reachable bucket returns no objects under the prefix, having
   previously returned many
 - **THEN** staleness markers publish for the entities of every object that is gone
+
+### Requirement: Git watch changes carry typed entity state
+
+When the git handler's watch observes a new HEAD, its change event MUST carry the commits' typed
+entity state, identified under the configured deployment authority.
+
+#### Scenario: A commit is made after startup
+
+- **GIVEN** a watched git source with a configured authority
+- **WHEN** a commit is added to the repository
+- **THEN** the next change event carries commit entity states
+- **AND** every commit state's ID is under the configured authority

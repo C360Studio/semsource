@@ -60,3 +60,25 @@ func diff(a, b []string) []string {
 	}
 	return out
 }
+
+// TestDeploymentAuthorityIsRetained: semengine_config holds the create-once
+// deployment authority. A graph-only cutover that purged it would mint a new
+// authority on the next boot and orphan every existing entity ID. The
+// classification test only checks that each bucket is listed somewhere, so it
+// passes with this bucket moved to Purged (#270).
+//
+// spec: openspec/specs/semstreams-governance/spec.md#Requirement: The cutover bucket inventory tracks the framework catalog
+func TestDeploymentAuthorityIsRetained(t *testing.T) {
+	const authority = "semengine_config"
+	for _, b := range Purged {
+		if b == authority {
+			t.Fatalf("%s is in Purged; a cutover would destroy the deployment authority", authority)
+		}
+	}
+	for _, b := range Retained {
+		if b == authority {
+			return
+		}
+	}
+	t.Fatalf("%s is not in Retained", authority)
+}
