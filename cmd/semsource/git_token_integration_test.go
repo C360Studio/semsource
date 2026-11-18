@@ -17,8 +17,9 @@ import (
 
 // TestIntegrationNewGenerationScrubsRetainedGitToken: a store written by a
 // build that put the token in git-source configurations holds it in the
-// bucket. The first boot at the next generation must leave the latest
-// revision of every component key without it (#272).
+// bucket. The first boot at the next generation must rewrite the keys the
+// file defines without it and delete the git-source keys the file lacks
+// (#272).
 //
 // spec: openspec/specs/runtime-configuration/spec.md#Requirement: The git token is resolved from the environment, never persisted into configuration
 func TestIntegrationNewGenerationScrubsRetainedGitToken(t *testing.T) {
@@ -73,6 +74,11 @@ func TestIntegrationNewGenerationScrubsRetainedGitToken(t *testing.T) {
 	inner["git_token"] = probe
 	comp["config"] = mustJSON(t, inner)
 	if _, err := kv.Put(ctx, gitKey, mustJSON(t, comp)); err != nil {
+		t.Fatal(err)
+	}
+	// A source added at run time or by discovery has a key the file lacks;
+	// the push cannot rewrite it, so the prune must delete it.
+	if _, err := kv.Put(ctx, "components.git-source-runtime-added", mustJSON(t, comp)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := kv.Put(ctx, "version", mustJSON(t, "4.0.0")); err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	semconfig "github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/internal/sourceauthority"
 	"github.com/c360studio/semsource/internal/workerjoin"
@@ -19,6 +18,7 @@ import (
 	"github.com/c360studio/semengine/pkg/retry"
 	"github.com/c360studio/semengine/types"
 
+	srcconfig "github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
@@ -130,7 +130,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		MaxCommits:   config.MaxCommits,
 		WorkspaceDir: config.WorkspaceDir,
 		// Read here, never carried in the configuration (#272).
-		Token:          semconfig.GitToken(),
+		Token:          srcconfig.GitToken(),
 		Authority:      authority,
 		BranchSlug:     config.BranchSlug,
 		SkipSubmodules: config.Submodules != nil && !*config.Submodules,

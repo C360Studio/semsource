@@ -63,6 +63,13 @@ func WriteSources(path string, sources []SourceEntry, revision int) error {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return fmt.Errorf("config: parse JSON: %w", err)
 	}
+	// Strict decoding matches keys case-insensitively, so "Sources" loaded as
+	// the sources; drop any such spelling rather than leave a stale twin.
+	for key := range doc {
+		if strings.EqualFold(key, "sources") || strings.EqualFold(key, "config_revision") {
+			delete(doc, key)
+		}
+	}
 	if doc["sources"], err = json.Marshal(sources); err != nil {
 		return fmt.Errorf("config: marshal sources: %w", err)
 	}

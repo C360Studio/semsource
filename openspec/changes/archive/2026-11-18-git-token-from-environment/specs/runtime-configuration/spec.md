@@ -22,7 +22,8 @@ configuration or the configuration KV bucket.
 
 - **GIVEN** a retained configuration bucket whose git-source components carry a `git_token` value
 - **WHEN** SemSource boots a build at the next composition generation
-- **THEN** the latest revision of every retained git-source component key contains no token
+- **THEN** the latest revision of every git-source component key the file defines contains no token
+- **AND** every retained git-source component key the file does not define is deleted
 
 #### Scenario: Rotating the token takes effect on restart
 

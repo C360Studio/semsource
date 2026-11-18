@@ -887,3 +887,22 @@ func TestLoadConfig_RejectsGitTokenInFile(t *testing.T) {
 		t.Fatalf("error echoes the token value: %v", err)
 	}
 }
+
+// TestWriteSources_ReplacesCaseVariantKeys: strict decoding accepts "Sources"
+// for sources, so the write must replace it rather than add a twin.
+func TestWriteSources_ReplacesCaseVariantKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	if err := os.WriteFile(path, []byte(`{"namespace":"acme","Sources":[{"type":"docs","paths":["old"]}],"Config_Revision":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteSources(path, []config.SourceEntry{{Type: "docs", Paths: []string{"new"}}}, 2); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "Sources") || strings.Contains(string(data), "Config_Revision") || strings.Contains(string(data), "old") {
+		t.Fatalf("a case-variant key survived the write:\n%s", data)
+	}
+}
