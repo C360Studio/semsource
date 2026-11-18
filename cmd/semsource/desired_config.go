@@ -21,7 +21,7 @@ func prepareComponentRegistry(ctx context.Context, cfg *config.Config, manager *
 		return nil, err
 	}
 	ingest := ingestHandlerConfig(cfg, manager)
-	ingest.Discovery, ingest.DiscoveryInterval = discovery, discoveryInterval(cfg)
+	ingest.Discovery = discovery
 	ingest.ReadDesired, err = readDesiredConfig(ctx, nc, cfg.Namespace, cfg.PlatformStem())
 	if err != nil {
 		return nil, err

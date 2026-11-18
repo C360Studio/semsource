@@ -60,6 +60,9 @@ type DiscoveryState struct {
 
 // ExpandResult holds the output of ExpandRepoSources.
 type ExpandResult struct {
+	// Declared are the sources as configured, before expansion: discovery
+	// reads a parent's own settings (languages, project, poll interval) here.
+	Declared []SourceEntry
 	Sources  []SourceEntry
 	Watchers []BranchWatcherRef
 	// Discovery holds one state per multi-branch source.
@@ -118,7 +121,7 @@ func ExpandRepoSources(ctx context.Context, sources []SourceEntry, workspaceDir 
 		expanded = append(expanded, entries...)
 	}
 
-	return &ExpandResult{Sources: expanded, Watchers: watchers, Discovery: states}, nil
+	return &ExpandResult{Declared: sources, Sources: expanded, Watchers: watchers, Discovery: states}, nil
 }
 
 // expandSingleBranch expands a repo source with a single branch (existing behavior).

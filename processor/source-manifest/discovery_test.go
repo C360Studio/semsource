@@ -276,3 +276,19 @@ func TestDiscoveryStatusBlock(t *testing.T) {
 		t.Fatalf("discovery block = %s", data)
 	}
 }
+
+func TestDiscoveryInterval(t *testing.T) {
+	for _, tc := range []struct {
+		watches []DiscoveryWatch
+		want    time.Duration
+	}{
+		{nil, DefaultDiscoveryInterval},
+		{[]DiscoveryWatch{{}, {Interval: 0}}, DefaultDiscoveryInterval},
+		{[]DiscoveryWatch{{Interval: 60 * time.Second}, {}}, 60 * time.Second},
+		{[]DiscoveryWatch{{Interval: 60 * time.Second}, {Interval: 2 * time.Second}}, 2 * time.Second},
+	} {
+		if got := discoveryInterval(tc.watches); got != tc.want {
+			t.Errorf("discoveryInterval(%+v) = %s; want %s", tc.watches, got, tc.want)
+		}
+	}
+}

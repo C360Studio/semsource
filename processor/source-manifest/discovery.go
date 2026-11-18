@@ -24,6 +24,23 @@ type DiscoveryWatch struct {
 	RepoPath    string
 	Patterns    []string // branch sources only
 	MaxBranches int      // branch sources only; 0 = workspace.DefaultMaxBranches
+	// Interval is the source's branch_poll_interval; 0 = unset.
+	Interval time.Duration
+}
+
+// discoveryInterval is how often the runtime check runs: the shortest
+// interval a watch sets, else DefaultDiscoveryInterval.
+func discoveryInterval(watches []DiscoveryWatch) time.Duration {
+	var interval time.Duration
+	for _, w := range watches {
+		if w.Interval > 0 && (interval == 0 || w.Interval < interval) {
+			interval = w.Interval
+		}
+	}
+	if interval == 0 {
+		return DefaultDiscoveryInterval
+	}
+	return interval
 }
 
 // DiscoveryStatus is the discovery block on /source-manifest/status and

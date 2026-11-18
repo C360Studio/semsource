@@ -314,6 +314,72 @@ func TestPlanDiscovery_CloneComponentIsNotASubmoduleParent(t *testing.T) {
 	}
 }
 
+// failManifestStore fails the source-manifest put once failManifest reaches
+// zero, counting down on each manifest put.
+type failManifestStore struct {
+	*reconcileStore
+	okManifestPuts int
+}
+
+func (s *failManifestStore) PutComponentToKV(ctx context.Context, name string, cfg types.ComponentConfig) error {
+	if name == "source-manifest" {
+		if s.okManifestPuts == 0 {
+			return errors.New("kv unavailable")
+		}
+		s.okManifestPuts--
+	}
+	return s.reconcileStore.PutComponentToKV(ctx, name, cfg)
+}
+
+// TestReconcileDiscovery_RetryRepairsTheManifest: a boot that committed its
+// component puts or deletes and then failed the final manifest write leaves
+// the manifest's sources and expected count wrong; the next, healthy boot
+// with the same plan repairs them from the configuration in effect.
+func TestReconcileDiscovery_RetryRepairsTheManifest(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	t.Run("committed puts", func(t *testing.T) {
+		_, entry, _ := docComponent(t, "new")
+		inner := &reconcileStore{components: semconfig.ComponentConfigs{"source-manifest": manifestWith(t, nil, nil)}}
+		plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+		if err := plan.add(plan.owner("/r", "branch", false), entry, reconcileOpts); err != nil {
+			t.Fatal(err)
+		}
+		// The pending-record write succeeds, the final manifest write fails.
+		if err := reconcileDiscovery(context.Background(), &failManifestStore{inner, 1}, plan, nil, reconcileOpts, logger); err == nil {
+			t.Fatal("want the failed manifest write to fail the reconcile")
+		}
+		if err := reconcileDiscovery(context.Background(), inner, plan, nil, reconcileOpts, logger); err != nil {
+			t.Fatal(err)
+		}
+		m := manifestOf(t, inner)
+		if len(m.Sources) != 1 || m.ExpectedSourceCount != 1 {
+			t.Errorf("after retry sources=%d expected_source_count=%d; want 1, 1", len(m.Sources), m.ExpectedSourceCount)
+		}
+	})
+	t.Run("committed deletes", func(t *testing.T) {
+		staleName, staleEntry, staleCC := docComponent(t, "stale")
+		inner := &reconcileStore{components: semconfig.ComponentConfigs{
+			"source-manifest": manifestWith(t, []sourcemanifest.ManifestSource{sourcemanifest.ManifestSourceFromEntry(staleEntry)},
+				[]sourcemanifest.DiscoveredRecord{{Parent: "/r", Kind: "branch", Components: []string{staleName}}}),
+			staleName: staleCC,
+		}}
+		plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+		plan.owner("/r", "branch", false)
+		if err := reconcileDiscovery(context.Background(), &failManifestStore{inner, 0}, plan, nil, reconcileOpts, logger); err == nil {
+			t.Fatal("want the failed manifest write to fail the reconcile")
+		}
+		if _, ok := inner.components[staleName]; ok {
+			t.Fatal("the stale component was not deleted before the manifest write")
+		}
+		if err := reconcileDiscovery(context.Background(), inner, plan, nil, reconcileOpts, logger); err != nil {
+			t.Fatal(err)
+		}
+		if m := manifestOf(t, inner); len(m.Sources) != 0 || m.ExpectedSourceCount != 0 || len(m.Discovered) != 0 {
+			t.Errorf("after retry manifest = %+v; want no sources, count 0, empty record", m)
+		}
+	})
+}
+
 // TestRuntimeDiscoveryPathsStayDeleted is the task 5.1 grep gate: the runtime
 // branch and submodule watchers and their "capability: blocked" warnings are
 // gone, and no Go file reintroduces them. Discovery happens at boot only

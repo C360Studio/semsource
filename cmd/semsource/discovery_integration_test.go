@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -234,5 +236,60 @@ func TestIntegrationDiscoveryAcrossFileWinsBoot(t *testing.T) {
 	}
 	if !hasPrefixed(third, "feature-b") || !hasPrefixed(third, "-via-") {
 		t.Fatal("bucket-wins boot after a file-wins boot lost discovered components")
+	}
+}
+
+// TestIntegrationDiscoveryKeepsParentSettings goes through the real load and
+// expansion path: a submodule parent's own languages and project reach its
+// submodule components (expansion drops them from the repo's git child), and
+// a multi-branch source's branch_poll_interval reaches the runtime check.
+func TestIntegrationDiscoveryKeepsParentSettings(t *testing.T) {
+	broker := natstest.New(t, natstest.WithJetStream())
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	repo := newGitRepo(t)
+	gitIn(t, repo, "branch", "feature/a")
+	sub := newGitRepo(t)
+	app := newGitRepo(t)
+	gitIn(t, app, "-c", "protocol.file.allow=always", "submodule", "add", sub, "libs/sub")
+	gitIn(t, app, "commit", "-m", "add submodule")
+	path := filepath.Join(t.TempDir(), "semsource.json")
+	writeFile(t, path, revisionFile("", `[
+		{"type": "repo", "path": "`+repo+`", "branches": ["feature/*"], "branch_poll_interval": "2s"},
+		{"type": "repo", "path": "`+app+`", "languages": ["python"], "project": "myapp"}]`))
+
+	components, watches := bootWithDiscovery(ctx, t, broker.URL, path)
+	var subAST []string
+	for name, cc := range components {
+		if cc.Name != "ast-source" || !strings.Contains(name, "-via-") {
+			continue
+		}
+		subAST = append(subAST, name)
+		if !strings.Contains(name, "via-myapp-") {
+			t.Errorf("%s: want the parent's project in the link suffix", name)
+		}
+		var astCfg struct {
+			WatchPaths []struct {
+				Languages []string `json:"languages"`
+			} `json:"watch_paths"`
+		}
+		if err := json.Unmarshal(cc.Config, &astCfg); err != nil {
+			t.Fatal(err)
+		}
+		if len(astCfg.WatchPaths) != 1 || !slices.Equal(astCfg.WatchPaths[0].Languages, []string{"python"}) {
+			t.Errorf("%s: watch paths %+v; want the parent's languages [python]", name, astCfg.WatchPaths)
+		}
+	}
+	if len(subAST) != 1 {
+		t.Fatalf("submodule ast components = %v; want one", subAST)
+	}
+	var interval time.Duration
+	for _, w := range watches {
+		if w.Kind == "branch" {
+			interval = w.Interval
+		}
+	}
+	if interval != 2*time.Second {
+		t.Errorf("branch watch interval = %s; want the configured 2s", interval)
 	}
 }

@@ -1,6 +1,7 @@
 package sourcemanifest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,10 +49,9 @@ type IngestHandlerConfig struct {
 	// Unused by the NATS path (in-mesh trusted).
 	AllowedRoots []string
 	// Discovery is the discovering sources boot admitted from; when set,
-	// Start runs the read-only runtime discovery check on DiscoveryInterval
-	// (0 = DefaultDiscoveryInterval) and serves its discovery status block.
-	Discovery         []DiscoveryWatch
-	DiscoveryInterval time.Duration
+	// Start runs the read-only runtime discovery check and serves its
+	// discovery status block.
+	Discovery []DiscoveryWatch
 }
 
 // RegisterIngestHandlers subscribes the component to graph.ingest.add and
@@ -460,6 +460,9 @@ func RewriteDesiredManifest(ctx context.Context, store sourcespawn.ConfigStore, 
 	raw, err := json.Marshal(desired)
 	if err != nil {
 		return fmt.Errorf("encode desired source-manifest: %w", err)
+	}
+	if bytes.Equal(raw, envelope.Config) {
+		return nil // already in place: every boot reconciles, most change nothing
 	}
 	envelope.Config = raw
 	if err := store.PutComponentToKV(ctx, "source-manifest", envelope); err != nil {

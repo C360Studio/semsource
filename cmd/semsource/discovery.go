@@ -125,21 +125,18 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 				o.keep[name] = true
 			}
 		}
+		interval, _ := time.ParseDuration(ref.BranchPollInterval) // invalid or unset: the default
 		plan.watches = append(plan.watches, sourcemanifest.DiscoveryWatch{
 			DiscoveryState: state, RepoPath: ref.RepoPath, Patterns: ref.Patterns, MaxBranches: ref.MaxBranches,
+			Interval: interval,
 		})
 	}
 
-	watched := map[string]bool{}
-	for _, ref := range expand.Watchers {
-		watched[ref.Source.URL+ref.Source.Path] = true
-	}
-	for _, src := range cfg.Sources {
-		if (src.Type != "repo" && src.Type != "git") || src.BranchSlug != "" {
+	// The declared sources, not the expanded ones: expansion drops a repo's
+	// languages and project from its git child.
+	for _, src := range expand.Declared {
+		if (src.Type != "repo" && src.Type != "git") || src.BranchSlug != "" || len(src.Branches) > 0 {
 			continue // per-branch submodule expansion is a non-goal
-		}
-		if watched[src.URL+src.Path] {
-			continue // a multi-branch source's clone component, not a submodule parent
 		}
 		if src.Submodules != nil && !*src.Submodules {
 			continue
@@ -264,8 +261,7 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 			return err
 		}
 	}
-	var added []config.SourceEntry
-	addedEntry := map[string]bool{}
+	admitted := 0
 	for name, want := range plan.desired {
 		have, exists := effective[name]
 		if exists && (!have.Enabled || reflect.DeepEqual(have, want)) {
@@ -274,11 +270,7 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 		if err := store.PutComponentToKV(ctx, name, want); err != nil {
 			return fmt.Errorf("admit discovered component %s: %w", name, err)
 		}
-		entry := plan.entries[name]
-		if key := fmt.Sprintf("%+v", entry); !addedEntry[key] {
-			addedEntry[key] = true
-			added = append(added, entry)
-		}
+		admitted++
 	}
 	var removed []string
 	for name, have := range effective {
@@ -296,11 +288,40 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 		}
 		removed = append(removed, name)
 	}
-	if len(added) == 0 && len(removed) == 0 && reflect.DeepEqual(prev, next) {
-		return nil
+	if admitted > 0 || len(removed) > 0 {
+		logger.Info("discovery reconciled", "admitted", admitted, "retired", removed)
 	}
-	logger.Info("discovery reconciled", "admitted", len(added), "retired", removed)
-	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, added, removed, &next)
+	sources, gone := manifestDelta(store.GetConfig().Get().Components, plan, owned)
+	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, sources, gone, &next)
+}
+
+// manifestDelta is what the next-boot manifest must hold after reconcile,
+// read from the configuration now in effect rather than from this attempt's
+// writes: an earlier boot may have committed its puts or deletes and failed
+// its manifest write. sources are the entries of the enabled discovered
+// components, in a stable order so an unchanged manifest stays byte-equal;
+// gone are the recorded names that nothing discovers and the configuration
+// no longer holds.
+func manifestDelta(now semconfig.ComponentConfigs, plan *discoveryPlan, owned map[string]bool) (sources []config.SourceEntry, gone []string) {
+	seen := map[string]bool{}
+	for _, name := range slices.Sorted(maps.Keys(plan.desired)) {
+		if !now[name].Enabled {
+			continue
+		}
+		entry := plan.entries[name]
+		if key := fmt.Sprintf("%+v", entry); !seen[key] {
+			seen[key] = true
+			sources = append(sources, entry)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(owned)) {
+		_, desired := plan.desired[name]
+		_, present := now[name]
+		if !desired && !present {
+			gone = append(gone, name)
+		}
+	}
+	return sources, gone
 }
 
 // instanceNames is the set of component names the entries build.
@@ -316,22 +337,4 @@ func instanceNames(entries []config.SourceEntry, opts sourcespawn.Options) map[s
 		}
 	}
 	return out
-}
-
-// discoveryInterval is how often the runtime check runs: the shortest
-// branch_poll_interval a multi-branch source sets, else the default.
-func discoveryInterval(cfg *config.Config) time.Duration {
-	var interval time.Duration
-	for _, src := range cfg.Sources {
-		if len(src.Branches) == 0 {
-			continue
-		}
-		if d, err := time.ParseDuration(src.BranchPollInterval); err == nil && d > 0 && (interval == 0 || d < interval) {
-			interval = d
-		}
-	}
-	if interval == 0 {
-		return sourcemanifest.DefaultDiscoveryInterval
-	}
-	return interval
 }

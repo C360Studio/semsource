@@ -66,4 +66,3 @@ A discovery failure SHALL NOT fail boot. Each discovering source SHALL report a 
 - **GIVEN** a boot that admitted `feature/a`
 - **WHEN** the next boot cannot list the repository's branches
 - **THEN** `feature/a` stays admitted and the state is `listing_failed` with the error
-

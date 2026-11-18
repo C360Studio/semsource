@@ -166,7 +166,7 @@ func (c *Component) Start(ctx context.Context) error {
 			return fmt.Errorf("start source management: %w", err)
 		}
 		if len(c.ingestCfg.Discovery) > 0 {
-			cancel := c.startDiscoveryCheck(ctx, c.ingestCfg.Discovery, c.ingestCfg.DiscoveryInterval)
+			cancel := c.startDiscoveryCheck(ctx, c.ingestCfg.Discovery, discoveryInterval(c.ingestCfg.Discovery))
 			c.mu.Lock()
 			c.cancelFuncs = append(c.cancelFuncs, cancel)
 			c.mu.Unlock()
