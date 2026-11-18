@@ -87,4 +87,5 @@
   deletes the stale keys (`TestIntegrationDiscoveryAcrossFileWinsBoot`, which fails with the prune
   off); fixed a skipped branch's names retired, a partial reconcile leaving unrecorded names, the
   clone treated as a submodule parent, and the capped count including skipped branches; the Q1
-  file-wins limit is #307. The PR review record follows.
+  file-wins limit is #307. Owner kept the record in the manifest and re-approved the design on
+  2026-11-18 (sha256:87ef642f6d61). The PR review record follows.
