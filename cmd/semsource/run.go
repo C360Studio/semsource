@@ -562,7 +562,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 	// one factory; the map key is the instance name (→ HTTP prefix), the
 	// Config.Lens selects the lens, and the NATS subject root differs by lens.
 	for instance, lens := range map[string]string{"code-context": "code", "doc-context": "docs"} {
-		gwCfg, err := codeContextComponentConfig(lens)
+		gwCfg, err := codeContextComponentConfig(cfg, lens)
 		if err != nil {
 			return nil, err
 		}
@@ -649,8 +649,12 @@ func sourceComponents(cfg *config.Config, org string) (semconfig.ComponentConfig
 
 // codeContextComponentConfig builds a code-context fusion-gateway component
 // config for the given lens ("code" or "docs").
-func codeContextComponentConfig(lens string) (types.ComponentConfig, error) {
-	raw, err := json.Marshal(map[string]any{"lens": lens})
+func codeContextComponentConfig(cfg *config.Config, lens string) (types.ComponentConfig, error) {
+	cfgMap := map[string]any{"lens": lens}
+	if !cfg.Graph.LexicalSearchEnabled() {
+		cfgMap["semantic_enabled"] = false
+	}
+	raw, err := json.Marshal(cfgMap)
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("marshal code-context config: %w", err)
 	}

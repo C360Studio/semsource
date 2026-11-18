@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/c360studio/semengine/component"
+	semgraph "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/metric"
 	"github.com/c360studio/semengine/natsclient"
+	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/c360studio/semengine/pkg/fusion"
 	"github.com/c360studio/semengine/pkg/fusion/fusionnats"
 	"github.com/c360studio/semengine/pkg/fusion/fusionvocab"
@@ -75,7 +77,10 @@ type Component struct {
 	sourceSystems []string
 	name          string
 	lensKind      string // "code" | "docs"
-	subjectRoot   string // NATS subject root, e.g. "code.v1."
+	// searchDisabled: the composition runs no search index, so the search
+	// verb refuses as not_enabled (Config.SemanticEnabled).
+	searchDisabled bool
+	subjectRoot    string // NATS subject root, e.g. "code.v1."
 	// org is the deployment's single global org (= the required top-level
 	// namespace), sourced from platform identity. It forms the first segment of
 	// the per-lens default retrieval scope; empty means no default scope (ask
@@ -147,17 +152,18 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		}
 	}
 	return &Component{
-		name:          name,
-		lensKind:      config.Lens,
-		subjectRoot:   config.Lens + ".v1.",
-		org:           deps.Platform.Org,
-		platform:      deps.Platform.Platform,
-		sourceSystems: append([]string(nil), config.SourceSystems...),
-		graph:         graph,
-		client:        deps.NATSClient,
-		storeRegistry: deps.StoreRegistry,
-		metrics:       deps.MetricsRegistry,
-		logger:        deps.GetLogger(),
+		name:           name,
+		lensKind:       config.Lens,
+		searchDisabled: !config.semanticEnabled(),
+		subjectRoot:    config.Lens + ".v1.",
+		org:            deps.Platform.Org,
+		platform:       deps.Platform.Platform,
+		sourceSystems:  append([]string(nil), config.SourceSystems...),
+		graph:          graph,
+		client:         deps.NATSClient,
+		storeRegistry:  deps.StoreRegistry,
+		metrics:        deps.MetricsRegistry,
+		logger:         deps.GetLogger(),
 	}, nil
 }
 
@@ -308,6 +314,13 @@ func (c *Component) serve(ctx context.Context, verb string, body []byte) ([]byte
 // serialization failures in separate stages; NATS serve still marshals the same
 // response bytes as before.
 func (c *Component) fuse(ctx context.Context, verb string, req fusion.Request) (fusion.Response, error) {
+	if verb == "search" && c.searchDisabled {
+		// Without a search index the lexical seed has no responder, which the
+		// substrate reports as a transient outage; a caller would retry a
+		// verb this composition can never answer.
+		return fusion.Response{}, errs.ClassifiedCode(errs.ErrorInvalid, semgraph.ErrorCodeNotEnabled,
+			errors.New("search is not enabled in this composition"))
+	}
 	lens := c.lensFor()
 	if len(req.Want) == 0 {
 		req.Want = defaultWants(verb)

@@ -11,6 +11,14 @@ type Config struct {
 	SourceSystems []string `json:"source_systems,omitempty" schema:"type:array,description:Boot source system slugs for scoped retrieval,category:advanced"`
 	// Lens is the domain this instance serves: "code" or "docs".
 	Lens string `json:"lens" schema:"type:string,description:Lens to serve (code|docs),category:basic,required"`
+	// SemanticEnabled is false when the composition runs no search index
+	// (Tier 0 foundation). The search verb then refuses as not_enabled
+	// instead of reporting the absent index as a transient outage.
+	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether the composition runs a search index,default:true,category:advanced"`
+}
+
+func (c *Config) semanticEnabled() bool {
+	return c.SemanticEnabled == nil || *c.SemanticEnabled
 }
 
 // Validate checks the configuration.
