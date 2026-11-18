@@ -75,7 +75,7 @@
   max, `TestSplitPassages_NeverExceedsHardMax`); QUICKSTART's pre-expand hold becomes the boot
   contract; `compatibility.md` marks both blocked rows resolved by #216. `review.md` and
   `merge-readiness.md` are dated records superseded by that ledger and stay unchanged.
-- [ ] 6.3 Independent review: go-component-reviewer and graph-event-reviewer, plus the PR review
+- [x] 6.3 Independent review: go-component-reviewer and graph-event-reviewer, plus the PR review
   record. Both specialists ran 2026-11-17. Fixed in this PR: false `restart_required` (submodule
   parent after its first clone; boot `listing_failed`), deletes on `awaiting_checkout`, name-based
   ownership (now the record), removed-parent children not retired, the remote clone component
@@ -88,4 +88,5 @@
   off); fixed a skipped branch's names retired, a partial reconcile leaving unrecorded names, the
   clone treated as a submodule parent, and the capped count including skipped branches; the Q1
   file-wins limit is #307. Owner kept the record in the manifest and re-approved the design on
-  2026-11-18 (sha256:87ef642f6d61). The PR review record follows.
+  2026-11-18 (sha256:87ef642f6d61). The PR review record was requested through
+  `ateam review request` when the PR was marked ready (2026-11-18).

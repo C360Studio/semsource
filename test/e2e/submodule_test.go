@@ -36,8 +36,8 @@ const (
 // submodule version scope, and no submodule code is attributed to the parent
 // scope.
 //
-// shortcut: first boot only; the restart that expands the pins is task 6.1's
-// real-process restart test (openspec boot-time-source-discovery).
+// First boot only: the restart that expands the pins is covered by
+// TestE2E_DiscoveryAcrossRestarts.
 func TestE2E_SubmoduleIngest(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network e2e in short mode")

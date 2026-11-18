@@ -131,7 +131,7 @@ func discoRepo(t *testing.T, name, doc string) string {
 // deleted branch's components are gone after the next restart, all on one
 // retained store at an unchanged config_revision.
 //
-// spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
+// spec: openspec/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
 func TestE2E_DiscoveryAcrossRestarts(t *testing.T) {
 	natsURL, cleanup := startNATS(t)
 	defer cleanup()

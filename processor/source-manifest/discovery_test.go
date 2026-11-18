@@ -86,7 +86,7 @@ func branchWatch(repo string, admitted ...string) DiscoveryWatch {
 // or retire against the boot set, types each failure (D4), never sets
 // restart_required for a listing failure (Q2), and touches nothing on disk.
 //
-// spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Runtime discovery is read-only and reports what a restart would change
+// spec: openspec/specs/source-discovery/spec.md#Requirement: Runtime discovery is read-only and reports what a restart would change
 func TestCheckDiscovery(t *testing.T) {
 	repo := discoveryRepo(t)
 	discoveryGit(t, repo, "branch", "feature/a")
@@ -214,7 +214,7 @@ func TestCheckDiscovery_Submodules(t *testing.T) {
 // discovers. The check holds no configuration store, so it cannot write one;
 // TestCheckDiscovery proves it leaves the filesystem and worktrees alone.
 //
-// spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Runtime discovery is read-only and reports what a restart would change
+// spec: openspec/specs/source-discovery/spec.md#Requirement: Runtime discovery is read-only and reports what a restart would change
 func TestDiscoveryStatusBlock(t *testing.T) {
 	repo := discoveryRepo(t)
 	discoveryGit(t, repo, "branch", "feature/a")

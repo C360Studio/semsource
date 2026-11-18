@@ -27,7 +27,7 @@ import (
 // manager constructs from (semengine service/component_manager.go:188), on a
 // retained store at an equal version where the file itself would not win.
 //
-// spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
+// spec: openspec/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
 func TestIntegrationDiscoveryBootSeam(t *testing.T) {
 	broker := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -143,7 +143,7 @@ func hasPrefixed(components semconfig.ComponentConfigs, want string) bool {
 // deleted one leaves the composition, and a materialized submodule expands at
 // boot, none of which needs a config_revision bump.
 //
-// spec: openspec/changes/boot-time-source-discovery/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
+// spec: openspec/specs/source-discovery/spec.md#Requirement: Discovery takes effect at the boot that finds it
 func TestIntegrationDiscoveryAcrossRestarts(t *testing.T) {
 	broker := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
