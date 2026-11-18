@@ -890,6 +890,8 @@ func TestLoadConfig_RejectsGitTokenInFile(t *testing.T) {
 
 // TestWriteSources_ReplacesCaseVariantKeys: strict decoding accepts "Sources"
 // for sources, so the write must replace it rather than add a twin.
+//
+// spec: openspec/specs/runtime-configuration/spec.md#Requirement: Source commands write back only the file's own content
 func TestWriteSources_ReplacesCaseVariantKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "semsource.json")
 	if err := os.WriteFile(path, []byte(`{"namespace":"acme","Sources":[{"type":"docs","paths":["old"]}],"Config_Revision":1}`), 0o644); err != nil {

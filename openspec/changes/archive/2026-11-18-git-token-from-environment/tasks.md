@@ -37,8 +37,10 @@
 - D4: `config.WriteSources` replaces `config.EditFile` (see 3.1). It also drops case-variant
   spellings of `sources` and `config_revision`, which strict decoding accepts.
 - Residual: retained git-source keys the file lacks are removed by `pruneRetainedComponents`, whose
-  failure is a logged warning, not a boot failure. If it fails, those keys keep the token until a
-  later prune succeeds.
+  failure is a logged warning, not a boot failure. If it fails, those keys keep the token, and a plain
+  restart does not recover: at an equal version the retained key is loaded into the effective
+  configuration, so the prune skips it. Recovery is a restart with a higher `config_revision`
+  (`TestIntegrationPruneFailureDoesNotFailTheBoot`).
 
 ## 4. Docs and close
 
