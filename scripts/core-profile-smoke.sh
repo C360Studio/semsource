@@ -9,6 +9,18 @@ fail() {
 	exit 1
 }
 
+# require_triple LABEL BODY PREDICATE OBJECT fails unless BODY holds the triple.
+# GraphQL does not fix the key order inside a triple object, so both orders
+# count; matching one literal order broke on a reorder that changed no data.
+require_triple() {
+	if printf '%s' "$2" | grep -Fq "\"predicate\":\"$3\",\"object\":\"$4\"" ||
+		printf '%s' "$2" | grep -Fq "\"object\":\"$4\",\"predicate\":\"$3\""; then
+		return 0
+	fi
+	echo "$1 missing triple $3=$4: $2" >&2
+	exit 1
+}
+
 command -v docker >/dev/null 2>&1 || fail "docker is required"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 docker compose version >/dev/null 2>&1 || fail "docker compose is required"
@@ -441,16 +453,17 @@ done
 echo "Checking GraphQL entity(id) ID and triples"
 gql_entity=$(graphql_post "entity(id)" \
 	"{\"query\":\"query(\$id: String!) { entity(id: \$id) { entity { id triples { predicate object } } kvRevision } }\",\"variables\":{\"id\":\"$main_entity_id\"}}")
-for expected_fragment in \
-	"\"entity\":{\"entity\":{\"id\":\"$main_entity_id\"" \
-	'"predicate":"dc.terms.title","object":"main"' \
-	'"predicate":"code.artifact.type","object":"function"' \
-	'"predicate":"code.artifact.path","object":"src/main.go"' \
-	"\"predicate\":\"code.structure.belongs\",\"object\":\"$main_file_id\""; do
-	if ! printf '%s' "$gql_entity" | grep -Fq "$expected_fragment"; then
-		echo "entity($main_entity_id) missing $expected_fragment: $gql_entity" >&2
-		exit 1
-	fi
+if ! printf '%s' "$gql_entity" | grep -Fq "\"entity\":{\"entity\":{\"id\":\"$main_entity_id\""; then
+	echo "entity($main_entity_id) did not return its ID: $gql_entity" >&2
+	exit 1
+fi
+for expected_triple in \
+	"dc.terms.title main" \
+	"code.artifact.type function" \
+	"code.artifact.path src/main.go" \
+	"code.structure.belongs $main_file_id"; do
+	# shellcheck disable=SC2086 # split "predicate object" into two arguments
+	require_triple "entity($main_entity_id)" "$gql_entity" $expected_triple
 done
 
 echo "Checking GraphQL entitiesByPrefix(prefix) IDs and triples"
@@ -459,14 +472,14 @@ gql_prefix=$(graphql_post "entitiesByPrefix(prefix)" \
 for expected_fragment in \
 	'"entitiesByPrefix":{"entities":[' \
 	"\"id\":\"$main_entity_id\"" \
-	"\"id\":\"$main_file_id\"" \
-	'"predicate":"dc.terms.title","object":"main"' \
-	'"predicate":"code.artifact.path","object":"src/main.go"'; do
+	"\"id\":\"$main_file_id\""; do
 	if ! printf '%s' "$gql_prefix" | grep -Fq "$expected_fragment"; then
 		echo "entitiesByPrefix(${authority}.workspace.golang) missing $expected_fragment: $gql_prefix" >&2
 		exit 1
 	fi
 done
+require_triple "entitiesByPrefix(${authority}.workspace.golang)" "$gql_prefix" dc.terms.title main
+require_triple "entitiesByPrefix(${authority}.workspace.golang)" "$gql_prefix" code.artifact.path src/main.go
 
 echo "Checking GraphQL pathSearch(startEntity, maxDepth, direction[, predicates])"
 gql_path_search=$(graphql_post "pathSearch(startEntity, maxDepth, direction, predicates)" \
