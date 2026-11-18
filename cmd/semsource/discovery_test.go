@@ -266,6 +266,10 @@ func TestReconcileDiscovery_SkippedBranchKeepsItsComponents(t *testing.T) {
 		}
 		maps.Copy(kept, built)
 	}
+	// A branch admitted earlier from an external worktree: its names derive
+	// from that path, which nothing in this boot can rebuild.
+	externalName, _, externalCC := docComponent(t, "custom-external")
+	kept[externalName] = externalCC
 	kept["source-manifest"] = manifestWith(t, nil, []sourcemanifest.DiscoveredRecord{
 		{Parent: repo, Kind: "branch", Components: slices.Sorted(maps.Keys(kept))},
 	})
@@ -433,10 +437,6 @@ func TestReconcileDiscovery_AwaitingCheckoutKeepsBranches(t *testing.T) {
 		t.Fatalf("state = %s; want awaiting_checkout", expand.Discovery[0].State)
 	}
 	cfg.Sources = []config.SourceEntry{src}
-	plan, err := planDiscovery(context.Background(), cfg, expand, reconcileOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	kept := semconfig.ComponentConfigs{}
 	entries := config.BranchEntries(src, workspace.BranchState{Branch: "feature/a", Slug: "feature-a",
@@ -453,7 +453,8 @@ func TestReconcileDiscovery_AwaitingCheckoutKeepsBranches(t *testing.T) {
 	})
 	store := &reconcileStore{components: maps.Clone(kept)}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if err := reconcileDiscovery(context.Background(), store, plan, semconfig.ComponentConfigs{}, reconcileOpts, logger); err != nil {
+	watches, err := admitDiscovered(context.Background(), cfg, expand, semconfig.ComponentConfigs{}, store, logger)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if len(store.dels) != 0 {
@@ -463,5 +464,21 @@ func TestReconcileDiscovery_AwaitingCheckoutKeepsBranches(t *testing.T) {
 		if _, ok := store.components[name]; !ok {
 			t.Errorf("clone placeholder %s not admitted", name)
 		}
+	}
+	// The kept branch is not in this boot's admitted set, so the runtime
+	// check must not compare against it as if it were complete.
+	if len(watches) != 1 || !watches[0].Partial {
+		t.Errorf("watches = %+v; want the branch watch marked partial", watches)
+	}
+
+	// A genuine first clone has nothing recorded: its watch is complete, so
+	// the branches the clone brings are reported as pending additions.
+	fresh := &reconcileStore{components: semconfig.ComponentConfigs{"source-manifest": manifestWith(t, nil, nil)}}
+	watches, err = admitDiscovered(context.Background(), cfg, expand, semconfig.ComponentConfigs{}, fresh, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(watches) != 1 || watches[0].Partial {
+		t.Errorf("first-clone watches = %+v; want a complete watch", watches)
 	}
 }

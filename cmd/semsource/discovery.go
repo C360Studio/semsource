@@ -26,15 +26,17 @@ import (
 )
 
 // discoveryOwner is one discovering parent source and the component names
-// its discovery admits this boot. When its discovery failed (a listing error
-// or a missing checkout), the names recorded for it at the previous boot are
-// kept rather than deleted (source-discovery spec); keep names the recorded
-// components of a branch whose worktree failed this boot, kept the same way.
+// its discovery admits this boot. When its discovery failed or was partial (a
+// listing error, a missing checkout, or a branch whose worktree could not be
+// created), every name recorded for it at the previous boot is kept rather
+// than deleted (source-discovery spec): a recorded name says nothing about
+// which branch or worktree path produced it. keptPrior reports that such
+// names were kept, so this boot's admitted set is not the parent's full one.
 type discoveryOwner struct {
 	parent, kind string
 	failed       bool
 	names        map[string]bool
-	keep         map[string]bool
+	keptPrior    bool
 }
 
 // discoveryPlan is what boot-time discovery found: the components it admits
@@ -50,7 +52,7 @@ type discoveryPlan struct {
 }
 
 func (p *discoveryPlan) owner(parent, kind string, failed bool) *discoveryOwner {
-	o := &discoveryOwner{parent: parent, kind: kind, failed: failed, names: map[string]bool{}, keep: map[string]bool{}}
+	o := &discoveryOwner{parent: parent, kind: kind, failed: failed, names: map[string]bool{}}
 	p.owners = append(p.owners, o)
 	return o
 }
@@ -86,7 +88,14 @@ func admitDiscovered(ctx context.Context, cfg *config.Config, expand *config.Exp
 		logger.Info("source discovery", "source", st.Source, "kind", st.Kind, "state", st.State,
 			"error", st.Error, "not_admitted", st.NotAdmitted)
 	}
-	return plan.watches, reconcileDiscovery(ctx, store, plan, file, opts, logger)
+	if err := reconcileDiscovery(ctx, store, plan, file, opts, logger); err != nil {
+		return nil, err
+	}
+	// Owners and watches are appended together, one each per parent.
+	for i, o := range plan.owners {
+		plan.watches[i].Partial = o.keptPrior
+	}
+	return plan.watches, nil
 }
 
 // planDiscovery collects the branch components expansion found, the clone
@@ -101,7 +110,8 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 			break
 		}
 		state := expand.Discovery[i]
-		failed := state.State == config.DiscoveryListingFailed || state.State == config.DiscoveryAwaitingCheckout
+		failed := state.State == config.DiscoveryListingFailed || state.State == config.DiscoveryAwaitingCheckout ||
+			len(state.Skipped) > 0
 		o := plan.owner(ref.Source.URL+ref.Source.Path, "branch", failed)
 		entries := ref.Entries
 		if ref.Source.URL != "" {
@@ -113,16 +123,6 @@ func planDiscovery(ctx context.Context, cfg *config.Config, expand *config.Expan
 		for _, entry := range entries {
 			if err := plan.add(o, entry, opts); err != nil {
 				return nil, fmt.Errorf("discovered branch source %s: %w", entry.URL+entry.Path, err)
-			}
-		}
-		// A worktree failure says nothing about whether the branch still
-		// exists: keep what it had (a transient git error must not flap it).
-		for _, branch := range state.Skipped {
-			slug := workspace.BranchSlug(branch)
-			for name := range instanceNames(config.BranchEntries(ref.Source, workspace.BranchState{
-				Branch: branch, Slug: slug, WorktreePath: filepath.Join(ref.WorktreeBase, slug),
-			}), opts) {
-				o.keep[name] = true
 			}
 		}
 		interval, _ := time.ParseDuration(ref.BranchPollInterval) // invalid or unset: the default
@@ -189,9 +189,10 @@ func (p *discoveryPlan) record(prev []sourcemanifest.DiscoveredRecord) (next []s
 	}
 	for _, o := range p.owners {
 		names := maps.Clone(o.names)
-		for _, name := range prevBy[o.kind+" "+o.parent] {
-			if o.failed || o.keep[name] {
+		if o.failed {
+			for _, name := range prevBy[o.kind+" "+o.parent] {
 				names[name], protected[name] = true, true
+				o.keptPrior = true
 			}
 		}
 		if len(names) > 0 {

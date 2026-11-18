@@ -165,6 +165,14 @@ func TestCheckDiscovery(t *testing.T) {
 			t.Fatalf("got %+v; want the boot failure with nothing pending", got)
 		}
 	})
+	t.Run("partial boot set reports nothing pending", func(t *testing.T) {
+		w := branchWatch(repo)
+		w.State, w.Partial = config.DiscoveryAwaitingCheckout, true
+		got := checkDiscovery(ctx, []DiscoveryWatch{w})
+		if got.RestartRequired || len(got.Sources[0].Pending) != 0 || got.Sources[0].Error == "" {
+			t.Fatalf("got %+v; want no pending entries and the reason shown", got)
+		}
+	})
 	t.Run("listing failure does not require a restart", func(t *testing.T) {
 		got := checkDiscovery(ctx, []DiscoveryWatch{branchWatch(t.TempDir(), "feature/a")})
 		src := got.Sources[0]

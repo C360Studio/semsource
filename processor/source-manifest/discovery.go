@@ -26,6 +26,11 @@ type DiscoveryWatch struct {
 	MaxBranches int      // branch sources only; 0 = workspace.DefaultMaxBranches
 	// Interval is the source's branch_poll_interval; 0 = unset.
 	Interval time.Duration
+	// Partial is set when boot kept this parent's previously admitted
+	// components without listing them (a missing checkout or a skipped
+	// branch): Admitted is then not the whole admitted set, so there is
+	// nothing exact to compare and nothing is reported pending.
+	Partial bool
 }
 
 // discoveryInterval is how often the runtime check runs: the shortest
@@ -82,6 +87,11 @@ func checkDiscovery(ctx context.Context, watches []DiscoveryWatch) *DiscoverySta
 			// no boot set to compare: report the boot failure, never a pending
 			// list or restart_required (owner ruling Q2).
 			src.State, src.Error = w.State, w.Error
+			out.Sources = append(out.Sources, src)
+			continue
+		}
+		if w.Partial {
+			src.State, src.Error = w.State, "boot kept components it could not list; a restart rediscovers this source"
 			out.Sources = append(out.Sources, src)
 			continue
 		}
