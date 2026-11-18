@@ -1,0 +1,39 @@
+C01	identical
+C02	identical
+C03	identical
+C04	identical
+C05	identical
+C06	identical
+D01	identical
+D02	identical
+D03	identical
+D04	identical
+D05	identical
+D06	identical
+D07	identical
+D08	identical
+D09	identical
+D10	identical
+I01	identical
+I02	identical
+L01	identical
+L02	identical
+L03	identical
+L04	identical
+L05	identical
+L06	identical
+L07	identical
+LX01	identical
+LX02	identical
+LX03	identical
+N01	identical
+N02	identical
+P01	identical
+P02	identical
+P03	identical
+P04	identical
+X01	identical
+X02	identical
+
+identical 36/36  reordered 0  different 0
+RANK-STABLE

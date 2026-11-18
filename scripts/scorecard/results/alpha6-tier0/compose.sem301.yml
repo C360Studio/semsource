@@ -1,0 +1,19 @@
+# #301 override: this branch at a35e4ac (SemEngine v0.1.0-alpha.6, embeddings off),
+# built locally as semsource:301-a35e4ac, the #230 corpora, isolated ports.
+# SEM301_CONFIGS holds tier0.json (and tier0-reversed.json for R1); SEM301_CORPUS
+# is the corpus tree. SCORECARD_QUESTIONS is main's questions.json (D10 as graded
+# on alpha.5), since the corpus tree is the frozen 758a805 one.
+services:
+  semsource:
+    image: semsource:301-a35e4ac
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:28080:8080"
+    volumes: !override
+      - ${SEM301_CONFIGS:?set SEM301_CONFIGS}:/etc/semsource:ro
+      - ${SEM301_CORPUS:?set SEM301_CORPUS}:/workspace:ro
+    restart: "no"
+  nats:
+    ports: !override
+      - "127.0.0.1:25222:4222"
+      - "127.0.0.1:29222:8222"
