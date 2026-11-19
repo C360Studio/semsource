@@ -3,22 +3,29 @@
 SemSource's retrieval quality — especially `code_search` (natural-language) — depends on which
 enrichment layer is running. The layers stack; each adds capability on top of the one below.
 
+**Tier 0 is the tier with no external provider**: nothing outside the SemSource process and NATS runs, and
+no embedder is composed. It has two compositions — Structural (`graph.lexical_search: false`) and Lexical
+(the default: `graph-lexical`, a BM25 word index).
+
 | Tier | Adds | `code_search` (NL) | External service | Runnable in semsource today |
 |------|------|--------------------|------------------|------------------------------|
-| **Structural** | graph-ingest / index / query / gateway | — (byName / prefix / relations / impact only) | none | ✅ (`tier0-foundation.json`, `graph.lexical_search: false`) |
-| **0 — Statistical** | graph-lexical (**BM25** word index) | keyword-statistical: good for term overlap, weak for paraphrase | none | ✅ (`tier0-statistical.json`) |
-| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | true semantic similarity, paraphrase-robust (needs `query_prefix` — beats BM25 once set) | **semembed** (:8081, OpenAI-compatible embeddings) | returns with 04C ([#234](https://github.com/C360Studio/semsource/issues/234)) |
-| **2 — Semantic + Instruct** | graph-clustering (LPA + **LLM → seminstruct**), GraphRAG/community summaries | + community/summary reasoning (`local`/`global`/`summary` search) | **seminstruct** (:8083, inference proxy) | returns with 04C ([#234](https://github.com/C360Studio/semsource/issues/234)) |
+| **0 — Structural** | graph-ingest / index / query / gateway | refused: `501 not_enabled` (byName / prefix / relations / impact only) | none | ✅ (`tier0-foundation.json`, `graph.lexical_search: false`) |
+| **0 — Lexical** (default) | graph-lexical (**BM25** word index) | keyword-statistical: good for term overlap, weak for paraphrase | none | ✅ (`mvp.json`, `tier0-statistical.json`) |
+| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | true semantic similarity, paraphrase-robust (needs `query_prefix`) | **semembed** (:8081, OpenAI-compatible embeddings) | ❌ not composed on this pin, no config ships; qualifies after the tag ([#234](https://github.com/C360Studio/semsource/issues/234)) |
+| **2 — Generative** | graph-clustering + LLM community summaries (**seminstruct**) | + community/summary reasoning | **seminstruct** (:8083, inference proxy) | ❌ LLM summaries are not shipped ([semengine#485](https://github.com/C360Studio/semengine/issues/485)); no config ships |
 
-The other query verbs — `code_context`, `code_impact`, `doc_context`, and byName/prefix resolution —
-are **structural** and work at every tier (they don't depend on the embedder). The tier only changes
+The structural verbs — `code_context`, `code_impact`, and byName/prefix resolution — don't depend on the word
+index or an embedder and work at every tier. `doc_context` needs a source that produces documents (see
+[Tier 0 — Structural](#tier-0--structural-tier0-foundationjson--works-today)). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
 
-> **On `semengine v0.1.0-alpha.6` only Structural and Tier 0 run.** Tier 0 word search is
+> **On `semengine v0.1.0-alpha.6` only Tier 0 runs (Structural and Lexical).** Tier 0 word search is
 > `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. SemSource
 > composes no tier 1 embedder on this pin, so the tier 1 and tier 2 configs and the tier 2 dev overlay
-> were removed and return with [#234](https://github.com/C360Studio/semsource/issues/234). The
-> Tier 1 and Tier 2 sections below describe that wiring as it stood and are kept until then.
+> were removed. Tier 1 returns with [#234](https://github.com/C360Studio/semsource/issues/234); LLM
+> community summaries wait on [semengine#485](https://github.com/C360Studio/semengine/issues/485). The
+> Tier 1 and Tier 2 sections below describe that wiring as it stood on the SemStreams pin: they are not
+> runnable here, and the keys and files they name are retired or gone.
 
 > **Paths in these files are Docker-container paths** (`/workspace`) — exactly the mount the shipped
 > compose stack creates (`SEMSOURCE_TARGET` on the host → `/workspace` in the container, defaulting to
@@ -27,30 +34,59 @@ are **structural** and work at every tier (they don't depend on the embedder). T
 > `tiers/` prefix is part of the value) and point `SEMSOURCE_TARGET` at the directory to index. To run
 > a tier config natively, edit the `sources` paths (and `source_roots`) to real host directories.
 
-## Tier 0 — Statistical (BM25) — works today
+## Tier 0 — Structural (`tier0-foundation.json`) — works today
 
-`tier0-statistical.json` is a complete, runnable config. BM25 is a pure-Go statistical embedder: it
-ranks by term overlap, so it's solid when the query shares words with the code (identifiers, comments)
-and weak on paraphrase ("where do we retry with backoff" won't match a `withRetry` helper unless the
-words line up). No external service.
+`tier0-foundation.json` sets `graph.lexical_search: false`: SemSource composes graph-ingest, graph-index,
+graph-query, and the gateway, and no word index. It is a complete, runnable config with no external service.
+
+```bash
+semsource run --config configs/tiers/tier0-foundation.json
+```
+
+- `POST /code-context/search` and `POST /doc-context/search` answer HTTP `501` with
+  `error.code: "not_enabled"` and `retryable: false`, not a transient outage.
+- The `embedding` block on `/source-manifest/status` reports `state: "disabled"` with
+  `reason.code: "not_enabled"` instead of a readiness figure.
+- The structural verbs are unaffected; gate them on `index.ready`.
+
+> **`doc_context` needs a docs source.** Both shipped Tier 0 configs (`tier0-foundation.json` and
+> `tier0-statistical.json`) configure only an `ast` source, so `doc_context` answers
+> "no boot sources configured for docs retrieval" on them: the docs lens is scoped to the systems of
+> `docs`, `config`, `url`, and `s3` sources (and the ones a `repo` source expands to), and none exist.
+> Add one to your copy of the config, or use `mvp.json`, which indexes docs and config files too. The
+> shipped JSON is unchanged.
+
+## Tier 0 — Lexical (BM25) — works today
+
+`tier0-statistical.json` is a complete, runnable config; `mvp.json` (the compose default) adds `docs` and
+`config` sources. `graph-lexical` keeps an in-memory BM25 word index of each entity's text, rebuilt from
+`ENTITY_STATES` at every start, and sends nothing to a model or service. It ranks by term overlap, so it's
+solid when the query shares words with the code (identifiers, comments) and weak on paraphrase ("where do
+we retry with backoff" won't match a `withRetry` helper unless the words line up).
+`tier0-statistical.json`, like `tier0-foundation.json`, indexes only an `ast` source (see the
+`doc_context` note above).
 
 ```bash
 semsource run --config configs/tiers/tier0-statistical.json
 ```
 
-> Observed while indexing a large dependency: on a big one-shot ingest, embeddings (even BM25) lag
-> structural readiness. Poll `source_status` until `embedding.ready` is `true` before trusting
-> `code_search` (`index.ready` gates the structural tools; the old "total_entities is stable"
-> heuristic is retired — counts are no longer a readiness proxy).
+> Observed while indexing a large dependency: on a big one-shot ingest, the word index lags structural
+> readiness. Poll `source_status` until `embedding.ready` is `true` before trusting `code_search` (the
+> `embedding` block reports the `graph-lexical` index; `index.ready` gates the structural tools; the old
+> "total_entities is stable" heuristic is retired — counts are no longer a readiness proxy).
 
 ## Tier 1 — Semantic (semembed) — returns with 04C (#234)
 
-Tier 1 swaps the embedder to `http`, which resolves the `model_registry` **`embedding`** capability
-(graph-embedding). semstreams centralizes endpoints in a `model_registry` (ADR-0002 / alpha.29 — it
+> **Not runnable on this pin.** No `graph-embedding` is composed, `graph.embedder_type` is refused at load
+> (any value, `null` included), and no Tier 1 config ships. What follows is the wiring as it stood on the
+> SemStreams pin, kept as the starting point for [#234](https://github.com/C360Studio/semsource/issues/234).
+
+Tier 1 swapped the embedder to `http`, which resolved the `model_registry` **`embedding`** capability
+(graph-embedding). semstreams centralized endpoints in a `model_registry` (ADR-0002 / alpha.29 — it
 removed per-component `embedder_url` in favour of the registry); semsource passes `config.ModelRegistry`
 straight through to `ssCfg.ModelRegistry`, and the ComponentManager injects it into
-`deps.ModelRegistry`. Config validation fails fast: `embedder_type: "http"` without a resolvable
-`embedding` capability is rejected at load, not degraded silently at runtime.
+`deps.ModelRegistry`. The pass-through still exists, but on this pin nothing resolves from it:
+`embedder_type` is refused outright rather than validated against the registry.
 
 **Set `query_prefix` for arctic/BGE/E5 models** (see the caveat below): it applies to the query side
 only (documents are embedded raw). Without it, retrieval quality collapses toward short generic entities.
@@ -59,29 +95,26 @@ only (documents are embedded raw). Without it, retrieval quality collapses towar
 {
   "namespace": "acme",
   "sources": [ /* ... */ ],
-  "graph": { "embedder_type": "http" },
   "model_registry": {
     "endpoints": {
       "semembed": { "provider": "openai", "url": "http://localhost:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s",
         "query_prefix": "Represent this sentence for searching relevant passages: " }
     },
-    "capabilities": { "embedding": { "preferred": ["semembed"] } },
-    "defaults": { "model": "semembed" }
+    "capabilities": { "embedding": { "preferred": ["semembed"] } }
   }
 }
 ```
 
 ```bash
 docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:latest   # OpenAI-compatible embeddings
-semsource run --config configs/tiers/tier1-semantic.json
 ```
 
 > **Resource footprint — semembed is CPU-heavy on the first index (local-dev caveat).** semembed runs
 > real embedding inference (fastembed-rs / ONNX, arctic-embed-s). Embedding a full initial index is a
 > burst of inference and, by default, ONNX fans out across every core: **measured ~561% CPU (≈5.6 cores)
 > embedding a 21.5k-entity graph on a laptop** — fine on a server, rough on a dev machine. It's a
-> **one-time first-index cost** (results land in `EMBEDDINGS_CACHE`; steady-state watch is cheap), not
-> continuous. Levers if it's hammering your machine:
+> **one-time first-index cost** (vectors land in `EMBEDDING_INDEX`, content hashes in `EMBEDDING_DEDUP`;
+> steady-state watch is cheap), not continuous. Levers if it's hammering your machine:
 > - **Cap the container CPU** — `docker run --cpus=2 ...` up front, or **live with no restart / no lost
 >   progress**: `docker update --cpus=2 semembed` (drops ~561%→~200%; the initial index just takes
 >   longer). In compose, `deploy.resources.limits.cpus: "2"`.
@@ -102,7 +135,7 @@ actually serve it.
 **These configs deliberately set no `defaults.model`.** It is a legitimate framework feature — a
 catch-all for capabilities that resolve nowhere else — but a catch-all pointed at an embeddings
 endpoint routes *every* unbound LLM capability there. That starts cleanly and fails only when
-called, and semstreams' own guidance is to "bind the capability explicitly rather than reshaping
+called, and semstreams' own guidance was to "bind the capability explicitly rather than reshaping
 `defaults.model`".
 
 Leaving an LLM capability unbound is **not** an omission to paper over. The consuming components
@@ -113,19 +146,20 @@ document and implement a non-LLM path for exactly this state:
 | `query_classification` | keyword-only classifier |
 | `answer_synthesis` | template synthesis, no model |
 
-So tier 0 and tier 1 bind `embedding` and nothing else, and that is correct, not incomplete.
+So a tier 1 config binds `embedding` and nothing else (tier 0 binds nothing), and that is correct, not
+incomplete.
 
 Config load enforces this: a capability resolving to an endpoint that cannot serve it fails
 `semsource validate` **and** `semsource run` before any component starts, naming the capability,
 the endpoint, and both remedies. Every shipped config is checked by a test that discovers them,
 so a config added later is covered without anyone remembering to register it.
 
-**Tier 2 binds `query_classification` and `answer_synthesis` to `seminstruct`** — it has a
-generative endpoint, so the honest binding is the real one. It does **not** bind `anomaly_review`:
-that consumer runs only under clustering, which ships off, and binding a capability nothing runs
-would invent coverage.
+**A tier 2 config would bind `query_classification` and `answer_synthesis` to `seminstruct`** — it
+would have a generative endpoint, so the honest binding is the real one. It would **not** bind
+`anomaly_review`: anomaly detection is not ported (graph-clustering refuses `enable_anomaly_detection`),
+and binding a capability nothing runs would invent coverage.
 
-> **What this does and does not claim.** Binding these capabilities makes tier 2's configuration
+> **What this does and does not claim.** Binding these capabilities would make a tier 2 configuration
 > *honest*, not *proven*. They are consumed on graph-query's GraphRAG path, which `code_context` /
 > `doc_context` do not use — so that path remains unexercised here, and this table should not be
 > read as evidence it works end to end.
@@ -142,113 +176,28 @@ would invent coverage.
 > whiffs those (no lexical overlap). Omit the prefix and tier-1 ranks *below* BM25. A code-specialized
 > or larger embedder is a complementary product-side lever.
 
-## Tier 2 — Semantic + Instruct (seminstruct) — returns with 04C (#234)
+## Tier 2 — Generative (seminstruct) — not shipped
 
-> **Ships OFF, and is not part of the MVP.** `enable_clustering` and `clustering_llm` are both
-> `false` in this config, and it names **no compose service** — you bring your own seminstruct.
-> Treat this file as a **wiring example**, not a supported profile: the capability bindings show what
-> to bind if you run seminstruct, and nothing here starts by default.
->
-> If you want a tier-2 stack that actually comes up, use the **dev overlay** below
-> (`docker-compose.tier2-dev.yml` + `tier2-compose-dev.json`) rather than editing this file. The
-> overlay is an opt-in `-f` overlay, deliberately **not** a profile on the core stack — the shippable
-> MVP stays nats+semsource, and `task core:smoke` asserts that exact default set.
->
-> It previously shipped with both flags `true`, which meant selecting this config would have driven
-> community summaries at `localhost:8083` with nothing listening. Flipped off rather than deleted so
-> the wiring stays documented.
+> **Nothing LLM-backed runs on this pin.** LLM community summaries are not ported
+> ([semengine#485](https://github.com/C360Studio/semengine/issues/485)): `graph.clustering_llm` and
+> `graph.entity_id_edges` are refused at load, no Tier 2 config ships, and the Tier 2 compose overlay
+> (`docker-compose.tier2-dev.yml`) was removed. What does run is `graph.enable_clustering: true`, which
+> composes `graph-clustering` with no external provider.
 
-Tier 2 *would* add **graph-clustering** (`graph.enable_clustering: true`): pure-Go LPA community
-detection over ENTITY_STATES → COMMUNITY_INDEX, lighting up the already-declared
-`local`/`global`/`summary` query routes. `graph.clustering_llm: true` additionally enables GraphRAG
-community summaries via the `model_registry` **`community_summary`** capability (→ seminstruct). LPA
-runs with no external service; only the LLM summaries need seminstruct.
+`graph.enable_clustering: true` adds **graph-clustering**: communities are entity-ID prefix groups over
+`ENTITY_STATES`, kept in `COMMUNITY_INDEX` with a statistical summary (ADR-099), which graph-query's
+`localSearch`, `globalSearch`, and `searchGraph` read. The generative part — LLM community summaries via
+the `model_registry` **`community_summary`** capability (→ seminstruct) — is what semengine#485 tracks.
 
-To try it, stand up seminstruct yourself and set both flags to `true`:
+`graph.entity_id_edges` went with label propagation: graph-clustering now synthesizes no edges, so the
+sibling and system-peer tuning measured on the SemStreams pin
+([`docs/testing/tier-baselines.md`](../../docs/testing/tier-baselines.md)) no longer applies.
+
+The seminstruct container the earlier wiring targeted still runs on its own; nothing in SemSource calls it
+on this pin:
 
 ```bash
 docker run -d -p 8083:8083 ghcr.io/c360studio/seminstruct:qwen3-0.6b   # OpenAI-compatible inference
-semsource run --config configs/tiers/tier2-semantic-instruct.json
-```
-
-Requires **seminstruct** running (Rust proxy, :8083, OpenAI-compatible inference) only when
-`clustering_llm` is set — and with this config you must provide it yourself.
-
-### Tier 2 in Compose — the dev overlay (`tier2-compose-dev.json`)
-
-`docker-compose.tier2-dev.yml` adds a digest-pinned `seminstruct` service on top of the core stack,
-and `configs/tiers/tier2-compose-dev.json` is the matching config — the difference from
-`tier2-semantic-instruct.json` is that it targets **Compose service hostnames** (`http://semembed:8081`,
-`http://seminstruct:8083`) instead of `localhost`, and it turns **both clustering flags on**. It is
-the only config in this repo that enables clustering, so it is what you need to exercise the
-community-summary path at all.
-
-```bash
-SEMSOURCE_CONFIG=tiers/<tier-2 config>.json \
-  docker compose -f docker-compose.yml -f docker-compose.tier2-dev.yml up -d
-```
-
-Two things the overlay is deliberate about:
-
-- **Not a profile.** Tier 2 is a ~1GB image running real inference. Keeping it an opt-in `-f`
-  overlay is what lets `task core:smoke` keep asserting that the default Compose resolves exactly
-  nats and semsource.
-- **A size-free model alias.** The config asks for model `seminstruct`, not `qwen3-0.6b`, and the
-  overlay sets `MODEL_ALIAS` to match. llama-server ignores the requested model name and serves
-  whatever GGUF it loaded, so a size-specific name would *not* error after you swapped images — it
-  would keep working while every log line and config claimed the wrong model. Swap size with
-  `SEMINSTRUCT_IMAGE` alone; the digests for 0.6b / 1.7b / 8b are listed in the overlay.
-
-Treat 0.6b output as evidence the wiring works, never as evidence the answers are good — community
-summaries and NL-search quality need the 8b image.
-
-### Clustering edge synthesis — why this config turns system peers off
-
-`tier2-compose-dev.json` sets:
-
-```json
-"entity_id_edges": { "include_system_peers": false }
-```
-
-Before running label propagation, `graph-clustering` synthesizes virtual edges from entity IDs.
-Two kinds, both ON in the substrate's defaults: **siblings** (entities sharing the 5-part type
-prefix) and **system peers** (entities sharing the `{system}` segment, up to 15 each).
-
-**Whether system peers help depends on how many distinct systems your graph has, and SemSource's
-`system` segment is coarse.** It is the source root's base name, so:
-
-| Deployment shape | What `system` looks like | System peers |
-| --- | --- | --- |
-| One source root — `/workspace` under Compose, or one repo | **the same value for every entity** | Links across the whole graph; LPA collapses |
-| One root per repo | one value per repo | Groups by repo — which is not a topic |
-
-Measured both ways on a three-repo, 12,798-entity corpus (see
-[`docs/testing/tier-baselines.md`](../../docs/testing/tier-baselines.md)):
-
-| `max_system_peers` | communities | largest community |
-| --- | --- | --- |
-| 15 (substrate default) | 14 | **8,823 — 66.1%**, holding *every* osh-core entity |
-| 3 | 22 | 6,067 — 47.4% |
-| off | 19 | 6,069 — 47.4% |
-
-Capping to 3 already recovers the whole benefit, so the harm comes from the *number* of peers, not
-from the idea. Off is what ships because it is the simplest setting with that outcome and the only
-one that stays right when a deployment has a single source root.
-
-**Two things this does not claim.** Turning system peers off does not make clustering *good* — the
-largest community still holds 47% of the graph, and that residue is **sibling** synthesis, which
-this config leaves at its default. And it does not improve community *summaries*: those are weak for
-an unrelated reason ([semstreams#829](https://github.com/C360Studio/semstreams/issues/829) — the
-summarizer is never given entity content), so better clusters are not better answers.
-
-To override, set the block yourself; omitting it entirely restores the substrate defaults, and
-omission is a true no-op rather than an implicit `false`.
-
-Check the overlay's composition, image pins, and config wiring without pulling anything:
-
-```bash
-task tier2:smoke:dev                          # composition checks only
-SEMSOURCE_TIER2_SMOKE_FULL=1 task tier2:smoke:dev   # also pulls, starts, and polls to ready
 ```
 
 **The MCP surface is two families.** The *fusion* tools (`code_context`, `code_impact`,
@@ -264,15 +213,13 @@ no community index exists. What changes with the tier is **how far the answer es
 
 | Tier | `graph_search` returns | Disclosed rung |
 | ---- | ---------------------- | -------------- |
-| 0 / 1 (no clustering) | Entity hits / digests. No community summaries and **no synthesized answer** — synthesis requires summaries | `entities_only`, `community_backed: false` |
-| Clustering, no LLM | \+ community summaries \+ a **template** answer | `community_summaries`, `answer_source: template` |
-| Clustering \+ LLM | \+ an **LLM-synthesized** answer | `llm_answer`, `answer_source: llm` |
+| 0 / 1 (no clustering) | Entity hits / digests. No community summaries | `entities_only`, `community_backed: false` |
+| Clustering (`graph.enable_clustering`) | \+ community summaries | `community_summaries`, `community_backed: true` |
 
 Read the disclosure before treating results as community evidence: a non-community answer is a
-similarity hit list, not thematic reasoning. Note that `answer_source` — not the substrate's
-`degraded` flag — distinguishes a template answer from an LLM one. A deployment with no LLM returns a
-template answer with `degraded: false` deliberately, because the template is the canonical answer
-there; `degraded` means an LLM-*configured* deployment fell back.
+word-search hit list, not thematic reasoning. The answer text, when one comes back, is a deterministic
+template built from the results (`answer_source: template`, else `none`) — never LLM-synthesized, because
+the pinned substrate synthesizes none ([semengine#485](https://github.com/C360Studio/semengine/issues/485)).
 
 **Answering never requires an LLM.** Query classification is a tiered chain whose first tier is a
 deterministic keyword classifier; a keyword match bypasses the LLM tier entirely, and the LLM tier
@@ -281,22 +228,28 @@ not currently expose, so it is off in every deployment.
 
 ## Current state / enablement
 
-- **Tier 0 is the MVP default** (`configs/mvp.json`, BM25 with no external service) and is what the
-  shipped compose runs until Slice 04C (`semengine#489`, [#234](https://github.com/C360Studio/semsource/issues/234)) lands.
+- **Tier 0 (Lexical) is the MVP default** (`configs/mvp.json`, BM25 with no external service) and is what
+  the shipped compose runs until Slice 04C (`semengine#489`,
+  [#234](https://github.com/C360Studio/semsource/issues/234)) lands. Structural (`tier0-foundation.json`)
+  is the other Tier 0 composition.
+
 > **Measured baselines:** [`docs/testing/tier-baselines.md`](../../docs/testing/tier-baselines.md)
 > records boot-to-ready timings and answer-quality observations from a real 6,685-entity Java corpus
-> — including the finding that LPA clustering put 82% of entities in one community, which makes
-> tier-2 "community-backed" answers weak on code. Read it before recommending a tier.
+> — including the finding that LPA clustering put 82% of entities in one community, which made
+> tier-2 "community-backed" answers weak on code. That was measured on the SemStreams LPA
+> implementation; SemEngine groups communities by entity-ID prefix, so it does not carry over. Read it
+> before recommending a tier.
 
-- **Tier 2 is wired but ships off** — see the note above: no compose service, and both clustering
-  flags are `false` in `tier2-semantic-instruct.json`. **`tier2-compose-dev.json` is the only shipped
-  config that sets `enable_clustering` and `clustering_llm` true.** Tier 2 is unexercised; do not
-  read its row in the table above as evidence it works end to end. The GraphRAG path now has an
-  in-repo consumer — `graph_search` — but the community-backed and LLM rungs of its disclosure are
-  proven from recorded substrate responses, not from a live clustered stack.
-- Tier 1/2 wiring is real (`config.ModelRegistry` → `ssCfg.ModelRegistry`; `graph.enable_clustering`
-  adds graph-clustering). Validated end-to-end against local semembed: http embedder active,
-  embeddings generated with 0 errors, `provenance: embedding` on `code_search`.
-- **Tier-1 beats BM25 with the query prefix set** (semstreams#438 resolved, beta.129). On the dogfood
-  corpus, semembed + `query_prefix` nails paraphrase queries that BM25 misses; omit the prefix and it
-  regresses below BM25. A code-specialized or larger embedder is the complementary product-side lever.
+- **Tier 2 is not shipped** — see the note above: no config or compose overlay, and LLM community
+  summaries are [semengine#485](https://github.com/C360Studio/semengine/issues/485). `graph.enable_clustering`
+  composes graph-clustering, but the community-backed rung of `graph_search`'s disclosure is covered by
+  unit tests over substrate-shaped replies (`processor/mcp-gateway/disclosure_test.go`), not by a live
+  clustered stack.
+- **Tier 1 is not composed on this pin.** The `config.ModelRegistry` → `ssCfg.ModelRegistry` pass-through
+  is the wiring that exists. The earlier end-to-end validation against local semembed (http embedder
+  active, embeddings generated with 0 errors, `provenance: embedding` on `code_search`) ran on the
+  SemStreams pin and does not carry over to [#234](https://github.com/C360Studio/semsource/issues/234).
+- **Tier-1 beat BM25 with the query prefix set** (semstreams#438 resolved, beta.129), measured on the
+  SemStreams pin. On the dogfood corpus, semembed + `query_prefix` nailed paraphrase queries that BM25
+  misses; omitting the prefix regressed below BM25. A code-specialized or larger embedder is the
+  complementary product-side lever. Re-measure for #234.

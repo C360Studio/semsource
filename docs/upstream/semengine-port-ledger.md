@@ -172,3 +172,21 @@ The pin moved to alpha.6 with embeddings off and the run above was repeated. Eve
 every miss is identical: dogfood 32/36, OSH 12/13, R1 36/36 RANK-STABLE, setup03a BM25 lane
 passing. The record is in
 [`SUMMARY-alpha6-tier0.md`](../../scripts/scorecard/results/SUMMARY-alpha6-tier0.md).
+
+## Open SemEngine Asks
+
+SemEngine owns substrate repairs and SemSource files them as issues there (ADR-0013 decision 4); this section is the
+evidence home for the asks SemSource carries at the pinned `v0.1.0-alpha.6`. States below were read with
+`gh issue view -R C360Studio/semengine <n>` on 2026-11-19. All three concern Tier 1 (neural search, #234); Tier 0 on
+alpha.6 runs with embeddings off and does not depend on them.
+
+| Issue | Gap | State | What SemSource does meanwhile |
+| --- | --- | --- | --- |
+| [semengine#667](https://github.com/C360Studio/semengine/issues/667) | Text cut at the embedder's input window (512 tokens for `arctic-embed-s`) is not counted: `httpembedder` ignores the per-entry `truncated` mark and `IncTruncated` is an empty stub (`processor/graph-embedding/metrics.go:52` at alpha.6) | open | Nothing: a deployment cannot see how many entities were embedded from their opening text only |
+| [semengine#686](https://github.com/C360Studio/semengine/issues/686) | `httpembedder` sends no `input_type`, so the product must supply each model's query prefix | closed 2026-11-17 by [PR #691](https://github.com/C360Studio/semengine/pull/691), merged after alpha.6 (released 2026-11-17 06:10 UTC); no tag after alpha.6 as of this date | SemSource carries each model's `query_prefix` on the embedding endpoint; revisit at the pin bump that includes #691 |
+| [semengine#683](https://github.com/C360Studio/semengine/issues/683) | No context in the embedded text to tell sibling entities apart: `graph-embedding` joins `name + " " + body`, so sections of one file share their leading tokens | open | Nothing |
+
+Closed upstream: [semengine#620](https://github.com/C360Studio/semengine/issues/620) (re-measure lexical `NameWeight` on
+SemSource's real entity names) closed on 2026-11-17 with `NameWeight` staying at 2. SemSource's sweep, merged in #298,
+is the record:
+[`SUMMARY-nameweight.md`](../../scripts/scorecard/results/SUMMARY-nameweight.md).

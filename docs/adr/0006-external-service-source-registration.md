@@ -5,8 +5,8 @@
 > **Pairs with:** ADR-0004 (fusion query side), [semstreams#376](https://github.com/C360Studio/semstreams/issues/376)
 >
 > **Amended by [ADR-0013](0013-substrate-cutover-to-semengine.md) (2026-11-19):** a source added or removed at runtime
-> is persisted as desired state and applied after the next SemSource restart (`ready_when` says so); it no longer
-> spawns or stops live (#213, #223).
+> is persisted as desired state and applied after the next SemSource restart (`AddReply.ready_when` says so;
+> `RemoveReply` carries `restart_required: true`); it no longer spawns or stops live (#213, #223).
 >
 > **Landed since:** headless mode is removed (`config` rejects `mode: "headless"`); the NATS
 > registration path exists (`graph.ingest.add/remove.{namespace}`); and the "durable bytes"

@@ -22,7 +22,7 @@ networks.
   SemSource together; nothing else is installed on the host.
 - **Without Docker** you need:
   - the `semsource` binary — `go install github.com/c360studio/semsource/cmd/semsource@latest`
-    (Go 1.26.3+), and
+    (Go 1.26.11+), and
   - a reachable **NATS server with JetStream**. The bundled compose file can
     provide just that piece: `docker compose up -d nats` from a
     [semsource checkout](https://github.com/C360Studio/semsource) publishes
@@ -110,7 +110,7 @@ seed. Three signals matter, and they become ready in this order:
 | --------------------- | ----------------------------------------------------------------------- |
 | `"phase": "ready"`    | Every configured source finished its initial seed                       |
 | `"index": {...}`      | The structural index caught up — `code_context`/`callers`/`impact` answer reliably |
-| `"embedding": {...}`  | The semantic pipeline caught up — `code_search` ranking is trustworthy  |
+| `"embedding": {...}`  | The word index caught up — `code_search` ranking is trustworthy         |
 
 While seeding, the per-source `files_parsed` and `bodies_offloaded` counters
 advance even when the published-entity count is flat — that's a working seed,
@@ -131,7 +131,8 @@ The response is a ranked answer with the symbol's verbatim body, its
 relations, and provenance — plus a readiness envelope, so a not-ready graph
 returns an honest empty answer instead of a false "not found".
 
-Search by meaning instead of by name:
+Search by the words in the code instead of by name (Tier 0 ranks by term overlap, so use words the code
+contains):
 
 ```bash quickstart:single
 curl -sf --max-time 10 -X POST "http://localhost:${SEMSOURCE_HTTP_PORT:-8080}/code-context/search" \
@@ -294,14 +295,17 @@ curl -sf --max-time 10 -X POST "http://localhost:${SEMSOURCE_HTTP_PORT:-8080}/co
 ```
 
 `Farewell` exists at the `b1256521ee39` pin. Look at the returned node's
-`handle` — the entity's identifier:
+`handle` — the entity's identifier, in the order
+`{org}.{platform}.{system}.{domain}.{type}.{instance}`:
 
-```
-quickstart.semsource.golang.github-com-c360studio-semdev-test-sub-b1256521ee39.function.farewell-go-Farewell
+```text
+quickstart.<platform>.github-com-c360studio-semdev-test-sub-b1256521ee39.golang.function.farewell-go-Farewell
 ```
 
-It carries the submodule's own project scope
-(`github-com-c360studio-semdev-test-sub`) and that pin — and there is exactly
+`<platform>` is the platform SemEngine minted for your deployment (`platform_id`, default stem `semsource`,
+is only its stem), so it differs per deployment and is not literally `semsource`. The system segment
+carries the submodule's own project scope (`github-com-c360studio-semdev-test-sub`) and that pin — and
+there is exactly
 **one** such entity, even though two registrations supplied it (your
 standalone `ast` source and `semdev-test`'s root submodule pin). Same
 project, same version, byte-identical IDs, one merged entity — dedup by
@@ -323,7 +327,7 @@ what it means, and what to do.
 | `phase: "degraded"`, every source `watching`/`idle`, some source's `seed_lost` > 0 | A seed finished but entities it offered never reached the graph — the corpus is incomplete | Check that source's `last_error` and NATS stream limits. The graph re-derives from source: fix the cause, then re-seed. `degraded` clears only when a pass completes with `seed_lost: 0` |
 | `phase: "degraded"`, some source not `watching`/`idle` | The seed timeout fired before every source reported | Find the source whose `phase` is not `watching`/`idle`; its `last_error` says why. Fix and restart |
 | `phase: "ready"` but `code_context` misses a symbol you can see, `index.ready: false` | Sources finished, structural index still catching up | Wait for `index.ready: true`, then re-query — structural queries gate on it |
-| `code_search` results weak or empty, `embedding.ready: false` (or `available: false`) | Semantic ranking not caught up (or not configured — native default is BM25) | Wait for `embedding.ready`; for semantic search natively, wait for 04C ([#234](https://github.com/C360Studio/semsource/issues/234)): tier 1 has no embedder on this SemEngine pin |
+| `code_search` results weak or empty, `embedding.ready: false` (or `available: false`) | The word index is not caught up, or word search is off (`graph.lexical_search: false` reports `available: false`, and `/code-context/search` answers `501 not_enabled`) | Wait for `embedding.ready`; for semantic search, wait for 04C ([#234](https://github.com/C360Studio/semsource/issues/234)): tier 1 has no embedder on this SemEngine pin |
 | A source's `phase: "errored"` or `error_count` > 0 | That source hit parse/publish failures; entities may be missing | Read `last_error.code` — bad paths and unreadable files are config-side; publish errors are transport-side |
 | A submodule path's `state` ≠ `materialized` | Declared submodule code is not in the graph | See the state table above — each state names its fix |
 | `total_entities: 0` and never leaves `seeding` | Sources registered but nothing ingests (wrong paths, empty target) | `GET /source-manifest/sources` shows exactly what was registered; `semsource validate` checks the config without starting |
@@ -336,5 +340,5 @@ what it means, and what to do.
   top-level field), compose profiles, and the API surfaces.
 - [docs/integration/mcp-quickstart.md](integration/mcp-quickstart.md) — the
   agent-side walkthrough of the MCP tools.
-- `configs/tiers/` — search-quality tiers, from BM25-only to
-  semantic-instruct.
+- `configs/tiers/` — search-quality tiers: the two Tier 0 configs (structural-only and BM25 word search),
+  and what the later tiers add.

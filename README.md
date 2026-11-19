@@ -25,9 +25,9 @@ the source files.
 SemSource runs on SemEngine and uses NATS JetStream/KV for graph
 state, ownership, and query indices — so **a NATS server is always required**.
 
-- **Docker** — the recommended path; `docker compose up` bundles NATS + embeddings and
-  needs nothing else installed.
-- To run the CLI **natively** instead: **Go 1.26.3+** (to build/install) and a reachable
+- **Docker** — the recommended path; `docker compose up` bundles NATS + SemSource (Tier 0 word
+  search, no embedding service) and needs nothing else installed.
+- To run the CLI **natively** instead: **Go 1.26.11+** (to build/install) and a reachable
   **NATS server** (JetStream enabled).
 - `ffmpeg` / `ffprobe` on your `PATH` — only if you ingest `video` / `audio` sources.
 
@@ -37,7 +37,7 @@ state, ownership, and query indices — so **a NATS server is always required**.
 zero-to-first-query path: point SemSource at a repository (or several, with
 explicit identity and the git-submodule case), watch it reach
 `phase: ready`, run a first query, and connect an agent. It covers both
-starts — Docker Compose (bundles NATS + semantic search) and the native
+starts — Docker Compose (bundles NATS + Tier 0 word search) and the native
 binary — plus a signal-keyed troubleshooting section. Its command blocks are
 executed verbatim by CI against real fixture repositories, so the walkthrough
 cannot silently drift from the product.
@@ -164,7 +164,7 @@ Brings up two services and indexes the current directory (`SEMSOURCE_TARGET`, de
 | Service   | Port             | Description                                                            |
 | --------- | ---------------- | ---------------------------------------------------------------------- |
 | SemSource | `localhost:8080` | Ingest + ServiceManager HTTP API **+ MCP gateway** (published to host) |
-| NATS      | internal `:4222` | JetStream and KV substrate                                             |
+| NATS      | `localhost:4222` | JetStream and KV substrate (published to the host)                     |
 
 SemSource runs on [`configs/mvp.json`](configs/mvp.json) with `graph-lexical` (Tier 0 statistical
 search, no external embedding service). The `semembed` service (`:8081`) is gated behind the opt-in
@@ -309,12 +309,14 @@ C360_PORT=3000                    # External port for Caddy (ui profile)
 SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>  # Required immutable workbench release image
 ```
 
-The default `SEMSOURCE_CONFIG=mvp.json` runs Tier 0 BM25 keyword-statistical search with no external
-embedding container; `semembed` stays off unless `--profile semantic` is enabled (reserved for 04C,
-[#234](https://github.com/C360Studio/semsource/issues/234)). Set
-`SEMSOURCE_CONFIG=tiers/tier0-foundation.json` (`graph.lexical_search: false`) to run the structural-only
-profile without `graph-embedding`. NATS is required because SemSource runs on the SemEngine
-ServiceManager and uses JetStream/KV for graph state, ownership, and query indices. Outside Docker,
+The default `SEMSOURCE_CONFIG=mvp.json` runs Tier 0: no external provider, with the `graph-lexical`
+BM25 word index (keyword-statistical search) and no embedding container; `semembed` stays off unless
+`--profile semantic` is enabled (reserved for 04C,
+[#234](https://github.com/C360Studio/semsource/issues/234)). Tier 0 has a second composition: set
+`SEMSOURCE_CONFIG=tiers/tier0-foundation.json` (`graph.lexical_search: false`) to run it structural-only,
+without `graph-lexical`; `POST /code-context/search` then answers `501 not_enabled`. NATS is required
+because SemSource runs on the SemEngine ServiceManager and uses JetStream/KV for graph state,
+ownership, and query indices. Outside Docker,
 SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NATS_URL`.
 
 ### Port Map
@@ -323,7 +325,7 @@ SemSource defaults to `nats://localhost:4222`; override with `--nats-url` or `NA
 | ---- | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | 8080 | ServiceManager HTTP API + MCP gateway | **Published to host** in the core profile (includes `/graph-gateway/graphql`)                            |
 | 8081 | semembed embeddings                   | `semantic` profile (reserved for 04C); internal Docker network                                           |
-| 4222 | NATS                                  | Internal Docker network by default                                                                       |
+| 4222 | NATS                                  | Published to the host by default (`NATS_HOST_PORT`); a native `semsource run` connects here              |
 | 3000 | Caddy entry point                     | ui profile: UI, GraphQL (`/graphql`), source-manifest APIs, `/ws` `ENTITY_STATES` KV-watch stream        |
 | 7890 | SemSource WebSocket                   | Internal `ENTITY_STATES` KV-watch stream export (`put`/`delete`/`poisoned`/`synced` frames, ADR-0001)     |
 | 9091 | Prometheus metrics                    | Internal, proxied at `/metrics` (ui profile)                                                             |
@@ -415,8 +417,9 @@ identity** — on by default for `repo`/`git` sources:
 
 Submodule expansion runs for sources configured in `semsource.json` at boot
 (see [Branch and submodule discovery](#branch-and-submodule-discovery));
-sources added at runtime via `add_source` materialize and report submodule
-state but are not yet auto-expanded.
+a source added with `add_source` starts after the next restart, reports
+submodule state, but is not auto-expanded (per-submodule identity expansion
+applies to boot-configured sources only).
 
 Optional top-level fields:
 
@@ -534,11 +537,13 @@ SemSource runs the graph gateway through the SemEngine ServiceManager. The live 
 `ui` profile, where Caddy exposes the operator-facing route at `http://localhost:3000/graphql` (see
 [UI profile](#ui-profile--add-the-semsource-workbench)).
 
-| Endpoint                      | Description                                                 |
-| ----------------------------- | ----------------------------------------------------------- |
-| `GET /graph-gateway/graphql`  | GraphQL playground when enabled on the ServiceManager route |
-| `POST /graph-gateway/graphql` | GraphQL query endpoint on the ServiceManager route          |
-| `GET/POST /graphql`           | Same GraphQL route through the `ui` profile Caddy proxy     |
+| Endpoint                      | Description                                             |
+| ----------------------------- | ------------------------------------------------------- |
+| `POST /graph-gateway/graphql` | GraphQL query endpoint on the ServiceManager route      |
+| `POST /graphql`               | Same GraphQL route through the `ui` profile Caddy proxy |
+
+The route accepts only `POST`; any other method answers `405` with `Allow: POST`. There is no playground, and
+`graph.enable_playground` is refused at load.
 
 ### Status Phases
 
@@ -562,7 +567,7 @@ Downstream consumers should gate on `phase: "ready"` before querying the graph.
 ## Fused Code & Doc Context (Agent API)
 
 For agents (e.g. Claude Code) that want a source-first answer instead of raw triples,
-SemSource runs a **deterministic fusion gateway** (ADR-0004, built on semstreams
+SemSource runs a **deterministic fusion gateway** (ADR-0004, built on SemEngine
 `pkg/fusion`): it resolves a query, expands the structure around it, hydrates verbatim
 bodies, and returns one ranked answer with a readiness/provenance envelope. Two instances:
 
@@ -619,16 +624,21 @@ on HTTP status plus `error.code`.
 | 405    | `method_not_allowed`                            | Use POST                                    |
 | 413    | `request_too_large`                             | Reduce the request body                     |
 | 500    | `internal_error`                                | SemSource failed locally                    |
+| 501    | `not_enabled`                                   | Search is off in this composition; no retry |
 | 502    | `upstream_contract_error`, `upstream_failure`   | The graph dependency failed non-transiently |
 | 503    | `component_not_ready`, `dependency_unavailable` | Retry after service/dependency recovery     |
 | 504    | `upstream_timeout`                              | The graph query exceeded its deadline       |
 
-Messages are sanitized and never carry raw NATS, storage, or entity details. `index.ready: false`
-and ready responses containing `misses` remain successful HTTP 200 fusion responses.
+`not_enabled` (`retryable: false`) is the Tier 0 structural-only refusal: `POST /code-context/search` and
+`POST /doc-context/search` answer it when `graph.lexical_search` is `false`, and retrying cannot succeed.
+
+Messages are sanitized and never carry raw NATS, storage, or entity details. A `deferred: true` response
+(with a `defer_reason`, for example `index_not_ready`) and ready responses containing `misses` remain
+successful HTTP 200 fusion responses.
 
 ## Building from Source
 
-Requires **Go 1.26.3+** (see `go.mod`). The binary still needs a running NATS server at
+Requires **Go 1.26.11+** (see `go.mod`). The binary still needs a running NATS server at
 runtime (see [Prerequisites](#prerequisites)); `video`/`audio` sources additionally need
 `ffmpeg`/`ffprobe` on `PATH`.
 

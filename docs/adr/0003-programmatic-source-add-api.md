@@ -3,8 +3,8 @@
 > **Status:** Superseded in part by ADR-0006 | **Date:** 2026-04-29
 >
 > **Amended by [ADR-0013](0013-substrate-cutover-to-semengine.md) (2026-11-19):** a source added or removed at runtime
-> is persisted as desired state and applied after the next SemSource restart (`ready_when` says so); it no longer
-> spawns or stops live (#213, #223).
+> is persisted as desired state and applied after the next SemSource restart (`AddReply.ready_when` says so;
+> `RemoveReply` carries `restart_required: true`); it no longer spawns or stops live (#213, #223).
 >
 > The wire contract (`AddRequest`/`AddReply`/`RemoveRequest`, `SourceEntry`, namespace
 > targeting) stands. Its "headless mode is first-class" premise does **not** — headless
