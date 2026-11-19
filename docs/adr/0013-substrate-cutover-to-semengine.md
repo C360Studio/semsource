@@ -3,65 +3,86 @@
 - **Status:** Accepted
 - **Date:** 2026-11-19
 - **Issue:** [#235](https://github.com/C360Studio/semsource/issues/235); cutover landed in #222 (`4ca2072`)
+- **Amends:** [ADR-0001](0001-websocket-exports-raw-entities.md) (`/ws` wire),
+  [ADR-0010](0010-graph-query-mcp-tool-family.md) (`graph_search` disclosure)
 
 ## Context
 
 SemSource was built on `github.com/c360studio/semstreams`. The governed graph substrate (entity
-state, the graph-ingest write seam, query verbs, components) now lives in SemEngine, and SemStreams
-stops receiving graph-substrate work. Carrying both would mean two copies of every contract
-SemSource depends on, so the choice is one substrate.
+state, the graph-ingest write seam, query verbs, components) now lives in SemEngine. Two defects
+that blocked broker recovery and source removal on the frozen SemStreams pin, a stale applied
+sequence after stream recreation ([semstreams#1442]) and deleted file components returning at
+restart ([semstreams#1443]), were fixed only in SemEngine
+([semengine#15](https://github.com/C360Studio/semengine/issues/15),
+[semengine#17](https://github.com/C360Studio/semengine/issues/17)). Carrying both substrates would
+mean two copies of every contract SemSource depends on.
 
-The move is irreversible in practice. SemEngine renames the substrate's outward identifiers
-([semengine#69](https://github.com/C360Studio/semengine/issues/69)), including the config bucket
-that retains deployment authority, so a deployment cannot move back without re-ingesting.
+The move cannot be undone without a re-ingest. SemEngine ADR-102/104 reorder the entity ID and
+mint the platform authority, and SemEngine renames the bucket that retains that authority
+([semengine#69](https://github.com/C360Studio/semengine/issues/69)).
+
+**Alternatives considered.** Staying on the frozen SemStreams baseline (SemSource main `8b99efe9`) keeps both defects
+and receives no further substrate work. Holding the cutover until neural 04C qualified would have
+delayed every Tier 0 fix behind an embedder SemSource's default composition does not run.
 
 ## Decision
 
 1. **SemEngine only.** `go.mod` requires `github.com/c360studio/semengine` and no
-   `c360studio/semstreams` module. There is no dual import and no shim. `TestNoSemStreamsImports`
+   `c360studio/semstreams` module, with no dual import and no shim. `TestNoSemStreamsImports`
    (`cmd/semsource/clustering_edges_test.go`) fails on a SemStreams import, `go.mod` entry or
    `go.sum` entry.
-2. **Cut over at Tier 0, not 04C.** Main moved in #222 at the 04A-qualified pseudo-version
-   (`v0.1.0-alpha.4.0.20261112145006-7bf638643b98`), then to `v0.1.0-alpha.5` (#290) and
-   `v0.1.0-alpha.6` with embeddings off (#302). Owner rulings on #237 (2026-11-16, amended
-   2026-11-17): the first SemEngine tag ships at Tier 0 on alpha.6; neural 04C qualification
-   (#234) is post-tag. The acceptance floor is the Tier 0 graded run (#233, regraded on alpha.6
-   in #301), not "tests pass".
-3. **One clean storage break.** Upgrading means fresh NATS storage and a re-ingest from source
-   (`docker compose down -v`, then reseed), as ADR-102/104 already require for identity changes.
-   Existing IDs are never aliased or rewritten. At startup, `checkLegacySemStreamsConfig`
+2. **Cut over at Tier 0, not 04C.** Owner ruling 2026-11-12 (Option A, recorded in
+   `docs/upstream/semengine-port-ledger.md`): #222 cut main over at the 04A-qualified
+   pseudo-version `v0.1.0-alpha.4.0.20261112145006-7bf638643b98`. Main then moved to
+   `v0.1.0-alpha.5` (#290) and to `v0.1.0-alpha.6` with embeddings off (#302). Owner rulings on
+   #237 (2026-11-16, amended 2026-11-17): the first SemEngine tag ships at Tier 0 on alpha.6, and
+   neural 04C (#234) qualifies after the tag. The acceptance floor is the Tier 0 graded scorecard
+   (#233, regraded on alpha.6 for #301), not "tests pass".
+3. **One clean storage break.** Upgrading means fresh NATS storage and a re-ingest from source.
+   Existing IDs are never aliased or rewritten. `checkLegacySemStreamsConfig`
    (`cmd/semsource/legacy_lifecycle.go`) refuses to boot over a populated
-   `semstreams_config_<org>_<stem>` bucket. Authority is retained in
+   `semstreams_config_<org>_<stem>` bucket; authority is retained in
    `semengine_config_<org>_<stem>` from then on.
-4. **Substrate asks go to SemEngine issues.** `docs/upstream/semstreams-asks.md` is frozen history;
-   the port's crosswalk and evidence are in `docs/upstream/semengine-port-ledger.md`.
+4. **Substrate asks go to SemEngine issues.** `docs/upstream/semstreams-asks.md` records the
+   SemStreams-era asks and receives no new rows.
 
-## Consumer contracts
+## Consumer contracts: v1.0.0-beta.9 → the first SemEngine tag
 
-**Unchanged:** the `graph.query.*` verbs SemSource serves (`status`, `sources`, `sourceSummary`,
-`versionDiff`); the MCP tool family (ADR-0010); `/source-manifest/status` and the other HTTP
-status routes; entity identity (6-part IDs built through `entityid.*`).
+Unchanged: the tool names of both MCP families (ADR-0004, ADR-0010); the `graph.query.*` verbs
+SemSource serves (`status`, `sources`, `sourceSummary`, `versionDiff`, `predicates`); the consumer
+readiness gate `/source-manifest/status` → `phase: "ready"`; the GraphQL route
+`/graph-gateway/graphql`. Verbs SemEngine itself serves follow SemEngine's `MIGRATION.md`.
 
-**Changed at the cutover:**
+| Surface | beta.9 | First SemEngine tag | PR |
+| --- | --- | --- | --- |
+| Entity ID | `{org}.semsource.{domain}.{system}.{type}.{instance}` | `{org}.{platform}.{system}.{domain}.{type}.{instance}`, platform minted and retained (SemEngine ADR-102/104) | #213 |
+| `/ws` export | raw `graph.ingest.>` payloads (`entity`, `manifest`, `status`, `predicates`), at-most-once | `ENTITY_STATES` KV-watch frames `put`/`delete`/`poisoned`/`synced`, convergent | #222; notice #262 |
+| Status figures | `publish_total` | `offered_total`, `delivered_total`, `lost_total`, `seed_lost`; a lossy seed reports `degraded` | #195 |
+| MCP `graph_search` | `llm_answer` rung; `answer_model`, `degraded` fields; substrate payload verbatim | rungs `entities_only` / `community_summaries` / `unknown`; typed `matches`, `community_summaries`, `entity`, `path`, `hints` | #292 |
+| Fusion envelope | contract v1, `index` and `view_revision` | contract v2, `deferred` / `defer_reason` | #253 |
+| Disabled capability | varied per surface | `not_enabled`, HTTP 501, `retryable: false` | #222, #312 |
+| Search composition | `graph.embedder_type` (`bm25`/`http`) | `graph.lexical_search` (default on); `embedder_type` refused | #290 |
+| GraphQL listener | extra listener on `graph.gateway_bind` (`:8082`) and a playground | shared HTTP port only; both keys refused | #222 |
+| Source lifecycle | no `config_revision`; SemSource-private lifecycle recovery | a retained store applies `semsource.json` edits only when `config_revision` rises; `remove_source` persists a disable that applies at next restart | #223, #271 |
+| Git credentials | `git_token` in `semsource.json` | `SEMSOURCE_GIT_TOKEN` only; the file key is refused | #309 |
+| Outward names | `semstreams_config_*`, `semstreams_*` metrics, `semstreams.graph.mutation`, `SemStreamsBase` IRI base | `semengine_config_*`, `semengine_*` metrics, `semengine.graph.mutation`, `SemEngineBase` IRI base | #256 |
 
-| Surface | Before (SemStreams) | After (SemEngine) |
-| --- | --- | --- |
-| `/ws` export | raw `graph.ingest.*` envelopes (`SEED`/`DELTA`/`RETRACT`/`HEARTBEAT`), ack/nack | `ENTITY_STATES` KV-watch frames `put`/`delete`/`poisoned`/`synced`, convergent (ADR-0001 amended; notice #262) |
-| Readiness | gate on `GRAPH_STATUS` | read readiness from query replies; `index_not_ready` is transient (SemEngine ADR-109) |
-| Fusion envelope | contract v1, `index` block | contract v2, `deferred` / `defer_reason` (#253) |
-| GraphQL | own `graph.gateway_bind` listener | `graph-gateway` on the shared HTTP port at `/graph-gateway/graphql` |
-| Search composition | `graph.embedder_type` (`bm25`/`http`) | `graph.lexical_search` (default on, `graph-lexical`); `embedder_type` refused at every value |
-| Disabled capability | varied per surface | `not_enabled`, HTTP 501, `retryable: false` |
-| Retired config | accepted | `graph.gateway_bind`, `enable_playground`, `embedding_batch_size`, `clustering_llm`, `entity_id_edges` refused with a migration message |
-| Outward names | `semstreams_config_*`, `semstreams_*` metrics, `SemStreamsBase` IRI base | `semengine_config_*`, `semengine_*` metrics, `SemEngineBase` IRI base |
-| Stream overrides | any extra GRAPH subject | exactly the five `graph.ingest.*` defaults (#315) |
+Direct callers of SemEngine's own `graph.query.*` verbs read readiness from the reply
+(`index_not_ready` is transient; SemEngine ADR-109, #227). SemSource's consumer gate above does
+not change.
 
 ## Consequences
 
-- Every existing deployment re-ingests once. There is no in-place migration.
-- `/ws` consumers must change decoders (#262); query, MCP and HTTP consumers do not.
-- SemSource's substrate cadence follows SemEngine pre-1.0 tags. Each pin bump reads SemEngine's
-  `MIGRATION.md` SemSource section and reruns the Tier 0 graded scorecard.
+- Every existing deployment re-ingests once; there is no in-place migration.
+- `/ws`, status-figure and `graph_search` consumers change decoders. Consumers that hard-code an
+  entity-ID prefix change it. Fusion-family MCP and HTTP callers change only for contract v2.
+- The boot refusal looks only for the old config bucket. A store whose `semstreams_config_*`
+  bucket was deleted by hand while `ENTITY_STATES` kept old-order IDs would boot into a mixed
+  graph; the documented fresh-storage upgrade is the guard.
+- Substrate cadence follows SemEngine pre-1.0 tags. Each pin bump reads SemEngine's `MIGRATION.md`
+  SemSource section and reruns the Tier 0 graded scorecard.
 - Neural search (04C, #234) and LLM community summaries
-  ([semengine#485](https://github.com/C360Studio/semengine/issues/485)) are not part of this
-  decision and qualify separately.
+  ([semengine#485](https://github.com/C360Studio/semengine/issues/485)) qualify separately.
+
+[semstreams#1442]: https://github.com/C360Studio/semstreams/issues/1442
+[semstreams#1443]: https://github.com/C360Studio/semstreams/issues/1443
