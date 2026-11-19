@@ -82,4 +82,13 @@
   `scripts/core-profile-smoke.sh` booting the shipped default (`mvp.json`) and
   `tiers/tier0-statistical.json`.
 
+## 4. Alpha.6 alignment (sign-off findings, 2026-11-19)
+
+- [x] Refuse explicit `streams.GRAPH.subjects` outside `graph.ingest.*` so the ingest stream cannot bind
+  `graph.query.status`, `sources`, `sourceSummary`, or `versionDiff` (#315;
+  `TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects`).
+- [x] Restate the cutover requirement for alpha.6: `graph.lexical_search: false` (structural) and default
+  `graph-lexical` (statistical); `graph.embedder_type` refused at every value (#290).
+- [ ] Hold: OPEN-Q amended proposal awaits owner re-approval.
+
 Current stop point: independent review sign-off on PR #222 at the updated HEAD and merge to `main`.

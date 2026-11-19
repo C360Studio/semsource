@@ -41,8 +41,9 @@ The disabled-component envelope SHALL remain until the admitted config contract 
 ### Requirement: Mainline cutover qualifies Tier 0 and BM25 while deferring neural 04C
 
 SemSource mainline SHALL cut over to SemEngine once the Tier 0 graph-foundation corpus
-(`configs/tiers/tier0-foundation.json`, `embedder_type: "none"`), the BM25 statistical smoke suites
-(`semsource.json`, `embedder_type: "bm25"`), and independent review pass. Neural HTTP embedding
+(`configs/tiers/tier0-foundation.json`, `graph.lexical_search: false`), the statistical smoke suites
+(the shipped default with `graph-lexical` enabled), and independent review pass. `graph.embedder_type`
+is retired and refused at every value. Neural HTTP embedding
 qualification (`semengine#489`, 04C), Tier 2 LLM community summaries (`semengine#485`), and
 SemEngine's separate SemConnect/dogfood obligations SHALL remain tracked in their respective slices
 without being claimed by the Tier 0 cutover.
@@ -50,5 +51,18 @@ without being claimed by the Tier 0 cutover.
 #### Scenario: Tier 0 and BM25 pass before neural 04C admission
 
 - **WHEN** the SemEngine consumer branch passes the admitted Tier 0 graph-foundation workload and BM25 smoke suites
-- **THEN** mainline cuts over to SemEngine for Tier 0 (`none`) and statistical (`bm25`) compositions
+- **THEN** mainline cuts over to SemEngine for Tier 0 structural (`lexical_search: false`) and statistical (`graph-lexical`) compositions
 - **AND** neural (`http`) and LLM community-summary qualification remain deferred to 04C (`semengine#489`, `semengine#485`)
+
+### Requirement: GRAPH stream overrides stay on the ingest subjects
+
+An explicit `streams.GRAPH.subjects` override SHALL keep all five default `graph.ingest.*` subjects and
+SHALL NOT name a subject outside `graph.ingest.*`, so the ingest stream never binds a request/reply
+subject SemSource serves. Covering wildcards SHALL pass configuration so SemEngine's boot check refuses them.
+
+#### Scenario: An override names a subject SemSource answers
+
+- **GIVEN** a configuration whose GRAPH subjects add `graph.query.status` to the five defaults
+- **WHEN** the configuration loads
+- **THEN** loading fails and the error names `graph.query.status`
+- **AND** the same holds for `graph.query.sources`, `graph.query.sourceSummary`, and `graph.query.versionDiff`

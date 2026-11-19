@@ -1,6 +1,6 @@
 # Qualify SemSource on SemEngine Tier 0
 
-Approved-by: Coby Leuschke (2026-11-12) sha256:8f597c039b48
+Approved-by: PENDING (amended 2026-11-19; prior approval 2026-11-12 sha256:8f597c039b48)
 
 ## Why
 
@@ -17,8 +17,8 @@ on SemEngine main at `7bf638643b98b4346101fabb39a1d016a7a15e7b`
 
 - Port SemSource exclusively to SemEngine (`v0.1.0-alpha.4.0.20261112145006-7bf638643b98`) and
   `semvocab v0.2.2` with zero `c360studio/semstreams` imports (#221, #231, #232, #253, #256, #257).
-- Add the true no-embedder Tier 0 composition (`configs/tiers/tier0-foundation.json`,
-  `embedder_type: "none"`) with truthful readiness and `not_enabled` (HTTP 501) capability refusal.
+- Add the true no-embedder Tier 0 composition (`configs/tiers/tier0-foundation.json`; alpha.4
+  `embedder_type: "none"`, at alpha.6 `graph.lexical_search: false` with `embedder_type` refused) with truthful readiness and `not_enabled` (HTTP 501) capability refusal.
 - Qualify `test/setup03a` `foundation` (`TestKnownAnswerCorpus` 64/64 and
   `TestDesiredSourceLifecycleWithoutRecovery` 33/33 + 37/37) alongside the BM25 statistical smoke
   suites (`e2e-local`, `UI smoke (dev)`, `Quickstart`), and cut `main` over to SemEngine so
@@ -26,6 +26,7 @@ on SemEngine main at `7bf638643b98b4346101fabb39a1d016a7a15e7b`
 - Reject retired SemStreams `graph.*` configuration keys (`gateway_bind`, `enable_playground`,
   `embedding_batch_size`, `clustering_llm`, `entity_id_edges`) with explicit migration errors, and
   record the forced `output/websocket` `ENTITY_STATES` KV-watch wire contract change in ADR-0001.
+- Refuse GRAPH stream subject overrides outside `graph.ingest.*` (#315); align with alpha.6 (#290).
 
 ## Capabilities
 
@@ -39,8 +40,8 @@ on SemEngine main at `7bf638643b98b4346101fabb39a1d016a7a15e7b`
 
 SemSource owns its composition, source adapters, public consumer interfaces and known-answer workload.
 SemEngine owns the substrate, public contracts and extraction admission. Mainline cuts over to
-SemEngine with `semsource.json` (`embedder_type: "bm25"`) and `configs/tiers/tier0-foundation.json`
-(`embedder_type: "none"`); the HTTP neural embedder (`semengine#489`, 04C) and LLM community
+SemEngine with the default statistical composition (`graph-lexical`) and
+`configs/tiers/tier0-foundation.json` (`graph.lexical_search: false`); the HTTP neural embedder (`semengine#489`, 04C) and LLM community
 summaries (`semengine#485`) remain tracked as follow-up slices.
 
 ## Non-goals
