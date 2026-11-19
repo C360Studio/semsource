@@ -31,7 +31,7 @@ func TestGraph_LexicalSearchDefaultsOn(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestGraph_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
 	cfg, err := loadJSON(t, `{"namespace":"acme",`+baseSource+`,"graph":{"lexical_search":false}}`)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestGraph_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestGraph_EmbedderTypeIsRetiredAtEveryValue(t *testing.T) {
 	// SemEngine refuses embedder_type whatever its value, so every former value
 	// must fail at load with the migration, not at boot.

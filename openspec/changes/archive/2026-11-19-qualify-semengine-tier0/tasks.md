@@ -89,9 +89,9 @@
   `TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects`).
 - [x] Restate the cutover requirement for alpha.6: `graph.lexical_search: false` (structural) and default
   `graph-lexical` (statistical); `graph.embedder_type` refused at every value (#290).
-- [ ] Hold: OPEN-Q amended proposal awaits owner re-approval.
+- [x] Owner re-approved the amended proposal (2026-11-19, sha256:7f13aa71c34d).
 
 Sign-off (2026-11-19, PR #316): go-component-reviewer signed off at `9b52d4d`; graph-event-reviewer
 signed off at `623a4f5` after #315 and the alpha.6 alignment closed its two blockers.
 
-Current stop point: owner re-approval of the amended proposal, then archive.
+Complete: re-approved 2026-11-19 and archived.

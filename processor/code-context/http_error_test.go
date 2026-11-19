@@ -101,6 +101,10 @@ func TestFusionHTTPErrorContract_LocalRequestFailures(t *testing.T) {
 	}
 }
 
+// TestFusionHTTPErrorContract_DependencyFailures maps graph dependency failures,
+// including the Tier 0 not_enabled refusal, onto the HTTP error contract.
+//
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestFusionHTTPErrorContract_DependencyFailures(t *testing.T) {
 	secret := "private.subject.entity.storage-key"
 	tests := []struct {
@@ -149,7 +153,6 @@ func TestFusionHTTPErrorContract_DependencyFailures(t *testing.T) {
 		})
 	}
 
-	// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 	t.Run("not enabled", func(t *testing.T) {
 		g := &errorGraph{
 			MemGraph:   fusiontest.NewMemGraph(),
@@ -357,7 +360,7 @@ func assertHTTPError(t *testing.T, rec *httptest.ResponseRecorder, status int, c
 // not_enabled (501, non-retryable) instead, matching what the capabilities
 // route advertises (#265).
 //
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestSearchRefusesWhenTheCompositionRunsNoSearchIndex(t *testing.T) {
 	disc, err := NewComponent(json.RawMessage(`{"lens":"code","semantic_enabled":false}`), component.Dependencies{})
 	if err != nil {

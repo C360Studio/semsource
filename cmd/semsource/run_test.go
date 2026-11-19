@@ -401,7 +401,7 @@ func TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts(t *testing.T)
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestGraphSubsystemComponents_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
 	off := false
 	cfg := &config.Config{
@@ -495,7 +495,7 @@ func (b *blockingStartService) Health() health.Status {
 // serveUntilSignal hands StartAll the live signalCtx (rather than wrapping it in
 // context.WithoutCancel) per SemEngine ADR-113 (#231, semengine#361): when a
 // service's Start blocks, cancelling signalCtx cuts boot short immediately.
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestServeUntilSignal_CancellingSignalContextInterruptsBlockedStart(t *testing.T) {
 	mgr := service.NewServiceManager(service.NewServiceRegistry())
 	started := make(chan struct{})

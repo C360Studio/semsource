@@ -31,7 +31,7 @@ func clusteringConfigFor(t *testing.T, cfg *config.Config) (map[string]json.RawM
 	return got, true
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestClusteringConfig_NoEntityIDEdgesEmitted(t *testing.T) {
 	cfg := &config.Config{
 		Namespace: "acme",
@@ -47,7 +47,7 @@ func TestClusteringConfig_NoEntityIDEdgesEmitted(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestNoSemStreamsImports(t *testing.T) {
 	repoRoot := filepath.Join("..", "..")
 	cmd := exec.Command(

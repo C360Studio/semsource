@@ -14,7 +14,7 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Known answers retain their positive acceptance obligations
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Known answers retain their positive acceptance obligations
 func TestResolveMode(t *testing.T) {
 	l := New()
 	if l.ResolveMode("docs/retry.md") != fusion.ResolveModePrefix {

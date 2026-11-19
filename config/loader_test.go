@@ -717,7 +717,7 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestLoadConfigFromReader_RetiredGraphKeysRejected(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -879,7 +879,7 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 // SemEngine refuses only its own query verbs at boot; these are SemSource's,
 // so config refuses them.
 //
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: GRAPH stream overrides stay on the ingest subjects
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: GRAPH stream overrides stay on the ingest subjects
 func TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects(t *testing.T) {
 	load := func(subjects ...string) error {
 		quoted := make([]string, len(subjects))

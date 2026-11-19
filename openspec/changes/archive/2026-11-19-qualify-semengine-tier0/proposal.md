@@ -1,6 +1,6 @@
 # Qualify SemSource on SemEngine Tier 0
 
-Approved-by: PENDING (amended 2026-11-19; prior approval 2026-11-12 sha256:8f597c039b48)
+Approved-by: Coby Leuschke (2026-11-19) sha256:7f13aa71c34d
 
 ## Why
 

@@ -199,7 +199,7 @@ func TestWorkbenchCapabilities_MalformedStatusAndUnavailableActions(t *testing.T
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestWorkbenchCapabilities_SemanticDisabledReportsNotEnabledWithoutQueryingEmbeddingStatus(t *testing.T) {
 	disabled := false
 	c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
