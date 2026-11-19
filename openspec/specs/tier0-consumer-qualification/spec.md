@@ -1,5 +1,11 @@
-## ADDED Requirements
+# tier0-consumer-qualification Specification
 
+## Purpose
+
+SemSource runs exclusively on SemEngine: the Tier 0 structural and statistical compositions, their
+qualification gates, and the configuration guards that keep the consumer composition honest.
+
+## Requirements
 ### Requirement: Consumer implementation waits for admitted engine contracts
 
 The consumer qualification SHALL record approved SemEngine 03B contracts, port scope, repair decisions
@@ -41,8 +47,9 @@ The disabled-component envelope SHALL remain until the admitted config contract 
 ### Requirement: Mainline cutover qualifies Tier 0 and BM25 while deferring neural 04C
 
 SemSource mainline SHALL cut over to SemEngine once the Tier 0 graph-foundation corpus
-(`configs/tiers/tier0-foundation.json`, `embedder_type: "none"`), the BM25 statistical smoke suites
-(`semsource.json`, `embedder_type: "bm25"`), and independent review pass. Neural HTTP embedding
+(`configs/tiers/tier0-foundation.json`, `graph.lexical_search: false`), the statistical smoke suites
+(the shipped default with `graph-lexical` enabled), and independent review pass. `graph.embedder_type`
+is retired and refused at every value. Neural HTTP embedding
 qualification (`semengine#489`, 04C), Tier 2 LLM community summaries (`semengine#485`), and
 SemEngine's separate SemConnect/dogfood obligations SHALL remain tracked in their respective slices
 without being claimed by the Tier 0 cutover.
@@ -50,5 +57,20 @@ without being claimed by the Tier 0 cutover.
 #### Scenario: Tier 0 and BM25 pass before neural 04C admission
 
 - **WHEN** the SemEngine consumer branch passes the admitted Tier 0 graph-foundation workload and BM25 smoke suites
-- **THEN** mainline cuts over to SemEngine for Tier 0 (`none`) and statistical (`bm25`) compositions
+- **THEN** mainline cuts over to SemEngine for Tier 0 structural (`lexical_search: false`) and statistical (`graph-lexical`) compositions
 - **AND** neural (`http`) and LLM community-summary qualification remain deferred to 04C (`semengine#489`, `semengine#485`)
+
+### Requirement: GRAPH stream overrides stay on the ingest subjects
+
+An explicit `streams.GRAPH.subjects` override SHALL name exactly the five default `graph.ingest.*`
+subjects and no other explicit subject, so it cannot bind a request/reply subject SemSource serves.
+The covering wildcards `graph.ingest.>`, `graph.>`, and `>` SHALL pass configuration and reach
+SemEngine's boot refusal; `graph.ingest.*` SHALL pass because it covers no served subject.
+
+#### Scenario: An override names a subject SemSource answers
+
+- **GIVEN** a configuration whose GRAPH subjects add `graph.query.status` to the five defaults
+- **WHEN** the configuration loads
+- **THEN** loading fails and the error names `graph.query.status`
+- **AND** the same holds for `graph.query.sources`, `graph.query.sourceSummary`, `graph.query.versionDiff`,
+  `graph.ingest.add.<namespace>`, and `graph.ingest.remove.<namespace>`

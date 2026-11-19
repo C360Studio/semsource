@@ -18,13 +18,20 @@ PR #222 cuts SemSource `main` over to SemEngine with `semsource.json` (`embedder
 (`semengine#489`, 04C), LLM community summaries (`semengine#485`), and SemEngine's separate
 SemConnect/dogfood obligations remain tracked in their respective slices.
 
+**Amended 2026-11-19 (alpha.6).** The pin is now `v0.1.0-alpha.6`. Tier 0 search moved to `graph-lexical`
+(#290): `graph.embedder_type` is retired and refused at every value, the structural composition sets
+`graph.lexical_search: false`, and the statistical composition is the default with `graph-lexical`.
+The alpha.4 corpus results below are history; current-head evidence is CI `e2e-local` (#265).
+Explicit GRAPH stream subjects are limited to the five defaults (#315), because SemEngine's boot
+check protects only its own query verbs, not `graph.query.*` or `graph.ingest.add|remove.*` subjects SemSource serves.
+
 ## Seams and Tier 0 outcomes
 
 | Seam | Previous behavior | Tier 0 SemEngine outcome |
 | --- | --- | --- |
-| [Composition][graph-compose] | BM25 and `graph-embedding` always enabled | `embedder_type: "none"` omits `graph-embedding` and sets `graph-query.embedding_enabled: false` |
-| [Graph config][graph-config] | Accepted retired SemStreams keys | Rejects retired `gateway_bind`, `enable_playground`, `embedding_batch_size`, `clustering_llm`, `entity_id_edges` |
-| [Validation][provider-validation] | HTTP requires `embedding` capability | Foundation (`none`) and BM25 require no model registry |
+| [Composition][graph-compose] | BM25 and `graph-embedding` always enabled | alpha.4: `embedder_type: "none"` omitted `graph-embedding`; alpha.6: `graph.lexical_search: false` omits `graph-lexical` |
+| [Graph config][graph-config] | Accepted retired SemStreams keys | Rejects retired `gateway_bind`, `enable_playground`, `embedding_batch_size`, `clustering_llm`, `entity_id_edges`, and (alpha.6) `embedder_type` at every value |
+| [Validation][provider-validation] | HTTP requires `embedding` capability | Foundation (`lexical_search: false`) and statistical (`graph-lexical`) require no model registry |
 | [Registries][registries] | SemStreams imports | Exclusive SemEngine + `semvocab` registrations; zero `semstreams` imports |
 | [Gateway][gateway] | Shared ServiceManager HTTP mux | `graph-gateway` on `:8080/graph-gateway/graphql`; `output/websocket` watches `ENTITY_STATES` KV |
 | [Fusion][fusion] | Contract v1 (`index` block) | Contract v2 (`deferred` / `defer_reason`); `not_enabled` maps to HTTP 501 `not_enabled` |

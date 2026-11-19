@@ -72,7 +72,7 @@
 - [x] Record that SemEngine's separate SemConnect reference and engine dogfood workloads remain
   tracked on `C360Studio/semengine#9`; SemSource code/docs corpus results qualify the SemSource
   consumer gate without claiming those upstream obligations.
-- [ ] Obtain independent Go/component and graph/event sign-off on implementation and exact
+- [x] Obtain independent Go/component and graph/event sign-off on implementation and exact
   qualification (including retired `graph.*` config rejection, ADR-0001 `ENTITY_STATES` KV-watch
   WebSocket contract update, >=4-part docs lens entity-ID prefix check, zero-`semstreams`-import
   guard test, and `StreamOverride.Subjects` validation).
@@ -82,4 +82,16 @@
   `scripts/core-profile-smoke.sh` booting the shipped default (`mvp.json`) and
   `tiers/tier0-statistical.json`.
 
-Current stop point: independent review sign-off on PR #222 at the updated HEAD and merge to `main`.
+## 4. Alpha.6 alignment (sign-off findings, 2026-11-19)
+
+- [x] Limit explicit `streams.GRAPH.subjects` to the five defaults so the ingest stream cannot bind
+  `graph.query.status`, `sources`, `sourceSummary`, `versionDiff`, or `graph.ingest.add|remove.<ns>` (#315;
+  `TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects`).
+- [x] Restate the cutover requirement for alpha.6: `graph.lexical_search: false` (structural) and default
+  `graph-lexical` (statistical); `graph.embedder_type` refused at every value (#290).
+- [x] Owner re-approved the amended proposal (2026-11-19, sha256:7f13aa71c34d).
+
+Sign-off (2026-11-19, PR #316): go-component-reviewer signed off at `9b52d4d`; graph-event-reviewer
+signed off at `623a4f5` after #315 and the alpha.6 alignment closed its two blockers.
+
+Complete: re-approved 2026-11-19 and archived.

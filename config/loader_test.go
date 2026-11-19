@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -716,7 +717,7 @@ func TestLoadConfigFromReader_GraphConfig(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
 func TestLoadConfigFromReader_RetiredGraphKeysRejected(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -868,6 +869,51 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 }`
 	if _, err := config.LoadConfigFromReader(strings.NewReader(allDefaultSubj)); err != nil {
 		t.Fatalf("expected complete default streams.GRAPH.subjects to pass validation: %v", err)
+	}
+}
+
+// TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects: a GRAPH stream
+// bound over a request/reply subject SemSource serves would PubAck the request
+// before the responder replies, so readiness and source queries return wrong or
+// empty answers (add_source would report success with nothing registered).
+// SemEngine refuses only its own query verbs at boot; these are SemSource's,
+// so config refuses them.
+//
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: GRAPH stream overrides stay on the ingest subjects
+func TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects(t *testing.T) {
+	load := func(subjects ...string) error {
+		quoted := make([]string, len(subjects))
+		for i, s := range subjects {
+			quoted[i] = strconv.Quote(s)
+		}
+		input := `{"namespace": "acme", "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {"GRAPH": {"subjects": [` + strings.Join(quoted, ",") + `]}}}`
+		_, err := config.LoadConfigFromReader(strings.NewReader(input))
+		return err
+	}
+	defaults := []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest",
+		"graph.ingest.status", "graph.ingest.predicates"}
+
+	for _, served := range []string{
+		"graph.query.status", "graph.query.sources", "graph.query.sourceSummary", "graph.query.versionDiff",
+		"graph.ingest.add.acme", "graph.ingest.remove.acme", "graph.ingest.add.*", "graph.ingest.*.*",
+	} {
+		err := load(append(append([]string{}, defaults...), served)...)
+		if err == nil || !strings.Contains(err.Error(), strconv.Quote(served)) {
+			t.Errorf("defaults + %s: got %v, want a refusal naming the subject", served, err)
+		}
+		if err := load("graph.ingest.>", served); err == nil {
+			t.Errorf("covering wildcard + %s: accepted, want refusal", served)
+		}
+	}
+
+	if err := load(defaults...); err != nil {
+		t.Errorf("the five defaults: %v", err)
+	}
+	for _, w := range []string{"graph.ingest.>", "graph.>", ">", "graph.ingest.*"} {
+		if err := load(w); err != nil {
+			t.Errorf("%s must pass config (boot refusal, or covers no served subject): %v", w, err)
+		}
 	}
 }
 

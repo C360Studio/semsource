@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -292,24 +293,34 @@ var defaultGraphIngestSubjects = []string{
 	"graph.ingest.predicates",
 }
 
-// validateStreams validates optional stream overrides. When overriding GRAPH
-// subjects with explicit subject names, all five default graph.ingest.*
-// subjects must remain present so entitypub, graph-ingest, and source-manifest
-// stay connected. Covering wildcards ("graph.ingest.*", "graph.ingest.>",
-// "graph.>", ">") are intentionally allowed through config validation so
-// SemEngine's EnsureStreams boot check is reached and emits the canonical
-// reserved_subject_capture startup refusal.
+// validateStreams validates optional stream overrides. An explicit GRAPH
+// subject list must name exactly the five default graph.ingest.* subjects
+// (entitypub, graph-ingest, and source-manifest stay connected) and nothing
+// else: a stream bound over a request/reply subject SemSource serves
+// (graph.query.status, graph.ingest.add.<ns>, ...) lets the PubAck answer the
+// request, and SemEngine's boot check protects only its own query verbs.
+// Covering wildcards pass config: "graph.ingest.>", "graph.>", and ">" reach
+// SemEngine's EnsureStreams reserved_subject_capture startup refusal, and
+// "graph.ingest.*" covers only three-token subjects, none of them served.
 func (c *Config) validateStreams() error {
 	override, ok := c.Streams["GRAPH"]
 	if !ok || len(override.Subjects) == 0 {
 		return nil
 	}
 	present := make(map[string]bool, len(override.Subjects))
+	wildcard := false
 	for _, subj := range override.Subjects {
 		if subj == "graph.ingest.*" || subj == "graph.ingest.>" || subj == "graph.>" || subj == ">" {
-			return nil
+			wildcard = true
+			continue
+		}
+		if !slices.Contains(defaultGraphIngestSubjects, subj) {
+			return fmt.Errorf("config: streams.GRAPH.subjects entry %q is not one of the default graph.ingest subjects (a stream bound over a request/reply subject swallows its replies)", subj)
 		}
 		present[subj] = true
+	}
+	if wildcard {
+		return nil
 	}
 	for _, req := range defaultGraphIngestSubjects {
 		if !present[req] {
