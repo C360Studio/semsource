@@ -295,21 +295,33 @@ var defaultGraphIngestSubjects = []string{
 // validateStreams validates optional stream overrides. When overriding GRAPH
 // subjects with explicit subject names, all five default graph.ingest.*
 // subjects must remain present so entitypub, graph-ingest, and source-manifest
-// stay connected. Covering wildcards ("graph.ingest.*", "graph.ingest.>",
-// "graph.>", ">") are intentionally allowed through config validation so
-// SemEngine's EnsureStreams boot check is reached and emits the canonical
-// reserved_subject_capture startup refusal.
+// stay connected, and every explicit subject must stay under graph.ingest.:
+// a stream filter over a request/reply subject SemSource serves
+// (graph.query.status, graph.query.sources, ...) lets the PubAck win the reply
+// race, and SemEngine's boot check protects only its own query verbs. Covering
+// wildcards ("graph.ingest.*", "graph.ingest.>", "graph.>", ">") are
+// intentionally allowed through config validation so SemEngine's EnsureStreams
+// boot check is reached and emits the canonical reserved_subject_capture
+// startup refusal.
 func (c *Config) validateStreams() error {
 	override, ok := c.Streams["GRAPH"]
 	if !ok || len(override.Subjects) == 0 {
 		return nil
 	}
 	present := make(map[string]bool, len(override.Subjects))
+	wildcard := false
 	for _, subj := range override.Subjects {
 		if subj == "graph.ingest.*" || subj == "graph.ingest.>" || subj == "graph.>" || subj == ">" {
-			return nil
+			wildcard = true
+			continue
+		}
+		if !strings.HasPrefix(subj, "graph.ingest.") {
+			return fmt.Errorf("config: streams.GRAPH.subjects entry %q is outside graph.ingest.* (a stream bound over a request/reply subject swallows its replies)", subj)
 		}
 		present[subj] = true
+	}
+	if wildcard {
+		return nil
 	}
 	for _, req := range defaultGraphIngestSubjects {
 		if !present[req] {
