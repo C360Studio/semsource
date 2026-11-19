@@ -206,15 +206,21 @@ GraphRAG, `query_classification`, or `answer_synthesis`. An agent gets ranked, c
 does its own reasoning (ADR-0004) — which is why the MVP needs no generative model at all.
 
 The *graph-query* tools (`graph_summary`, `graph_search`) reach the substrate's query surface
-directly. Neither is gated, because neither routed subject requires clustering: `graph.query.summary`
-is a discovery resolver, and `graph.query.searchGraph` answers through non-community strategies when
-no community index exists. What changes with the tier is **how far the answer escalates**, and
+directly. Neither is gated on clustering: `graph.query.summary` is a discovery resolver, and
+`graph.query.searchGraph` always starts with a word search over `graph-lexical`, then reads the
+community groups that hold the matches when clustering has built them. So `graph_search` needs the
+word index: under the structural composition (`graph.lexical_search: false`) there is no
+`graph-lexical` to search and the call fails rather than returning entity hits. Where it runs,
 `graph_search` discloses the rung it reached in a `retrieval` block:
 
-| Tier | `graph_search` returns | Disclosed rung |
-| ---- | ---------------------- | -------------- |
-| 0 / 1 (no clustering) | Entity hits / digests. No community summaries | `entities_only`, `community_backed: false` |
-| Clustering (`graph.enable_clustering`) | \+ community summaries | `community_summaries`, `community_backed: true` |
+| Composition | `graph_search` returns | Disclosed rung |
+| ----------- | ---------------------- | -------------- |
+| Tier 0 structural (`lexical_search: false`) | An error: no word index to search | — |
+| Tier 0 lexical, no community records for the matches | Word-search matches. No community summaries | `entities_only`, `community_backed: false` |
+| Lexical + clustering, community records read for the matches | \+ community summaries | `community_summaries`, `community_backed: true` |
+
+Enabling `graph.enable_clustering` does not by itself make an answer community-backed: the rung
+reflects whether the reply actually carried community records for the matched groups.
 
 Read the disclosure before treating results as community evidence: a non-community answer is a
 word-search hit list, not thematic reasoning. The answer text, when one comes back, is a deterministic
