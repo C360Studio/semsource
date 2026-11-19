@@ -26,7 +26,7 @@ on SemEngine main at `7bf638643b98b4346101fabb39a1d016a7a15e7b`
 - Reject retired SemStreams `graph.*` configuration keys (`gateway_bind`, `enable_playground`,
   `embedding_batch_size`, `clustering_llm`, `entity_id_edges`) with explicit migration errors, and
   record the forced `output/websocket` `ENTITY_STATES` KV-watch wire contract change in ADR-0001.
-- Refuse GRAPH stream subject overrides outside `graph.ingest.*` (#315); align with alpha.6 (#290).
+- Limit explicit GRAPH stream subjects to the five ingest defaults (#315); align with alpha.6 (#290).
 
 ## Capabilities
 

@@ -875,8 +875,9 @@ func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
 // TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects: a GRAPH stream
 // bound over a request/reply subject SemSource serves would PubAck the request
 // before the responder replies, so readiness and source queries return wrong or
-// empty answers. SemEngine refuses only its own query verbs at boot; these are
-// SemSource's, so config refuses them.
+// empty answers (add_source would report success with nothing registered).
+// SemEngine refuses only its own query verbs at boot; these are SemSource's,
+// so config refuses them.
 //
 // spec: openspec/changes/qualify-semengine-tier0/specs/tier0-consumer-qualification/spec.md#Requirement: GRAPH stream overrides stay on the ingest subjects
 func TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects(t *testing.T) {
@@ -895,6 +896,7 @@ func TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects(t *testing.T) 
 
 	for _, served := range []string{
 		"graph.query.status", "graph.query.sources", "graph.query.sourceSummary", "graph.query.versionDiff",
+		"graph.ingest.add.acme", "graph.ingest.remove.acme", "graph.ingest.add.*", "graph.ingest.*.*",
 	} {
 		err := load(append(append([]string{}, defaults...), served)...)
 		if err == nil || !strings.Contains(err.Error(), strconv.Quote(served)) {
@@ -905,12 +907,12 @@ func TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects(t *testing.T) 
 		}
 	}
 
-	if err := load(append(append([]string{}, defaults...), "graph.ingest.extra")...); err != nil {
-		t.Errorf("an extra graph.ingest.* subject is still an ingest subject: %v", err)
+	if err := load(defaults...); err != nil {
+		t.Errorf("the five defaults: %v", err)
 	}
-	for _, w := range []string{"graph.ingest.>", "graph.>"} {
+	for _, w := range []string{"graph.ingest.>", "graph.>", ">", "graph.ingest.*"} {
 		if err := load(w); err != nil {
-			t.Errorf("%s must pass config so SemEngine's boot refusal fires: %v", w, err)
+			t.Errorf("%s must pass config (boot refusal, or covers no served subject): %v", w, err)
 		}
 	}
 }

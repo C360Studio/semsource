@@ -84,8 +84,8 @@
 
 ## 4. Alpha.6 alignment (sign-off findings, 2026-11-19)
 
-- [x] Refuse explicit `streams.GRAPH.subjects` outside `graph.ingest.*` so the ingest stream cannot bind
-  `graph.query.status`, `sources`, `sourceSummary`, or `versionDiff` (#315;
+- [x] Limit explicit `streams.GRAPH.subjects` to the five defaults so the ingest stream cannot bind
+  `graph.query.status`, `sources`, `sourceSummary`, `versionDiff`, or `graph.ingest.add|remove.<ns>` (#315;
   `TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects`).
 - [x] Restate the cutover requirement for alpha.6: `graph.lexical_search: false` (structural) and default
   `graph-lexical` (statistical); `graph.embedder_type` refused at every value (#290).
