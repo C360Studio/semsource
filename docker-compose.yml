@@ -161,11 +161,13 @@ services:
   # loss under a still-healthy stack). Container-lifecycle durability only —
   # graph retention semantics stay ADR-0008's (no NATS TTL/MaxBytes lifecycle).
   nats:
-    # Exact version, matching the server line SemStreams tests its own substrate
-    # against (its e2e, tiered, and testcontainers harnesses all pin 2.12). A
-    # floating major tag would let a server upgrade arrive implicitly under a
-    # governed graph the framework has not exercised on that version.
-    image: nats:2.14-alpine
+    # Exact version and digest: the server the Tier 0 graded scorecard ran on
+    # for alpha.5 and alpha.6 (the tag's acceptance floor; see
+    # scripts/scorecard/results/SUMMARY-alpha5-tier0.md). The SETUP 03A lane
+    # (internal/natstest.Image) runs 2.14.4; SemEngine itself pins 2.15.0. A
+    # floating tag would let a server upgrade arrive implicitly under a
+    # governed graph that has not been exercised on that version.
+    image: nats:2.14.10-alpine@sha256:311da47e2f31c26e99c623cd78d486a1e8ab039c49b32652770bb91a4f70512e
     command: ["-js", "-sd", "/data", "-m", "8222", "--name", "c360-nats"]
     volumes:
       - nats-data:/data

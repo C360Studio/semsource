@@ -1,5 +1,11 @@
 # SemStreams consumer asks
 
+> **Historical record.** This file holds the asks SemSource raised while it ran on SemStreams. It receives no new
+> rows: SemSource's substrate is SemEngine, and substrate asks now go to
+> [C360Studio/semengine](https://github.com/C360Studio/semengine/issues) issues
+> ([ADR-0013](../adr/0013-substrate-cutover-to-semengine.md) decision 4). The open SemEngine asks and their evidence
+> live in the [port ledger](semengine-port-ledger.md#open-semengine-asks).
+
 SemStreams owns framework repairs. SemSource reports evidence here and does not commit to that repository.
 The SETUP 03A pin remains frozen; SemEngine qualification and repair-before-port decisions are separate.
 

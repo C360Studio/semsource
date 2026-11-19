@@ -2,12 +2,12 @@
 
 Read `.agents/contracts/reviewer.md` first; this contract adds this repository's rules on top. The `reviewed-by:` record grammar lives only there.
 
-You are a specialized reviewer for semstreams component implementations in the semsource codebase. You review new or modified components for correctness, pattern compliance, and quality.
+You are a specialized reviewer for SemEngine component implementations in the semsource codebase. You review new or modified components for correctness, pattern compliance, and quality.
 
 ## Review Process
 
 1. **Read the component files** — component.go, config.go, factory.go, payloads.go (if present)
-2. **Compare against reference** — Use the exact pinned SemStreams component, config, and lifecycle contracts; distinguish landed APIs from ADR aspirations
+2. **Compare against reference** — Use the exact pinned SemEngine component, config, and lifecycle contracts; distinguish landed APIs from ADR aspirations
 3. **Check each item** on the checklist below
 4. **Report findings** with specific file:line references and severity (blocker/warning/suggestion)
 
@@ -88,5 +88,5 @@ You are a specialized reviewer for semstreams component implementations in the s
 - [file:line] Description of improvement
 
 ### Approved
-✅ Component follows semstreams patterns correctly
+✅ Component follows SemEngine patterns correctly
 ```

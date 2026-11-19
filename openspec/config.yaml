@@ -5,7 +5,7 @@ schema: spec-driven
 # in here); fuller detail lives in AGENTS.md and docs/adr/.
 context: |
   SemSource is the source-knowledge ingestion service for the C360 sem* family
-  (Go; NATS JetStream via github.com/c360studio/semstreams / github.com/c360studio/semengine;
+  (Go; NATS JetStream via github.com/c360studio/semengine;
   Task runner; revive). It turns repos, docs, URLs, config files, and media into
   typed graph facts and publishes governed entity-state payloads for downstream
   consumers (SemTeams, SemDragon).
@@ -13,7 +13,7 @@ context: |
   Product Boundary — check this before scoping a change:
   - SemSource owns source discovery/parsing, entity-ID construction, source
     provenance, media/binary-by-reference, and source-graph publishing.
-  - SemEngine (replacing archived SemStreams) owns the governed substrate
+  - SemEngine (which replaced SemStreams, ADR-0013) owns the governed substrate
     (Graphable ingestion, ENTITY_STATES, graph.mutation.* / graph.query.* APIs,
     indexing profiles, lifecycle primitives), and SemVocab owns standard upper/domain
     ontologies (BFO 2020, CCO v2.2). Do NOT reimplement substrate; log framework gaps
@@ -39,8 +39,9 @@ context: |
     handlers receive that authority, never a product-name constant.
   - Raw binary bytes never enter triples — store by reference, project metadata,
     hashes, offsets, provenance.
-  - Every graph write carries a semantic envelope (semstreams ADR-055); no source
-    relies on triple.add auto-vivifying an entity.
+  - Every graph write carries a semantic envelope (SemStreams ADR-055, which
+    SemEngine still cites); no source relies on triple.add auto-vivifying an
+    entity.
   - The live graph is retention-first — never use NATS TTL/MaxBytes for graph
     lifecycle (reference-blind eviction orphans edges; see ADR-0008).
   - CI must be green before push: revive WARNINGS FAIL (pinned v1.15.0), plus
@@ -50,7 +51,7 @@ rules:
   proposal:
     - Always include a "## Non-goals" section (boundary discipline).
     - Name which sem* products consume the capability, if any.
-    - Check the Product Boundary first — if it is substrate, it is semstreams' job.
+    - Check the Product Boundary first — if it is substrate, it is SemEngine's job.
   specs:
     - Describe CURRENT behavior verified against code, not aspirations.
     - Seed a capability spec lazily (the first change that touches it); do not backfill.

@@ -66,7 +66,7 @@ readiness gate `/source-manifest/status` → `phase: "ready"`; the GraphQL route
 | Disabled capability | varied per surface | `not_enabled`, HTTP 501, `retryable: false` | #222, #312 |
 | Search composition | `graph.embedder_type` (`bm25`/`http`) | `graph.lexical_search` (default on); `embedder_type` refused | #290 |
 | GraphQL listener | extra listener on `graph.gateway_bind` (`:8082`) and a playground | shared HTTP port only; both keys refused | #222 |
-| Source lifecycle | `add_source` spawns the source live (`ready_when`: phase `watching`/`idle`); `remove_source` stops it at once; no `config_revision` | `add_source` and `remove_source` persist desired state applied after the next restart (`ready_when` says so); a retained store applies `semsource.json` edits only when `config_revision` rises | #213, #223, #271 |
+| Source lifecycle | `add_source` spawns the source live (`ready_when`: phase `watching`/`idle`); `remove_source` stops it at once; no `config_revision` | `add_source` and `remove_source` persist desired state applied after the next restart (the add reply's `ready_when` says so; the remove reply sets `restart_required: true`); a retained store applies `semsource.json` edits only when `config_revision` rises | #213, #223, #271 |
 | Git credentials | `git_token` in `semsource.json` | `SEMSOURCE_GIT_TOKEN` only; the file key is refused | #309 |
 | Outward names | `semstreams_config_*`, `semstreams_*` metrics, `semstreams.graph.mutation`, `SemStreamsBase` IRI base | `semengine_config_*`, `semengine_*` metrics, `semengine.graph.mutation`, `SemEngineBase` IRI base | #222 (issue #256) |
 

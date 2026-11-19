@@ -4,8 +4,8 @@ The files here are the tracked, platform-neutral authority. `.claude/` and `.cod
 adapters** that name exactly one canonical file and carry none of its content. Two copies of a
 behavioral contract drift, and the one that drifts is always the one you are not looking at.
 
-Modeled on the same layout in semstreams (`.agents/README.md` there), so someone moving between
-the repos finds the same shape. Where we diverge, we say so and why.
+Modeled on the same layout in SemEngine (`.agents/README.md` there, itself adapted from SemStreams), so someone
+moving between the repos finds the same shape. Where we diverge, we say so and why.
 
 ## Roles
 
@@ -39,7 +39,7 @@ never commits, and a finding is an input to your judgment rather than a verdict 
 Massively-parallel `Workflow` orchestration remains opt-in and is a separate question — that
 restriction does not extend to these role agents.
 
-We still do **not** adopt semstreams' architect/developer/reviewer role triad as spawnable agents.
+We still do **not** adopt SemEngine's architect/developer/reviewer role triad as spawnable agents.
 Those roles carry a framework's design authority; SemSource is a consumer, and our two specialists are
 scoped to the failure classes that are actually ours. The `architect.md`, `developer.md`, and
 `reviewer.md` files under `contracts/` are a different thing: **ateam's generated base contracts**
