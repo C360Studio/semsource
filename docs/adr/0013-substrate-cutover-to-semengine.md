@@ -4,7 +4,10 @@
 - **Date:** 2026-11-19
 - **Issue:** [#235](https://github.com/C360Studio/semsource/issues/235); cutover landed in #222 (`4ca2072`)
 - **Amends:** [ADR-0001](0001-websocket-exports-raw-entities.md) (`/ws` wire),
-  [ADR-0010](0010-graph-query-mcp-tool-family.md) (`graph_search` disclosure)
+  [ADR-0010](0010-graph-query-mcp-tool-family.md) (`graph_search` disclosure),
+  [ADR-0003](0003-programmatic-source-add-api.md) and
+  [ADR-0006](0006-external-service-source-registration.md) (a source added at runtime starts after
+  the next restart, not live)
 
 ## Context
 
@@ -21,7 +24,7 @@ The move cannot be undone without a re-ingest. SemEngine ADR-102/104 reorder the
 mint the platform authority, and SemEngine renames the bucket that retains that authority
 ([semengine#69](https://github.com/C360Studio/semengine/issues/69)).
 
-**Alternatives considered.** Staying on the frozen SemStreams baseline (SemSource main `8b99efe9`) keeps both defects
+**Alternatives considered.** Staying on the frozen SemStreams pin `8b99efe9` (SemSource `bbfb3c6`) keeps both defects
 and receives no further substrate work. Holding the cutover until neural 04C qualified would have
 delayed every Tier 0 fix behind an embedder SemSource's default composition does not run.
 
@@ -53,19 +56,19 @@ SemSource serves (`status`, `sources`, `sourceSummary`, `versionDiff`, `predicat
 readiness gate `/source-manifest/status` → `phase: "ready"`; the GraphQL route
 `/graph-gateway/graphql`. Verbs SemEngine itself serves follow SemEngine's `MIGRATION.md`.
 
-| Surface | beta.9 | First SemEngine tag | PR |
+| Surface | beta.9 | First SemEngine tag | PR / issue |
 | --- | --- | --- | --- |
 | Entity ID | `{org}.semsource.{domain}.{system}.{type}.{instance}` | `{org}.{platform}.{system}.{domain}.{type}.{instance}`, platform minted and retained (SemEngine ADR-102/104) | #213 |
 | `/ws` export | raw `graph.ingest.>` payloads (`entity`, `manifest`, `status`, `predicates`), at-most-once | `ENTITY_STATES` KV-watch frames `put`/`delete`/`poisoned`/`synced`, convergent | #222; notice #262 |
 | Status figures | `publish_total` | `offered_total`, `delivered_total`, `lost_total`, `seed_lost`; a lossy seed reports `degraded` | #195 |
 | MCP `graph_search` | `llm_answer` rung; `answer_model`, `degraded` fields; substrate payload verbatim | rungs `entities_only` / `community_summaries` / `unknown`; typed `matches`, `community_summaries`, `entity`, `path`, `hints` | #292 |
-| Fusion envelope | contract v1, `index` and `view_revision` | contract v2, `deferred` / `defer_reason` | #253 |
+| Fusion envelope | contract v1, `index` and `view_revision` | contract v2, `deferred` / `defer_reason` | #222 (issue #253) |
 | Disabled capability | varied per surface | `not_enabled`, HTTP 501, `retryable: false` | #222, #312 |
 | Search composition | `graph.embedder_type` (`bm25`/`http`) | `graph.lexical_search` (default on); `embedder_type` refused | #290 |
 | GraphQL listener | extra listener on `graph.gateway_bind` (`:8082`) and a playground | shared HTTP port only; both keys refused | #222 |
-| Source lifecycle | no `config_revision`; SemSource-private lifecycle recovery | a retained store applies `semsource.json` edits only when `config_revision` rises; `remove_source` persists a disable that applies at next restart | #223, #271 |
+| Source lifecycle | `add_source` spawns the source live (`ready_when`: phase `watching`/`idle`); `remove_source` stops it at once; no `config_revision` | `add_source` and `remove_source` persist desired state applied after the next restart (`ready_when` says so); a retained store applies `semsource.json` edits only when `config_revision` rises | #213, #223, #271 |
 | Git credentials | `git_token` in `semsource.json` | `SEMSOURCE_GIT_TOKEN` only; the file key is refused | #309 |
-| Outward names | `semstreams_config_*`, `semstreams_*` metrics, `semstreams.graph.mutation`, `SemStreamsBase` IRI base | `semengine_config_*`, `semengine_*` metrics, `semengine.graph.mutation`, `SemEngineBase` IRI base | #256 |
+| Outward names | `semstreams_config_*`, `semstreams_*` metrics, `semstreams.graph.mutation`, `SemStreamsBase` IRI base | `semengine_config_*`, `semengine_*` metrics, `semengine.graph.mutation`, `SemEngineBase` IRI base | #222 (issue #256) |
 
 Direct callers of SemEngine's own `graph.query.*` verbs read readiness from the reply
 (`index_not_ready` is transient; SemEngine ADR-109, #227). SemSource's consumer gate above does
@@ -74,7 +77,9 @@ not change.
 ## Consequences
 
 - Every existing deployment re-ingests once; there is no in-place migration.
-- `/ws`, status-figure and `graph_search` consumers change decoders. Consumers that hard-code an
+- `/ws`, status-figure and `graph_search` consumers change decoders. Callers of `add_source` /
+  `remove_source` (ADR-0003, ADR-0006) restart SemSource to apply the change and must not wait for
+  live readiness. Consumers that hard-code an
   entity-ID prefix change it. Fusion-family MCP and HTTP callers change only for contract v2.
 - The boot refusal looks only for the old config bucket. A store whose `semstreams_config_*`
   bucket was deleted by hand while `ENTITY_STATES` kept old-order IDs would boot into a mixed
