@@ -72,7 +72,7 @@
 - [x] Record that SemEngine's separate SemConnect reference and engine dogfood workloads remain
   tracked on `C360Studio/semengine#9`; SemSource code/docs corpus results qualify the SemSource
   consumer gate without claiming those upstream obligations.
-- [ ] Obtain independent Go/component and graph/event sign-off on implementation and exact
+- [x] Obtain independent Go/component and graph/event sign-off on implementation and exact
   qualification (including retired `graph.*` config rejection, ADR-0001 `ENTITY_STATES` KV-watch
   WebSocket contract update, >=4-part docs lens entity-ID prefix check, zero-`semstreams`-import
   guard test, and `StreamOverride.Subjects` validation).
@@ -91,4 +91,7 @@
   `graph-lexical` (statistical); `graph.embedder_type` refused at every value (#290).
 - [ ] Hold: OPEN-Q amended proposal awaits owner re-approval.
 
-Current stop point: independent review sign-off on PR #222 at the updated HEAD and merge to `main`.
+Sign-off (2026-11-19, PR #316): go-component-reviewer signed off at `9b52d4d`; graph-event-reviewer
+signed off at `623a4f5` after #315 and the alpha.6 alignment closed its two blockers.
+
+Current stop point: owner re-approval of the amended proposal, then archive.
