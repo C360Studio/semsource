@@ -148,7 +148,6 @@ func endpointLabel(endpoint string) string {
 	return endpoint
 }
 
-// addNonInteractive dispatches to a type-specific flag parser.
 // parseFlags parses a source type's flags and refuses anything left over: a
 // stray positional argument means a flag was mistyped or misplaced, and
 // silently dropping it writes a source the operator did not ask for (#267).
@@ -162,6 +161,7 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
+// addNonInteractive dispatches to a type-specific flag parser.
 func addNonInteractive(typeKey string, args []string) (*config.SourceEntry, error) {
 	switch typeKey {
 	case "ast":
