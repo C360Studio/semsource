@@ -50,7 +50,7 @@ Delivery is **convergent** rather than `at-least-once` event-stream replay: inte
 
 ### Negative / Consumer Impact
 
-- **Wire-format break from SemStreams ([#262](https://github.com/C360Studio/semsource/issues/262)):** `/ws` no longer emits raw `graph.ingest.*` envelopes (`SEED`/`DELTA`/`RETRACT`/`HEARTBEAT` or `ack`/`nack`). It emits SemEngine `output/websocket` KV-watch frames (`put`/`delete`/`poisoned`/`synced`, convergent and folded per key) for `ENTITY_STATES`.
+- **Wire-format break from SemStreams ([#262](https://github.com/C360Studio/semsource/issues/262)):** `/ws` no longer emits raw `graph.ingest.>` payloads (`entity`, `manifest`, `status`, `predicates`, delivered at-most-once). It emits SemEngine `output/websocket` KV-watch frames (`put`/`delete`/`poisoned`/`synced`, convergent and folded per key) for `ENTITY_STATES`.
 - Enrichment data (embeddings in `EMBEDDING_INDEX`, communities in `COMMUNITY_INDEX`) remains in separate KV buckets and is accessed via GraphQL/MCP/`graph.query.*`, not `/ws`.
 
 ## Data Flow Reference (SemEngine)

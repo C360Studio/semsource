@@ -1,9 +1,18 @@
 # ADR-0010: Graph-Query Tools Are a Second MCP Family
 
-> **Status:** Accepted — owner ruling 2026-07-31 that GraphRAG being unreachable over MCP is a gap,
-> not intended design. | **Date:** 2026-07-31
+> **Status:** Amended by [ADR-0013](0013-substrate-cutover-to-semengine.md) (2026-11-19; originally Accepted
+> 2026-07-31 — owner ruling that GraphRAG being unreachable over MCP is a gap, not intended design)
+>
+> **SemEngine port amendment (#292):** the pinned SemEngine substrate synthesizes no LLM answer
+> ([semengine#485](https://github.com/C360Studio/semengine/issues/485)), so the `llm_answer` rung and the
+> `answer_model` / `degraded` fields below are retired. The disclosure rungs are `entities_only`,
+> `community_summaries`, and `unknown` (unreadable reply), with `answer_source` `none` or `template`.
+> `graph_search` no longer passes the substrate payload verbatim: it returns typed `matches`,
+> `community_summaries`, `entity`, `path`, and `hints` built only from the reply's own values
+> (`processor/mcp-gateway/graph_matches.go`). The text below is the original decision.
+>
 > **Owners:** SemSource owns the gateway routes, tool contracts, and the retrieval disclosure.
-> SemStreams owns clustering, community summaries, and the `graph.query.*` handlers.
+> SemEngine (SemStreams when accepted) owns clustering, community summaries, and the `graph.query.*` handlers.
 > **Supersedes:** the MCP scoping note in [ADR-0004](0004-deterministic-fusion-gateway.md).
 
 ## Context
