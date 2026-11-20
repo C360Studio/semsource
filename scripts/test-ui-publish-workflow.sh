@@ -22,6 +22,7 @@ require_text "ui-quality:"
 require_text "publish-ui:"
 require_text "ui-release-smoke:"
 require_text "needs: [test, lint, ui-quality]"
+require_text "publish-ui-build:"
 require_text "needs: publish-ui"
 require_text "packages: write"
 require_text "packages: read"
@@ -91,13 +92,39 @@ if printf '%s\n' "$core_publish" | grep -F "setup-task" >/dev/null; then
 	fail "core build-and-push must not install the unused Task runner"
 fi
 
+# Each platform builds natively and pushes by digest; publish-ui only merges
+# them. No QEMU on the UI path: npm under arm64 emulation hit SIGILL and hung
+# the job to its timeout (semsource#219).
+ui_build=$(awk '
+  /^  publish-ui-build:/ { in_job = 1 }
+  /^  publish-ui:/ { in_job = 0 }
+  in_job { print }
+' "$workflow")
+printf '%s\n' "$ui_build" | grep -F "docker/build-push-action@v7" >/dev/null ||
+	fail "publish-ui-build does not build the image"
+printf '%s\n' "$ui_build" | grep -F "runner: ubuntu-24.04-arm" >/dev/null ||
+	fail "publish-ui-build does not build arm64 on a native arm runner"
+printf '%s\n' "$ui_build" | grep -F "push-by-digest=true" >/dev/null ||
+	fail "publish-ui-build does not push by digest"
+printf '%s\n' "$ui_build" | grep -F "platforms: linux/\${{ matrix.arch }}" >/dev/null ||
+	fail "publish-ui-build does not build one platform per runner"
+printf '%s\n' "$ui_build" | grep -F "provenance: mode=max" >/dev/null ||
+	fail "publish-ui-build dropped max provenance"
+printf '%s\n' "$ui_build" | grep -F "sbom: true" >/dev/null ||
+	fail "publish-ui-build dropped the SBOM"
+
 ui_publish=$(awk '
   /^  publish-ui:/ { in_job = 1 }
   /^  ui-release-smoke:/ { in_job = 0 }
   in_job { print }
 ' "$workflow")
-printf '%s\n' "$ui_publish" | grep -F "docker/build-push-action@v7" >/dev/null ||
-	fail "publish-ui does not publish the image"
+printf '%s\n' "$ui_publish" | grep -F "needs: publish-ui-build" >/dev/null ||
+	fail "publish-ui does not wait for the platform builds"
+printf '%s\n' "$ui_publish" | grep -F "./scripts/ui-image-merge.sh" >/dev/null ||
+	fail "publish-ui does not merge the platform digests"
+if printf '%s\n' "$ui_build$ui_publish" | grep -F "setup-qemu-action" >/dev/null; then
+	fail "the UI publish path must not use QEMU emulation"
+fi
 if printf '%s\n' "$ui_publish" | grep -F "task ui:smoke" >/dev/null; then
 	fail "publish-ui must stop after publishing"
 fi
