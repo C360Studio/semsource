@@ -145,7 +145,11 @@ contracts without any UI artifact.
 Pull requests SHALL run locked UI quality/browser gates, clean production-image verification, and
 release-verifier contract tests without publishing. Only trusted pushes to `main` or a valid
 `v`-prefixed SemVer tag SHALL receive package-write permission and publish the SemSource-owned image
-to `ghcr.io/c360studio/semsource-ui` for `linux/amd64` and `linux/arm64`.
+to `ghcr.io/c360studio/semsource-ui` for `linux/amd64` and `linux/arm64`. Each platform SHALL be
+built on a runner of that architecture, never under emulation, and pushed by digest without a tag; a
+separate merge step SHALL tag the multi-platform index only when exactly one valid digest per required
+platform is present, and SHALL report the index digest read back from the registry. Re-running a
+failed platform build SHALL replace only that platform's digest.
 
 A `main` publication SHALL emit `latest` and `sha-<full-revision>` tags, with the SHA tag as the
 verification tag and OCI version. A release publication SHALL emit the exact `v<semver>` tag and the
@@ -213,3 +217,12 @@ GitHub Actions run URL and attempt; failure SHALL preserve actionable profile di
 - **WHEN** the SemSource core smoke runs without optional UI profiles
 - **THEN** it proves backend readiness and HTTP/MCP/query availability without pulling or starting a UI
   artifact
+
+#### Scenario: Platform images build natively and merge both-or-nothing
+
+- **GIVEN** a trusted push to `main` or a valid release tag
+- **WHEN** the UI image is published
+- **THEN** `linux/amd64` and `linux/arm64` each build on a native runner without QEMU and push by digest
+- **AND** the tagged index is created only from exactly one valid digest per platform
+- **AND** a missing, malformed, or extra digest, or a tag outside the repository, publishes nothing
+

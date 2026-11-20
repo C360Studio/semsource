@@ -1,6 +1,6 @@
 # Publish the workbench image from native per-platform runners
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-20) sha256:3adefeb4d77b
 
 Track: design (changes a gate file, `.github/workflows/ci.yml`, and the release-evidence contract).
 
