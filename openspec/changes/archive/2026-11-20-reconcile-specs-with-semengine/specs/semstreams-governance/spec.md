@@ -10,7 +10,7 @@
 SemSource MUST target a released SemEngine tag (currently `v0.1.0-alpha.6`) and MUST NOT use a
 local replacement, fork, vendored substitute, or unreleased commit as compatibility evidence.
 
-#### Scenario: Substrate target is pinned to a release
+#### Scenario: Migration target is pinned to a release
 
 **GIVEN** SemEngine has released the tag SemSource qualifies against
 **WHEN** SemSource pins it
@@ -144,7 +144,7 @@ that the framework declares as having none, and MUST NOT create or expect creati
 bucket it does not own — readers bind to existing buckets and MUST surface the framework's
 not-ready error rather than conjuring an empty bucket.
 
-#### Scenario: An output-less component declares no output ports
+#### Scenario: Embedding component declares no output ports
 
 **GIVEN** SemSource composes a component the framework declares with no output ports
 **WHEN** the component configuration is validated at startup

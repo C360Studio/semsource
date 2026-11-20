@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Hold: OPEN-Q proposal awaits owner approval.
+- [x] 1.1 Owner approved the proposal (2026-11-20, sha256:a92592e07504).
 
 ## 2. Deltas
 
@@ -12,4 +12,4 @@
 
 ## 3. Close
 
-- [ ] 3.1 Archive; update the `semstreams-governance` Purpose; `ateam test-spec` still passes.
+- [x] 3.1 Archive; update the `semstreams-governance` Purpose; `ateam test-spec` still passes.

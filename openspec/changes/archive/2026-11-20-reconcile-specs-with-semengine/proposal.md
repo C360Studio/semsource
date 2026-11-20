@@ -1,6 +1,6 @@
 # Reconcile the current-truth specs with the SemEngine substrate
 
-Approved-by: PENDING
+Approved-by: Coby Leuschke (2026-11-20) sha256:a92592e07504
 
 Track: standard (renames, modifies, and removes Requirements; adds none).
 

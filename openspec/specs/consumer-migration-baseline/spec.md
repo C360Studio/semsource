@@ -4,7 +4,6 @@
 How SemSource measures a substrate migration as a consumer: immutable inputs, a versioned known-answer
 corpus (`test/setup03a`), explicit profile mapping and gaps, and known-at-pin failures kept failing rather
 than skipped. Established by SETUP 03A on the SemStreams pin; SemEngine qualification reuses the corpus.
-
 ## Requirements
 ### Requirement: Migration comparisons use immutable inputs
 
@@ -98,14 +97,3 @@ SHALL NOT be treated as a qualified substitute for the consumer workaround.
 - **WHEN** the owner accepts baseline merge readiness and ends the SemStreams continuation
 - **THEN** the disabled-envelope behavior, pin and existing test expectations remain unchanged
 - **AND** later removal of the workaround requires the SemEngine config contract and proving tests
-
-### Requirement: SemStreams remains the shipped substrate
-
-SETUP 03A SHALL retain SemStreams. Later SemEngine qualification SHALL use a separate exclusive
-SemEngine branch. Mainline cutover SHALL wait for full semembed-backed and lower-profile workloads.
-
-#### Scenario: Lower engine profiles pass first
-
-- **WHEN** graph/lexical engine profiles pass but neural qualification remains incomplete
-- **THEN** SemSource mainline stays on SemStreams
-
