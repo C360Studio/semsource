@@ -143,6 +143,7 @@ tasks:
     desc: Test immutable UI release-image verification without registry access
     cmds:
       - ./scripts/test-ui-image-metadata.sh
+      - ./scripts/test-ui-image-merge.sh
       - ./scripts/test-ui-profile-pin-verify.sh
       - ./scripts/test-ui-profile-smoke-preflight.sh
       - ./scripts/test-ui-release-image-verify.sh

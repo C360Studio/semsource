@@ -303,13 +303,92 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  publish-ui:
+  # Each platform builds on its own native runner and pushes by digest; the
+  # publish-ui job below merges the digests into one tagged index. arm64 does
+  # not run under QEMU: node/npm hit an intermittent SIGILL in `npm ci` under
+  # emulation and hung the job to its timeout (semsource#219).
+  publish-ui-build:
     needs: [test, lint, ui-quality]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Derive immutable UI image metadata
+        id: image
+        env:
+          IMAGE_REPOSITORY: ghcr.io/c360studio/semsource-ui
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_REF_NAME: ${{ github.ref_name }}
+          SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          ./scripts/ui-image-metadata.sh \
+            --repository "$IMAGE_REPOSITORY" \
+            --ref "$SOURCE_REF" \
+            --ref-name "$SOURCE_REF_NAME" \
+            --revision "$SOURCE_REVISION" \
+            --output "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the workbench image by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ui
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            SEMSOURCE_UI_VERSION=${{ steps.image.outputs.version }}
+            SEMSOURCE_UI_COMMIT=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          outputs: type=image,name=${{ steps.image.outputs.repository }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Record the platform digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          printf '%s\n' "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' ||
+            { echo "build did not report a sha256 digest: $DIGEST" >&2; exit 1; }
+          mkdir -p ui-digests
+          printf '%s\n' "$DIGEST" >"ui-digests/${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          # No attempt suffix: re-running one failed leg overwrites only its
+          # own digest and the merge still finds the other leg's.
+          name: semsource-ui-digest-${{ matrix.arch }}
+          path: ui-digests/${{ matrix.arch }}
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+
+  publish-ui:
+    needs: publish-ui-build
     runs-on: ubuntu-latest
-    # Cold buildx cache + QEMU arm64 emulation blew through 15 minutes on the
-    # first publish after six weeks of red mains (run 31630208346, cancelled
-    # at 15:17 elapsed). Same budget class as ui-smoke-dev's cold build.
-    timeout-minutes: 30
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
@@ -338,7 +417,11 @@ jobs:
             --revision "$SOURCE_REVISION" \
             --output "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-qemu-action@v4
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: semsource-ui-digest-*
+          path: ui-digests
+          merge-multiple: true
 
       - uses: docker/setup-buildx-action@v4
 
@@ -350,21 +433,11 @@ jobs:
 
       - name: Publish multi-platform workbench image
         id: publish
-        uses: docker/build-push-action@v7
-        with:
-          context: ./ui
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            SEMSOURCE_UI_VERSION=${{ steps.image.outputs.version }}
-            SEMSOURCE_UI_COMMIT=${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.image.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          tags: ${{ steps.image.outputs.tags }}
-          provenance: mode=max
-          sbom: true
+        env:
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          IMAGE_TAGS: ${{ steps.image.outputs.tags }}
+          PRIMARY_TAG: ${{ steps.image.outputs.primary_tag }}
+        run: ./scripts/ui-image-merge.sh ui-digests
 
   ui-release-smoke:
     needs: publish-ui
@@ -448,6 +521,7 @@ jobs:
         lint,
         ui-quality,
         build-and-push,
+        publish-ui-build,
         publish-ui,
         ui-release-smoke,
       ]
