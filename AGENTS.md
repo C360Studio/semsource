@@ -244,7 +244,7 @@ forks** whose manifest records the upstream digest last reconciled. ateam ships 
 
 ## Where the depth lives
 
-- **`ROADMAP.md`** — the public roadmap and the per-tag release detail (current tag beta.9); not the historical
+- **`ROADMAP.md`** — the public roadmap and the per-tag release detail (current tag beta.10); not the historical
   milestone list in `docs/spec/semsource-spec-v3.md`.
 - **`docs/spec/semsource-spec-v3.md`** — the full specification. **`docs/adr/`** — decision records.
 - **`openspec/config.yaml`** (`context:`) — the canonical planning context.

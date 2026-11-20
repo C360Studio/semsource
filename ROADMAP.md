@@ -1,10 +1,13 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.9`,
-running on SemStreams `v1.0.0-beta.161` (unchanged since beta.7 — no
-substrate cutover). `main` has since moved to SemEngine: the next tag is the
-first SemEngine release, it is **breaking** (fresh storage, re-ingest), and it is
-unreleased. See [Next Tag](#next-tag-the-first-semengine-release-unreleased).
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.10`
+(2026-11-20), the **first SemEngine release**: SemSource now runs on SemEngine
+`v0.1.0-alpha.6` at Tier 0, and SemStreams is retired
+([ADR-0013](docs/adr/0013-substrate-cutover-to-semengine.md)). It is
+**breaking**: upgrading needs fresh storage and a re-ingest. See
+[v1.0.0-beta.10](#v100-beta10-the-first-semengine-release).
+
+The previous tag, `v1.0.0-beta.9`, is described below for reference.
 
 `v1.0.0-beta.9` is the onboarding release — and the **first non-breaking
 release in the beta line**: no substrate cutover, no fresh storage, no
@@ -43,30 +46,33 @@ confidence and dependency shape. The "why" behind durable choices lives in
 [`docs/adr/`](docs/adr/); non-trivial work is specced first under
 [`openspec/`](openspec/).
 
-## Next Tag: The First SemEngine Release (Unreleased)
+## v1.0.0-beta.10: The First SemEngine Release
 
 This is the substrate cutover from SemStreams to SemEngine
 ([ADR-0013](docs/adr/0013-substrate-cutover-to-semengine.md), tracked on
 [#237](https://github.com/C360Studio/semsource/issues/237)). Unlike beta.9 it
-cannot be upgraded in place. No version number or date is assigned here; this
-section describes `main`, not a published tag.
+cannot be upgraded in place. Consumers should read the
+[SemEngine adoption note](docs/integration/semengine-adoption-note.md) first.
 
+- **A clean storage break.** Entity IDs reorder to
+  `{org}.{platform}.{system}.{domain}.{type}.{instance}` and SemEngine mints and
+  retains the platform authority, so existing IDs are never aliased or
+  rewritten. Upgrading means fresh NATS storage and a re-ingest from source;
+  for Compose, `docker compose down -v` then `docker compose up -d`. SemSource
+  refuses to boot over a populated `semstreams_config_<org>_<stem>` bucket. Do
+  not delete that bucket by hand to get past the refusal.
 - **Tier 0 on SemEngine `v0.1.0-alpha.6`, embeddings off.** Structural queries
   plus tier 0 word search (`graph-lexical`, on by default through
   `graph.lexical_search`). Neural search (Tier 1,
   [#234](https://github.com/C360Studio/semsource/issues/234)) and LLM community
   summaries ([semengine#485](https://github.com/C360Studio/semengine/issues/485))
   qualify separately, after the tag.
-- **A clean storage break.** Entity IDs reorder to
-  `{org}.{platform}.{system}.{domain}.{type}.{instance}` and SemEngine mints and
-  retains the platform authority, so existing IDs are never aliased or
-  rewritten. Upgrading means fresh NATS storage (for Compose,
-  `docker compose down -v`) and a re-ingest from source; SemSource refuses to
-  boot over a populated `semstreams_config_<org>_<stem>` bucket.
 - **Consumer contracts change.** The `/ws` export, status figures, MCP
   `graph_search`, the fusion envelope (contract v2), disabled-capability errors
   (`not_enabled`, HTTP 501), runtime `add_source`/`remove_source` (applied after
   the next restart), and git credentials (`SEMSOURCE_GIT_TOKEN` only) change.
+  A deployment that ran `main` with `git_token` in `semsource.json` before #309
+  should rotate the token: the config bucket keeps earlier revisions.
   Tool names, the `graph.query.*` verbs SemSource serves, the
   `/source-manifest/status` readiness gate (`phase: "ready"`), and the GraphQL
   route do not. The table in
@@ -78,6 +84,14 @@ section describes `main`, not a published tag.
   ([port ledger](docs/upstream/semengine-port-ledger.md)). The question sets are
   newer than the ones behind the beta.9 numbers above, so the two are not
   comparable.
+- **Also in this tag.** Boot-time branch and submodule discovery with a
+  restart-required signal (#216); `semsource.json` edits apply on a retained
+  store through an operator `config_revision` (#266); `semsource add <type>`
+  applies its flags or fails (#267); a source's staleness sweep touches only
+  its own entities (#286); file-path queries in the code and docs lenses
+  (#299); S3-compatible document sources (#203); honest delivery figures and
+  loss-aware readiness (#195); the workbench image now builds arm64 natively
+  (#219).
 
 ## Current Release-Candidate Shape
 
@@ -132,6 +146,11 @@ section describes `main`, not a published tag.
 
 ## Recently Shipped
 
+- `v1.0.0-beta.10`: the first SemEngine release (breaking; fresh storage and
+  re-ingest) — Tier 0 on SemEngine `v0.1.0-alpha.6` with embeddings off, the
+  reordered entity ID, `/ws` as `ENTITY_STATES` KV-watch frames, and the consumer
+  contract changes listed in ADR-0013 and the
+  [adoption note](docs/integration/semengine-adoption-note.md).
 - `v1.0.0-beta.9`: the onboarding release (non-breaking; no reseed) — the
   executable quickstart (#184: `docs/QUICKSTART.md` command blocks run
   verbatim by CI against public fixtures, single- and multi-repo tracks
@@ -327,12 +346,17 @@ is how we prioritize.
 Moved verbatim from `CLAUDE.md` when the repository adopted ateam (#238); the
 narrative above is the public summary, this list keeps the per-tag mechanics.
 
-The next tag (unreleased) is the first SemEngine release: Tier 0 on semengine
-`v0.1.0-alpha.6`, a substrate cutover and a clean storage break, with neural
-search (04C, #234) after the tag. See "Next Tag" above and ADR-0013. The list
-below is the shape up to the latest public tag, beta.9:
+The list below is the shape up to the latest public tag, beta.10:
 
-1. `v1.0.0-beta.9` is the onboarding release — the first **non-breaking**
+1. `v1.0.0-beta.10` is the first SemEngine release — **breaking**: Tier 0 on
+   semengine `v0.1.0-alpha.6` (embeddings off; `graph-lexical` word search on
+   by default), a substrate cutover with zero SemStreams imports, and a clean
+   storage break (reordered entity IDs, `semengine_config_<org>_<stem>`, boot
+   refusal over the old bucket). Acceptance was the Tier 0 graded scorecard on
+   alpha.6 (dogfood 32/36, OSH 12/13, R1 36/36). Neural search (04C, #234)
+   qualifies after the tag. See ADR-0013 and
+   `docs/integration/semengine-adoption-note.md`.
+2. `v1.0.0-beta.9` is the onboarding release — the first **non-breaking**
    tag in the beta line (still SemStreams `v1.0.0-beta.161`; no fresh
    storage, no reseed). It closes v1-blocker #184: `docs/QUICKSTART.md` is
    executable truth — CI extracts its `quickstart:single|multi`-marked
@@ -346,7 +370,7 @@ below is the shape up to the latest public tag, beta.9:
    `semsource add ast|repo --project/--version` (#189). New capability
    `onboarding-quickstart`; modified `ingestion-readiness` and
    `cli-onboarding`.
-2. `v1.0.0-beta.8` is the git-submodule release (#185, ADR-0012), still on
+3. `v1.0.0-beta.8` is the git-submodule release (#185, ADR-0012), still on
    SemStreams `v1.0.0-beta.161` (no substrate cutover). Repos with submodules
    ingest completely (clone/pull materialize declared trees at their gitlink
    pins, shallow-first with full-fetch fallback; `submodules: false` opts out),
@@ -362,7 +386,7 @@ below is the shape up to the latest public tag, beta.9:
    ingested submodule code under parent identity (fresh reseed). Known
    upstream dependency: semstreams#986 (config-watcher burst race; SemSource
    defends with a confirm re-put).
-3. `v1.0.0-beta.7` targeted SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
+4. `v1.0.0-beta.7` targeted SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
    lifecycle-control slice on top of
    the intentionally breaking graph/foundation refactor checkpoint (no
    upstream shims; fresh NATS storage mandated on adoption, so deployments upgrade via
@@ -384,21 +408,21 @@ below is the shape up to the latest public tag, beta.9:
    `OpenCatalogReader`. The `graph.query.searchGraph` and `graph.query.summary` operations
    SURVIVE the query-contract closure (the removals were aggregate Go wrappers and shared
    agentic tool registrations).
-4. Core ingestion, governed entity publishing, source manifest/status, fusion
+5. Core ingestion, governed entity publishing, source manifest/status, fusion
    tools, version diffs, and consumer query integration are present.
-5. The default Compose profile is UI-free: `docker compose up` resolves only
+6. The default Compose profile is UI-free: `docker compose up` resolves only
    NATS and SemSource (semembed sits behind the `semantic` profile). In deployment documentation, "headless" means
    this omitted workbench profile; it is not the removed `mode: "headless"`
    configuration value, which must continue to fail validation.
-6. The opt-in `ui` profile now belongs to SemSource and serves the local `ui/`
+7. The opt-in `ui` profile now belongs to SemSource and serves the local `ui/`
    workbench. This is a breaking replacement for the former sibling SemTeams UI
    mapping; SemTeams owns its packaging and consumes unchanged SemSource HTTP,
    MCP, NATS, GraphQL, and governed graph contracts.
-7. Release use requires `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>` and no sibling
+8. Release use requires `SEMSOURCE_UI_IMAGE=<tag>@sha256:<digest>` and no sibling
    checkout or host Node.js. Local development is explicit through
    `docker-compose.ui-dev.yml` or `task ui:smoke:dev`; `task ui:e2e` uses the
    lockfile-matched container runner.
-8. OpenSpec task 7.3 is complete. Trusted `main` UI publish/smoke jobs verified
+9. OpenSpec task 7.3 is complete. Trusted `main` UI publish/smoke jobs verified
    revision `25b2816d14a147c1d6eb7b54e40668b51ba3574a` at manifest digest
    `sha256:43edacf62e7908681e7bedd193d1b18f3ebe8f3de438d417c6c091517020ea20`
    for `linux/amd64` and `linux/arm64`, including registry, local, Compose-rendered,
@@ -409,7 +433,7 @@ below is the shape up to the latest public tag, beta.9:
    uses the adopted SemStreams #533 facet in `v1.0.0-beta.153` through the existing
    code-context route, with local and real-profile acceptance; GraphQL is not part
    of that slice.
-9. Active follow-ups are query-index readiness/scale, GraphQL capabilities
+10. Active follow-ups are query-index readiness/scale, GraphQL capabilities
    alignment, code/version intelligence, and federation validation (#184
    easy-button onboarding closed in beta.9; both v1 blockers were done at
    beta.9, and the v1 gate then remaining was SemStreams reaching v1; the
