@@ -2,13 +2,14 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md`, including the open questions. Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-21, sha256:fc1a4c524e4c; line entered by claude at the owner's instruction).
+- [x] 1.2 Open questions ruled by the owner on 2026-11-21: the switch is the `graph.semantic_search` boolean (design decision 1), and a Tier 1 boot with an unreachable provider stays up degraded (decision 6). Both match the design as written.
 
 ## 2. Verify before code
 
-- [ ] 2.1 Determine whether `pkg/fusion/fusionnats` at alpha.6 resolves nl seeds through the merged `searchGraph` or only `graph.lexical.query.search`; record the answer in `design.md` decision 3.
-- [ ] 2.2 Determine whether graph-embedding backfills vectors from an existing `ENTITY_STATES`; record it under Risks.
-- [ ] 2.3 Measure the tools-list size with the new `graph_search` fields against the 8 KB budget.
+- [x] 2.1 Fusion NL at alpha.6 is **word-only**. `fusionnats.Client.Resolve` sends `ResolveModeNL` to `resolveWords`, which asks only `graph.lexical.query.search` (`pkg/fusion/fusionnats/client.go:100-101,148-168`), and the verb table has no semantic row (`:23-27`). Design decision 3's word-only branch applies: Tier 1 changes `graph_search` only, and `code_search` / `code_context` / `doc_context` are unchanged. Filed upstream as semengine#706.
+- [x] 2.2 graph-embedding catches up a retained store from source. Its `graph/follower` replays the stored `ENTITY_STATES` entities and then the live writes (`graph/follower/follower.go:1-3`; `processor/graph-embedding/README.md:35`), so switching a retained Tier 0 store to Tier 1 should need no reseed. To be confirmed by measurement in 5.1 before any doc promises it.
+- [x] 2.3 tools/list is 7,603 B of 8,192 today (`graph_search` 1,030 B, of which 728 B is description). The new fields are reply fields, not input schema, so they cost only the description text about the merged score scale. That fits in the 589 B of headroom.
 
 ## 3. Composition and config
 
