@@ -32,7 +32,11 @@ as on main at `86626c0` (the version the alpha.6 run graded; see "D10"), OSH
 | R1 (restart, sources reversed) | 36/36 identical, RANK-STABLE | **35/36 identical, 1 reordered: RANK-UNSTABLE** |
 | setup03a BM25 lane | 67 observations pass | **67 observations pass** |
 
-Latency is one run each on a shared laptop and is recorded, not judged.
+Latency is one run each on a shared laptop and is recorded, not judged. Both columns use the
+same convention: each question's `latency_ms` over all questions, median, and p95 as the sorted
+value at index `round(0.95 × (n − 1))`. Recomputed that way from the committed alpha.6 JSON, this
+convention gives the alpha.6 summary's own 169 and 146 ms. It is not `run.sh`'s per-band p95
+(`sorted[ceil(0.95n) − 1]`), which would read 191 / 177 ms here.
 
 ## R1
 
@@ -80,10 +84,18 @@ the binary, not the image. Report:
 
 ## Replay
 
-As in `SUMMARY-alpha5-tier0.md` "Replay", with `semb10`/`SEMB10_*` for `sem233`/`SEM233_*`,
-`beta10-tier0` for `alpha5-tier0`, `SCORECARD_QUESTIONS` set to `questions.json` from `86626c0`
-for the dogfood legs, and no image build: `compose.semb10.yml` pins the released image by its
-index digest, so the tag can't drift.
+As in `SUMMARY-alpha5-tier0.md` "Replay", with these substitutions:
+
+- `SRC` is `9537f59b5d30149e7b9a1c456d6f7599cf618c28` (the tagged commit), not `e5d90d3`:
+  `git -C "$ART" worktree add --detach "$W/src" 9537f59b5d30149e7b9a1c456d6f7599cf618c28`, and check
+  `git -C "$SRC" rev-parse HEAD` before building the setup03a binary from it.
+- `semb10` / `SEMB10_*` for `sem233` / `SEM233_*`, and `beta10-tier0` for `alpha5-tier0`.
+- `SCORECARD_QUESTIONS` is `questions.json` from `86626c0` for the dogfood legs
+  (`git -C "$ART" show 86626c0:scripts/scorecard/questions.json > "$W/questions-86626c0.json"`).
+- No image build: `compose.semb10.yml` pins the released image by its index digest, so the tag
+  can't drift.
+- The repeat leg is one more fresh-storage dogfood run with `tier0.json`, labelled
+  `beta10-tier0-dogfood-rep`.
 
 ## Not covered
 
