@@ -5,6 +5,7 @@ package mcpgateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 
 	semgraph "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/graph/kvcatalog"
+	"github.com/c360studio/semengine/pkg/errs"
 	"github.com/c360studio/semsource/internal/graphstatus"
 	"github.com/c360studio/semsource/internal/natstest"
 
@@ -338,4 +340,48 @@ func assertRequestFields(data []byte, want map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// TestIntegration_QueryToolsNameNotEnabledRefusal: with no search index the
+// code-context and doc-context gateways refuse an nl query as not_enabled
+// (#291). The MCP tools must carry that code into the tool error, so an agent
+// can tell a permanent refusal from an outage it may retry.
+//
+// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+func TestIntegration_QueryToolsNameNotEnabledRefusal(t *testing.T) {
+	ctx := context.Background()
+	tc := natstest.New(t)
+	for _, subject := range []string{"code.v1.search", "docs.v1.context"} {
+		sub, err := tc.Client.SubscribeForRequests(ctx, subject,
+			func(context.Context, []byte) ([]byte, error) {
+				return nil, errs.ClassifiedCode(errs.ErrorInvalid, semgraph.ErrorCodeNotEnabled,
+					errors.New("natural-language search is not enabled in this composition"))
+			})
+		if err != nil {
+			t.Fatalf("subscribe %s: %v", subject, err)
+		}
+		t.Cleanup(func() { _ = sub.Unsubscribe() })
+	}
+
+	c := &Component{
+		name:   "mcp-gateway",
+		config: Config{Namespace: "acme", RequestTimeoutMs: 3000},
+		client: tc.Client,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	c.server = c.buildServer()
+	cs := connect(t, c)
+
+	for _, tool := range []string{"code_search", "doc_context"} {
+		t.Run(tool, func(t *testing.T) {
+			res := callTool(t, cs, tool, map[string]any{"query": "where are bodies kept"})
+			if !res.IsError || len(res.Content) == 0 {
+				t.Fatalf("%s: want a tool error, got %+v", tool, res)
+			}
+			text, ok := res.Content[0].(*mcp.TextContent)
+			if !ok || !strings.Contains(text.Text, semgraph.ErrorCodeNotEnabled) {
+				t.Fatalf("%s: tool error does not name %s: %+v", tool, semgraph.ErrorCodeNotEnabled, res.Content[0])
+			}
+		})
+	}
 }
