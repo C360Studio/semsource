@@ -3,11 +3,13 @@ package mcpgateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gtypes "github.com/c360studio/semengine/graph"
+	"github.com/c360studio/semengine/pkg/errs"
 )
 
 // QueryInput is the shared argument for the fused query tools. The per-tool
@@ -144,6 +146,12 @@ func (c *Component) fusionQuery(ctx context.Context, subject, query string) (*mc
 	}
 	resp, err := c.request(ctx, subject, data)
 	if err != nil {
+		// Name a handler's error code, as the source tools do, so an agent can
+		// tell a permanent refusal (not_enabled) from an outage it may retry.
+		var ce *errs.ClassifiedError
+		if errors.As(err, &ce) && ce.Code != "" {
+			return nil, nil, fmt.Errorf("fusion query failed: %s: %w", ce.Code, err)
+		}
 		return nil, nil, fmt.Errorf("fusion query failed: %w", err)
 	}
 	return textResult(resp), nil, nil
