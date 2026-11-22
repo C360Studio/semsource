@@ -42,6 +42,67 @@ func indexReadinessFrom(raw []byte, err error, label string) workbenchIndexReadi
 	}
 }
 
+// embeddingIndexLabel names graph-embedding's half of the tier 1 semantic index.
+const embeddingIndexLabel = "Embedding index"
+
+// foldSemanticReadiness folds the word index's and graph-embedding's readiness
+// into the one tier 1 semantic-index signal: ready only when both are, else the
+// half that is unavailable or behind, so the reason and revisions shown are
+// the ones holding it back. graph-embedding is checked first because its gap
+// is the one search hides: graph-query answers words alone.
+//
+// Readiness is index coverage, not provider liveness (owner ruling, #234). An
+// embedding that failed while the provider was down leaves graph-embedding
+// degraded and not ready (semengine graph/follower envelope), but a provider
+// that goes down after the index caught up, with no new write to embed, still
+// reads ready here. Liveness is reported per answer: merge.honoured on
+// graph_search; fusion provenance cannot tell provider loss apart
+// (semengine#723).
+func foldSemanticReadiness(lexical, embedding workbenchIndexReadiness) workbenchIndexReadiness {
+	halves := []workbenchIndexReadiness{embedding, lexical}
+	for _, half := range halves {
+		if !half.Available {
+			return half
+		}
+	}
+	for _, half := range halves {
+		if !half.Ready {
+			return half
+		}
+	}
+	// Both halves are ready but may cover different revisions. A caller
+	// compares indexed_revision with its write's revision (ReadinessNote), so
+	// the folded watermark is the lower one; it is unknown if either is.
+	folded := lexical
+	folded.IndexedRevision, folded.TargetRevision, folded.Lag = nil, nil, nil
+	if lexical.IndexedRevision == nil || embedding.IndexedRevision == nil {
+		return folded
+	}
+	indexed := min(*lexical.IndexedRevision, *embedding.IndexedRevision)
+	folded.IndexedRevision = &indexed
+	if lexical.TargetRevision != nil && embedding.TargetRevision != nil {
+		target := max(*lexical.TargetRevision, *embedding.TargetRevision, indexed)
+		lag := target - indexed
+		folded.TargetRevision, folded.Lag = &target, &lag
+	}
+	return folded
+}
+
+// SemanticReadinessJSON is the tier 1 form of IndexReadinessJSON for the
+// semantic index: the word index's and graph-embedding's envelopes (or the
+// errors fetching them) folded by foldSemanticReadiness.
+func SemanticReadinessJSON(lexicalRaw []byte, lexicalErr error, embeddingRaw []byte, embeddingErr error,
+	label string,
+) json.RawMessage {
+	obj := foldSemanticReadiness(indexReadinessFrom(lexicalRaw, lexicalErr, label),
+		indexReadinessFrom(embeddingRaw, embeddingErr, embeddingIndexLabel))
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return json.RawMessage(`{"available":false,"reason":{"code":"marshal_failed","message":"readiness marshal failed","retryable":true}}`)
+	}
+	return data
+}
+
 // IndexReadinessJSON is the exported form of indexReadinessFrom for the other
 // status surfaces (MCP gateway): one canonical readiness shape everywhere.
 func IndexReadinessJSON(raw []byte, err error, label string) json.RawMessage {

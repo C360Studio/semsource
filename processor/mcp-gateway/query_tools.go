@@ -78,8 +78,9 @@ func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in Q
 
 // graphSearch answers a corpus-wide thematic question. It routes to
 // graph.query.searchGraph, which the pinned substrate answers as globalSearch:
-// a word search over every entity, grouped by community afterwards. It carries
-// no semantic fallback; a question whose words match nothing answers empty.
+// a word search over every entity, grouped by community afterwards. At tier 0
+// it is words only, so a question whose words match nothing answers empty; at
+// tier 1 it merges the word and embedding lists (see buildGraphSearchResult).
 //
 // The result is a RANKED, BOUNDED match list plus a disclosure of the rung the
 // answer reached. It is deliberately not the substrate payload verbatim: on a
@@ -107,22 +108,8 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 
 	result := graphSearchResult{Retrieval: unknownDisclosure()}
 	var reply graphSearchReply
-	if err := json.Unmarshal(resp, &reply); err == nil && reply.Data.Text != nil {
-		text := reply.Data.Text
-		matches, total, truncated := deriveMatches(text)
-		communities := deriveCommunities(text)
-		entity, path, hints := deriveHintAnswers(&reply.Data)
-		result = graphSearchResult{
-			Retrieval:          deriveDisclosure(&reply.Data, communities),
-			Answer:             text.Answer,
-			Matches:            matches,
-			TotalMatches:       total,
-			Truncated:          truncated,
-			CommunitySummaries: communities,
-			Entity:             entity,
-			Path:               path,
-			Hints:              hints,
-		}
+	if err := json.Unmarshal(resp, &reply); err == nil {
+		result = buildGraphSearchResult(&reply.Data)
 	}
 	// An unreadable payload reports the unknown rung rather than failing the
 	// call, and says nothing about matches we cannot see.

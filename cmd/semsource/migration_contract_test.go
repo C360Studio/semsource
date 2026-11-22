@@ -73,34 +73,48 @@ func TestSourcePayloadBindsRegistryContract(t *testing.T) {
 }
 
 // spec: openspec/specs/compose-deployment/spec.md#Requirement: Every documented config path boots
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestDefaultComposeConfigDeclaresComponents(t *testing.T) {
-	cfg, err := config.LoadConfig("../../configs/mvp.json")
-	if err != nil {
-		t.Fatalf("LoadConfig(configs/mvp.json): %v", err)
-	}
-	if !cfg.Graph.LexicalSearchEnabled() {
-		t.Fatal("configs/mvp.json must run tier 0 word search")
-	}
-	ssCfg, err := buildSemstreamsConfig(cfg, cfg.Namespace)
-	if err != nil {
-		t.Fatalf("buildSemstreamsConfig(configs/mvp.json): %v", err)
-	}
-	if _, ok := ssCfg.Components["graph-lexical"]; !ok {
-		t.Fatal("configs/mvp.json must compose graph-lexical")
-	}
-	if _, ok := ssCfg.Components["graph-embedding"]; ok {
-		t.Fatal("configs/mvp.json must not compose graph-embedding: it has no tier 0 embedder")
-	}
-	registry := component.NewRegistry()
-	if err := registerComponentFactories(registry); err != nil {
-		t.Fatal(err)
-	}
-	if err := requireRegisteredFactories(registry, ssCfg.Components); err != nil {
-		t.Fatalf("requireRegisteredFactories: %v", err)
-	}
-	for instance, cc := range ssCfg.Components {
-		if _, err := registry.Declare(instance, cc); err != nil {
-			t.Errorf("Declare(%s, factory %s): %v", instance, cc.Name, err)
-		}
+	for _, tc := range []struct {
+		path      string
+		wantEmbed bool
+	}{
+		{path: "../../configs/mvp.json"},
+		{path: "../../configs/tiers/tier1-semantic.json", wantEmbed: true},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			cfg, err := config.LoadConfig(tc.path)
+			if err != nil {
+				t.Fatalf("LoadConfig(%s): %v", tc.path, err)
+			}
+			if !cfg.Graph.LexicalSearchEnabled() {
+				t.Fatalf("%s must run word search", tc.path)
+			}
+			if got := cfg.Graph.SemanticSearchEnabled(); got != tc.wantEmbed {
+				t.Fatalf("%s graph.semantic_search = %v, want %v", tc.path, got, tc.wantEmbed)
+			}
+			ssCfg, err := buildSemstreamsConfig(cfg, cfg.Namespace)
+			if err != nil {
+				t.Fatalf("buildSemstreamsConfig(%s): %v", tc.path, err)
+			}
+			if _, ok := ssCfg.Components["graph-lexical"]; !ok {
+				t.Fatalf("%s must compose graph-lexical", tc.path)
+			}
+			if _, ok := ssCfg.Components["graph-embedding"]; ok != tc.wantEmbed {
+				t.Fatalf("%s composes graph-embedding = %v, want %v: tier 0 has no embedder", tc.path, ok, tc.wantEmbed)
+			}
+			registry := component.NewRegistry()
+			if err := registerComponentFactories(registry, componentWiring{ModelRegistry: cfg.ModelRegistry}); err != nil {
+				t.Fatal(err)
+			}
+			if err := requireRegisteredFactories(registry, ssCfg.Components); err != nil {
+				t.Fatalf("requireRegisteredFactories: %v", err)
+			}
+			for instance, cc := range ssCfg.Components {
+				if _, err := registry.Declare(instance, cc); err != nil {
+					t.Errorf("Declare(%s, factory %s): %v", instance, cc.Name, err)
+				}
+			}
+		})
 	}
 }

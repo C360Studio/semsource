@@ -3,6 +3,7 @@ package mcpgateway
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -46,8 +47,16 @@ func TestRecordedAlpha6TierZeroReplyDecodes(t *testing.T) {
 	if top.Relevance <= 1 || top.Relevance < matches[1].Relevance {
 		t.Errorf("relevance %v then %v, want word-index scores best first", top.Relevance, matches[1].Relevance)
 	}
-	if got := deriveDisclosure(&r.Data, deriveCommunities(r.Data.Text)); got.Rung != rungEntitiesOnly {
+	if top.WordRank != 0 || top.VectorRank != 0 || r.Data.Merge != nil {
+		t.Errorf("tier 0 reply carried ranks %d/%d or a merge %+v", top.WordRank, top.VectorRank, r.Data.Merge)
+	}
+	got := deriveDisclosure(&r.Data, deriveCommunities(r.Data.Text))
+	if got.Rung != rungEntitiesOnly {
 		t.Errorf("rung=%q, want %q", got.Rung, rungEntitiesOnly)
+	}
+	// Tier 0's note is unchanged by the tier 1 merge wording.
+	if !strings.Contains(got.Note, "these are word-search hits, not community") {
+		t.Errorf("tier 0 note = %q", got.Note)
 	}
 }
 

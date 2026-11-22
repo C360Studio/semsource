@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,6 +29,12 @@ type GraphConfig struct {
 	// LexicalSearch runs graph-lexical, the tier 0 word index behind code_search
 	// and doc_context. Nil means on; false composes a structural-only graph.
 	LexicalSearch *bool `json:"lexical_search,omitempty"`
+
+	// SemanticSearch composes tier 1: graph-embedding over the model_registry
+	// embedding endpoint, merged with the word index by graph-query. Nil and
+	// false mean off. It is an explicit switch rather than inferred from the
+	// registry, because tier 0 configs carry registries for other capabilities.
+	SemanticSearch *bool `json:"semantic_search,omitempty"`
 
 	// CoalesceMs is the debounce window in ms for graph-index.
 	// Defaults to 200.
@@ -245,7 +252,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	return c.validateModelRegistry()
+	if err := c.validateModelRegistry(); err != nil {
+		return err
+	}
+	return c.validateSemanticSearch()
 }
 
 // validateGraph checks the graph block and rejects retired SemStreams keys
@@ -273,7 +283,8 @@ func (c *Config) validateGraph() error {
 	// Any presence is refused, null included: the key has no meaning on SemEngine.
 	if len(c.Graph.EmbedderType) > 0 {
 		return fmt.Errorf("config: graph.embedder_type is retired in SemEngine: tier 0 word search is graph-lexical, on by default " +
-			"(set graph.lexical_search to false for a structural-only graph), and the HTTP embedder returns with tier 1 (#234) — remove graph.embedder_type")
+			"(set graph.lexical_search to false for a structural-only graph), and tier 1 is graph.semantic_search: true with a " +
+			"model_registry embedding endpoint — remove graph.embedder_type")
 	}
 	return nil
 }
@@ -281,6 +292,77 @@ func (c *Config) validateGraph() error {
 // LexicalSearchEnabled reports whether the composition runs graph-lexical.
 func (g *GraphConfig) LexicalSearchEnabled() bool {
 	return g == nil || g.LexicalSearch == nil || *g.LexicalSearch
+}
+
+// SemanticSearchEnabled reports whether the composition runs tier 1:
+// graph-embedding, merged with the word index by graph-query.
+func (g *GraphConfig) SemanticSearchEnabled() bool {
+	return g != nil && g.SemanticSearch != nil && *g.SemanticSearch
+}
+
+// validateSemanticSearch refuses a tier 1 config that would boot as something
+// else. Without an embedding endpoint graph-embedding fails at every start
+// while search quietly answers words only; without the word index there is no
+// second list to merge with. The refusal names the missing piece.
+//
+// This is the reverse-direction check validateCapabilityRoles deliberately
+// skips: here the operator has asked for tier 1, so an endpoint that is not
+// recognisably an embedder is refused rather than trusted. Reachability is not
+// probed (validate must work offline); an unreachable provider boots degraded.
+func (c *Config) validateSemanticSearch() error {
+	if !c.Graph.SemanticSearchEnabled() {
+		return nil
+	}
+	if !c.Graph.LexicalSearchEnabled() {
+		return fmt.Errorf("config: graph.semantic_search needs graph.lexical_search on: tier 1 merges the word index's list " +
+			"with the embedding list — remove graph.lexical_search: false or graph.semantic_search")
+	}
+	if c.ModelRegistry == nil {
+		return fmt.Errorf("config: graph.semantic_search needs a model_registry whose %q capability resolves to an embedding "+
+			"endpoint (for example semembed at http://semembed:8081/v1); none is configured", model.CapabilityEmbedding)
+	}
+	name := c.ModelRegistry.Resolve(model.CapabilityEmbedding)
+	ep := c.ModelRegistry.GetEndpoint(name)
+	if ep == nil {
+		return fmt.Errorf("config: graph.semantic_search needs model_registry capability %q to resolve to an endpoint; "+
+			"it resolves to none", model.CapabilityEmbedding)
+	}
+	if !isEmbeddingEndpoint(ep) {
+		return fmt.Errorf("config: graph.semantic_search: model_registry capability %q resolves to endpoint %q (model %q), "+
+			"which is not recognisably an embedding endpoint; bind %q to an embedding model", model.CapabilityEmbedding,
+			name, ep.Model, model.CapabilityEmbedding)
+	}
+	if err := checkEmbeddingURL(ep.URL); err != nil {
+		return fmt.Errorf("config: graph.semantic_search: model_registry endpoint %q url %q %w", name, ep.URL, err)
+	}
+	return nil
+}
+
+// checkEmbeddingURL checks a tier 1 base URL offline: an absolute http or https
+// URL with a host, which httpembedder itself requires but refuses only at
+// Start, and a path ending in /v1, semembed's convention (the client adds
+// /embeddings), which httpembedder does not check and a wrong path fails only on
+// the first request. Validation names a typo instead of booting degraded.
+// Nothing is dialled.
+//
+// shortcut: /v1 is required because semembed is the only provider SemSource
+// ships for; drop it or make it per-provider when a provider with another API
+// root is supported.
+func checkEmbeddingURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("does not parse: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("is not an http or https URL")
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("has no host")
+	}
+	if !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), "/v1") {
+		return fmt.Errorf("must end in /v1, the semembed convention (the embedder adds /embeddings), for example http://semembed:8081/v1")
+	}
+	return nil
 }
 
 // defaultGraphIngestSubjects lists the five subjects SemSource's GRAPH stream

@@ -33,7 +33,7 @@ consumer contracts; raw KV reads must not silently replace a failed public query
   signals. A source being ready does not establish that its indexes are ready. When a
   caller has a write revision (`ENTITY_STATES` KV revision from `entity.create`/`entity.patch`), pass
   `min_revision` on enveloped `graph.query.*` requests (`byName`, `predicate`, `entityByAlias`,
-  `relationships`, `pathSearch`, `localSearch`, `globalSearch`, `searchGraph`, `summary`); an index behind it
+  `relationships`, `pathSearch`, `localSearch`, `globalSearch`, `searchGraph`, `mergedSearch`, `summary`); an index behind it
   refuses transient `revision_not_reached` (never waits) so the caller retries. The search verbs pass it to
   the word index.
 - Unavailable providers, transport errors, partial hydration, or `Deferred` are not absence findings.
@@ -46,7 +46,9 @@ consumer contracts; raw KV reads must not silently replace a failed public query
 - Apply source/taxonomy scope before result limits. Under ADR-102, taxonomy is segment four; a wildcard
   is not a literal prefix. Use complete admitted scopes, not broad search followed by post-limit filtering.
 - Code/doc fusion and `graph.query.searchGraph` (`localSearch`/`globalSearch` in SemEngine) are distinct
-  paths; qualify both when a consumer needs both.
+  paths; qualify both when a consumer needs both. Fusion's `nl` resolve asks `graph.query.mergedSearch`
+  (ranked IDs only, same merge as `searchGraph`; waits at most 4 s for the embedding search, then answers
+  from words), so at tier 1 fusion seeds can come from meaning; read the response's `provenance`.
 - MCP does not automatically wrap GraphQL, provide durable audit, or admit generation. SemSource's
   neural retrieval (semembed) returns with 04C (#234); optional generation has a separate qualification
   contract.

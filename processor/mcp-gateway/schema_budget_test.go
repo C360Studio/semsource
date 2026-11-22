@@ -21,6 +21,7 @@ const toolsListBudgetBytes = 8192
 // tool (as an MCP client receives it) and fails when the total exceeds the
 // budget. The per-tool breakdown is logged largest-first so the offender is
 // named, not hunted.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
 func TestToolsListSchemaBudget(t *testing.T) {
 	cs := connect(t, newTestComponent(nil))
 	res, err := cs.ListTools(context.Background(), nil)
@@ -48,10 +49,18 @@ func TestToolsListSchemaBudget(t *testing.T) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].total > rows[j].total })
 
+	// Gate on the marshalled result, not the per-tool sum: the list framing
+	// rides the wire too, and a sum under-counts it.
+	wire, err := json.Marshal(res)
+	if err != nil {
+		t.Fatalf("marshal tools/list: %v", err)
+	}
+	total = len(wire)
+
 	for _, r := range rows {
 		t.Logf("%-16s %5d B (description %4d B, schema+envelope %4d B)", r.name, r.total, r.desc, r.total-r.desc)
 	}
-	t.Logf("tools/list total: %d bytes across %d tools (budget %d)", total, len(rows), toolsListBudgetBytes)
+	t.Logf("tools/list result: %d bytes across %d tools (budget %d)", total, len(rows), toolsListBudgetBytes)
 
 	if total > toolsListBudgetBytes {
 		t.Errorf("tools/list = %d bytes, over the %d-byte budget: trim the largest tools above or raise the budget deliberately (#126)",

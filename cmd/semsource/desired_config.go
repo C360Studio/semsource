@@ -26,7 +26,10 @@ func prepareComponentRegistry(ctx context.Context, cfg *config.Config, manager *
 	if err != nil {
 		return nil, err
 	}
-	if err := registerComponentFactories(registry, componentWiring{Ingest: &ingest, ScopeSystems: scopes}); err != nil {
+	// The retained registry, not the file's: it is the one boot applies, so the
+	// embedder resolves the endpoint the running composition was retained with.
+	wiring := componentWiring{Ingest: &ingest, ScopeSystems: scopes, ModelRegistry: manager.GetConfig().Get().ModelRegistry}
+	if err := registerComponentFactories(registry, wiring); err != nil {
 		return nil, err
 	}
 	if err := requireRegisteredFactories(registry, manager.GetConfig().Get().Components); err != nil {

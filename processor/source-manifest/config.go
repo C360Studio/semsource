@@ -36,6 +36,13 @@ type Config struct {
 	// (not_enabled) without polling GRAPH_STATUS/graph-lexical.
 	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
 
+	// EmbeddingEnabled reports that the composition runs graph-embedding
+	// (tier 1). The semantic index is then ready only while graph-lexical and
+	// graph-embedding both report ready. That is index coverage, not provider
+	// liveness: a provider lost after catch-up can still read ready, and each
+	// answer reports it through merge.honoured.
+	EmbeddingEnabled bool `json:"embedding_enabled,omitempty" schema:"type:bool,description:Whether the composition runs graph-embedding (tier 1),default:false,category:advanced"`
+
 	// Discovered records the component names boot-time discovery admitted,
 	// per discovering parent. The next boot owns exactly these names: it
 	// retires the ones nothing discovers any more, including those of a
@@ -86,6 +93,11 @@ type ManifestSource struct {
 func (c *Config) Validate() error {
 	if c.Namespace == "" {
 		return fmt.Errorf("namespace is required")
+	}
+	// graph-embedding is merged with the word index; without the word index
+	// there is no tier 1 semantic index to report.
+	if c.EmbeddingEnabled && !c.semanticEnabled() {
+		return fmt.Errorf("embedding_enabled needs semantic_enabled: tier 1 merges graph-embedding with the word index")
 	}
 	return nil
 }

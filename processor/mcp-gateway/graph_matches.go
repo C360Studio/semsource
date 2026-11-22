@@ -59,11 +59,18 @@ var valuePredicates = []string{
 // graphMatch is one ranked hit: enough to judge relevance and to follow up with
 // a deterministic tool, and nothing else — plus the entity's own allowlisted
 // value facts when the substrate response already carried its triples.
+//
+// At tier 1 Relevance is the substrate's merged score when the merge was
+// honoured (the sum of 1/(60+place) over the word and embedding lists, at most
+// 2/61), not a word-index score, and WordRank / VectorRank are the match's
+// 1-based places in each list, absent when it is not in that list.
 type graphMatch struct {
 	ID         string            `json:"id"`
 	Type       string            `json:"type,omitempty"`
 	Label      string            `json:"label,omitempty"`
 	Relevance  float64           `json:"relevance,omitempty"`
+	WordRank   int               `json:"word_rank,omitempty"`
+	VectorRank int               `json:"vector_rank,omitempty"`
 	Tags       []string          `json:"tags,omitempty"`
 	Properties map[string]string `json:"properties,omitempty"`
 }
@@ -113,7 +120,10 @@ func deriveMatches(text *gtypes.TextSearchData) (matches []graphMatch, total int
 		return nil, 0, false
 	}
 	for _, m := range text.Matches {
-		gm := graphMatch{ID: m.ID, Type: entityTypeSegment(m.ID), Label: m.Label, Relevance: m.Score}
+		gm := graphMatch{
+			ID: m.ID, Type: entityTypeSegment(m.ID), Label: m.Label, Relevance: m.Score,
+			WordRank: m.WordRank, VectorRank: m.VectorRank,
+		}
 		var e substrateEntity
 		if len(m.Entity) > 0 && json.Unmarshal(m.Entity, &e) == nil {
 			if gm.Label == "" {
@@ -129,6 +139,67 @@ func deriveMatches(text *gtypes.TextSearchData) (matches []graphMatch, total int
 	}
 	truncated = text.Truncated || len(matches) < total
 	return matches, total, truncated
+}
+
+// mergeDetailIndexNotReady is the merge detail of a tier 1 searchGraph answered
+// from the embedding search alone while the word index is not ready.
+const mergeDetailIndexNotReady = "index_not_ready"
+
+// buildGraphSearchResult renders a decoded searchGraph reply. A reply with a
+// word list renders it; a tier 1 reply answered from the embedding search
+// alone (text null, merge honoured with detail index_not_ready) renders the
+// embedding hits; anything else is the unknown rung. The merge step and the
+// hints ride in every case, so neither the reason nor an honoured hint's
+// answer is lost with the word list.
+func buildGraphSearchResult(data *gtypes.GlobalSearchData) graphSearchResult {
+	entity, path, hints := deriveHintAnswers(data)
+	result := graphSearchResult{Retrieval: unknownDisclosure()}
+	switch {
+	case data.Text != nil:
+		matches, total, truncated := deriveMatches(data.Text)
+		communities := deriveCommunities(data.Text)
+		result = graphSearchResult{
+			Retrieval: deriveDisclosure(data, communities), Answer: data.Text.Answer,
+			Matches: matches, TotalMatches: total, Truncated: truncated, CommunitySummaries: communities,
+		}
+	case embeddingAlone(data):
+		if matches, total, truncated, ok := deriveVectorMatches(data.Semantic); ok {
+			result = graphSearchResult{
+				Retrieval: deriveDisclosure(data, nil), Matches: matches, TotalMatches: total, Truncated: truncated,
+			}
+		}
+	}
+	result.Entity, result.Path, result.Hints, result.Merge = entity, path, hints, data.Merge
+	return result
+}
+
+// embeddingAlone says the reply is searchGraph's embedding-only answer.
+func embeddingAlone(data *gtypes.GlobalSearchData) bool {
+	m := data.Merge
+	return data.Text == nil && m != nil && m.Honoured && m.Detail == mergeDetailIndexNotReady
+}
+
+// deriveVectorMatches renders the embedding search's hits, in its order, as
+// bounded matches carrying their vector_rank. The hit's similarity is left
+// out: it is a cosine, on neither the word nor the merged scale, and
+// relevance must not carry a third. The hits are IDs only, so no label or
+// property renders. searchGraph asks the embedding search for at most
+// MaxSimilarityLimit hits, so a full list may have left more out.
+func deriveVectorMatches(raw json.RawMessage) (matches []graphMatch, total int, truncated, ok bool) {
+	var semantic gtypes.SemanticData
+	if len(raw) == 0 || json.Unmarshal(raw, &semantic) != nil {
+		return nil, 0, false, false
+	}
+	matches = []graphMatch{}
+	for n, hit := range semantic.Results {
+		if n == maxGraphMatches {
+			break
+		}
+		matches = append(matches, graphMatch{ID: hit.EntityID, Type: entityTypeSegment(hit.EntityID), VectorRank: n + 1})
+	}
+	total = len(semantic.Results)
+	truncated = total > len(matches) || total >= gtypes.MaxSimilarityLimit
+	return matches, total, truncated, true
 }
 
 // communitySummary is one community group holding matches whose record the
@@ -243,9 +314,12 @@ func truncateValue(v string) string {
 // derived disclosure, and nothing invented. The match list is bounded;
 // TotalMatches and Truncated keep that honest rather than presenting a cap as
 // the whole result. Hints say what the question asked for beyond its words
-// (a time range, an area, a count) and whether it was applied.
+// (a time range, an area, a count) and whether it was applied. Merge is the
+// substrate's tier 1 merge step, verbatim: honoured false means the matches
+// are the word list alone, and it is never dropped. Tier 0 sends none.
 type graphSearchResult struct {
 	Retrieval          retrievalDisclosure       `json:"retrieval"`
+	Merge              *gtypes.GlobalSearchHint  `json:"merge,omitempty"`
 	Answer             string                    `json:"answer,omitempty"`
 	Matches            []graphMatch              `json:"matches"`
 	TotalMatches       int                       `json:"total_matches"`

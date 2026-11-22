@@ -29,6 +29,7 @@ const (
 const (
 	structuralReadinessKey = graphstatus.KeyGraphIndex
 	semanticReadinessKey   = graphstatus.KeyGraphLexical
+	embeddingReadinessKey  = graphstatus.KeyGraphEmbedding
 )
 
 // readinessRequestFunc fetches one producer's raw readiness envelope by
@@ -294,10 +295,13 @@ func (c *Component) collectIndexReadiness(parent context.Context) (workbenchInde
 	} {
 		query := query
 		go func() {
-			results <- namedReadinessSignal{
-				name:   query.name,
-				signal: c.fetchIndexReadiness(ctx, query.key, query.label),
+			var signal workbenchIndexReadiness
+			if query.name == "semantic" {
+				signal = c.fetchSemanticReadiness(ctx, query.label)
+			} else {
+				signal = c.fetchIndexReadiness(ctx, query.key, query.label)
 			}
+			results <- namedReadinessSignal{name: query.name, signal: signal}
 		}()
 	}
 
@@ -322,6 +326,16 @@ func (c *Component) collectIndexReadiness(parent context.Context) (workbenchInde
 func (c *Component) fetchIndexReadiness(ctx context.Context, key, label string) workbenchIndexReadiness {
 	raw, err := c.requestReadiness(ctx, key)
 	return indexReadinessFrom(raw, err, label)
+}
+
+// fetchSemanticReadiness reads the semantic index's readiness: the word index
+// alone at tier 0, folded with graph-embedding's at tier 1.
+func (c *Component) fetchSemanticReadiness(ctx context.Context, label string) workbenchIndexReadiness {
+	lexical := c.fetchIndexReadiness(ctx, semanticReadinessKey, label)
+	if !c.config.EmbeddingEnabled {
+		return lexical
+	}
+	return foldSemanticReadiness(lexical, c.fetchIndexReadiness(ctx, embeddingReadinessKey, embeddingIndexLabel))
 }
 
 // requestReadiness reads one producer's readiness envelope from GRAPH_STATUS.

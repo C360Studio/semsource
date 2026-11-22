@@ -361,77 +361,119 @@ func assertPortSubjects(t *testing.T, got, want map[string]string) {
 	}
 }
 
+// TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts: graph-lexical
+// keeps its default ports at both tiers, and graph-embedding is composed only
+// at tier 1.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts(t *testing.T) {
-	components, err := graphSubsystemComponents(&config.Config{Graph: &config.GraphConfig{EnableClustering: true}})
-	if err != nil {
-		t.Fatalf("graphSubsystemComponents() error = %v", err)
-	}
-	if _, ok := components["graph-embedding"]; ok {
-		t.Fatal("graph-embedding composed at tier 0; SemEngine refuses it without an embedder")
-	}
-	suffixesOf := func(name string) []string {
-		t.Helper()
-		comp, ok := components[name]
-		if !ok {
-			t.Fatalf("%s component not configured", name)
-		}
-		var raw struct {
-			Ports        json.RawMessage `json:"ports"`
-			TextSuffixes []string        `json:"text_suffixes"`
-		}
-		if err := json.Unmarshal(comp.Config, &raw); err != nil {
-			t.Fatalf("unmarshal %s config: %v", name, err)
-		}
-		if raw.Ports != nil {
-			t.Fatalf("%s config overrides ports; its DefaultConfig owns them", name)
-		}
-		return raw.TextSuffixes
-	}
-	lexical := suffixesOf("graph-lexical")
-	// A non-empty list replaces SemEngine's defaults: it must keep a default
-	// (.title) and add the code doc predicates, or signatures and docstrings
-	// never reach word search.
-	for _, want := range []string{".title", ".signature", ".comment"} {
-		if !slices.Contains(lexical, want) {
-			t.Fatalf("graph-lexical text_suffixes %v lack %s", lexical, want)
-		}
-	}
-	if clustering := suffixesOf("graph-clustering"); !slices.Equal(clustering, lexical) {
-		t.Fatalf("graph-clustering text_suffixes %v differ from graph-lexical's %v", clustering, lexical)
+	on := true
+	for _, tc := range []struct {
+		name          string
+		graph         *config.GraphConfig
+		wantEmbedding bool
+	}{
+		{name: "tier 0", graph: &config.GraphConfig{EnableClustering: true}},
+		{name: "tier 1", graph: &config.GraphConfig{EnableClustering: true, SemanticSearch: &on}, wantEmbedding: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			components, err := graphSubsystemComponents(&config.Config{Graph: tc.graph})
+			if err != nil {
+				t.Fatalf("graphSubsystemComponents() error = %v", err)
+			}
+			if _, ok := components["graph-embedding"]; ok != tc.wantEmbedding {
+				t.Fatalf("graph-embedding composed = %v, want %v: SemEngine refuses it without an embedder, and tier 1 needs it",
+					ok, tc.wantEmbedding)
+			}
+			suffixesOf := func(name string) []string {
+				t.Helper()
+				comp, ok := components[name]
+				if !ok {
+					t.Fatalf("%s component not configured", name)
+				}
+				var raw struct {
+					Ports        json.RawMessage `json:"ports"`
+					TextSuffixes []string        `json:"text_suffixes"`
+				}
+				if err := json.Unmarshal(comp.Config, &raw); err != nil {
+					t.Fatalf("unmarshal %s config: %v", name, err)
+				}
+				if raw.Ports != nil {
+					t.Fatalf("%s config overrides ports; its DefaultConfig owns them", name)
+				}
+				return raw.TextSuffixes
+			}
+			lexical := suffixesOf("graph-lexical")
+			// A non-empty list replaces SemEngine's defaults: it must keep a default
+			// (.title) and add the code doc predicates, or signatures and docstrings
+			// never reach word search.
+			for _, want := range []string{".title", ".signature", ".comment"} {
+				if !slices.Contains(lexical, want) {
+					t.Fatalf("graph-lexical text_suffixes %v lack %s", lexical, want)
+				}
+			}
+			if clustering := suffixesOf("graph-clustering"); !slices.Equal(clustering, lexical) {
+				t.Fatalf("graph-clustering text_suffixes %v differ from graph-lexical's %v", clustering, lexical)
+			}
+			// The merge ranks one entity's word and vector places together, so
+			// both lists must read the same text.
+			if tc.wantEmbedding {
+				if embedding := suffixesOf("graph-embedding"); !slices.Equal(embedding, lexical) {
+					t.Fatalf("graph-embedding text_suffixes %v differ from graph-lexical's %v", embedding, lexical)
+				}
+			}
+		})
 	}
 }
 
 // spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestGraphSubsystemComponents_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
-	off := false
-	cfg := &config.Config{
-		Namespace: "acme",
-		Graph:     &config.GraphConfig{LexicalSearch: &off},
-	}
-	ssCfg, err := buildSemstreamsConfig(cfg, "acme")
-	if err != nil {
-		t.Fatalf("buildSemstreamsConfig() error = %v", err)
-	}
-	for _, name := range []string{"graph-lexical", "graph-embedding"} {
-		if _, ok := ssCfg.Components[name]; ok {
-			t.Fatalf("%s must not be composed when lexical_search is false", name)
-		}
-	}
-	var queryRaw map[string]any
-	if err := json.Unmarshal(ssCfg.Components["graph-query"].Config, &queryRaw); err != nil {
-		t.Fatalf("unmarshal graph-query config: %v", err)
-	}
-	if enabled, _ := queryRaw["embedding_enabled"].(bool); enabled {
-		t.Fatal("graph-query embedding_enabled = true with no embedder")
-	}
-	for _, compName := range []string{"source-manifest", "mcp-gateway"} {
-		var raw map[string]any
-		if err := json.Unmarshal(ssCfg.Components[compName].Config, &raw); err != nil {
-			t.Fatalf("unmarshal %s config: %v", compName, err)
-		}
-		if enabled, ok := raw["semantic_enabled"].(bool); !ok || enabled {
-			t.Fatalf("%s semantic_enabled = %v, want false", compName, raw["semantic_enabled"])
-		}
+	off, on := false, true
+	for _, tc := range []struct {
+		name         string
+		graph        *config.GraphConfig
+		wantLexical  bool
+		wantEmbed    bool
+		wantSemantic bool // source-manifest / mcp-gateway semantic_enabled
+	}{
+		{name: "tier 0 structural", graph: &config.GraphConfig{LexicalSearch: &off}},
+		{name: "tier 0 lexical", graph: nil, wantLexical: true, wantSemantic: true},
+		{name: "tier 1", graph: &config.GraphConfig{SemanticSearch: &on}, wantLexical: true, wantEmbed: true, wantSemantic: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ssCfg, err := buildSemstreamsConfig(&config.Config{Namespace: "acme", Graph: tc.graph}, "acme")
+			if err != nil {
+				t.Fatalf("buildSemstreamsConfig() error = %v", err)
+			}
+			for name, want := range map[string]bool{"graph-lexical": tc.wantLexical, "graph-embedding": tc.wantEmbed} {
+				if _, ok := ssCfg.Components[name]; ok != want {
+					t.Fatalf("%s composed = %v, want %v", name, ok, want)
+				}
+			}
+			var queryRaw map[string]any
+			if err := json.Unmarshal(ssCfg.Components["graph-query"].Config, &queryRaw); err != nil {
+				t.Fatalf("unmarshal graph-query config: %v", err)
+			}
+			if enabled, _ := queryRaw["embedding_enabled"].(bool); enabled != tc.wantEmbed {
+				t.Fatalf("graph-query embedding_enabled = %v, want %v (true exactly when graph-embedding is composed)",
+					enabled, tc.wantEmbed)
+			}
+			for _, compName := range []string{"source-manifest", "mcp-gateway"} {
+				var raw map[string]any
+				if err := json.Unmarshal(ssCfg.Components[compName].Config, &raw); err != nil {
+					t.Fatalf("unmarshal %s config: %v", compName, err)
+				}
+				// semantic_enabled is written only to turn the search index off.
+				enabled, ok := raw["semantic_enabled"].(bool)
+				if tc.wantSemantic == (ok && !enabled) {
+					t.Fatalf("%s semantic_enabled = %v, want search on = %v", compName, raw["semantic_enabled"], tc.wantSemantic)
+				}
+				// At tier 1 readiness must also wait on graph-embedding.
+				if embedding, _ := raw["embedding_enabled"].(bool); embedding != tc.wantEmbed {
+					t.Fatalf("%s embedding_enabled = %v, want %v", compName, raw["embedding_enabled"], tc.wantEmbed)
+				}
+			}
+		})
 	}
 }
 

@@ -90,7 +90,7 @@ func (c *Component) buildServer() *mcp.Server {
 	// status.phase is ready AND the relevant source_status signal is ready.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_context",
-		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. Use to understand a symbol and how it connects. If a symbol misses while index.ready is false (check source_status), the structural index is still catching up — retry once ready.",
+		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. A miss while index.ready is false (source_status) means the structural index is catching up — retry once ready. Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `lexical` may be either (semengine#723).",
 	}, c.codeContext)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_impact",
@@ -98,11 +98,11 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.codeImpact)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_search",
-		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies. Quality depends on the embedder tier; results are reliable once embedding.ready is true (check source_status).",
+		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies, reliable once embedding.ready is true (source_status). Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `lexical` may be either (semengine#723).",
 	}, c.codeSearch)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "doc_context",
-		Description: "Fused documentation context (READMEs/ADRs/prose) for a query — the intended design, not just the code.",
+		Description: "Fused doc context (READMEs/ADRs/prose) for a query: the intended design, not just code. Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `lexical` may be either (semengine#723).",
 	}, c.docContext)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_changes",
@@ -123,7 +123,7 @@ func (c *Component) buildServer() *mcp.Server {
 	// summarize_graph works because its roster has query_by_type; ours does not.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "graph_search",
-		Description: "Corpus-wide word search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Matches are id/type/label/relevance plus allowlisted value properties (versions, kinds); follow up with a deterministic tool on IDs of interest. Every result carries a `retrieval` block disclosing whether matches are community-backed (clustering on) or word hits only; the answer text is a template, never LLM-synthesized. `hints` lists what the question asked beyond its words and whether it was applied; an applied entity reference or path walk comes back as `entity` / `path`",
+		Description: "Corpus-wide word search across ALL entity types (code, docs, config, commits) — use it for open questions like 'how does readiness gating work'; use code_search instead to find code symbols by meaning. A substrate graph query, not a fusion answer. Matches are id/type/label/relevance plus allowlisted value properties (versions, kinds); follow up with a deterministic tool on IDs of interest. Every result carries a `retrieval` block disclosing whether matches are community-backed (clustering on) or word hits only; the answer text is a template, never LLM-synthesized. `hints` lists what the question asked beyond its words and whether it was applied; an applied entity reference or path walk comes back as `entity` / `path`. At tier 1, when merge.honoured, word and embedding hits merge: relevance is a rank score ≤2/61, not the word scale, with word_rank/vector_rank; honoured false = word hits and scores",
 	}, c.graphSearch)
 	return s
 }

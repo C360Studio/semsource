@@ -1,0 +1,45 @@
+D01   doc        doc_context   correct    nodes=20  body=20168   top=824     
+D02   doc        doc_context   correct    nodes=12  body=9043    top=1076    
+C01   code       code_context  correct    nodes=2   body=47639   top=47073   
+C02   code       code_context  correct    nodes=2   body=9560    top=9519    
+C03   code       code_search   correct    nodes=20  body=42540   top=141     
+I01   impact     code_impact   correct    nodes=1   body=256     top=256     
+N01   negative   code_context  correct    nodes=0   body=0       top=0       
+N02   negative   doc_context   correct    nodes=20  body=19326   top=1965    
+P01   composition code_impact   correct    nodes=1   body=338     top=338     
+P02   composition code_impact   correct    nodes=1   body=343     top=343     
+G01   config     graph_search  correct    nodes=0   body=0       top=0       
+G02   config     graph_search  correct    nodes=0   body=0       top=0       
+G03   config     graph_search  correct    nodes=0   body=0       top=0       
+
+=== tier1-alpha7-osh-B: 13/13  (repeats=3) ===
+code: 3/3
+composition: 2/2
+config: 3/3
+doc: 2/2
+impact: 1/1
+negative: 2/2
+
+--- evidence precision (doc bands) ---
+median top-node body: 1076 bytes
+mean  total body:     14605 bytes
+mean  nodes/answer:   16
+
+--- latency (first call per question; same-machine comparisons only) ---
+code: median 149 ms, p95 174 ms (n=3)
+composition: median 76 ms, p95 76 ms (n=2)
+config: median 68 ms, p95 72 ms (n=3)
+doc: median 231 ms, p95 231 ms (n=2)
+impact: median 153 ms, p95 153 ms (n=1)
+negative: median 109 ms, p95 109 ms (n=2)
+
+--- context cost (first call per question; tokens ~ bytes/4, estimate) ---
+code: total 116972 B (~29243 tok), mean 38990 B
+composition: total 3306 B (~826 tok), mean 1653 B
+config: total 22710 B (~5677 tok), mean 7570 B
+doc: total 41521 B (~10380 tok), mean 20760 B
+impact: total 1871 B (~467 tok), mean 1871 B
+negative: total 27272 B (~6818 tok), mean 13636 B
+all bands: total 213652 B (~53413 tok)
+schema overhead (tools/list): 8175 B (~2043 tok), 9 tools — session-fixed, excluded from the figures above
+written: /Users/coby/Code/c360/semsource/.worktrees/claude-234-tier1-openspec/scripts/scorecard/results/tier1-alpha7-osh-B.json

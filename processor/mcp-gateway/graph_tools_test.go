@@ -57,3 +57,34 @@ func TestGraphToolDescriptionsStayHonest(t *testing.T) {
 		t.Errorf("graph_search description does not distinguish itself from code_search: %s", search)
 	}
 }
+
+// TestTierOneDescriptionsStateTheMergedScale: at tier 1 a score is a merged
+// rank score, at most 2/61, not a word-index score, so a client thresholding
+// on the word scale breaks. The descriptions must say so, and say where seeds
+// came from and when a merge was not honoured.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Fusion tools disclose where Tier 1 seeds came from
+func TestTierOneDescriptionsStateTheMergedScale(t *testing.T) {
+	cs := connect(t, newTestComponent(nil))
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	descriptions := make(map[string]string, len(res.Tools))
+	for _, tool := range res.Tools {
+		descriptions[tool.Name] = tool.Description
+	}
+	want := map[string][]string{
+		"graph_search": {"tier 1", "2/61", "not the word scale", "word_rank", "vector_rank", "when merge.honoured", "honoured false"},
+		"code_search":  {"Tier 1", "`provenance`", "`similarity`", "2/61"},
+		"code_context": {"Tier 1", "`provenance`", "`similarity`", "2/61"},
+		"doc_context":  {"Tier 1", "`provenance`", "`similarity`", "2/61"},
+	}
+	for tool, fragments := range want {
+		for _, fragment := range fragments {
+			if !strings.Contains(descriptions[tool], fragment) {
+				t.Errorf("%s description missing %q: %s", tool, fragment, descriptions[tool])
+			}
+		}
+	}
+}

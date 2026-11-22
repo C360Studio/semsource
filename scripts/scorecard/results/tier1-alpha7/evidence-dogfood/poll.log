@@ -1,0 +1,27 @@
+21:04:28 seed {} 117 graph={"messages":3,"bytes":11612}
+21:04:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":540,"emb_target":7828,"emb_state":"building"} 709 graph={"messages":7833,"bytes":49403558}
+21:05:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":908,"emb_target":7828,"emb_state":"building"} 1099 graph={"messages":7834,"bytes":49405429}
+21:05:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":1269,"emb_target":7828,"emb_state":"building"} 1509 graph={"messages":7835,"bytes":49407300}
+21:06:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":1739,"emb_target":7828,"emb_state":"building"} 1919 graph={"messages":7836,"bytes":49409171}
+21:06:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":2116,"emb_target":7828,"emb_state":"building"} 2319 graph={"messages":7837,"bytes":49411042}
+21:07:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":2454,"emb_target":7828,"emb_state":"building"} 2683 graph={"messages":7838,"bytes":49412913}
+21:07:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":2939,"emb_target":7828,"emb_state":"building"} 3114 graph={"messages":7839,"bytes":49414784}
+21:08:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":3447,"emb_target":7828,"emb_state":"building"} 3549 graph={"messages":7840,"bytes":49416655}
+21:08:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":3822,"emb_target":7828,"emb_state":"building"} 3878 graph={"messages":7841,"bytes":49418526}
+21:09:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":4170,"emb_target":7828,"emb_state":"building"} 4182 graph={"messages":7842,"bytes":49420397}
+21:09:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":4722,"emb_target":7828,"emb_state":"building"} 4539 graph={"messages":7843,"bytes":49422268}
+21:10:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":5160,"emb_target":7828,"emb_state":"building"} 4959 graph={"messages":7844,"bytes":49424139}
+21:10:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":5597,"emb_target":7828,"emb_state":"building"} 5338 graph={"messages":7845,"bytes":49426010}
+21:11:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":5996,"emb_target":7828,"emb_state":"building"} 5668 graph={"messages":7846,"bytes":49427881}
+21:11:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":6325,"emb_target":7828,"emb_state":"building"} 6028 graph={"messages":7847,"bytes":49429752}
+21:12:28 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":6690,"emb_target":7828,"emb_state":"building"} 6403 graph={"messages":7848,"bytes":49431623}
+21:12:58 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":7167,"emb_target":7828,"emb_state":"building"} 6873 graph={"messages":7849,"bytes":49433494}
+21:13:29 seed {"phase":"ready","total_entities":7828,"index":7828,"emb":7781,"emb_target":7828,"emb_state":"building"} 7378 graph={"messages":7850,"bytes":49435365}
+seed settled in 571 s
+seed provider requests=7271 tokens=1426105
+21:14:18 restart {"phase":"seeding","total_entities":1351,"index":null,"emb":null,"emb_target":7828,"emb_state":"building"} 7471 graph={"messages":9205,"bytes":53816296}
+21:14:48 restart {"phase":"ready","total_entities":7828,"index":null,"emb":15656,"emb_target":15656,"emb_state":"degraded"} 7476 graph={"messages":15684,"bytes":98827577}
+21:15:19 restart {"phase":"ready","total_entities":7828,"index":7828,"emb":15656,"emb_target":15656,"emb_state":"ready"} 7476 graph={"messages":15685,"bytes":98829448}
+21:15:49 restart {"phase":"ready","total_entities":7828,"index":7909,"emb":15656,"emb_target":15656,"emb_state":"ready"} 7476 graph={"messages":15686,"bytes":98831319}
+restart settled in 121 s
+restart provider requests=10 tokens=144

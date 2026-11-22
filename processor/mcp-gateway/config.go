@@ -40,6 +40,11 @@ type Config struct {
 	// as disabled (not_enabled) in source_status without polling
 	// GRAPH_STATUS/graph-lexical.
 	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
+
+	// EmbeddingEnabled reports that the composition runs graph-embedding
+	// (tier 1): source_status's embedding block is then ready only while
+	// graph-lexical and graph-embedding both are.
+	EmbeddingEnabled bool `json:"embedding_enabled,omitempty" schema:"type:bool,description:Whether the composition runs graph-embedding (tier 1),default:false,category:advanced"`
 }
 
 func (c *Config) semanticEnabled() bool {
@@ -50,6 +55,11 @@ func (c *Config) semanticEnabled() bool {
 func (c *Config) Validate() error {
 	if c.Namespace == "" {
 		return fmt.Errorf("namespace is required")
+	}
+	// graph-embedding is merged with the word index; without the word index
+	// there is no tier 1 to report.
+	if c.EmbeddingEnabled && !c.semanticEnabled() {
+		return fmt.Errorf("embedding_enabled needs semantic_enabled: tier 1 merges graph-embedding with the word index")
 	}
 	return nil
 }

@@ -1,0 +1,40 @@
+questions_version: 7
+
+band            pin-8b99efe9-tier1-dogfood-B (B)  alpha6-tier0-dogfood-B (B)     fix329-tier0-dogfood-B (B)     tier1-alpha7-dogfood-B (B)
+code            6/6  75571 B                      6/6  81430 B                   6/6  84836 B                   6/6  71180 B
+composition     3/4  8714 B                       3/4  8009 B                    3/4  8009 B                    3/4  8009 B
+discrimination  2/2  45594 B                      1/2  45883 B                   1/2  45883 B                   1/2  44655 B
+doc-early       3/3  47833 B                      3/3  67794 B                   3/3  67794 B                   3/3  60651 B
+doc-late        7/7  169004 B                     7/7  170103 B                  7/7  172801 B                  7/7  179678 B
+impact          2/2  4587 B                       2/2  4248 B                    2/2  4248 B                    2/2  4248 B
+lexical         2/3  65955 B                      3/3  26677 B                   3/3  26847 B                   3/3  70170 B
+loose           5/7  125878 B                     5/7  136619 B                  5/7  140164 B                  6/7  128398 B
+negative        2/2  19803 B                      2/2  18474 B                   2/2  18779 B                   2/2  23464 B
+TOTAL           32/36  562939 B (~140734 tok)     32/36  559237 B (~139809 tok)  32/36  569361 B (~142340 tok)  33/36  590453 B (~147613 tok)
+
+latency, median/p95 ms per band (first call per question; same-machine comparisons only):
+band            pin-8b99efe9-tier1-dogfood-B (B)  alpha6-tier0-dogfood-B (B)  fix329-tier0-dogfood-B (B)  tier1-alpha7-dogfood-B (B)
+code            50 / 62 ms                        39 / 47 ms                  33 / 73 ms                  55 / 69 ms
+composition     190 / 364 ms                      192 / 413 ms                179 / 420 ms                168 / 379 ms
+discrimination  90 / 90 ms                        60 / 60 ms                  64 / 64 ms                  80 / 80 ms
+doc-early       97 / 144 ms                       60 / 88 ms                  62 / 69 ms                  77 / 96 ms
+doc-late        89 / 112 ms                       61 / 68 ms                  67 / 82 ms                  78 / 103 ms
+impact          178 / 178 ms                      169 / 169 ms                170 / 170 ms                168 / 168 ms
+lexical         76 / 86 ms                        32 / 36 ms                  27 / 35 ms                  80 / 90 ms
+loose           50 / 79 ms                        41 / 78 ms                  37 / 91 ms                  61 / 88 ms
+negative        125 / 125 ms                      84 / 84 ms                  64 / 64 ms                  104 / 104 ms
+ALL             70 / 190 ms                       59 / 192 ms                 62 / 179 ms                 77 / 168 ms
+  pin-8b99efe9-tier1-dogfood-B: measured on arm64/Darwin
+  alpha6-tier0-dogfood-B: measured on arm64/Darwin
+  fix329-tier0-dogfood-B: measured on arm64/Darwin
+  tier1-alpha7-dogfood-B: measured on arm64/Darwin
+
+session-fixed schema overhead (excluded from figures above):
+  pin-8b99efe9-tier1-dogfood-B: 7579 B (~1894 tok), 9 tools
+  alpha6-tier0-dogfood-B: 7516 B (~1879 tok), 9 tools
+  fix329-tier0-dogfood-B: 7657 B (~1914 tok), 9 tools
+  tier1-alpha7-dogfood-B: 8175 B (~2043 tok), 9 tools
+
+!!! flagged verdicts:
+pin-8b99efe9-tier1-dogfood-B:
+  LX03 FABRICATED: asserted: func test
