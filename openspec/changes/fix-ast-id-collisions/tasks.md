@@ -7,7 +7,7 @@
 ## 2. Verify before code
 
 - [ ] 2.1 Rerun the #333 collision probe across Python, C and C++ fixtures and record any collisions. Any found become a follow-up issue, out of this break.
-- [ ] 2.2 Measure decision 3 on OSH: the share of Java call sites to overloaded names that arity resolves, versus same-arity sites that would lose their edge. Record the numbers in this task before Q1 is closed.
+- [ ] 2.2 Measure decision 3 on OSH against today's edges: how many edges arity keeps, and how many are lost to each of the three Q1 costs (same-arity overloads, external ancestor chains, overrides written differently). Record the numbers here before Q1 is closed.
 - [ ] 2.3 Confirm that no TS/JS/Svelte edge targets a local entity that decision 4 removes. Check `calls`, references and destructured bindings (the #103 rule) across dogfood; the reviewer read `ts/calls.go:103-129` as top-level only. If an edge does target one, decision 4 is revised before code.
 
 ## 3. Guard (additive; lands first and fails)
@@ -19,7 +19,7 @@
 
 - [ ] 4.1 Java discriminator (kind, type text without type arguments, array dimensions kept, type variables to their first bound) on every method and constructor. Tests: the constructor-versus-method and `int`/`int[]` scenarios, plus stability under a sibling-overload add and a parameter rename.
 - [ ] 4.2 Java call edges collect overloads across the in-repo hierarchy and select by arity even with one candidate, or emit none; constructor calls likewise. Tests are the five code-call-graph scenarios.
-- [ ] 4.3 TS/JS/Svelte: stop emitting locals of every form (namespace members kept); always discriminate accessor pairs and static members. Tests: the `fetcher`, local-function and accessor scenarios, with module-level IDs unchanged.
+- [ ] 4.3 TS/JS/Svelte: stop emitting locals of every form (namespace members kept); always discriminate accessor pairs and static members, and carry the discriminated ID through `classMethodNames` for `this.` calls. Tests: a `this.` call to a method and a `ClassName.` call to a static method still edge correctly, plus the `fetcher`, local-function and accessor scenarios, with module-level IDs unchanged.
 - [ ] 4.4 Go: skip blank `var`, `const` and `func`, and identify `init` per Q4. Test: the blank-declaration scenario, plus an `init` test under the ruling.
 - [ ] 4.5 Asset guard: an `X.js` with an `X.min.js` sibling is file-entity-only, plus `index_vendored_js`. Tests are both asset-ingestion-guards scenarios.
 - [ ] 4.6 3.1 passes on all fixtures, and the repo-tree guard reports zero collisions.

@@ -30,7 +30,7 @@ The races are ours, in identity. graph-ingest is behaving as documented.
      - It keeps the first declaration in parse order. Every parser emits in tree-sitter child order or `file.Decls` order, never in map order, so "first" is deterministic.
      - It counts the rest on a new `id_collisions` status field and logs one aggregated warning per file.
      - Dropping beats merging, because a merge fabricates edges. The count stays out of `ErrorCount`, since the entity that is kept is valid.
-     - During the initial index the same check runs across the watch path's whole result set (`component.go:389`). `SanitizePathSegment` is many-to-one: `a/b.ts` and `a-b.ts` both fold to `a-b-ts`.
+     - During the initial index the same check runs across the watch path's whole result set (`component.go:389`). `SanitizePathSegment` is many-to-one: `a/b.ts` and `a-b.ts` both fold to `a-b-ts`. *Limit:* a fold that first appears through watch or reindex is caught only by the next initial index.
    - *Alternative rejected:* failing the parse result, which would turn one parser bug into lost files.
 2. **Java discriminator (#330).** Every method and constructor instance gets `-<6 hex>`, a SHA-256 prefix over:
    - the **kind**: a constructor `Foo(…)` and a method `void Foo(…)` are both `TypeMethod`;
@@ -48,7 +48,7 @@ The races are ours, in identity. graph-ingest is behaving as documented.
    - A *local* is a declaration with a function, arrow, method or static-block ancestor. That definition keeps namespace members, whose body is also a `statement_block`.
    - **Locals are not emitted, whatever their form:** `const`/`let`/`var`, `function inner(){}`, `const inner = () => {}` (both of those are `TypeFunction`, `ts/parser.go:700`), and local classes with their methods.
    - No edge depends on them: `localFuncs` holds top-level names only (`ts/calls.go:103-129`), and a local shadows the call into inertness.
-   - **Class members are discriminated always, never only on collision:** a getter and setter pair gets `-get` / `-set`, and a static member gets `-static` (`ts/parser.go:413-418,445`).
+   - **Class members are discriminated always, never only on collision:** a getter and setter pair gets `-get` / `-set`, and a static member gets `-static` (`ts/parser.go:413-418,445`). `this.` call resolution builds the callee ID from the bare name (`ts/calls.go:589`), so `classMethodNames` and its callers carry the discriminated ID. A static method is reached through `ClassName.m()`, not `this.`, and accessors are never call targets.
    - Go emits only package-level declarations, so this restores parity.
 5. **Go (#332).** Blank declarations are skipped in every form: `var _`, `const _` (including `iota` blocks, `golang/parser.go:224-233`) and `func _()`. A blank binds nothing anyone can look up. Multiple `func init()` in one file (`:270`) take Q4's ruling.
 6. **Vendored bundles (#334).** `.min.js` files are already file-entity-only under `asset-ingestion-guards` (`processor/ast-source/assetguard.go:44,96`). The OSH collisions come from their unminified **twins**: `jquery.js`, `lodash.js`, `joint.js` and `backbone.js`.
@@ -72,11 +72,16 @@ Merge, then the release note announces the break. Operators provision fresh stor
 
 ## Open Questions
 
-- **Q1 (decision 3):** if task 2.2 shows same-arity overloads carry a large share of OSH call sites, should edges also use argument types where receiver resolution already knows them? Default: no, arity only.
+- **Q1 (decision 3):** task 2.2 counts three costs:
+  - same-arity overloads;
+  - own-class calls in a class whose ancestor chain leaves the repo, such as one extending `Exception` or `Thread`;
+  - overrides written differently, such as `foo(List)` against `foo(java.util.List)`, or `foo(T)` against `foo(String)`.
+
+  If those carry a large share of OSH call sites, should edges also use argument types where receiver resolution knows them, or trust a unique in-repo arity match past an external ancestor? Default: no, conservative as specified.
 - **Q2 (decision 4):** should test files' locals be kept under a scope-path ID instead of dropped? Default: drop. They are fixtures, not symbols.
 - **Q3 (decision 6):** the #334 ruling said "exclude". This design keeps a file entity for twins and drops only their symbols, matching `asset-ingestion-guards`. Is that acceptable? Opt-in is `index_vendored_js`.
 - **Q4 (decision 5):** how should several `func init()` in one file be identified? Options:
-  - (a) an ordinal in source order, `init-1` and `init-2`. Go itself runs inits in source order, but reordering them re-identifies them.
+  - (a) an ordinal in source order, `init-1` and `init-2`. Go itself runs inits in source order, but this is an **explicit exception to rule 1** (no insertion order): reordering them re-identifies them.
   - (b) skip `init` entirely. It is never a call target, but its own outgoing calls are lost.
 
-  Default: (a).
+  Default: (b), which keeps rule 1 intact.
