@@ -81,7 +81,10 @@ cannot be upgraded in place. Consumers should read the
 - **Evidence.** The acceptance floor is the Tier 0 graded scorecard, not "tests
   pass". On alpha.6: dogfood 32/36, OSH 12/13, R1 36/36 rank-stable, and the
   setup03a BM25 lane passing
-  ([port ledger](docs/upstream/semengine-port-ledger.md)). The question sets are
+  ([port ledger](docs/upstream/semengine-port-ledger.md)). On the released
+  beta.10 image the verdicts and bytes match, but R1 is 35/36: two tail results
+  of one correctly answered question swap with ingestion order (#324;
+  [record](scripts/scorecard/results/SUMMARY-beta10-tier0.md)). The question sets are
   newer than the ones behind the beta.9 numbers above, so the two are not
   comparable.
 - **Also in this tag.** Boot-time branch and submodule discovery with a
