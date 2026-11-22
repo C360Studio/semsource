@@ -8,7 +8,7 @@ evidence for #324.
 
 | | |
 |---|---|
-| SemSource | built locally from `08227da` (branch `claude/329-ast-id-collisions`) by the base compose file's `build` |
+| SemSource | built locally from `08227da` (branch `claude/329-ast-id-collisions`) by the base compose file's `build`; rerun at `5518379` after the review fixes, and the committed JSON is from that rerun |
 | Config | [`fix329-tier0/tier0.json`](fix329-tier0/tier0.json), byte-identical to beta.10's; `tier0-reversed.json` is `jq '.sources \|= reverse'` of it |
 | Corpora | dogfood `b4c2cfd9026b20b5`, OSH `9b1e77bc0bf0291f`: the beta.10 trees, hashes rechecked |
 | Questions | dogfood: `questions.json` from `86626c0`, as in beta.10; OSH: `questions-osh.json`, unchanged since `9537f59` |
@@ -47,6 +47,13 @@ layout (`TestForeignAncestorDoesNotHideOtherModules`), which exposed it.
 
 `08227da` resolves the referrer's own package (`packageFor`), pinned by `TestInheritedFieldTypedInAnotherModuleLinks`.
 Every number above is from the rerun at `08227da`, and P01's impact is back to beta.10's 6 nodes in 6 files.
+
+## Rerun after the review fixes
+
+At `5518379` (TS block locals and namespace scoping, the ast-source fold fixes) every figure above reproduces
+exactly. Dogfood is 32/36 with 569,361 bytes and 7,828 entities in both legs, R1 is 36/36 RANK-STABLE, and OSH is
+13/13 with 195,263 bytes and 28,461 entities. Neither corpus contains the module-level block or namespace shapes,
+which is why the 5.1 probe already showed zero collisions there.
 
 ## Not covered
 

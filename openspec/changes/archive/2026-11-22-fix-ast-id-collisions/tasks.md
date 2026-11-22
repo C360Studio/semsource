@@ -107,5 +107,7 @@
 - [x] 6.5 `index_vendored_js` is forwarded from `repo` sources (`config/expand.go`; `expand_vendored_test.go`, `spawned_config_test.go` end to end through the strict decode). `index_interval` is deliberately not forwarded, because its documented scope is ast-only.
 - [x] 6.6 Vendored-twin skips are counted as `vendored_twin_files` in the guard summary, separate from `minified_files`.
 - [x] 6.7 Migration note: guard coverage, block-scoped and namespace identity, and the Java override-spelling and varargs edge losses.
-- [ ] 6.8 Rerun 5.2 and 5.3 at the review-fix head.
+- [x] 6.8 Reran 5.2 and 5.3 at `5518379`. The results are unchanged:
+  - 5.2: 0 differing entities for both fresh vs restart and fresh vs reversed, over 7,828 keys.
+  - 5.3: R1 36/36 rank-stable, OSH 13/13, and dogfood 32/36 with the loose band at 5/7. See `SUMMARY-fix329-tier0.md`.
 
