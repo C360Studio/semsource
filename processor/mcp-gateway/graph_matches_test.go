@@ -321,7 +321,7 @@ func TestHonouredHintsKeepTheirAnswers(t *testing.T) {
 // renders at most maxGraphMatches hits in vector order, and a full list of
 // MaxSimilarityLimit hits reads as truncated, since searchGraph asked for no
 // more. A null word list with no such merge stays the unknown rung.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
 func TestEmbeddingOnlyReplyRendersVectorOrderBounded(t *testing.T) {
 	hits := make([]gtypes.SimilarityHit, gtypes.MaxSimilarityLimit)
 	for i := range hits {

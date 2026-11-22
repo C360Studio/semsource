@@ -155,6 +155,7 @@ func (h *harness) embeddingStatus() (map[string]any, error) {
 // this test and gets the assertion updated: an entity whose embedding failed
 // is not retried until a restart (semengine#724), and a restart embeds stored
 // entities again, not only the failed ones (semengine#722).
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
 func TestProviderFailureAndRecovery(t *testing.T) {
 	if os.Getenv("SETUP03A_PROFILE") != "neural" {
 		t.Skip("provider fault qualification is only selected by the neural profile")

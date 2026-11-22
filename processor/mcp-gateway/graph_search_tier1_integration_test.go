@@ -84,7 +84,7 @@ func (p *fakeProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // vector list, with the merged score and the ranks shown and the merge
 // honoured; once the provider stops answering queries, the reply is the word
 // list and says the merge was not honoured.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
 func TestIntegration_GraphSearchDisclosesTheTierOneMerge(t *testing.T) {
 	ctx := t.Context()
 	tc := natstest.New(t, natstest.WithJetStream(),
@@ -197,7 +197,7 @@ func TestIntegration_GraphSearchDisclosesTheTierOneMerge(t *testing.T) {
 // search alone (text null, merge honoured with detail index_not_ready, hits in
 // data.semantic). graph_search must render those hits in vector order and say
 // they are embedding hits only, never report the reply as uninspectable.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
 func TestIntegration_GraphSearchRendersEmbeddingOnlyAnswer(t *testing.T) {
 	ctx := t.Context()
 	tc := natstest.New(t, natstest.WithJetStream(),

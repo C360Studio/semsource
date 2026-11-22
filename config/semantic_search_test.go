@@ -17,7 +17,7 @@ func registryAt(url string) string {
 	return strings.Replace(semembedRegistry, "http://semembed:8081/v1", url, 1)
 }
 
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestGraph_SemanticSearch(t *testing.T) {
 	tests := []struct {
 		name    string

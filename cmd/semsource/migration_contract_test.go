@@ -73,7 +73,7 @@ func TestSourcePayloadBindsRegistryContract(t *testing.T) {
 }
 
 // spec: openspec/specs/compose-deployment/spec.md#Requirement: Every documented config path boots
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestDefaultComposeConfigDeclaresComponents(t *testing.T) {
 	for _, tc := range []struct {
 		path      string

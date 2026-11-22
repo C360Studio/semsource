@@ -94,6 +94,9 @@ type processExit struct {
 	Signal   string `json:"signal,omitempty"`
 }
 
+// TestKnownAnswerCorpus is the SETUP 03A qualification lane; its neural
+// profile is the Tier 1 acceptance run.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
 func TestKnownAnswerCorpus(t *testing.T) {
 	binary, out := os.Getenv("SETUP03A_BINARY"), os.Getenv("SETUP03A_OUT")
 	if binary == "" || out == "" {

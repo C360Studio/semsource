@@ -35,7 +35,7 @@ func embeddingRegistry(url, apiKeyEnv string) *model.Registry {
 // TestHTTPEmbedderResolvesTheEmbeddingEndpoint: the embedder graph-embedding
 // gets talks to the registry's embedding endpoint with its model and key, and
 // sends queries raw with input_type, so semembed applies the instruction.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestHTTPEmbedderResolvesTheEmbeddingEndpoint(t *testing.T) {
 	requests := make(chan embeddingsRequest, 1)
 	auth := make(chan string, 1)
@@ -83,6 +83,7 @@ func TestHTTPEmbedderResolvesTheEmbeddingEndpoint(t *testing.T) {
 
 // TestHTTPEmbedderRefusesAMissingEndpoint: graph-embedding's Start fails
 // naming the missing embedding endpoint instead of embedding nothing.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestHTTPEmbedderRefusesAMissingEndpoint(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -105,6 +106,7 @@ func TestHTTPEmbedderRefusesAMissingEndpoint(t *testing.T) {
 // TestTierOneGraphEmbeddingConfigIsAccepted: graph-embedding decodes its config
 // strictly, so the composed config must construct through the registered
 // factory, not only declare.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestTierOneGraphEmbeddingConfigIsAccepted(t *testing.T) {
 	cfg, err := config.LoadConfig("../../configs/tiers/tier1-semantic.json")
 	if err != nil {

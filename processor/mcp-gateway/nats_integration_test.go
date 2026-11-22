@@ -215,7 +215,7 @@ func TestIntegration_SourceStatusReportsDisabledSearchIndex(t *testing.T) {
 // embedding block is ready only while graph-lexical and graph-embedding both
 // are. A provider that does not answer leaves graph-embedding degraded, and the
 // block must say so even though the word index is ready.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
 func TestIntegration_SourceStatusWaitsOnGraphEmbedding(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t, natstest.WithJetStream())

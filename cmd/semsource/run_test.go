@@ -361,6 +361,10 @@ func assertPortSubjects(t *testing.T, got, want map[string]string) {
 	}
 }
 
+// TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts: graph-lexical
+// keeps its default ports at both tiers, and graph-embedding is composed only
+// at tier 1.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts(t *testing.T) {
 	on := true
 	for _, tc := range []struct {
@@ -422,7 +426,7 @@ func TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts(t *testing.T)
 }
 
 // spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: Tier 0 qualifies an exclusive no-embedder composition
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestGraphSubsystemComponents_LexicalSearchFalseIsStructuralOnly(t *testing.T) {
 	off, on := false, true
 	for _, tc := range []struct {

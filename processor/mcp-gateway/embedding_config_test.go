@@ -8,6 +8,7 @@ import (
 // TestValidateRefusesEmbeddingWithoutSearchIndex: tier 1 merges graph-embedding
 // with the word index, so a config that claims embedding with the search index
 // off describes a composition that cannot exist and is refused.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestValidateRefusesEmbeddingWithoutSearchIndex(t *testing.T) {
 	off, on := false, true
 	for _, tc := range []struct {

@@ -141,7 +141,7 @@ func TestCompositionFingerprintMatchesGeneration(t *testing.T) {
 // TestTierZeroWiringUnchangedByTierOne pins that adding tier 1 left the default
 // composition byte-identical: a retained tier 0 store adopts generation 6 with
 // the wiring it already runs.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
 func TestTierZeroWiringUnchangedByTierOne(t *testing.T) {
 	if compositionFingerprints[6] != compositionFingerprints[5] {
 		t.Fatalf("tier 0 fingerprint at generation 6 is %s, generation 5 recorded %s; tier 1 must not change the default composition",

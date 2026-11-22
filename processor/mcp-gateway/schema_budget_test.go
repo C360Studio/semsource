@@ -21,6 +21,7 @@ const toolsListBudgetBytes = 8192
 // tool (as an MCP client receives it) and fails when the total exceeds the
 // budget. The per-tool breakdown is logged largest-first so the offender is
 // named, not hunted.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
 func TestToolsListSchemaBudget(t *testing.T) {
 	cs := connect(t, newTestComponent(nil))
 	res, err := cs.ListTools(context.Background(), nil)
