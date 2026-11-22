@@ -23,8 +23,9 @@ import (
 // mergedSearch, and their replies carry the fusion response's provenance as
 // the real fusionnats client derives it: embedding when a returned seed came
 // from the embedding list (tier 1), lexical for the word list alone (tier 0,
-// or a merge that was not honoured).
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Fusion tools disclose where Tier 1 seeds came from
+// or a merge that was not honoured). With include_scores, similarity is the
+// merged rank score only when merged; the fallback keeps the word score.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Fusion tools disclose where Tier 1 seeds came from
 func TestIntegration_FusionRepliesCarryMergedSearchProvenance(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t)
@@ -92,16 +93,17 @@ func TestIntegration_FusionRepliesCarryMergedSearchProvenance(t *testing.T) {
 	for _, tc := range []struct {
 		lens, verb, question string
 		want                 fusion.Provenance
+		similarity           float64
 	}{
-		{lens: "code", verb: "search", question: "tier one meaning", want: fusion.ProvenanceEmbedding},
-		{lens: "docs", verb: "context", question: "tier one meaning", want: fusion.ProvenanceEmbedding},
-		{lens: "code", verb: "search", question: "tier zero words", want: fusion.ProvenanceLexical},
-		{lens: "code", verb: "search", question: "provider is down", want: fusion.ProvenanceLexical},
+		{lens: "code", verb: "search", question: "tier one meaning", want: fusion.ProvenanceEmbedding, similarity: 0.0163},
+		{lens: "docs", verb: "context", question: "tier one meaning", want: fusion.ProvenanceEmbedding, similarity: 0.0163},
+		{lens: "code", verb: "search", question: "tier zero words", want: fusion.ProvenanceLexical, similarity: 3.2},
+		{lens: "code", verb: "search", question: "provider is down", want: fusion.ProvenanceLexical, similarity: 3.2},
 	} {
 		t.Run(tc.lens+" "+tc.verb+" "+tc.question, func(t *testing.T) {
 			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			raw, err := newComp(tc.lens).serve(reqCtx, tc.verb, []byte(`{"query":"`+tc.question+`"}`))
+			raw, err := newComp(tc.lens).serve(reqCtx, tc.verb, []byte(`{"query":"`+tc.question+`","include_scores":true}`))
 			if err != nil {
 				t.Fatalf("serve: %v", err)
 			}
@@ -122,6 +124,10 @@ func TestIntegration_FusionRepliesCarryMergedSearchProvenance(t *testing.T) {
 			}
 			if len(resp.Nodes) == 0 || resp.Nodes[0].Name != "retry" {
 				t.Fatalf("nodes = %+v, want the merged seed hydrated: %s", resp.Nodes, raw)
+			}
+			if sim := resp.Nodes[0].Similarity; sim == nil || *sim != tc.similarity {
+				t.Fatalf("similarity = %v, want %v (merged rank score only when merged, else the word score): %s",
+					sim, tc.similarity, raw)
 			}
 		})
 	}

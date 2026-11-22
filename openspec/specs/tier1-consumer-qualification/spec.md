@@ -53,14 +53,22 @@ merged. The tools-list SHALL stay within its byte budget.
 
 At Tier 1 the fusion tools (`code_search`, `code_context`, `doc_context`) SHALL seed natural-language
 questions only through the substrate's merged search, with no SemSource-owned search path, and SHALL
-return the fusion response's `provenance`. Their descriptions SHALL state that `similarity` is on the
-merged scale at Tier 1.
+return the fusion response's `provenance`. Their descriptions SHALL state that `similarity` is the
+merged rank score (at most 2/61) only when the merge was applied, and the word score otherwise; and that
+`provenance: lexical` cannot tell a word-list fallback from an applied merge with no embedding-list seed
+(semengine#723).
 
 #### Scenario: Merged seeds at Tier 1
 
 - **GIVEN** a Tier 1 composition whose embedding provider answers
 - **WHEN** an agent asks `code_search` a natural-language question whose answer includes an embedding-list seed
 - **THEN** the reply reports `provenance: embedding`
+
+#### Scenario: Provider fails during a fusion question
+
+- **GIVEN** a Tier 1 composition whose provider does not answer
+- **WHEN** an agent asks `code_search` a natural-language question with `include_scores`
+- **THEN** the reply reports `provenance: lexical` and each `similarity` is the word score, not a merged rank score
 
 #### Scenario: Tier 0 unchanged
 
