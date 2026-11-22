@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,8 +28,11 @@ import (
 // In mode 0 every request reaches the provider; mode 1 answers 503; mode 2
 // stalls until the caller gives up. It counts the texts each request carried
 // by input_type, so the test can tell document embedding (the index) from
-// query embedding (search).
+// query embedding (search), and keeps the forwarded document texts so a check
+// can name what was embedded in a window.
 type faultProxy struct {
+	mu                        sync.Mutex
+	docTexts                  []string // forwarded document texts, in order
 	mode                      atomic.Int32
 	documents, queries        atomic.Int64 // texts forwarded to the provider
 	failedDocs, failedQueries atomic.Int64 // texts answered 503
@@ -71,9 +75,30 @@ func (p *faultProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.queries.Add(texts)
 		} else {
 			p.documents.Add(texts)
+			p.mu.Lock()
+			p.docTexts = append(p.docTexts, req.Input...)
+			p.mu.Unlock()
 		}
 		p.reverse.ServeHTTP(w, r)
 	}
+}
+
+// documentTextsFrom returns the forwarded document texts from index from on,
+// each cut to 160 bytes for the report.
+func (p *faultProxy) documentTextsFrom(from int) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if from > len(p.docTexts) {
+		return nil
+	}
+	out := make([]string, 0, len(p.docTexts)-from)
+	for _, text := range p.docTexts[from:] {
+		if len(text) > 160 {
+			text = text[:160]
+		}
+		out = append(out, text)
+	}
+	return out
 }
 
 // searchReply is the part of graph.query.searchGraph's reply this test reads.
@@ -225,7 +250,9 @@ func TestProviderFailureAndRecovery(t *testing.T) {
 		}
 		return f, errors.New("word answer lost the matching passage")
 	})
-	// A document written during the outage fails to embed.
+	// A document written during the outage fails to embed. outageMarker is
+	// its own text, so the proxy can tell whether it was sent again.
+	const outageMarker = "amber beacon schedule ships green crates"
 	outageDoc := filepath.Join(h.source, "docs/outage.md")
 	if err = os.WriteFile(outageDoc, []byte("# Amber beacon schedule\n\nThe amber beacon schedule ships green crates to the south quay.\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -286,13 +313,26 @@ func TestProviderFailureAndRecovery(t *testing.T) {
 	})
 	// semengine#724: the Worker does not retry a failed embedding. The repair
 	// lane runs every 30 s, so the failure is observed across two passes.
-	beforeWindow := proxy.documents.Load()
+	// The count alone cannot prove it: other entities may be embedded in the
+	// window, so the outage document's own text must not reach the provider.
+	beforeWindow := len(proxy.documentTextsFrom(0))
 	window := time.Now()
 	h.check("failed_embedding_not_retried_after_recovery", 75*time.Second, func() (any, error) {
 		status, err := h.embeddingStatus()
-		detail := map[string]any{"graph_embedding": status, "documents_since_recovery": proxy.documents.Load() - beforeWindow}
+		sent := proxy.documentTextsFrom(beforeWindow)
+		detail := map[string]any{"graph_embedding": status, "documents_since_recovery": len(sent),
+			"document_texts_since_recovery": sent,
+			// Traced in the application log: the AST source's 60 s lifecycle
+			// pass re-publishes the repo and folder entities, and
+			// graph-embedding embeds the merged ones again.
+			"expected_texts": "repo and folder labels re-published by the AST lifecycle pass; never the outage document"}
 		if err != nil {
 			return detail, err
+		}
+		for _, text := range sent {
+			if strings.Contains(text, outageMarker) {
+				return detail, errors.New("the outage document was sent again; semengine#724 is fixed — update this assertion")
+			}
 		}
 		if failed, _ := status["failed_count"].(float64); failed == 0 {
 			return detail, errors.New("the failed embedding was retried; semengine#724 is fixed — update this assertion")
@@ -340,8 +380,9 @@ func TestProviderFailureAndRecovery(t *testing.T) {
 			"failed_entities_before_restart": failedBeforeRestart}
 		// semengine#722: the embedder reports width 0 until its first reply,
 		// so graph-embedding embeds the entities it replays before that reply
-		// again, not only the failed ones. Measured on the fixture: 8 texts
-		// after restart against an 11-text seed and one failed entity.
+		// again, not only the failed ones. How many it replays first varies:
+		// measured on the fixture, 6 to 9 texts after a restart against a
+		// 10- or 11-text seed, with two failed entities each time.
 		if float64(reembedded) <= failedBeforeRestart {
 			return detail, errors.New("a restart embedded only the failed entities; semengine#722 may be fixed — update this assertion")
 		}
