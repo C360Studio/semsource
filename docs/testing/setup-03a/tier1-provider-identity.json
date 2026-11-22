@@ -1,0 +1,49 @@
+{
+  "recorded_for": "qualify-semengine-tier1 task 5.2 (#234)",
+  "recorded_at": "2026-11-22T21:01:57Z",
+  "semengine": "github.com/c360studio/semengine v0.1.0-alpha.7",
+  "semsource_binary_sha256": "b0c4114d14b5a2b6d9425e446de015a6e6c269726a08a8bf6f66b350ec029448",
+  "semsource_commit": "a1bf7f2f13da3f35392f3f3ee835f2016080efb3",
+  "provider": {
+    "image": "ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33bcb8ae9bfd4f08888340824ed48dbc0c85b981b19a69557a292e",
+    "image_id": "sha256:22ea57c60e33bcb8ae9bfd4f08888340824ed48dbc0c85b981b19a69557a292e",
+    "platform": "linux/arm64",
+    "build_revision": "ac52a6276ad5e0da3c4ad1617a85553524ad24fd",
+    "executable_sha256": "4b2d735cf127fcf93315534721aa4418270502c25e5a720f76d5eaea6dfef2eb",
+    "boot_model": "Snowflake/snowflake-arctic-embed-s",
+    "served_model_reported": {
+      "status": "healthy",
+      "model": "Snowflake/snowflake-arctic-embed-s",
+      "max_tokens": 512
+    },
+    "artifact_revision": "e596f507467533e48a2e17c007f0e1dacc837b33",
+    "onnx_sha256": "579c1f1778a0993eb0d2a1403340ffb491c769247fb46acc4f5cf8ac5b89c1e1",
+    "dimensions": 384,
+    "query_instruction": {
+      "applied_by": "provider, from input_type (httpembedder sends input_type query/document)",
+      "instruction": "Represent this sentence for searching relevant passages: ",
+      "product_query_prefix": null,
+      "document_prefix": "",
+      "source": "semembed v0.2.1 src/main.rs ARCTIC_BGE_QUERY_PREFIX",
+      "probe": {
+        "query_vs_document_cosine": 0.8448,
+        "query_vs_manually_prefixed_cosine": 1.0,
+        "prefixed_text_with_input_type_query_vs_query_cosine": 1.0,
+        "note": "same probe on the previous compose pin (rev 7ceb528, sha256:7972174f...) gave 1.0000 / 0.8448 / 0.8448: input_type ignored"
+      }
+    },
+    "preprocessing": {
+      "max_tokens": 512,
+      "native_max_tokens": 512,
+      "truncation": "provider truncates at max_tokens; SemEngine does not count it (semengine#667)",
+      "max_text_len_semengine_default_chars": 4000
+    },
+    "cpu_limit_nanos": 2000000000,
+    "memory_limit_bytes": 0,
+    "container_id": "f88bfefc4d173092192320fee8187cdd5b04e82cf6cb4d4b7c753f7d614facb2",
+    "started_at": "2026-11-22T20:57:45.993376511Z",
+    "restart_count": 0,
+    "same_container_for_every_run": true,
+    "cache_identity_rule": "Any image, served artifact, dimension, or preprocessing change invalidates comparison and requires fresh graph/index/cache plus rerunning both points."
+  }
+}

@@ -79,6 +79,7 @@ type node struct {
 	Relations                map[string][]struct{ Name, Path string } `json:"relations"`
 }
 type fused struct {
+	Provenance string `json:"provenance"`
 	Nodes      []node `json:"nodes"`
 	Deferred   bool   `json:"deferred"`
 	Unhydrated []any  `json:"unhydrated"`
@@ -165,6 +166,9 @@ func TestKnownAnswerCorpus(t *testing.T) {
 	}) {
 		return
 	}
+	if profile == "neural" {
+		h.semanticReady("semantic_index_ready", 120*time.Second)
+	}
 	h.resolveIdentity()
 	h.structural("initial", false)
 	h.queries("cold")
@@ -178,6 +182,11 @@ func TestKnownAnswerCorpus(t *testing.T) {
 			f, queryErr := h.fuse("doc", "context", "where should a blue package be sent", 10)
 			if queryErr != nil {
 				return f, queryErr
+			}
+			// The answer must come through the embedding list: a word-only
+			// answer (provenance lexical) would pass on the shared word "blue".
+			if f.Provenance != "embedding" {
+				return f, fmt.Errorf("paraphrase provenance=%q, want embedding", f.Provenance)
 			}
 			for _, n := range f.Nodes {
 				if strings.Contains(n.Body, "north depot") {
@@ -381,7 +390,7 @@ func (h *harness) configure(profile string) {
 	case "foundation":
 		cfgPath = "../../configs/tiers/tier0-foundation.json"
 	case "neural":
-		h.t.Fatal("the neural profile has no config on this pin: the tier 1 composition returns with 04C (#234)")
+		cfgPath = "../../configs/tiers/tier1-semantic.json"
 	}
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -670,12 +679,17 @@ func values(e exact, predicate string) []string {
 	return result
 }
 func (h *harness) fuse(lens, verb, query string, limit int) (fused, error) {
+	return h.fuseWithin(lens, verb, query, limit, 5*time.Second)
+}
+
+// fuseWithin is fuse with the caller's request deadline.
+func (h *harness) fuseWithin(lens, verb, query string, limit int, timeout time.Duration) (fused, error) {
 	var result fused
 	raw, err := json.Marshal(map[string]any{"query": query, "want": []string{"body", "relations"}, "budget": map[string]any{"max_nodes": limit}, "include_scores": true})
 	if err != nil {
 		return result, err
 	}
-	ctx, cancel := context.WithTimeout(h.ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(h.ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.httpURL+"/"+lens+"-context/"+verb, bytes.NewReader(raw))
 	if err != nil {
@@ -1197,6 +1211,43 @@ func (h *harness) rpcCollision() {
 			"error":     runErr.Error(),
 			"log":       string(out),
 		}, nil
+	})
+}
+
+// semanticStatus reads /source-manifest/status's embedding block, which at
+// tier 1 folds graph-lexical's and graph-embedding's readiness.
+func (h *harness) semanticStatus() (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(h.ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.httpURL+"/source-manifest/status", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var status struct {
+		Embedding map[string]any `json:"embedding"`
+	}
+	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&status); err != nil {
+		return nil, err
+	}
+	return status.Embedding, nil
+}
+
+// semanticReady waits until the semantic index reports ready.
+func (h *harness) semanticReady(name string, timeout time.Duration) bool {
+	return h.check(name, timeout, func() (any, error) {
+		embedding, err := h.semanticStatus()
+		if err != nil {
+			return embedding, err
+		}
+		if ready, _ := embedding["ready"].(bool); !ready {
+			return embedding, errors.New("semantic index not ready")
+		}
+		return embedding, nil
 	})
 }
 

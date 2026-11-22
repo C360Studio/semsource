@@ -56,7 +56,7 @@ the process exit code. The report is flushed after every check, including before
 | --- | --- | --- | --- |
 | `bm25`, structural checks | `configs/tiers/tier0-statistical.json` | Structural slice under BM25 | 0 |
 | `bm25`, retrieval checks | `configs/tiers/tier0-statistical.json` | BM25 | 1 |
-| `neural` | none until 04C (#234); the harness refuses it | Real HTTP embeddings | 2, retaining structural checks |
+| `neural` | `configs/tiers/tier1-semantic.json` (#234) | Real HTTP embeddings | 2, retaining structural checks |
 
 The harness loads the selected config and replaces only source paths, fixture namespace/project/revision, per-run
 ports, and the provider URL. It retains model name, query prefix, index-worker count, and coalescing settings.
@@ -64,9 +64,13 @@ Record the provider image/build, served model artifact/version, and dimensions a
 the config's requested model is not proof of the served model. The same real provider must serve both revisions.
 Neural runs record provider request counters before ingestion and after cold/warm queries to prove actual use, and
 exercise a paraphrase whose expected answer is the north-depot document passage.
-`TestProviderFailureAndRecovery` adds a separate run through an owned HTTP proxy: real initial retrieval,
-503 unavailability, a stalled request reaching the caller deadline, then real recovery. It records evidence under
-`provider-faults/`, requires an injected provider request, and rejects an outage returned as confident absence.
+`TestProviderFailureAndRecovery` adds a separate run through an owned HTTP proxy that counts document and query
+texts by `input_type`. It asserts SemEngine alpha.7's behaviour: an outage answers from words and says so
+(`merge.honoured: false` on `searchGraph`, `provenance: lexical` on fusion) rather than failing; an embedding that
+failed during the outage degrades the semantic index; a stalled provider is bounded by `mergedSearch`'s 4 s wait;
+recovery merges again; the failed embedding is not retried until a restart (semengine#724); and a restart embeds
+stored entities again, not only the failed ones (semengine#722). It records evidence under `provider-faults/`.
+The 0.2.1 provider identity and the run reports are in `docs/testing/setup-03a/tier1-*.json`.
 The proxy never modifies the shared provider container or its served model.
 
 ## Expected behavior
