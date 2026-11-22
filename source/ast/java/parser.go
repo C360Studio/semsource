@@ -41,10 +41,9 @@ type Parser struct {
 	// type indexes across the run, keyed by content hash so an edited file is
 	// re-parsed rather than served stale. classFields is the enclosing class's
 	// field types, saved and restored around nested class bodies.
-	sourceRoots     []string             // sibling module source roots (multi-module repos)
-	sourceRootsDone bool                 // discovery is lazy and once per ParseFile
-	fqnMemo         map[string]fqnResult // (FQN, referrer) -> file, this ParseFile only
-	ambiguousFQNs   map[string]bool      // FQNs found under several source roots
+	sourceRoots   map[string][]string  // layout glob -> sibling module source roots, this ParseFile only
+	fqnMemo       map[string]fqnResult // (FQN, referrer) -> file, this ParseFile only
+	ambiguousFQNs map[string]bool      // FQNs found under several source roots
 
 	selfRel     string
 	selfMembers map[string][]*classMembers
@@ -107,7 +106,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	p.selfMembers, p.selfByScope = p.collectFileMembers(rootNode, content)
 	p.classFields = nil
 	p.classMemo = make(map[string]classResolution)
-	p.sourceRoots, p.sourceRootsDone = nil, false
+	p.sourceRoots = make(map[string][]string)
 	p.fqnMemo = make(map[string]fqnResult)
 	p.ambiguousFQNs = make(map[string]bool)
 
@@ -485,6 +484,7 @@ func (p *Parser) extractMethod(node *sitter.Node, content []byte, filePath strin
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
 	entity := ast.NewScopedCodeEntity(p.authority, "java", p.project, ast.TypeMethod, scope, name, filePath)
+	entity.ID = p.callableID(scope, name, filePath, p.signatureIn(node, content, false, scope).suffix)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -655,6 +655,7 @@ func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath 
 	name := string(content[nameNode.StartByte():nameNode.EndByte()])
 
 	entity := ast.NewScopedCodeEntity(p.authority, "java", p.project, ast.TypeMethod, scope, name, filePath)
+	entity.ID = p.callableID(scope, name, filePath, p.signatureIn(node, content, true, scope).suffix)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
 	entity.Visibility = p.extractVisibility(node, content)
@@ -676,6 +677,17 @@ func (p *Parser) extractConstructor(node *sitter.Node, content []byte, filePath 
 	}
 
 	return entity
+}
+
+// signatureIn computes a callable's overload identity with the type variables
+// of the type declared at scope, the same view collectTypeMembers records for
+// call resolution.
+func (p *Parser) signatureIn(node *sitter.Node, content []byte, ctor bool, scope []string) callableSig {
+	var typeVars map[string]string
+	if cm := p.selfByScope[strings.Join(scope, ".")]; cm != nil {
+		typeVars = cm.typeVars
+	}
+	return callableSignature(node, content, ctor, typeVars)
 }
 
 // extractParameters extracts parameter type entity IDs.

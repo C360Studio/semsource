@@ -640,3 +640,17 @@ func TestTabIndentedAnnotatedPrivateFieldStaysInert(t *testing.T) {
 	})
 	assertCallsExactly(t, ents, "same")
 }
+
+// TestForeignAncestorDoesNotHideOtherModules guards the source-root memo. An
+// ancestor walk resolves the supers of a class in ANOTHER package, a referrer
+// whose layout sourceRootPrefix cannot recognise; that answer must not stand
+// for the parsed file's own lookups for the rest of the parse.
+func TestForeignAncestorDoesNotHideOtherModules(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"lib/core/src/main/java/u/Util.java": "package u;\npublic class Util { public static void x() {} }\n",
+		"app/src/main/java/b/Base.java":      "package b;\nimport z.Other;\npublic class Base extends Other {}\n",
+		"app/src/main/java/a/Svc.java": "package a;\nimport b.Base;\nimport u.Util;\npublic class Svc extends Base {\n" +
+			"  public void run() { Util.x(); }\n}\n",
+	})
+	assertCalls(t, ents, "run", "x")
+}
