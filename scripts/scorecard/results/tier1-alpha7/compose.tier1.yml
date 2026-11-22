@@ -1,0 +1,21 @@
+# #234 5.3 override: SemSource built locally from the branch head (the base
+# compose file's build), tier 1 (graph.semantic_search) against the compose
+# semembed 0.2.1 pin, the #230 corpora, isolated project and ports.
+# TIER1_CONFIGS holds tier1.json; TIER1_CORPUS is the corpus tree.
+# semembed is published by scripts/scorecard/compose.semembed-host.yml
+# (SEMEMBED_HOST_PORT=27081), so one provider container serves every run:
+#   docker compose -p semsource234 -f docker-compose.yml \
+#     -f scripts/scorecard/compose.semembed-host.yml \
+#     -f scripts/scorecard/results/tier1-alpha7/compose.tier1.yml --profile semantic up -d
+services:
+  semsource:
+    ports: !override
+      - "127.0.0.1:27080:8080"
+    volumes: !override
+      - ${TIER1_CONFIGS:?set TIER1_CONFIGS}:/etc/semsource:ro
+      - ${TIER1_CORPUS:?set TIER1_CORPUS}:/workspace:ro
+    restart: "no"
+  nats:
+    ports: !override
+      - "127.0.0.1:27222:4222"
+      - "127.0.0.1:27822:8222"

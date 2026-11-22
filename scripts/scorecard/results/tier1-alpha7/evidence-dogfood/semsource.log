@@ -1,0 +1,257 @@
+{"time":"2026-11-22T21:04:28.000306919Z","level":"INFO","msg":"semsource starting","version":"dev","namespace":"c360","sources":3,"branch_watchers":0}
+{"time":"2026-11-22T21:04:28.000509794Z","level":"INFO","msg":"connecting to NATS","url":"nats://nats:4222"}
+{"time":"2026-11-22T21:04:28.000558711Z","level":"INFO","msg":"Connecting to NATS","urls":"nats://nats:4222"}
+{"time":"2026-11-22T21:04:28.003058669Z","level":"INFO","msg":"Successfully connected to NATS","urls":"nats://nats:4222"}
+{"time":"2026-11-22T21:04:28.013334961Z","level":"INFO","msg":"connected to NATS","url":"nats://nats:4222"}
+{"time":"2026-11-22T21:04:28.015430003Z","level":"INFO","msg":"Created JetStream stream","stream":"FLOWS","subjects":["flows.>"],"storage":"memory","source":"framework constant (config/streams.go)","max_age":300000000000,"max_bytes":10485760,"discard":"DiscardOld","duplicates":0}
+{"time":"2026-11-22T21:04:28.016315878Z","level":"INFO","msg":"Created JetStream stream","stream":"GOVERNANCE_VERDICT_AUDIT","subjects":["governance.verdict.>"],"storage":"file","source":"framework constant (config/streams.go)","max_age":7776000000000000,"max_bytes":524288000,"discard":"DiscardOld","duplicates":0}
+{"time":"2026-11-22T21:04:28.016326836Z","level":"WARN","msg":"Stream declares discard=new: at its ceiling this stream REFUSES writes rather than evicting","stream":"GRAPH","source":"config.streams[\"GRAPH\"]; component \"ast-source-workspace\" port \"graph.ingest\"; component \"cfgfile-source-workspace\" port \"graph.ingest\"; component \"doc-source-workspace\" port \"graph.ingest\"; component \"source-manifest\" port \"graph.ingest\"; component \"source-manifest\" port \"graph.ingest.predicates\"; component \"source-manifest\" port \"graph.ingest.status\"","max_bytes":268435456,"max_age":3600000000000,"hint":"discard must be \"old\" or \"new\": \"old\" evicts the oldest messages once the stream reaches max_bytes or max_age (the write succeeds, the loss is silent); \"new\" refuses the write instead, which a producer at the ceiling sees as NATS 503 err_code=10077 \"maximum bytes exceeded\" on every publish — including a replacement of an existing message — until something is deleted"}
+{"time":"2026-11-22T21:04:28.016604169Z","level":"INFO","msg":"Created JetStream stream","stream":"GRAPH","subjects":["graph.ingest.entity","graph.ingest.batch","graph.ingest.manifest","graph.ingest.status","graph.ingest.predicates"],"storage":"memory","source":"config.streams[\"GRAPH\"]; component \"ast-source-workspace\" port \"graph.ingest\"; component \"cfgfile-source-workspace\" port \"graph.ingest\"; component \"doc-source-workspace\" port \"graph.ingest\"; component \"source-manifest\" port \"graph.ingest\"; component \"source-manifest\" port \"graph.ingest.predicates\"; component \"source-manifest\" port \"graph.ingest.status\"","max_age":3600000000000,"max_bytes":268435456,"discard":"DiscardNew","duplicates":0}
+{"time":"2026-11-22T21:04:28.016843836Z","level":"INFO","msg":"Created JetStream stream","stream":"HEALTH","subjects":["health.>"],"storage":"memory","source":"framework constant (config/streams.go)","max_age":300000000000,"max_bytes":10485760,"discard":"DiscardOld","duplicates":0}
+{"time":"2026-11-22T21:04:28.017600003Z","level":"INFO","msg":"Created JetStream stream","stream":"LOGS","subjects":["logs.>"],"storage":"file","source":"framework constant (config/streams.go)","max_age":3600000000000,"max_bytes":104857600,"discard":"DiscardOld","duplicates":0}
+{"time":"2026-11-22T21:04:28.018365169Z","level":"INFO","msg":"Created JetStream stream","stream":"MAX_DELIVERY_EVENTS","subjects":["$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.>"],"storage":"file","source":"framework constant (config/streams.go)","max_age":604800000000000,"max_bytes":67108864,"discard":"DiscardOld","duplicates":0}
+{"time":"2026-11-22T21:04:28.018696836Z","level":"INFO","msg":"Created JetStream stream","stream":"METRICS","subjects":["metrics.>"],"storage":"memory","source":"framework constant (config/streams.go)","max_age":300000000000,"max_bytes":52428800,"discard":"DiscardOld","duplicates":0}
+{"time":"2026-11-22T21:04:28.018705961Z","level":"INFO","msg":"Ensured JetStream streams","count":7,"archival":0}
+{"time":"2026-11-22T21:04:28.018707961Z","level":"INFO","msg":"JetStream streams ready"}
+{"time":"2026-11-22T21:04:28.018826461Z","level":"INFO","msg":"projection intent declared","owner":"semsource.source-service","contract":"semsource.entity.v1","predicates":133}
+{"time":"2026-11-22T21:04:28.019888378Z","level":"INFO","msg":"Created new KV bucket","bucket":"semengine_config_c360_semsource"}
+{"time":"2026-11-22T21:04:28.021697919Z","level":"INFO","msg":"Minted platform identity","org":"c360","stem":"semsource","platform":"semsource-f25674"}
+{"time":"2026-11-22T21:04:28.022491211Z","level":"INFO","msg":"First boot detected, pushing config to KV"}
+{"time":"2026-11-22T21:04:28.028509753Z","level":"INFO","msg":"component factories registered","count":23}
+{"time":"2026-11-22T21:04:28.031922294Z","level":"WARN","msg":"composition finding","type":"disconnected_node","component":"code-context","port":"","message":"component has no connections"}
+{"time":"2026-11-22T21:04:28.031933794Z","level":"WARN","msg":"composition finding","type":"disconnected_node","component":"doc-context","port":"","message":"component has no connections"}
+{"time":"2026-11-22T21:04:28.031935586Z","level":"WARN","msg":"composition finding","type":"disconnected_node","component":"mcp-gateway","port":"","message":"component has no connections"}
+{"time":"2026-11-22T21:04:28.031936794Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"alias_index","message":"output port 'alias_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:04:28.031938044Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"incoming_index","message":"output port 'incoming_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:04:28.031939253Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"outgoing_index","message":"output port 'outgoing_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:04:28.031940336Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"predicate_index","message":"output port 'predicate_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:04:28.031941461Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-ingest","port":"mutations","message":"input port 'mutations' (request): optional_api_unused"}
+{"time":"2026-11-22T21:04:28.031942586Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"objectstore","port":"stored","message":"output port 'stored' (stream): no_subscribers"}
+{"time":"2026-11-22T21:04:28.031943753Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"objectstore","port":"write","message":"input port 'write' (stream): no_publishers"}
+{"time":"2026-11-22T21:04:28.031944961Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"supersession","port":"source.lifecycle","message":"input port 'source.lifecycle' (request): optional_api_unused"}
+{"time":"2026-11-22T21:04:28.031946461Z","level":"INFO","msg":"composition validated at boot","status":"warnings","errors":0,"warnings":11,"components":16,"edges":13}
+{"time":"2026-11-22T21:04:28.035379169Z","level":"INFO","msg":"mcp-gateway started"}
+{"time":"2026-11-22T21:04:28.035526586Z","level":"INFO","msg":"Starting cfgfile-source initial ingest","paths":["/workspace"],"org":"c360","watch_enabled":false}
+{"time":"2026-11-22T21:04:28.035700461Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.context"}
+{"time":"2026-11-22T21:04:28.035934211Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.context"}
+{"time":"2026-11-22T21:04:28.035982753Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.callers"}
+{"time":"2026-11-22T21:04:28.036005128Z","level":"WARN","msg":"community view unavailable; searches answer without group records until it opens again","component":"graph-query","error":"framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment","retry_in":5000000000}
+{"time":"2026-11-22T21:04:28.036045169Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.callers"}
+{"time":"2026-11-22T21:04:28.036082753Z","level":"WARN","msg":"applied-state view unavailable; upgrades are refused with 503 until it opens and catches up again","component":"websocket","listener":"0.0.0.0:7890","error":"framework bucket \"ENTITY_STATES\" is not ready: its owner (graph-ingest) has not provisioned it in this deployment","retry_in":5000000000}
+{"time":"2026-11-22T21:04:28.036108003Z","level":"INFO","msg":"source manifest published","namespace":"c360","sources":3}
+{"time":"2026-11-22T21:04:28.036144294Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.callees"}
+{"time":"2026-11-22T21:04:28.036494961Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.impact"}
+{"time":"2026-11-22T21:04:28.036509753Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.callees"}
+{"time":"2026-11-22T21:04:28.036515919Z","level":"INFO","msg":"listening for source queries","subject":"graph.query.sources"}
+{"time":"2026-11-22T21:04:28.036575294Z","level":"INFO","msg":"supersession listening for run requests","subject":"graph.supersession.run"}
+{"time":"2026-11-22T21:04:28.036589378Z","level":"INFO","msg":"supersession listening for version-diff queries","subject":"graph.query.versionDiff"}
+{"time":"2026-11-22T21:04:28.036592669Z","level":"INFO","msg":"supersession listening for lifecycle-run requests","subject":"graph.lifecycle.run"}
+{"time":"2026-11-22T21:04:28.036885211Z","level":"INFO","msg":"predicate schema published","source_types":3}
+{"time":"2026-11-22T21:04:28.036909669Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.impact"}
+{"time":"2026-11-22T21:04:28.037210544Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.file"}
+{"time":"2026-11-22T21:04:28.037317711Z","level":"INFO","msg":"Created new KV bucket","bucket":"ENTITY_STATES"}
+{"time":"2026-11-22T21:04:28.037434211Z","level":"INFO","msg":"listening for predicate queries","subject":"graph.query.predicates"}
+{"time":"2026-11-22T21:04:28.037466836Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.search"}
+{"time":"2026-11-22T21:04:28.037647294Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.file"}
+{"time":"2026-11-22T21:04:28.037839586Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.search"}
+{"time":"2026-11-22T21:04:28.037917711Z","level":"INFO","msg":"Starting doc-source initial ingest","paths":["/workspace"],"org":"c360","watch_enabled":false}
+{"time":"2026-11-22T21:04:28.037918211Z","level":"INFO","msg":"Initializing path watcher","path":"/workspace","org":"c360","project":"workspace","languages":["go","typescript","javascript","java","python","svelte"]}
+{"time":"2026-11-22T21:04:28.037949044Z","level":"INFO","msg":"Starting initial code index","paths":1}
+{"time":"2026-11-22T21:04:28.038421461Z","level":"INFO","msg":"listening for status queries","subject":"graph.query.status"}
+{"time":"2026-11-22T21:04:28.038544044Z","level":"INFO","msg":"listening for summary queries","subject":"graph.query.sourceSummary"}
+{"time":"2026-11-22T21:04:28.038955378Z","level":"INFO","msg":"listening for ingest requests","add_subject":"graph.ingest.add.c360","remove_subject":"graph.ingest.remove.c360"}
+{"time":"2026-11-22T21:04:28.039173669Z","level":"INFO","msg":"Created new KV bucket","bucket":"GRAPH_INGEST_APPLIED_SEQ"}
+{"time":"2026-11-22T21:04:28.039618419Z","level":"INFO","msg":"query handlers registered","component":"graph-query","subjects":["graph.query.entity","graph.query.batch","graph.query.prefix","graph.query.prefixIDs","graph.query.byName","graph.query.predicate","graph.query.entityByAlias","graph.query.relationships","graph.query.pathSearch","graph.query.hierarchyStats","graph.query.summary","graph.query.localSearch","graph.query.globalSearch","graph.query.searchGraph","graph.query.mergedSearch","graph.query.semantic","graph.query.similar","graph.query.spatial","graph.query.temporal"]}
+{"time":"2026-11-22T21:04:28.041006919Z","level":"INFO","msg":"Created new KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:04:28.043103503Z","level":"INFO","msg":"JetStream consumer acknowledgement policy applied","component":"graph-ingest","port":"entity_stream","stream":"GRAPH","consumer":"graph-ingest-graph-ingest-entity","policy_source":"server","requested_max_ack_pending":0,"effective_max_ack_pending":1000}
+{"time":"2026-11-22T21:04:28.044373336Z","level":"INFO","msg":"query handlers registered","component":"graph-ingest","subjects":["graph.ingest.query.entity","graph.ingest.query.batch","graph.ingest.query.prefix","graph.ingest.query.prefixIDs"]}
+{"time":"2026-11-22T21:04:28.045069003Z","level":"INFO","msg":"mutation handlers registered","component":"graph-ingest","subjects":["graph.mutation.entity.create","graph.mutation.entity.reconcile","graph.mutation.triple.append","graph.mutation.entity.delete"]}
+{"time":"2026-11-22T21:04:28.045083044Z","level":"INFO","msg":"component started","component":"graph-ingest","component":"graph-ingest","start_time":"2026-11-22T21:04:28.045081794Z"}
+{"time":"2026-11-22T21:04:28.31953817Z","level":"INFO","msg":"Cfgfile-source initial ingest complete","paths":["/workspace"],"entities_published":126}
+{"time":"2026-11-22T21:04:28.464789461Z","level":"INFO","msg":"Doc-source initial ingest complete","paths":["/workspace"],"entities_published":1225}
+{"time":"2026-11-22T21:04:28.536273003Z","level":"INFO","msg":"resource available","component":"graph-embedding","resource":"ENTITY_STATES","attempt":2}
+{"time":"2026-11-22T21:04:28.536308461Z","level":"INFO","msg":"resource available","component":"graph-lexical","resource":"ENTITY_STATES","attempt":2}
+{"time":"2026-11-22T21:04:28.536354586Z","level":"INFO","msg":"resource available","component":"graph-index","resource":"ENTITY_STATES","attempt":2}
+{"time":"2026-11-22T21:04:28.537864086Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:04:28.538234253Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:04:28.538265295Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:04:28.539014711Z","level":"INFO","msg":"query handlers registered","component":"graph-lexical","subjects":["graph.lexical.query.search"]}
+{"time":"2026-11-22T21:04:28.540102086Z","level":"INFO","msg":"Created new KV bucket","bucket":"OUTGOING_INDEX"}
+{"time":"2026-11-22T21:04:28.540511086Z","level":"INFO","msg":"Created new KV bucket","bucket":"EMBEDDING_INDEX"}
+{"time":"2026-11-22T21:04:28.54388967Z","level":"INFO","msg":"Created new KV bucket","bucket":"EMBEDDING_DEDUP"}
+{"time":"2026-11-22T21:04:28.543895503Z","level":"INFO","msg":"Created new KV bucket","bucket":"INCOMING_INDEX"}
+{"time":"2026-11-22T21:04:28.550456211Z","level":"INFO","msg":"Embedding worker running","component":"graph-embedding","workers":5}
+{"time":"2026-11-22T21:04:28.55129867Z","level":"INFO","msg":"query handlers registered","component":"graph-embedding","subjects":["graph.embedding.query.search","graph.embedding.query.similar"]}
+{"time":"2026-11-22T21:04:28.55173867Z","level":"INFO","msg":"Created new KV bucket","bucket":"ALIAS_INDEX"}
+{"time":"2026-11-22T21:04:28.557606586Z","level":"INFO","msg":"Created new KV bucket","bucket":"PREDICATE_INDEX"}
+{"time":"2026-11-22T21:04:28.560140503Z","level":"INFO","msg":"Created new KV bucket","bucket":"NAME_INDEX"}
+{"time":"2026-11-22T21:04:28.570903211Z","level":"INFO","msg":"query handlers registered","component":"graph-index","subjects":["graph.index.query.outgoing","graph.index.query.incoming","graph.index.query.alias","graph.index.query.predicate","graph.index.query.predicateList","graph.index.query.predicateStats","graph.index.query.predicateCompound","graph.index.query.byName"]}
+{"time":"2026-11-22T21:04:28.571357711Z","level":"INFO","msg":"heartbeat started","service":"heartbeat","interval":30000000000}
+{"time":"2026-11-22T21:04:28.57139592Z","level":"INFO","msg":"Metrics service started","port":9091,"path":"/metrics","manager_owned":true}
+{"time":"2026-11-22T21:04:28.57152592Z","level":"INFO","msg":"ComponentManager HTTP handlers registered","prefix":"/components/"}
+{"time":"2026-11-22T21:04:28.571583128Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/context"}
+{"time":"2026-11-22T21:04:28.571631503Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/callers"}
+{"time":"2026-11-22T21:04:28.571639628Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/callees"}
+{"time":"2026-11-22T21:04:28.571646836Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/impact"}
+{"time":"2026-11-22T21:04:28.571651461Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/file"}
+{"time":"2026-11-22T21:04:28.571655128Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/search"}
+{"time":"2026-11-22T21:04:28.571774711Z","level":"INFO","msg":"registered HTTP handlers","path":"/source-manifest/sources"}
+{"time":"2026-11-22T21:04:28.571799336Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/status"}
+{"time":"2026-11-22T21:04:28.57180767Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/health"}
+{"time":"2026-11-22T21:04:28.571812795Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/capabilities"}
+{"time":"2026-11-22T21:04:28.571819378Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/predicates"}
+{"time":"2026-11-22T21:04:28.571824378Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/summary"}
+{"time":"2026-11-22T21:04:28.57210517Z","level":"INFO","msg":"registered HTTP handler","path":"/supersession/versionDiff"}
+{"time":"2026-11-22T21:04:28.572115711Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/context"}
+{"time":"2026-11-22T21:04:28.572118378Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/callers"}
+{"time":"2026-11-22T21:04:28.57212117Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/callees"}
+{"time":"2026-11-22T21:04:28.572123753Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/impact"}
+{"time":"2026-11-22T21:04:28.572126003Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/file"}
+{"time":"2026-11-22T21:04:28.57212792Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/search"}
+{"time":"2026-11-22T21:04:28.572138253Z","level":"INFO","msg":"registered MCP endpoint","path":"/mcp-gateway/mcp","auth":false}
+{"time":"2026-11-22T21:04:28.572146878Z","level":"INFO","msg":"All services started","count":3,"port":8080}
+{"time":"2026-11-22T21:04:28.572150211Z","level":"INFO","msg":"semsource running — waiting for shutdown signal"}
+{"time":"2026-11-22T21:04:28.572986045Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"0s","goroutines":225,"components_healthy":15,"components_total":16}
+{"time":"2026-11-22T21:04:35.85026134Z","level":"INFO","msg":"Initial index complete","paths":1,"files":627,"entities":6477,"parse_failures":0}
+{"time":"2026-11-22T21:04:35.850943215Z","level":"INFO","msg":"all sources seeded — seed complete","total_entities":7828,"sources":3}
+{"time":"2026-11-22T21:04:39.1713668Z","level":"WARN","msg":"entity text cut at max_text_len; words past it are not indexed","component":"graph-lexical","entity":"c360.semsource-f25674.workspace.golang.function.test-e2e-e2e_test-go-TestE2E_OSH_JavaMavenIngest","max_text_len":16000}
+{"time":"2026-11-22T21:04:58.572314336Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"30s","goroutines":226,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:05:28.571973836Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"1m0s","goroutines":226,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:05:58.571903503Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"1m30s","goroutines":226,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:06:28.571346378Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"2m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:06:58.57157517Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"2m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:07:28.571125795Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"3m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:07:58.571225836Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"3m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:08:28.570339961Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"4m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:08:58.566928503Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"4m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:09:28.570230503Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"5m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:09:58.56971917Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"5m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:10:28.570173961Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"6m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:10:58.570063253Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"6m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:11:28.569642378Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"7m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:11:58.569446086Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"7m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:12:28.569320003Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"8m0s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:12:58.568871586Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"8m30s","goroutines":225,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:13:28.569100711Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"9m0s","goroutines":219,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:13:58.568560961Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"9m30s","goroutines":219,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:14:16.543238095Z","level":"INFO","msg":"shutdown signal received"}
+{"time":"2026-11-22T21:14:16.543287137Z","level":"INFO","msg":"Metrics service stopped"}
+{"time":"2026-11-22T21:14:16.543329637Z","level":"INFO","msg":"heartbeat stopped","service":"heartbeat"}
+{"time":"2026-11-22T21:14:16.544569928Z","level":"INFO","msg":"mcp-gateway stopped"}
+{"time":"2026-11-22T21:14:16.547709012Z","level":"INFO","msg":"component stopped gracefully","component":"graph-ingest","component":"graph-ingest"}
+{"time":"2026-11-22T21:14:16.551034053Z","level":"INFO","msg":"semsource stopped"}
+{"time":"2026-11-22T21:14:16.741900178Z","level":"INFO","msg":"semsource starting","version":"dev","namespace":"c360","sources":3,"branch_watchers":0}
+{"time":"2026-11-22T21:14:16.74206822Z","level":"INFO","msg":"connecting to NATS","url":"nats://nats:4222"}
+{"time":"2026-11-22T21:14:16.742084928Z","level":"INFO","msg":"Connecting to NATS","urls":"nats://nats:4222"}
+{"time":"2026-11-22T21:14:16.74387747Z","level":"INFO","msg":"Successfully connected to NATS","urls":"nats://nats:4222"}
+{"time":"2026-11-22T21:14:16.754086803Z","level":"INFO","msg":"connected to NATS","url":"nats://nats:4222"}
+{"time":"2026-11-22T21:14:16.755605095Z","level":"WARN","msg":"Stream declares discard=new: at its ceiling this stream REFUSES writes rather than evicting","stream":"GRAPH","source":"config.streams[\"GRAPH\"]; component \"ast-source-workspace\" port \"graph.ingest\"; component \"cfgfile-source-workspace\" port \"graph.ingest\"; component \"doc-source-workspace\" port \"graph.ingest\"; component \"source-manifest\" port \"graph.ingest\"; component \"source-manifest\" port \"graph.ingest.predicates\"; component \"source-manifest\" port \"graph.ingest.status\"","max_bytes":268435456,"max_age":3600000000000,"hint":"discard must be \"old\" or \"new\": \"old\" evicts the oldest messages once the stream reaches max_bytes or max_age (the write succeeds, the loss is silent); \"new\" refuses the write instead, which a producer at the ceiling sees as NATS 503 err_code=10077 \"maximum bytes exceeded\" on every publish — including a replacement of an existing message — until something is deleted"}
+{"time":"2026-11-22T21:14:16.75626772Z","level":"INFO","msg":"Ensured JetStream streams","count":7,"archival":0}
+{"time":"2026-11-22T21:14:16.75627497Z","level":"INFO","msg":"JetStream streams ready"}
+{"time":"2026-11-22T21:14:16.756372262Z","level":"INFO","msg":"projection intent declared","owner":"semsource.source-service","contract":"semsource.entity.v1","predicates":133}
+{"time":"2026-11-22T21:14:16.756847178Z","level":"INFO","msg":"Using existing KV bucket","bucket":"semengine_config_c360_semsource"}
+{"time":"2026-11-22T21:14:16.758399595Z","level":"INFO","msg":"Adopted platform identity","org":"c360","stem":"semsource","platform":"semsource-f25674"}
+{"time":"2026-11-22T21:14:16.761662595Z","level":"INFO","msg":"Synced configuration from KV","keys":25}
+{"time":"2026-11-22T21:14:16.763997053Z","level":"WARN","msg":"configuration file differs from the retained configuration; the retained configuration is in effect and the file's values were not applied","entries":["components.source-manifest"],"differing":1,"retained_only":null,"retained_only_count":0,"retained_disabled":null,"retained_disabled_count":0,"file_version":"6.0.0","hint":"the retained configuration stays in effect until config_revision in the configuration file is higher than the retained one; see \"Changing configuration on an existing deployment\" in the README"}
+{"time":"2026-11-22T21:14:16.765682178Z","level":"INFO","msg":"component factories registered","count":23}
+{"time":"2026-11-22T21:14:16.769195637Z","level":"WARN","msg":"composition finding","type":"disconnected_node","component":"code-context","port":"","message":"component has no connections"}
+{"time":"2026-11-22T21:14:16.769295928Z","level":"WARN","msg":"composition finding","type":"disconnected_node","component":"doc-context","port":"","message":"component has no connections"}
+{"time":"2026-11-22T21:14:16.769298053Z","level":"WARN","msg":"composition finding","type":"disconnected_node","component":"mcp-gateway","port":"","message":"component has no connections"}
+{"time":"2026-11-22T21:14:16.76929922Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"alias_index","message":"output port 'alias_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:14:16.769300512Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"incoming_index","message":"output port 'incoming_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:14:16.76930172Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"outgoing_index","message":"output port 'outgoing_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:14:16.769302845Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-index","port":"predicate_index","message":"output port 'predicate_index' (watch): optional_index_unwatched"}
+{"time":"2026-11-22T21:14:16.769304012Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"graph-ingest","port":"mutations","message":"input port 'mutations' (request): optional_api_unused"}
+{"time":"2026-11-22T21:14:16.769305137Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"objectstore","port":"stored","message":"output port 'stored' (stream): no_subscribers"}
+{"time":"2026-11-22T21:14:16.769306262Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"objectstore","port":"write","message":"input port 'write' (stream): no_publishers"}
+{"time":"2026-11-22T21:14:16.769307345Z","level":"WARN","msg":"composition finding","type":"orphaned_port","component":"supersession","port":"source.lifecycle","message":"input port 'source.lifecycle' (request): optional_api_unused"}
+{"time":"2026-11-22T21:14:16.769308845Z","level":"INFO","msg":"composition validated at boot","status":"warnings","errors":0,"warnings":11,"components":16,"edges":13}
+{"time":"2026-11-22T21:14:16.772083303Z","level":"INFO","msg":"mcp-gateway started"}
+{"time":"2026-11-22T21:14:16.772178845Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.context"}
+{"time":"2026-11-22T21:14:16.772184345Z","level":"INFO","msg":"Starting cfgfile-source initial ingest","paths":["/workspace"],"org":"c360","watch_enabled":false}
+{"time":"2026-11-22T21:14:16.772187845Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.context"}
+{"time":"2026-11-22T21:14:16.772304095Z","level":"INFO","msg":"resource available","component":"graph-index","resource":"ENTITY_STATES","attempt":1}
+{"time":"2026-11-22T21:14:16.772353512Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.callers"}
+{"time":"2026-11-22T21:14:16.772376345Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.callers"}
+{"time":"2026-11-22T21:14:16.77241272Z","level":"WARN","msg":"community view unavailable; searches answer without group records until it opens again","component":"graph-query","error":"framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment","retry_in":5000000000}
+{"time":"2026-11-22T21:14:16.772440178Z","level":"INFO","msg":"resource available","component":"graph-lexical","resource":"ENTITY_STATES","attempt":1}
+{"time":"2026-11-22T21:14:16.772448303Z","level":"INFO","msg":"Using existing KV bucket","bucket":"ENTITY_STATES"}
+{"time":"2026-11-22T21:14:16.772463387Z","level":"INFO","msg":"source manifest published","namespace":"c360","sources":3}
+{"time":"2026-11-22T21:14:16.772485803Z","level":"INFO","msg":"resource available","component":"graph-embedding","resource":"ENTITY_STATES","attempt":1}
+{"time":"2026-11-22T21:14:16.772643887Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.callees"}
+{"time":"2026-11-22T21:14:16.772650637Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.callees"}
+{"time":"2026-11-22T21:14:16.77281872Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.impact"}
+{"time":"2026-11-22T21:14:16.772852262Z","level":"INFO","msg":"listening for source queries","subject":"graph.query.sources"}
+{"time":"2026-11-22T21:14:16.772926845Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.file"}
+{"time":"2026-11-22T21:14:16.772971303Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.impact"}
+{"time":"2026-11-22T21:14:16.773160845Z","level":"INFO","msg":"Initializing path watcher","path":"/workspace","org":"c360","project":"workspace","languages":["go","typescript","javascript","java","python","svelte"]}
+{"time":"2026-11-22T21:14:16.773170512Z","level":"INFO","msg":"Starting initial code index","paths":1}
+{"time":"2026-11-22T21:14:16.773196553Z","level":"INFO","msg":"listening for code-context queries","subject":"docs.v1.search"}
+{"time":"2026-11-22T21:14:16.773204928Z","level":"INFO","msg":"supersession listening for run requests","subject":"graph.supersession.run"}
+{"time":"2026-11-22T21:14:16.773206387Z","level":"INFO","msg":"supersession listening for version-diff queries","subject":"graph.query.versionDiff"}
+{"time":"2026-11-22T21:14:16.773207637Z","level":"INFO","msg":"supersession listening for lifecycle-run requests","subject":"graph.lifecycle.run"}
+{"time":"2026-11-22T21:14:16.773231428Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.file"}
+{"time":"2026-11-22T21:14:16.773251303Z","level":"INFO","msg":"predicate schema published","source_types":3}
+{"time":"2026-11-22T21:14:16.773286762Z","level":"INFO","msg":"listening for code-context queries","subject":"code.v1.search"}
+{"time":"2026-11-22T21:14:16.773251887Z","level":"INFO","msg":"Starting doc-source initial ingest","paths":["/workspace"],"org":"c360","watch_enabled":false}
+{"time":"2026-11-22T21:14:16.773401512Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:14:16.773462803Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:14:16.773483387Z","level":"INFO","msg":"listening for predicate queries","subject":"graph.query.predicates"}
+{"time":"2026-11-22T21:14:16.77356297Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:14:16.774025887Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_INGEST_APPLIED_SEQ"}
+{"time":"2026-11-22T21:14:16.774227345Z","level":"INFO","msg":"listening for status queries","subject":"graph.query.status"}
+{"time":"2026-11-22T21:14:16.775718345Z","level":"INFO","msg":"listening for summary queries","subject":"graph.query.sourceSummary"}
+{"time":"2026-11-22T21:14:16.77680797Z","level":"INFO","msg":"query handlers registered","component":"graph-lexical","subjects":["graph.lexical.query.search"]}
+{"time":"2026-11-22T21:14:16.777358553Z","level":"INFO","msg":"listening for ingest requests","add_subject":"graph.ingest.add.c360","remove_subject":"graph.ingest.remove.c360"}
+{"time":"2026-11-22T21:14:16.778985428Z","level":"INFO","msg":"Using existing KV bucket","bucket":"EMBEDDING_INDEX"}
+{"time":"2026-11-22T21:14:16.779379803Z","level":"INFO","msg":"Using existing KV bucket","bucket":"OUTGOING_INDEX"}
+{"time":"2026-11-22T21:14:16.791075595Z","level":"INFO","msg":"query handlers registered","component":"graph-query","subjects":["graph.query.entity","graph.query.batch","graph.query.prefix","graph.query.prefixIDs","graph.query.byName","graph.query.predicate","graph.query.entityByAlias","graph.query.relationships","graph.query.pathSearch","graph.query.hierarchyStats","graph.query.summary","graph.query.localSearch","graph.query.globalSearch","graph.query.searchGraph","graph.query.mergedSearch","graph.query.semantic","graph.query.similar","graph.query.spatial","graph.query.temporal"]}
+{"time":"2026-11-22T21:14:16.791587762Z","level":"INFO","msg":"Using existing KV bucket","bucket":"EMBEDDING_DEDUP"}
+{"time":"2026-11-22T21:14:16.791999012Z","level":"INFO","msg":"Using existing KV bucket","bucket":"INCOMING_INDEX"}
+{"time":"2026-11-22T21:14:16.794115387Z","level":"INFO","msg":"Using existing KV bucket","bucket":"ALIAS_INDEX"}
+{"time":"2026-11-22T21:14:16.795477303Z","level":"INFO","msg":"Using existing KV bucket","bucket":"PREDICATE_INDEX"}
+{"time":"2026-11-22T21:14:16.797542345Z","level":"INFO","msg":"Using existing KV bucket","bucket":"NAME_INDEX"}
+{"time":"2026-11-22T21:14:16.81119897Z","level":"INFO","msg":"query handlers registered","component":"graph-index","subjects":["graph.index.query.outgoing","graph.index.query.incoming","graph.index.query.alias","graph.index.query.predicate","graph.index.query.predicateList","graph.index.query.predicateStats","graph.index.query.predicateCompound","graph.index.query.byName"]}
+{"time":"2026-11-22T21:14:17.154727303Z","level":"INFO","msg":"Using existing KV bucket","bucket":"GRAPH_STATUS"}
+{"time":"2026-11-22T21:14:17.159885137Z","level":"INFO","msg":"JetStream consumer acknowledgement policy applied","component":"graph-ingest","port":"entity_stream","stream":"GRAPH","consumer":"graph-ingest-graph-ingest-entity","policy_source":"server","requested_max_ack_pending":0,"effective_max_ack_pending":1000}
+{"time":"2026-11-22T21:14:17.161797803Z","level":"INFO","msg":"query handlers registered","component":"graph-ingest","subjects":["graph.ingest.query.entity","graph.ingest.query.batch","graph.ingest.query.prefix","graph.ingest.query.prefixIDs"]}
+{"time":"2026-11-22T21:14:17.162768387Z","level":"INFO","msg":"mutation handlers registered","component":"graph-ingest","subjects":["graph.mutation.entity.create","graph.mutation.entity.reconcile","graph.mutation.triple.append","graph.mutation.entity.delete"]}
+{"time":"2026-11-22T21:14:17.162781095Z","level":"INFO","msg":"component started","component":"graph-ingest","component":"graph-ingest","start_time":"2026-11-22T21:14:17.16277972Z"}
+{"time":"2026-11-22T21:14:17.268368512Z","level":"INFO","msg":"query handlers registered","component":"graph-embedding","subjects":["graph.embedding.query.search","graph.embedding.query.similar"]}
+{"time":"2026-11-22T21:14:17.268420262Z","level":"INFO","msg":"heartbeat started","service":"heartbeat","interval":30000000000}
+{"time":"2026-11-22T21:14:17.268429804Z","level":"INFO","msg":"Metrics service started","port":9091,"path":"/metrics","manager_owned":true}
+{"time":"2026-11-22T21:14:17.268469512Z","level":"INFO","msg":"ComponentManager HTTP handlers registered","prefix":"/components/"}
+{"time":"2026-11-22T21:14:17.268578804Z","level":"INFO","msg":"registered MCP endpoint","path":"/mcp-gateway/mcp","auth":false}
+{"time":"2026-11-22T21:14:17.268609929Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/context"}
+{"time":"2026-11-22T21:14:17.26862547Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/callers"}
+{"time":"2026-11-22T21:14:17.268637554Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/callees"}
+{"time":"2026-11-22T21:14:17.26864197Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/impact"}
+{"time":"2026-11-22T21:14:17.268646054Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/file"}
+{"time":"2026-11-22T21:14:17.268649595Z","level":"INFO","msg":"registered HTTP handler","path":"/doc-context/search"}
+{"time":"2026-11-22T21:14:17.268681137Z","level":"INFO","msg":"registered HTTP handlers","path":"/source-manifest/sources"}
+{"time":"2026-11-22T21:14:17.26868897Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/status"}
+{"time":"2026-11-22T21:14:17.268694095Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/health"}
+{"time":"2026-11-22T21:14:17.268698845Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/capabilities"}
+{"time":"2026-11-22T21:14:17.268704679Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/predicates"}
+{"time":"2026-11-22T21:14:17.268709845Z","level":"INFO","msg":"registered HTTP handler","path":"/source-manifest/summary"}
+{"time":"2026-11-22T21:14:17.268744512Z","level":"INFO","msg":"registered HTTP handler","path":"/supersession/versionDiff"}
+{"time":"2026-11-22T21:14:17.26875147Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/context"}
+{"time":"2026-11-22T21:14:17.268755929Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/callers"}
+{"time":"2026-11-22T21:14:17.268760095Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/callees"}
+{"time":"2026-11-22T21:14:17.26876397Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/impact"}
+{"time":"2026-11-22T21:14:17.268768095Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/file"}
+{"time":"2026-11-22T21:14:17.268771845Z","level":"INFO","msg":"registered HTTP handler","path":"/code-context/search"}
+{"time":"2026-11-22T21:14:17.268785137Z","level":"INFO","msg":"All services started","count":3,"port":8080}
+{"time":"2026-11-22T21:14:17.268790262Z","level":"INFO","msg":"semsource running — waiting for shutdown signal"}
+{"time":"2026-11-22T21:14:17.269356887Z","level":"INFO","msg":"Embedding worker running","component":"graph-embedding","workers":5}
+{"time":"2026-11-22T21:14:17.269702679Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"0s","goroutines":223,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:14:17.392857887Z","level":"INFO","msg":"Cfgfile-source initial ingest complete","paths":["/workspace"],"entities_published":126}
+{"time":"2026-11-22T21:14:18.278246887Z","level":"INFO","msg":"Doc-source initial ingest complete","paths":["/workspace"],"entities_published":1225}
+{"time":"2026-11-22T21:14:24.055492959Z","level":"INFO","msg":"Initial index complete","paths":1,"files":627,"entities":6477,"parse_failures":0}
+{"time":"2026-11-22T21:14:24.056284417Z","level":"INFO","msg":"all sources seeded — seed complete","total_entities":7828,"sources":3}
+{"time":"2026-11-22T21:14:28.121598836Z","level":"WARN","msg":"body read failed; its store is skipped until the next repair pass","component":"graph-lexical","storage_instance":"objectstore","entity":"c360.semsource-f25674.workspace.web.chunk.docs-upstream-semstreams-asks-md-0000","error":"entitytext: read body \"doc:6787e17feb86d721f5170aed19291346d950196453bf948de2c5a036c9fcfb6e\" from \"objectstore\": read: read pipe: i/o timeout"}
+{"time":"2026-11-22T21:14:47.26895047Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"30s","goroutines":224,"components_healthy":15,"components_total":16}
+{"time":"2026-11-22T21:14:47.779180762Z","level":"WARN","msg":"entity text cut at max_text_len; words past it are not indexed","component":"graph-lexical","entity":"c360.semsource-f25674.workspace.golang.function.test-e2e-e2e_test-go-TestE2E_OSH_JavaMavenIngest","max_text_len":16000}
+{"time":"2026-11-22T21:15:17.268732887Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"1m0s","goroutines":221,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:15:47.26903872Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"1m30s","goroutines":221,"components_healthy":16,"components_total":16}
+{"time":"2026-11-22T21:16:17.269410595Z","level":"INFO","msg":"System heartbeat","service":"heartbeat","uptime":"2m0s","goroutines":214,"components_healthy":16,"components_total":16}

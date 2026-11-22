@@ -1,0 +1,84 @@
+D01   doc-early  doc_context   correct    nodes=20  body=18130   top=1300    
+D02   doc-early  doc_context   correct    nodes=20  body=6161    top=48      
+D03   doc-early  doc_context   correct    nodes=20  body=14238   top=451     
+D04   doc-late   doc_context   correct    nodes=20  body=17437   top=1361    
+D05   doc-late   doc_context   correct    nodes=20  body=19710   top=944     
+D06   doc-late   doc_context   correct    nodes=20  body=17316   top=782     
+D07   doc-late   doc_context   correct    nodes=20  body=12604   top=528     
+D08   doc-late   doc_context   correct    nodes=18  body=9861    top=105     
+D09   doc-late   doc_context   correct    nodes=20  body=20572   top=1148    
+D10   doc-late   doc_context   correct    nodes=20  body=22939   top=1040    
+C01   code       code_context  correct    nodes=1   body=674     top=674     
+C02   code       code_context  correct    nodes=1   body=117     top=117     
+C03   code       code_context  correct    nodes=1   body=2478    top=2478    
+C04   code       code_search   correct    nodes=20  body=7262    top=958     
+C05   code       code_search   correct    nodes=20  body=20243   top=174     
+C06   code       code_search   correct    nodes=20  body=13100   top=932     
+I01   impact     code_impact   correct    nodes=1   body=674     top=674     
+I02   impact     code_impact   correct    nodes=1   body=117     top=117     
+N01   negative   code_context  correct    nodes=0   body=0       top=0       
+N02   negative   doc_context   correct    nodes=18  body=15975   top=1055    
+X01   discrimination doc_context   correct    nodes=20  body=11966   top=218     
+X02   discrimination doc_context   miss       nodes=20  body=16049   top=575     top node missing: -p 8083:8083
+P01   composition code_impact   correct    nodes=1   body=674     top=674     
+P02   composition code_impact   correct    nodes=1   body=142     top=142     
+P03   composition code_impact   miss       nodes=1   body=125     top=125     missing required: initializewatchers
+P04   composition code_impact   correct    nodes=1   body=680     top=680     
+L01   loose      code_search   correct    nodes=20  body=7668    top=1935    
+L02   loose      code_search   miss       nodes=20  body=8383    top=1772    none of expect_any present
+L03   loose      code_search   correct    nodes=20  body=9036    top=127     
+L04   loose      code_search   correct    nodes=20  body=12079   top=674     
+L05   loose      doc_context   correct    nodes=19  body=14840   top=832     
+L06   loose      code_search   correct    nodes=20  body=10072   top=516     
+L07   loose      code_search   correct    nodes=20  body=17215   top=672     
+LX01  lexical    doc_context   correct    nodes=20  body=13660   top=108     
+LX02  lexical    doc_context   correct    nodes=19  body=25669   top=888     
+LX03  lexical    code_search   correct    nodes=20  body=7191    top=41      
+
+=== tier1-alpha7-dogfood-B: 33/36  (repeats=3) ===
+code: 6/6
+composition: 3/4
+discrimination: 1/2
+doc-early: 3/3
+doc-late: 7/7
+impact: 2/2
+lexical: 3/3
+loose: 6/7
+negative: 2/2
+
+--- evidence precision (doc bands) ---
+median top-node body: 944 bytes
+mean  total body:     15896 bytes
+mean  nodes/answer:   19.8
+
+--- latency (first call per question; same-machine comparisons only) ---
+code: median 55 ms, p95 69 ms (n=6)
+composition: median 168 ms, p95 379 ms (n=4)
+discrimination: median 80 ms, p95 80 ms (n=2)
+doc-early: median 77 ms, p95 96 ms (n=3)
+doc-late: median 78 ms, p95 103 ms (n=7)
+impact: median 168 ms, p95 168 ms (n=2)
+lexical: median 80 ms, p95 90 ms (n=3)
+loose: median 61 ms, p95 88 ms (n=7)
+negative: median 104 ms, p95 104 ms (n=2)
+
+--- context cost (first call per question; tokens ~ bytes/4, estimate) ---
+code: total 71180 B (~17795 tok), mean 11863 B
+composition: total 8009 B (~2002 tok), mean 2002 B
+discrimination: total 44655 B (~11163 tok), mean 22327 B
+doc-early: total 60651 B (~15162 tok), mean 20217 B
+doc-late: total 179678 B (~44919 tok), mean 25668 B
+impact: total 4248 B (~1062 tok), mean 2124 B
+lexical: total 70170 B (~17542 tok), mean 23390 B
+loose: total 128398 B (~32099 tok), mean 18342 B
+negative: total 23464 B (~5866 tok), mean 11732 B
+all bands: total 590453 B (~147613 tok)
+schema overhead (tools/list): 8175 B (~2043 tok), 9 tools — session-fixed, excluded from the figures above
+
+--- discrimination (top node answers on its own) ---
+passed:     1/2
+imprecise:  0 (top node carried the confusable value too)
+MISLEADING: 0 (top node carried the confusable INSTEAD of the answer)
+written: /Users/coby/Code/c360/semsource/.worktrees/claude-234-tier1-openspec/scripts/scorecard/results/tier1-alpha7-dogfood-B.json
+restart settled in 121 s
+restart provider requests=10 tokens=144
