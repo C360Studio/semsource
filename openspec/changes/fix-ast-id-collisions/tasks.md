@@ -2,26 +2,26 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md`, and rules on Q1–Q3. Hold: OPEN-Q proposal awaits owner approval
+- [ ] 1.1 Owner approves `proposal.md` and `design.md`, and rules on Q1–Q4. Hold: OPEN-Q proposal awaits owner approval
 
 ## 2. Verify before code
 
 - [ ] 2.1 Rerun the #333 collision probe across Python, C and C++ fixtures and record any collisions. Any found become a follow-up issue, out of this break.
 - [ ] 2.2 Measure decision 3 on OSH: the share of Java call sites to overloaded names that arity resolves, versus same-arity sites that would lose their edge. Record the numbers in this task before Q1 is closed.
-- [ ] 2.3 Confirm that no TS/JS/Svelte call edge targets a function- or block-local variable entity that decision 4 removes (`source/ast/ts/calls.go` `localFuncs`). If one does, decision 4 is revised before code.
+- [ ] 2.3 Confirm that no TS/JS/Svelte edge targets a local entity that decision 4 removes. Check `calls`, references and destructured bindings (the #103 rule) across dogfood; the reviewer read `ts/calls.go:103-129` as top-level only. If an edge does target one, decision 4 is revised before code.
 
 ## 3. Guard (additive; lands first and fails)
 
 - [ ] 3.1 `source/ast` test: per-class fixtures (Java overloads, TS scoped consts, Go `_`) fail on duplicate IDs today. Proven by `TestParseResultIDsAreUnique` failing before 4.x.
-- [ ] 3.2 `processor/ast-source`: dedup by ID before `bodiesForResult`, keeping the first; `id_collisions` status field; one aggregated warning per file. Proven by a unit test that feeds a result with a duplicate and asserts one publish, one body, and a count of 1.
+- [ ] 3.2 `processor/ast-source`: dedup by ID before `bodiesForResult`, keeping the first, plus the cross-file check over the initial index; `id_collisions` status field; one aggregated warning per file. Proven by a unit test that feeds a result with a duplicate and asserts one publish, one body, and a count of 1. The status field is reviewed by `go-component-reviewer`.
 
 ## 4. Identity fixes (breaking; one storage break)
 
-- [ ] 4.1 Java erased-parameter-type discriminator on every method and constructor. Test: stable under a sibling-overload add and a parameter rename.
-- [ ] 4.2 Java call edges select an overload by arity, or emit none; constructor calls likewise. Tests are the three code-call-graph scenarios.
-- [ ] 4.3 TS/JS/Svelte: stop emitting function- and block-local variable declarations; scope colliding nested function declarations by enclosing symbol. Test: the `fetcher` scenario, with module-level IDs unchanged.
-- [ ] 4.4 Go: skip `var _` declarations. Test: the blank-declaration scenario.
-- [ ] 4.5 `*.min.js` / `.min.js`-sibling default exclusion plus `include_vendored`. Tests are both ast-source-configuration scenarios.
+- [ ] 4.1 Java discriminator (kind, type text without type arguments, array dimensions kept, type variables to their first bound) on every method and constructor. Tests: the constructor-versus-method and `int`/`int[]` scenarios, plus stability under a sibling-overload add and a parameter rename.
+- [ ] 4.2 Java call edges collect overloads across the in-repo hierarchy and select by arity even with one candidate, or emit none; constructor calls likewise. Tests are the five code-call-graph scenarios.
+- [ ] 4.3 TS/JS/Svelte: stop emitting locals of every form (namespace members kept); always discriminate accessor pairs and static members. Tests: the `fetcher`, local-function and accessor scenarios, with module-level IDs unchanged.
+- [ ] 4.4 Go: skip blank `var`, `const` and `func`, and identify `init` per Q4. Test: the blank-declaration scenario, plus an `init` test under the ruling.
+- [ ] 4.5 Asset guard: an `X.js` with an `X.min.js` sibling is file-entity-only, plus `index_vendored_js`. Tests are both asset-ingestion-guards scenarios.
 - [ ] 4.6 3.1 passes on all fixtures, and the repo-tree guard reports zero collisions.
 
 ## 5. Acceptance

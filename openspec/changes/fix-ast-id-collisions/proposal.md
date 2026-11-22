@@ -2,8 +2,7 @@
 
 Approved-by:
 
-Track: design (adds Requirements to three capabilities, changes entity identity, and adds a
-publish-path guard ahead of the body offload).
+Track: design (Requirements in three capabilities, entity identity, a publish-path guard).
 
 ## Why
 
@@ -23,19 +22,21 @@ collision is worse than last-write-wins:
   ast-source **before** the body offload. A duplicate ID in one parse result is counted and
   surfaced, never stored last-write-wins.
 - **Java (#330):** methods and constructors carry a discriminator derived from their erased
-  parameter types, applied to every callable (the C++ `overloadID` precedent). A call edge
-  resolves to one overload by argument count, or to none.
-- **TS/JS/Svelte (#331):** function- and block-local variable declarations are no longer
-  emitted. Module-level and class-member declarations keep their IDs.
-- **Go (#332):** `var _ = …` blank declarations are not emitted.
-- **Vendored bundles (#334, owner ruling 2026-11-22):** `*.min.js`, and a `.js` file whose
-  `.min.js` sibling exists, are excluded by default. A new per-watch-path `include_vendored` setting opts back in.
+  parameter signature (kind, type text, array dimensions), applied to every callable (the C++ `overloadID` precedent). A call edge
+  resolves by argument count across the class hierarchy, to one overload or none.
+- **TS/JS/Svelte (#331):** declarations local to a function, method or static block are no longer
+  emitted, in any form. Accessor pairs and static members are always discriminated.
+- **Go (#332):** blank `var _`, `const _` and `func _` are not emitted. Several `init` per file:
+  owner ruling Q4.
+- **Vendored bundles (#334, owner ruling 2026-11-22):** an `X.js` whose `X.min.js` sibling exists
+  becomes file-entity-only, like `.min.js` already is. Opt back in with `index_vendored_js`.
 - One clean storage break plus reseed for all of it (rule 1). #324 closes at R1 36/36 after it.
 
 ## Non-goals
 
 - Re-ingest never removing dropped predicates: that is #336, which isn't identity-breaking.
-- Python, C and C++ collision fixes. The guard measures them; any fix is a follow-up issue.
+- Python, C and C++ collision fixes. The runtime guard covers them, and task 2.1 measures them;
+  any fix is a follow-up issue.
 - Any change to graph-ingest's merge semantics. They behave as documented, so nothing goes upstream.
 
 ## Consumers
@@ -50,10 +51,10 @@ fewer TS local entities after the reseed. The release note names the break.
 
 - `entity-identity-safety`: one ID per declaration per parse pass, guarded at test and runtime.
 - `code-call-graph`: Java calls to overloaded methods resolve to one overload or none.
-- `ast-source-configuration`: vendored and minified JavaScript is excluded by default.
+- `asset-ingestion-guards`: unminified twins of minified assets are indexed as files.
 
 ## Impact
 
 `source/ast/{java,ts,svelte,golang}`, `source/ast` guard test, `processor/ast-source`
-(runtime guard before `bodiesForResult`, status counter), `handler/excludes.go`, scorecard R1
+(runtime guard before `bodiesForResult`, status counter), `processor/ast-source/assetguard.go`, scorecard R1
 evidence, the release note, and the SETUP 03A storage-break notes.
