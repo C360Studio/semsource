@@ -87,7 +87,11 @@
   - The excluded fields are write-time metadata, not content: per-triple `timestamp` and the entity's `updated_at`.
   - Observed, not judged: a fresh seed leaves `updated_at` at `0001-01-01T00:00:00Z` on all 7,828 entities, and a restart sets it on all 7,828. That is SemEngine graph-ingest behaviour. It does not gate 5.2.
   - Ranking is out of scope for this check; 5.3 measures it (R1).
-- [ ] 5.3 Scorecard on the reseeded store: R1 36/36 (closes #324), OSH arm not below 10/10, dogfood loose band not below the beta.10 regrade.
+- [x] 5.3 Scorecard on the reseeded store: R1 36/36 (closes #324), OSH arm not below 10/10, dogfood loose band not below the beta.10 regrade. Done 2026-11-22 at `08227da`; see `scripts/scorecard/results/SUMMARY-fix329-tier0.md`.
+  - R1 36/36 identical, RANK-STABLE (beta.10: 35/36).
+  - OSH 13/13 (beta.10: 12/13; C03 now correct, recorded and not claimed).
+  - Dogfood 32/36 with every verdict identical to beta.10, and the loose band 5/7 = beta.10.
+  - The first OSH leg at `396123d` caught a regression: P01 lost its three callers, because an inherited field's type was resolved with the parsed file's package. Fixed in `08227da` (`packageFor`, `TestInheritedFieldTypedInAnotherModuleLinks`) and rerun.
 - [ ] 5.4 Release note and SETUP 03A record the identity break and the reseed, plus the visible losses:
   - IIFE/AMD-wrapped JS indexes as files only;
   - `init` callers are gone;
