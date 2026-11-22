@@ -93,6 +93,11 @@ func (c *Config) Validate() error {
 	if c.Namespace == "" {
 		return fmt.Errorf("namespace is required")
 	}
+	// graph-embedding is merged with the word index; without the word index
+	// there is no tier 1 semantic index to report.
+	if c.EmbeddingEnabled && !c.semanticEnabled() {
+		return fmt.Errorf("embedding_enabled needs semantic_enabled: tier 1 merges graph-embedding with the word index")
+	}
 	return nil
 }
 

@@ -48,11 +48,15 @@ const embeddingIndexLabel = "Embedding index"
 // foldSemanticReadiness folds the word index's and graph-embedding's readiness
 // into the one tier 1 semantic-index signal: ready only when both are, else the
 // half that is unavailable or behind, so the reason and revisions shown are
-// the ones holding it back. graph-embedding is checked first because its
-// failure is the one search hides: graph-query answers words alone with
-// merge.honoured false. A provider that is down fails every embedding, and the
-// follower then publishes ready false, degraded (semengine graph/follower
-// envelope), so it never reads ready here.
+// the ones holding it back. graph-embedding is checked first because its gap
+// is the one search hides: graph-query answers words alone.
+//
+// Readiness is index coverage, not provider liveness (owner ruling, #234). An
+// embedding that failed while the provider was down leaves graph-embedding
+// degraded and not ready (semengine graph/follower envelope), but a provider
+// that goes down after the index caught up, with no new write to embed, still
+// reads ready here. Liveness is reported per answer: merge.honoured false on
+// searchGraph and the word-only provenance on fusion.
 func foldSemanticReadiness(lexical, embedding workbenchIndexReadiness) workbenchIndexReadiness {
 	halves := []workbenchIndexReadiness{embedding, lexical}
 	for _, half := range halves {

@@ -143,10 +143,11 @@ func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ 
 	var embJSON json.RawMessage
 	if c.config.semanticEnabled() {
 		embResp, embErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphLexical)
-		embJSON = sourcemanifest.IndexReadinessJSON(embResp, embErr, "semantic index")
 		if c.config.EmbeddingEnabled {
 			vecResp, vecErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphEmbedding)
 			embJSON = sourcemanifest.SemanticReadinessJSON(embResp, embErr, vecResp, vecErr, "semantic index")
+		} else {
+			embJSON = sourcemanifest.IndexReadinessJSON(embResp, embErr, "semantic index")
 		}
 	} else {
 		embJSON = sourcemanifest.DisabledIndexReadinessJSON("semantic index")
