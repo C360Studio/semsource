@@ -88,10 +88,14 @@ disambiguation); #686 (query prefix carried by SemSource) closed in alpha.7; any
    runtime only checks `Model` (upstream refuses a mismatched reply); the rest is recorded and checked
    by the harness.
 6. **Fault semantics.** A configured-but-unreachable provider leaves boot up (upstream constructs
-   without a request). Search answers on the word list with `merge.honoured: false`. source-manifest
-   readiness reports the semantic index `unavailable`, never `ready`, until graph-embedding reports
-   ready. setup03a's neural lane and the scorecard refuse to grade a run whose provider
-   `/metrics` was unreachable, so it is never a pass.
+   without a request). Search answers on the word list with `merge.honoured: false`. Readiness is
+   index coverage, not provider liveness (owner ruling 2026-11-22, #234): the semantic index reads
+   ready only while graph-lexical and graph-embedding both report caught up, so embeddings that fail
+   while the index is built hold it not ready, but a provider that stops after the index caught up
+   can leave it reading ready. Liveness is reported per answer, through `merge.honoured` on
+   `graph_search` and `provenance` on the fusion tools; SemSource adds no liveness probe.
+   setup03a's neural lane and the scorecard refuse to grade a run whose provider `/metrics` was
+   unreachable, so it is never a pass.
 7. **Configs and compose.** Restore `configs/tiers/tier1-semantic.json`: `graph.semantic_search:
    true`, registry `semembed` at `http://semembed:8081/v1`, model `Snowflake/snowflake-arctic-embed-s`,
    no `query_prefix` (semembed applies the instruction; `isEmbeddingEndpoint`'s model-name backstop
@@ -108,6 +112,15 @@ disambiguation); #686 (query prefix carried by SemSource) closed in alpha.7; any
   against the GRAPH stream ceiling is remeasured here.
 - **Merged score scale.** Clients that threshold `relevance` on the word scale break at Tier 1. That
   is why the tool description and the adoption notes say so explicitly.
+- **Restart re-embeds most of the corpus.** httpembedder reports width 0 until its first reply, so on
+  each restart graph-embedding cannot vouch for the stored vectors it replays before that reply and
+  embeds them again (graph-embedding README, "Changing the embedder"; semengine#722). Every restart pays
+  the first-index CPU and seed time again.
+- **Outage recovery needs a restart.** graph-embedding's Worker does not retry a failed embedding; it
+  waits for a new revision of the entity or a restart (graph-embedding README, "Failed entities and the
+  repair lane"; semengine#724). After a provider outage the failed entities stay failed, and the index
+  stays degraded, until SemSource restarts. The fusion response also cannot carry the merge step, so a
+  fusion answer says only `provenance` (semengine#723).
 - **Upstream gaps.** semengine#667 means long texts are cut at 512 tokens without being counted,
   which could depress vector recall on doc passages. Recorded, not fixed here.
 

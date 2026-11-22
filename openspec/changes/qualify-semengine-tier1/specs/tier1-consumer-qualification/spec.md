@@ -70,14 +70,28 @@ merged scale at Tier 1.
 Tier 1 qualification SHALL record the embedding provider's image digest, build SHA, served model id
 and revision, model artifact hash, dimensions and the query instruction applied (by the provider via `input_type`, or a product prefix), and SHALL use one provider instance for
 every compared run. A run whose provider was configured but unreachable SHALL be reported as
-unavailable evidence, never as a pass. Readiness SHALL NOT report the semantic index ready while the
-provider is unreachable.
+unavailable evidence, never as a pass. Readiness SHALL report the semantic index ready only while
+graph-lexical and graph-embedding both report their index caught up. Readiness is index coverage,
+not provider liveness: each answer reports liveness itself, through `merge.honoured` on
+`graph_search` and `provenance` on the fusion tools.
 
 #### Scenario: Provider missing during a qualification run
 
 - **GIVEN** the neural lane or the Tier 1 scorecard arm is configured with a provider that does not answer
 - **WHEN** the run completes
-- **THEN** it is recorded as unavailable, not graded, and readiness never reported the semantic index ready
+- **THEN** it is recorded as unavailable, not graded
+
+#### Scenario: Embeddings fail while the index is built
+
+- **GIVEN** a Tier 1 composition whose provider does not answer while entities are embedded
+- **WHEN** a client reads readiness
+- **THEN** the semantic index is not ready, because graph-embedding's failed entities hold its index back
+
+#### Scenario: Provider goes down after the index caught up
+
+- **GIVEN** a Tier 1 composition whose index has caught up and whose provider then stops answering
+- **WHEN** an agent calls `graph_search`
+- **THEN** readiness may still report the semantic index ready, and the answer reports `merge.honoured: false` with the word list
 
 #### Scenario: Graded against the floors
 
