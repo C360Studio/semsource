@@ -464,6 +464,10 @@ func TestGraphSubsystemComponents_LexicalSearchFalseIsStructuralOnly(t *testing.
 				if tc.wantSemantic == (ok && !enabled) {
 					t.Fatalf("%s semantic_enabled = %v, want search on = %v", compName, raw["semantic_enabled"], tc.wantSemantic)
 				}
+				// At tier 1 readiness must also wait on graph-embedding.
+				if embedding, _ := raw["embedding_enabled"].(bool); embedding != tc.wantEmbed {
+					t.Fatalf("%s embedding_enabled = %v, want %v", compName, raw["embedding_enabled"], tc.wantEmbed)
+				}
 			}
 		})
 	}

@@ -707,6 +707,9 @@ func mcpGatewayComponentConfig(cfg *config.Config) (types.ComponentConfig, error
 	if !cfg.Graph.LexicalSearchEnabled() {
 		cfgMap["semantic_enabled"] = false
 	}
+	if cfg.Graph.SemanticSearchEnabled() {
+		cfgMap["embedding_enabled"] = true
+	}
 	raw, err := json.Marshal(cfgMap)
 	if err != nil {
 		return types.ComponentConfig{}, fmt.Errorf("marshal mcp-gateway config: %w", err)
@@ -752,6 +755,10 @@ func manifestComponentConfig(cfg *config.Config, org string, sourceCount int) (t
 	}
 	if !cfg.Graph.LexicalSearchEnabled() {
 		cfgMap["semantic_enabled"] = false
+	}
+	// At tier 1 the semantic index is ready only once graph-embedding is too.
+	if cfg.Graph.SemanticSearchEnabled() {
+		cfgMap["embedding_enabled"] = true
 	}
 	raw, err := json.Marshal(cfgMap)
 	if err != nil {

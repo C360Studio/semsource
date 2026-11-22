@@ -211,6 +211,78 @@ func TestIntegration_SourceStatusReportsDisabledSearchIndex(t *testing.T) {
 	}
 }
 
+// TestIntegration_SourceStatusWaitsOnGraphEmbedding: at tier 1 source_status's
+// embedding block is ready only while graph-lexical and graph-embedding both
+// are. A provider that does not answer leaves graph-embedding degraded, and the
+// block must say so even though the word index is ready.
+// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
+func TestIntegration_SourceStatusWaitsOnGraphEmbedding(t *testing.T) {
+	ctx := context.Background()
+	tc := natstest.New(t, natstest.WithJetStream())
+
+	sub, err := tc.Client.SubscribeForRequests(ctx, "graph.query.status",
+		func(_ context.Context, _ []byte) ([]byte, error) {
+			return []byte(`{"namespace":"ss","phase":"ready","total_entities":42}`), nil
+		})
+	if err != nil {
+		t.Fatalf("subscribe status: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	statusKV, err := kvcatalog.EnsureCatalogBucket(ctx, tc.Client, semgraph.BucketGraphStatus)
+	if err != nil {
+		t.Fatalf("ensure %s: %v", semgraph.BucketGraphStatus, err)
+	}
+	if _, err := statusKV.PutString(ctx, "graph-lexical", `{"ready":true,"state":"ready"}`); err != nil {
+		t.Fatalf("seed graph-lexical readiness: %v", err)
+	}
+
+	c := &Component{
+		name:        "mcp-gateway",
+		config:      Config{Namespace: "ss", RequestTimeoutMs: 3000, EmbeddingEnabled: true},
+		client:      tc.Client,
+		graphStatus: graphstatus.New(tc.Client),
+		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	c.server = c.buildServer()
+	cs := connect(t, c)
+
+	embedding := func() (ready, available bool, state string) {
+		t.Helper()
+		res := callTool(t, cs, "source_status", map[string]any{})
+		if res.IsError {
+			t.Fatalf("source_status errored: %+v", res)
+		}
+		var merged struct {
+			Embedding struct {
+				Available bool   `json:"available"`
+				Ready     bool   `json:"ready"`
+				State     string `json:"state"`
+			} `json:"embedding"`
+		}
+		body := res.Content[0].(*mcp.TextContent).Text
+		if err := json.Unmarshal([]byte(body), &merged); err != nil {
+			t.Fatalf("decode merged status: %v; body=%s", err, body)
+		}
+		return merged.Embedding.Ready, merged.Embedding.Available, merged.Embedding.State
+	}
+
+	if ready, available, state := embedding(); ready || available {
+		t.Fatalf("before graph-embedding published: ready=%v available=%v state=%q, want unavailable", ready, available, state)
+	}
+	if _, err := statusKV.PutString(ctx, "graph-embedding", `{"ready":false,"state":"degraded","failed_count":42}`); err != nil {
+		t.Fatalf("seed graph-embedding readiness: %v", err)
+	}
+	if ready, _, state := embedding(); ready || state != "degraded" {
+		t.Fatalf("provider unreachable: ready=%v state=%q, want not ready, degraded", ready, state)
+	}
+	if _, err := statusKV.PutString(ctx, "graph-embedding", `{"ready":true,"state":"ready"}`); err != nil {
+		t.Fatalf("seed graph-embedding readiness: %v", err)
+	}
+	if ready, _, state := embedding(); !ready || state != "ready" {
+		t.Fatalf("both halves ready: ready=%v state=%q, want ready", ready, state)
+	}
+}
+
 // TestIntegration_QueryToolsTranslateToNATS proves the read-side MCP tools are
 // real NATS-backed facades, not just advertised names. Each tool call is routed
 // to its owned request/reply subject and returns the responder payload verbatim.

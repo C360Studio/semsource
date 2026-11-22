@@ -36,6 +36,12 @@ type Config struct {
 	// (not_enabled) without polling GRAPH_STATUS/graph-lexical.
 	SemanticEnabled *bool `json:"semantic_enabled,omitempty" schema:"type:bool,description:Whether semantic embedding is enabled in the composition,default:true,category:advanced"`
 
+	// EmbeddingEnabled reports that the composition runs graph-embedding
+	// (tier 1). The semantic index is then ready only while graph-lexical and
+	// graph-embedding both report ready, so an unreachable provider never
+	// reads as a ready semantic index.
+	EmbeddingEnabled bool `json:"embedding_enabled,omitempty" schema:"type:bool,description:Whether the composition runs graph-embedding (tier 1),default:false,category:advanced"`
+
 	// Discovered records the component names boot-time discovery admitted,
 	// per discovering parent. The next boot owns exactly these names: it
 	// retires the ones nothing discovers any more, including those of a

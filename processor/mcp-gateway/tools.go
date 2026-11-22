@@ -124,7 +124,8 @@ func (c *Component) removeSource(ctx context.Context, _ *mcp.CallToolRequest, in
 // (graph.query.status: phase + per-source counts + total_entities), the
 // graph-index structural readiness (GRAPH_STATUS/graph-index: caught-up
 // Ready/Lag/State), and the search-index readiness (GRAPH_STATUS/graph-lexical,
-// reported under "embedding" — surfaced, not gated). The index/embedding
+// folded with GRAPH_STATUS/graph-embedding at tier 1, reported under
+// "embedding" — surfaced, not gated). The index/embedding
 // objects use the canonical readiness shape shared with the HTTP status and
 // capabilities surfaces; a failed sub-query yields an explicit
 // {available:false, reason} object — the signal agents gate on is never
@@ -143,6 +144,10 @@ func (c *Component) sourceStatus(ctx context.Context, _ *mcp.CallToolRequest, _ 
 	if c.config.semanticEnabled() {
 		embResp, embErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphLexical)
 		embJSON = sourcemanifest.IndexReadinessJSON(embResp, embErr, "semantic index")
+		if c.config.EmbeddingEnabled {
+			vecResp, vecErr := c.graphStatus.Raw(ctx, graphstatus.KeyGraphEmbedding)
+			embJSON = sourcemanifest.SemanticReadinessJSON(embResp, embErr, vecResp, vecErr, "semantic index")
+		}
 	} else {
 		embJSON = sourcemanifest.DisabledIndexReadinessJSON("semantic index")
 	}

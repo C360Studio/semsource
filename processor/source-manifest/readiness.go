@@ -42,6 +42,47 @@ func indexReadinessFrom(raw []byte, err error, label string) workbenchIndexReadi
 	}
 }
 
+// embeddingIndexLabel names graph-embedding's half of the tier 1 semantic index.
+const embeddingIndexLabel = "Embedding index"
+
+// foldSemanticReadiness folds the word index's and graph-embedding's readiness
+// into the one tier 1 semantic-index signal: ready only when both are, else the
+// half that is unavailable or behind, so the reason and revisions shown are
+// the ones holding it back. graph-embedding is checked first because its
+// failure is the one search hides: graph-query answers words alone with
+// merge.honoured false. A provider that is down fails every embedding, and the
+// follower then publishes ready false, degraded (semengine graph/follower
+// envelope), so it never reads ready here.
+func foldSemanticReadiness(lexical, embedding workbenchIndexReadiness) workbenchIndexReadiness {
+	halves := []workbenchIndexReadiness{embedding, lexical}
+	for _, half := range halves {
+		if !half.Available {
+			return half
+		}
+	}
+	for _, half := range halves {
+		if !half.Ready {
+			return half
+		}
+	}
+	return lexical
+}
+
+// SemanticReadinessJSON is the tier 1 form of IndexReadinessJSON for the
+// semantic index: the word index's and graph-embedding's envelopes (or the
+// errors fetching them) folded by foldSemanticReadiness.
+func SemanticReadinessJSON(lexicalRaw []byte, lexicalErr error, embeddingRaw []byte, embeddingErr error,
+	label string,
+) json.RawMessage {
+	obj := foldSemanticReadiness(indexReadinessFrom(lexicalRaw, lexicalErr, label),
+		indexReadinessFrom(embeddingRaw, embeddingErr, embeddingIndexLabel))
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return json.RawMessage(`{"available":false,"reason":{"code":"marshal_failed","message":"readiness marshal failed","retryable":true}}`)
+	}
+	return data
+}
+
 // IndexReadinessJSON is the exported form of indexReadinessFrom for the other
 // status surfaces (MCP gateway): one canonical readiness shape everywhere.
 func IndexReadinessJSON(raw []byte, err error, label string) json.RawMessage {

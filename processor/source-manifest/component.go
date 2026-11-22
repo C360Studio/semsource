@@ -775,7 +775,7 @@ func (c *Component) handleStatus(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		payload["index"] = c.fetchIndexReadiness(ctx, structuralReadinessKey, "structural index")
 		if c.config.semanticEnabled() {
-			payload["embedding"] = c.fetchIndexReadiness(ctx, semanticReadinessKey, "semantic index")
+			payload["embedding"] = c.fetchSemanticReadiness(ctx, "semantic index")
 		} else {
 			payload["embedding"] = disabledIndexReadiness("Semantic index")
 		}

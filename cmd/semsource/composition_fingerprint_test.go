@@ -29,7 +29,7 @@ var compositionFingerprints = map[int]string{
 // tierOneFingerprintFixture, so a change to the tier 1 wiring needs a
 // generation bump as a tier 0 change does.
 var tierOneCompositionFingerprints = map[int]string{
-	6: "a5b28d6e85989ea743601a4b4f366e51c8588d91eb0ae4d74893fc794e865ed5",
+	6: "ba28af1e051ba4f705cd57331211ef26dfa27d700f25f5b57003ebe9ea1d9b7b",
 }
 
 // fingerprintFixture is a fixed configuration with every field the generator
