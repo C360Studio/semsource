@@ -34,23 +34,29 @@ alpha.6 Tier 0 (`SUMMARY-alpha6-tier0.md`) and #337 Tier 0 (`SUMMARY-fix329-tier
   has `merge.honoured: true`.
 - Bytes are up 3.7% on dogfood (mostly the lexical band: 70 KB vs 27 KB) and 9.4% on OSH, against fix329.
 - Median latency: dogfood 77 ms (fix329 62 ms), OSH 81 ms (fix329 76 ms).
-- The tools/list schema is 8,175 B, 17 B under the 8,192 B gate.
+- The tools/list schema is 8,175 B by the scorecard's `schema_overhead` meter (it includes the JSON-RPC envelope). The gate `TestToolsListSchemaBudget` measures the marshalled result at 8,141 of 8,192 B.
 
 The full per-band tables are in `tier1-alpha7/compare-{dogfood,osh}.txt`.
 
 ## Seed, provider work and restart (semengine#722)
 
 - **Dogfood:** the seed took 571 s and made 7,271 provider requests (1,426,105 tokens); the GRAPH stream ended at
-  7,851 msgs and 49.4 MB. A restart with the same config settled in 121 s and repeated 10 requests (144 tokens). So
-  the #722 re-embed is real, but small at this scale.
+  7,851 msgs and 49.4 MB. A restart with the same config settled in 121 s and made 10 provider requests (144 tokens). This is
+  consistent with #722 but does not prove every request was a repeat: entity revisions also changed
+  across the restart. The stronger evidence is the static setup03a fixture, which re-embedded 9 of
+  10 seed texts (`docs/testing/setup-03a/tier1-provider-faults-report.json`). Either way the cost is
+  small at this scale.
 - **OSH:** the seed took 1,112 s and made 25,180 requests (2,724,705 tokens). The restart did not settle (see the
   next section).
 - After the restart, both corpora briefly reported `embedding.state: degraded`, then returned to `ready` on their own.
 
 ## #178 OSH tail
 
-- **Fresh seed:** clean at 28,505 msgs and 221,779,926 B, which is 82.6% of the 268,435,456 B limit (memory storage,
-  `max_age` 1h, `discard:new`). No 10077 rejects.
+- **Fresh seed:** within the GRAPH ceiling at 28,505 msgs and 221,779,926 B, which is 82.6% of the 268,435,456 B limit
+  (memory storage, `max_age` 1h, `discard:new`). No 10077 rejects. The log is not clean, though: between 21:24 and
+  21:35Z it has 11 `NATS error` lines reporting a slow consumer on one `_INBOX` subscription, reaching 15,476
+  dropped messages (`evidence-osh/semsource.log`). This looks like the known slow-consumer class, and outcomes
+  were unaffected (13/13). The dogfood log has none.
 - **Warm restart within `max_age`:** breaches the limit. SemSource re-publishes the corpus while the seed's messages
   are still retained, so GRAPH reached 34,612 msgs and 268,434,490 B. From 21:38:14Z the publisher logged 10077
   (`maximum bytes exceeded`) after exhausting its delivery budget, and dropped 114 entities after bounded backpressure.

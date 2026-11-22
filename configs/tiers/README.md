@@ -130,7 +130,8 @@ docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33
 > HTTP embedder learns its vector width from its first reply, so on a restart graph-embedding cannot
 > vouch for the stored vectors it replays before that reply and embeds those again
 > ([semengine#722](https://github.com/C360Studio/semengine/issues/722)). Measured on the dogfood corpus:
-> 10 repeated requests against 7,271 for the seed, settled in 121 s. A small burst on each restart.
+> 10 provider requests after a same-config restart against 7,271 for the seed, settled in 121 s,
+> consistent with #722 (the static setup03a fixture re-embedded 9 of 10 seed texts). A small burst on each restart.
 > Levers if it's hammering your machine:
 > - **Cap the container CPU** — `docker run --cpus=2 ...` up front, or **live with no restart / no lost
 >   progress**: `docker update --cpus=2 semembed` (drops ~561%→~200%; the initial index just takes
