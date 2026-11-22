@@ -217,7 +217,7 @@ func (p *Parser) extractDeclaration(fset *token.FileSet, decl goast.Decl, _ /* p
 		switch d.Tok {
 		case token.TYPE:
 			for _, spec := range d.Specs {
-				if ts, ok := spec.(*goast.TypeSpec); ok {
+				if ts, ok := spec.(*goast.TypeSpec); ok && ts.Name.Name != "_" {
 					entity := p.extractTypeSpec(fset, ts, d.Doc, filePath)
 					if entity != nil {
 						entities = append(entities, entity)

@@ -33,6 +33,10 @@ var x, _ = 1, 2
 
 func _() {}
 
+type _ struct{}
+
+type _ int
+
 func init() {}
 
 func init() {}

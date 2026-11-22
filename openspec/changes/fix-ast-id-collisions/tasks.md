@@ -50,8 +50,10 @@
 
 - [ ] 4.1 Java discriminator (kind, type text without type arguments, array dimensions kept, type variables to their first bound) on every method and constructor. Tests: the constructor-versus-method and `int`/`int[]` scenarios, plus stability under a sibling-overload add and a parameter rename.
 - [ ] 4.2 Java call edges collect overloads across the in-repo hierarchy and select by arity even with one candidate. A unique in-repo match links even when the chain leaves the repo (Q1, option B); otherwise no edge. Constructor calls likewise. Tests are the six code-call-graph scenarios.
-- [x] 4.3 TS/JS/Svelte: stop emitting locals of every form (namespace members kept); always discriminate accessor pairs and static members, and carry the discriminated ID through `classMethodNames` for `this.` calls. Tests: a `this.` call to a method and a `ClassName.` call to a static method still edge correctly, plus the `fetcher`, local-function and accessor scenarios, with module-level IDs unchanged. Done 2026-11-22 (`source/ast/ts/scope_identity_test.go`, `source/ast/svelte/scope_identity_test.go`). Mutants that disable the local rule fail both tests. The guard's `ts` fixture and the repository-tree pass now hold.
-- [x] 4.4 Go: skip blank `var`, `const` and `func`, and identify `init` per Q4. Test: the blank-declaration scenario, plus an `init` test under the ruling. Done 2026-11-22 (`source/ast/golang/blank_decls_test.go`). A method named `init` is still emitted.
+- [x] 4.3 TS/JS/Svelte: stop emitting locals of every form (namespace members kept); always discriminate accessor pairs and static members, and carry the discriminated ID through `classMethodNames` for `this.` calls. Tests: a `this.` call from an instance method reaches the instance member, and from a static method the static member, plus the `fetcher`, local-function and accessor scenarios, with module-level IDs unchanged. Done 2026-11-22 (`source/ast/ts/scope_identity_test.go`, `source/ast/svelte/scope_identity_test.go`). Mutants that disable the local rule fail both tests. Review (graph-event-reviewer) corrections:
+  - Design decision 4's "a static method is reached through `ClassName.m()`" is wrong. `ClassName.m()` never resolved, before or after this change (`ts/calls.go:605-610` handles namespace imports only), so it stays out of scope.
+  - IIFE, AMD and UMD-wrapped JS now emits only its file entity, because everything inside the wrapper function is local. The owner has to acknowledge this, and the release note has to name it (5.4). The guard's `ts` fixture and the repository-tree pass now hold.
+- [x] 4.4 Go: skip blank `var`, `const` and `func`, and identify `init` per Q4. Test: the blank-declaration scenario, plus an `init` test under the ruling. Done 2026-11-22 (`source/ast/golang/blank_decls_test.go`). A method named `init` is still emitted, and `type _` is skipped too (review). Functions called only from `init` lose that caller; the release note has to name it (5.4).
 - [ ] 4.5 Asset guard: an `X.js` with an `X.min.js` sibling is file-entity-only, plus `index_vendored_js`. Tests are both asset-ingestion-guards scenarios.
 - [ ] 4.6 3.1 passes on all fixtures, and the repo-tree guard reports zero collisions.
 
@@ -60,4 +62,8 @@
 - [ ] 5.1 Probe reruns: zero collisions on dogfood and OSH, and zero hybrids from `/tmp/hybrid`-style replay. Numbers recorded on #329.
 - [ ] 5.2 Fresh-seed and restart ENTITY_STATES dumps are identical apart from `dc.terms.created`. This is the #324 shape.
 - [ ] 5.3 Scorecard on the reseeded store: R1 36/36 (closes #324), OSH arm not below 10/10, dogfood loose band not below the beta.10 regrade.
-- [ ] 5.4 Release note and SETUP 03A record the identity break and the reseed.
+- [ ] 5.4 Release note and SETUP 03A record the identity break and the reseed, plus the visible losses:
+  - IIFE/AMD-wrapped JS indexes as files only;
+  - `init` callers are gone;
+  - same-arity Java overload calls have no edge;
+  - test-file locals are no longer entities.
