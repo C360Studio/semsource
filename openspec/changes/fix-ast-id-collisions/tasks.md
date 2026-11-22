@@ -11,9 +11,35 @@
 
 ## 2. Verify before code
 
-- [ ] 2.1 Rerun the #333 collision probe across Python, C and C++ fixtures and record any collisions. Any found become a follow-up issue, out of this break.
-- [ ] 2.2 Measure decision 3 on OSH against today's edges: how many edges arity keeps, and how many are lost to each of the three Q1 costs (same-arity overloads, external ancestor chains, overrides written differently). Record the numbers here before Q1 is closed.
-- [ ] 2.3 Confirm that no TS/JS/Svelte edge targets a local entity that decision 4 removes. Check `calls`, references and destructured bindings (the #103 rule) across dogfood; the reviewer read `ts/calls.go:103-129` as top-level only. If an edge does target one, decision 4 is revised before code.
+- [x] 2.1 Ran the #333 collision probe (python, c, cpp) over two local polyglot trees, 2026-11-22:
+  - **Tree 1:** 157k entities, 1,289 colliding IDs.
+  - **Tree 2:** 728k entities, 12,657 colliding IDs.
+  - **After removing third-party paths** (`.venv`, `site-packages`, uv cache, build output): tree 1 has 0, and tree 2 has 711, all C/C++ in a vendored `llama.cpp` checkout and CMake probe files. Neither tree has first-party Python.
+  - **Classes seen:**
+    - Python property getter/setter pairs, e.g. `_pytest/_code/code.py:631,638` `traceback`;
+    - C/C++ alternative `#if`/`#ifdef` definitions (`ARCHITECTURE_ID`, `move_cursor`);
+    - C++ overloads in a `.h` routed to the C parser (`common.h:1088,1091` `add`).
+  - The runtime guard covers all of them. Fixes are out of this break; follow-up is #338.
+- [x] 2.2 Measured on OSH core, 2026-11-22. The probe reproduced today's edges exactly: 23,319 `calls` edges from 29,373 resolved call sites, 3,329 of them constructors.
+
+  | Outcome | Sites | Share |
+  |---|---|---|
+  | (a) kept | 23,374 | 79.6% |
+  | (b) same-arity ambiguity | 2,043 | 7.0% |
+  | (c) hierarchy leaves the repo | 3,914 | 13.3% |
+  | (d) no arity match (a wrong edge today) | 6 | 0.02% |
+  | (e) override written differently | 36 | 0.1% |
+
+  - Of the (c) sites, 3,318 hit an import outside the repo and 596 hit an unresolved super (`Exception`, `Iterable`, …).
+  - Checking only the in-repo hierarchy would keep 3,616 of the (c) sites: about 12.3 points.
+  - 18,782 of 23,319 edges are kept (80.5%). 1,549 of 8,564 callers (18.1%) lose every outgoing edge.
+  - Top (b) callees: `Asserts.checkNotNull` 315, `getStringValue` 138, `new OWSException` 81.
+  - **This was surfaced to the owner for a new Q1 ruling. Implementation of 4.2 waits on it.** Hold: OPEN-Q Q1 edge-cost ruling after 2.2 measurement
+- [x] 2.3 **The claim holds** on dogfood, measured 2026-11-22.
+  - Dogfood has 475 local entities (330 distinct IDs): 352 TS const, 67 JS const, 31 var, 13 Svelte const, 10 TS function.
+  - The only statements pointing at them are `code.structure.contains` from their own file. Zero `calls`, references, `extends`, `implements`, `parameter`, `returns` or `belongs` edges come from a non-local subject.
+  - Destructured-binding locals receive no inbound edges, and no non-local ID changes.
+  - Caveat: `extractLocalKinds` (`ts/imports.go:118`) lets a local's `returns`/`parameter` edge target a local class. Both ends are dropped together, so the claim still holds. Task 4.3 gets a fixture for it.
 
 ## 3. Guard (additive; lands first and fails)
 
