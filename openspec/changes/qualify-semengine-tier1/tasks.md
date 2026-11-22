@@ -15,17 +15,17 @@
 ## 3. Composition and config
 
 - [x] 3.0 semengine#706 answered by alpha.7 (2026-11-22); owner re-approved the alpha.7 revision the same day (sha256:2f717b5b2e6e; line entered by claude at the owner's instruction).
-- [ ] 3.1 `graph.semantic_search` with its validation (embedding capability resolves; lexical on); tests for both refusals.
-- [ ] 3.2 Compose graph-embedding via `RegisterWithEmbedder` + `httpembedder`, set `embedding_enabled`, generation 6 and its fingerprint.
-- [ ] 3.3 Make the three "no graph-embedding" tests tier-conditional.
-- [ ] 3.4 Restore `configs/tiers/tier1-semantic.json`; document `docker compose --profile semantic up`.
-- [ ] 3.5 Readiness: the semantic index reports unavailable until graph-embedding is ready.
+- [x] 3.1 `graph.semantic_search` with its validation (embedding capability resolves; lexical on); tests for both refusals. Evidence: `config/config.go:36,311` (`validateSemanticSearch`, run after the registry check); refusals for no registry, embedding unbound, embedding bound to a chat endpoint and lexical off in `config/semantic_search_test.go:16`.
+- [x] 3.2 Compose graph-embedding via `RegisterWithEmbedder` + `httpembedder`, set `embedding_enabled`, generation 6 and its fingerprint. Evidence: `cmd/semsource/embedder.go:22,33` (embedder from the retained registry, `desired_config.go`), `cmd/semsource/run.go:537,813,907`; tier 0 fingerprint unchanged at 6 and a tier 1 fixture fingerprint, `cmd/semsource/composition_fingerprint_test.go:24,32`; the composed config constructs through the factory, `cmd/semsource/embedder_test.go` (`TestTierOneGraphEmbeddingConfigIsAccepted`).
+- [x] 3.3 Make the three "no graph-embedding" tests tier-conditional. Evidence: `cmd/semsource/run_test.go:364,426`, `cmd/semsource/migration_contract_test.go:77` (tier 0 asserts absence; tier 1 asserts presence, `embedding_enabled: true` and matching text suffixes).
+- [x] 3.4 Restore `configs/tiers/tier1-semantic.json`; document `docker compose --profile semantic up`. Evidence: `configs/tiers/tier1-semantic.json` (semembed `http://semembed:8081/v1`, arctic-embed-s, no `query_prefix`); `configs/tiers/README.md:89`, and the semembed path no longer says to set `query_prefix`.
+- [x] 3.5 Readiness: the semantic index reports unavailable until graph-embedding is ready. Evidence: `processor/source-manifest/readiness.go:56` (`foldSemanticReadiness`), `workbench_capabilities.go:333` (capabilities and `/status`), MCP `source_status` via `SemanticReadinessJSON`; tests `processor/source-manifest/semantic_readiness_test.go:30` and `processor/mcp-gateway/nats_integration_test.go:219`.
 
 ## 4. graph_search
 
-- [ ] 4.1 Merged `relevance`, `word_rank`, `vector_rank` and the `merge` disclosure; description states the score scale.
-- [ ] 4.2 Fusion tools pass `provenance` through, and their descriptions state the Tier 1 `similarity` scale.
-- [ ] 4.3 `TestToolsListSchemaBudget` passes.
+- [x] 4.1 Merged `relevance`, `word_rank`, `vector_rank` and the `merge` disclosure; description states the score scale. Evidence: `processor/mcp-gateway/graph_matches.go:72,261`, `query_tools.go:131`, retrieval note in `disclosure.go`; live graph-query + graph-embedding test `processor/mcp-gateway/graph_search_tier1_integration_test.go:85` (honoured and `honoured:false`).
+- [x] 4.2 Fusion tools pass `provenance` through, and their descriptions state the Tier 1 `similarity` scale. Evidence: `processor/code-context/provenance_integration_test.go:28` (real fusionnats over `mergedSearch`: `embedding`, `lexical`, unhonoured merge `lexical`); descriptions in `processor/mcp-gateway/component.go`, pinned by `graph_tools_test.go:67`.
+- [x] 4.3 `TestToolsListSchemaBudget` passes. Evidence: tools/list 8,121 of 8,192 B (was 7,603; `graph_search` 1,215 B).
 
 ## 5. Acceptance
 
