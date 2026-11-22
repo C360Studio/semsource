@@ -110,4 +110,13 @@
 - [x] 6.8 Reran 5.2 and 5.3 at `5518379`. The results are unchanged:
   - 5.2: 0 differing entities for both fresh vs restart and fresh vs reversed, over 7,828 keys.
   - 5.3: R1 36/36 rank-stable, OSH 13/13, and dogfood 32/36 with the loose band at 5/7. See `SUMMARY-fix329-tier0.md`.
+- [x] 6.9 Re-review round:
+  - Go-component M1: a new fold of an unchanged file is now counted (`9143d77`, `TestReindexCountsANewFoldOfAnUnchangedFile`).
+  - Graph-event R1: types in `declare global {}` reach localKinds again; their reference edges had been dangling.
+  - Graph-event R2: the exported members of merged namespace declarations are pre-scanned per chain, so a bare name no longer binds to a module-level namesake (`d13b191`).
+  - Both specialists approved at `d13b191`.
+  - The `declare module "foo.bar"` / `namespace foo.bar` ID collision is filed as #340.
+- [x] 6.10 Reran 5.2 and 5.3 at `d13b191`. The results are unchanged:
+  - 5.2: 0 differing entities for both fresh vs restart and fresh vs reversed.
+  - 5.3: R1 36/36, OSH 13/13, dogfood 32/36.
 

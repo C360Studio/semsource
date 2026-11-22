@@ -8,7 +8,7 @@ evidence for #324.
 
 | | |
 |---|---|
-| SemSource | built locally from `08227da` (branch `claude/329-ast-id-collisions`) by the base compose file's `build`; rerun at `5518379` after the review fixes, and the committed JSON is from that rerun |
+| SemSource | built locally from `08227da` (branch `claude/329-ast-id-collisions`) by the base compose file's `build`; rerun at `5518379` and again at `d13b191` after the review fixes; the committed JSON is from the `d13b191` rerun |
 | Config | [`fix329-tier0/tier0.json`](fix329-tier0/tier0.json), byte-identical to beta.10's; `tier0-reversed.json` is `jq '.sources \|= reverse'` of it |
 | Corpora | dogfood `b4c2cfd9026b20b5`, OSH `9b1e77bc0bf0291f`: the beta.10 trees, hashes rechecked |
 | Questions | dogfood: `questions.json` from `86626c0`, as in beta.10; OSH: `questions-osh.json`, unchanged since `9537f59` |
@@ -54,6 +54,8 @@ At `5518379` (TS block locals and namespace scoping, the ast-source fold fixes) 
 exactly. Dogfood is 32/36 with 569,361 bytes and 7,828 entities in both legs, R1 is 36/36 RANK-STABLE, and OSH is
 13/13 with 195,263 bytes and 28,461 entities. Neither corpus contains the module-level block or namespace shapes,
 which is why the 5.1 probe already showed zero collisions there.
+
+At `d13b191` (the `declare global` and merged-namespace fixes) every figure reproduces again.
 
 ## Not covered
 
