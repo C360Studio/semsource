@@ -76,7 +76,17 @@
   - OSH skips 14 vendored files under the guard: 10 `.min.js` and 4 twins.
   - Sensitivity: the branch tree includes the `testdata/idcollisions` fixtures, which collide under `main` and are now clean.
   - Numbers posted on #329.
-- [ ] 5.2 Fresh-seed and restart ENTITY_STATES dumps are identical apart from `dc.terms.created`. This is the #324 shape.
+- [x] 5.2 Fresh-seed and restart ENTITY_STATES dumps are identical apart from `dc.terms.created`. This is the #324 shape. Done 2026-11-22 at `396123d`: a local build on the beta.10 dogfood corpus with the beta.10 `tier0.json`, in compose project `s52` on ports 28080/25222. Three legs: a fresh seed, a restart of `semsource` alone on the same NATS volume, and a fresh seed with `tier0-reversed.json`. Every `ENTITY_STATES` key and value was dumped read-only.
+
+  | Comparison | Keys | Entities differing in content |
+  |---|---|---|
+  | fresh vs restart | 7,828 = 7,828, same platform `semsource-d7623c` | **0** |
+  | fresh vs reversed source order | 7,828 = 7,828, same key set once the per-store platform segment is stripped | **0** |
+
+  - Content means each entity's triples by (subject, predicate, object, source), with `dc.terms.created` excluded. Every differing triple was `dc.terms.created`: 12,954 per comparison, and nothing else.
+  - The excluded fields are write-time metadata, not content: per-triple `timestamp` and the entity's `updated_at`.
+  - Observed, not judged: a fresh seed leaves `updated_at` at `0001-01-01T00:00:00Z` on all 7,828 entities, and a restart sets it on all 7,828. That is SemEngine graph-ingest behaviour. It does not gate 5.2.
+  - Ranking is out of scope for this check; 5.3 measures it (R1).
 - [ ] 5.3 Scorecard on the reseeded store: R1 36/36 (closes #324), OSH arm not below 10/10, dogfood loose band not below the beta.10 regrade.
 - [ ] 5.4 Release note and SETUP 03A record the identity break and the reseed, plus the visible losses:
   - IIFE/AMD-wrapped JS indexes as files only;
