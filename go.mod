@@ -26,6 +26,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/moby/moby/client v0.6.2 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.64 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 )
 
 require (

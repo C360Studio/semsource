@@ -19,6 +19,17 @@ var compositionFingerprints = map[int]string{
 	3: "0a998ae19901b05af18e26f70fbbb105aa49f94817485dfb7eb8e3268ed4ca08",
 	4: "7115044e7482f2710561d33dcb41b11b31e33dba9a8eea31776aa00e31575075",
 	5: "cb3737fb36bdc0d16cf26b02c85b79c5f584b958ffd4a1e1a438ff87e3d0bad9",
+	// 6 added the opt-in tier 1 composition and left tier 0 unchanged, so it
+	// records generation 5's fingerprint (TestTierZeroWiringUnchangedByTierOne).
+	6: "cb3737fb36bdc0d16cf26b02c85b79c5f584b958ffd4a1e1a438ff87e3d0bad9",
+}
+
+// tierOneCompositionFingerprints records, per composition generation from 6,
+// the fingerprint of what buildSemstreamsConfig generates from
+// tierOneFingerprintFixture, so a change to the tier 1 wiring needs a
+// generation bump as a tier 0 change does.
+var tierOneCompositionFingerprints = map[int]string{
+	6: "a5b28d6e85989ea743601a4b4f366e51c8588d91eb0ae4d74893fc794e865ed5",
 }
 
 // fingerprintFixture is a fixed configuration with every field the generator
@@ -46,6 +57,23 @@ func fingerprintFixture() *config.Config {
 			{Type: "url", URLs: []string{"https://docs.acme.example/widgets"}, PollInterval: "300s"},
 		},
 	}
+}
+
+// tierOneFingerprintFixture is fingerprintFixture with graph.semantic_search on
+// and the embedding capability bound to semembed, as the shipped tier 1 config.
+func tierOneFingerprintFixture() *config.Config {
+	cfg := fingerprintFixture()
+	on := true
+	cfg.Graph = &config.GraphConfig{SemanticSearch: &on}
+	cfg.ModelRegistry = &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"semembed": {Provider: "openai", URL: "http://semembed:8081/v1", Model: "Snowflake/snowflake-arctic-embed-s"},
+		},
+		Capabilities: map[string]*model.CapabilityConfig{
+			model.CapabilityEmbedding: {Preferred: []string{"semembed"}},
+		},
+	}
+	return cfg
 }
 
 // compositionFingerprint hashes the sections of the generated composition that
@@ -79,35 +107,59 @@ func compositionFingerprint(t *testing.T, ssCfg *semconfig.Config) string {
 
 // spec: openspec/specs/runtime-configuration/spec.md#Requirement: A change to the generated composition requires a new generation
 func TestCompositionFingerprintMatchesGeneration(t *testing.T) {
-	ssCfg, err := buildSemstreamsConfig(fingerprintFixture(), "acme")
-	if err != nil {
-		t.Fatalf("buildSemstreamsConfig: %v", err)
+	for _, tc := range []struct {
+		name     string
+		fixture  *config.Config
+		recorded map[int]string
+		mapName  string
+	}{
+		{name: "tier 0", fixture: fingerprintFixture(), recorded: compositionFingerprints, mapName: "compositionFingerprints"},
+		{name: "tier 1", fixture: tierOneFingerprintFixture(), recorded: tierOneCompositionFingerprints,
+			mapName: "tierOneCompositionFingerprints"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ssCfg, err := buildSemstreamsConfig(tc.fixture, "acme")
+			if err != nil {
+				t.Fatalf("buildSemstreamsConfig: %v", err)
+			}
+			got := compositionFingerprint(t, ssCfg)
+			recorded, ok := tc.recorded[compositionGeneration]
+			if !ok || recorded == "" {
+				t.Fatalf("no fingerprint recorded for composition generation %d: record %q under %d in %s",
+					compositionGeneration, got, compositionGeneration, tc.mapName)
+			}
+			if got != recorded {
+				t.Fatalf("the generated composition changed without a generation bump (fingerprint %s, recorded %s for generation %d). "+
+					"A retained store keeps the previous wiring until the composition version is newer: "+
+					"bump compositionGeneration to %d in cmd/semsource/run.go and record %q under %d in %s",
+					got, recorded, compositionGeneration, compositionGeneration+1, got, compositionGeneration+1, tc.mapName)
+			}
+		})
 	}
-	got := compositionFingerprint(t, ssCfg)
-	recorded, ok := compositionFingerprints[compositionGeneration]
-	if !ok {
-		t.Fatalf("no fingerprint recorded for composition generation %d: record %q under %d in compositionFingerprints",
-			compositionGeneration, got, compositionGeneration)
-	}
-	if got != recorded {
-		t.Fatalf("the generated composition changed without a generation bump (fingerprint %s, recorded %s for generation %d). "+
-			"A retained store keeps the previous wiring until the composition version is newer: "+
-			"bump compositionGeneration to %d in cmd/semsource/run.go and record %q under %d in compositionFingerprints",
-			got, recorded, compositionGeneration, compositionGeneration+1, got, compositionGeneration+1)
+}
+
+// TestTierZeroWiringUnchangedByTierOne pins that adding tier 1 left the default
+// composition byte-identical: a retained tier 0 store adopts generation 6 with
+// the wiring it already runs.
+// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 is an explicit opt-in neural composition
+func TestTierZeroWiringUnchangedByTierOne(t *testing.T) {
+	if compositionFingerprints[6] != compositionFingerprints[5] {
+		t.Fatalf("tier 0 fingerprint at generation 6 is %s, generation 5 recorded %s; tier 1 must not change the default composition",
+			compositionFingerprints[6], compositionFingerprints[5])
 	}
 }
 
 // spec: openspec/specs/runtime-configuration/spec.md#Requirement: The composition version orders the binary and the operator
 func TestBuildSemstreamsConfigVersion(t *testing.T) {
-	// Generation 5. A generation bump updates these expectations with it.
+	// Generation 6. A generation bump updates these expectations with it.
 	tests := []struct {
 		name     string
 		revision int
 		want     string
 	}{
-		{name: "no revision keeps the generation's version", revision: 0, want: "5.0.0"},
-		{name: "revision is the minor position", revision: 2, want: "5.2.0"},
-		{name: "multi-digit revision", revision: 12, want: "5.12.0"},
+		{name: "no revision keeps the generation's version", revision: 0, want: "6.0.0"},
+		{name: "revision is the minor position", revision: 2, want: "6.2.0"},
+		{name: "multi-digit revision", revision: 12, want: "6.12.0"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
