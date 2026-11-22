@@ -44,7 +44,7 @@ hybrids.
 These are deliberate, and each was ruled on #329.
 
 - **Locals are not entities.** Function-scoped TS/JS/Svelte declarations, local functions included, no longer
-  appear, and test-file locals go too. So do block-scoped declarations at module level: anything declared inside a
+  appear, and test-file locals go too. Non-exported members of a namespace declared more than once in the same file go too. Each body's private declarations are separately scoped in TypeScript but would share one ID, and calls to them emit no edge. So do block-scoped declarations at module level: anything declared inside a
   module-level `if`/`else`, `try`/`catch`, loop, `switch` or bare `{}` block, `var` and classes included. Namespace
   members are kept.
 - **IIFE-, AMD- and UMD-wrapped JavaScript indexes as a file only.** Everything inside the wrapper function is

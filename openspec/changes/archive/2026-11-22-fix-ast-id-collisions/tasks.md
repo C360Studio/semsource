@@ -119,4 +119,5 @@
 - [x] 6.10 Reran 5.2 and 5.3 at `d13b191`. The results are unchanged:
   - 5.2: 0 differing entities for both fresh vs restart and fresh vs reversed.
   - 5.3: R1 36/36, OSH 13/13, dogfood 32/36.
+- [x] 6.11 The formal review (codex gpt-6-astra, REQUEST CHANGES at `a978734`) found a P1: in a namespace declared more than once in one file, same-named private members of separate bodies shared one ID, and calls bound to the first. Those members are now locals: not emitted, and references to them are inert (no edge, no fallback to a namesake). Single-declaration namespaces keep their private members. Tests: `TestMergedNamespacePrivatesAreLocals`, `TestSvelteMergedNamespacePrivatesAreLocals`, plus a fixture in `ambient_and_merged.ts`. The 5.2 and 5.3 evidence was not rerun for this one, because neither corpus has a merged namespace; the d13b191 runs already showed both corpora are insensitive to namespace changes.
 
