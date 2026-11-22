@@ -141,6 +141,67 @@ func deriveMatches(text *gtypes.TextSearchData) (matches []graphMatch, total int
 	return matches, total, truncated
 }
 
+// mergeDetailIndexNotReady is the merge detail of a tier 1 searchGraph answered
+// from the embedding search alone while the word index is not ready.
+const mergeDetailIndexNotReady = "index_not_ready"
+
+// buildGraphSearchResult renders a decoded searchGraph reply. A reply with a
+// word list renders it; a tier 1 reply answered from the embedding search
+// alone (text null, merge honoured with detail index_not_ready) renders the
+// embedding hits; anything else is the unknown rung. The merge step and the
+// hints ride in every case, so neither the reason nor an honoured hint's
+// answer is lost with the word list.
+func buildGraphSearchResult(data *gtypes.GlobalSearchData) graphSearchResult {
+	entity, path, hints := deriveHintAnswers(data)
+	result := graphSearchResult{Retrieval: unknownDisclosure()}
+	switch {
+	case data.Text != nil:
+		matches, total, truncated := deriveMatches(data.Text)
+		communities := deriveCommunities(data.Text)
+		result = graphSearchResult{
+			Retrieval: deriveDisclosure(data, communities), Answer: data.Text.Answer,
+			Matches: matches, TotalMatches: total, Truncated: truncated, CommunitySummaries: communities,
+		}
+	case embeddingAlone(data):
+		if matches, total, truncated, ok := deriveVectorMatches(data.Semantic); ok {
+			result = graphSearchResult{
+				Retrieval: deriveDisclosure(data, nil), Matches: matches, TotalMatches: total, Truncated: truncated,
+			}
+		}
+	}
+	result.Entity, result.Path, result.Hints, result.Merge = entity, path, hints, data.Merge
+	return result
+}
+
+// embeddingAlone says the reply is searchGraph's embedding-only answer.
+func embeddingAlone(data *gtypes.GlobalSearchData) bool {
+	m := data.Merge
+	return data.Text == nil && m != nil && m.Honoured && m.Detail == mergeDetailIndexNotReady
+}
+
+// deriveVectorMatches renders the embedding search's hits, in its order, as
+// bounded matches carrying their vector_rank. The hit's similarity is left
+// out: it is a cosine, on neither the word nor the merged scale, and
+// relevance must not carry a third. The hits are IDs only, so no label or
+// property renders. searchGraph asks the embedding search for at most
+// MaxSimilarityLimit hits, so a full list may have left more out.
+func deriveVectorMatches(raw json.RawMessage) (matches []graphMatch, total int, truncated, ok bool) {
+	var semantic gtypes.SemanticData
+	if len(raw) == 0 || json.Unmarshal(raw, &semantic) != nil {
+		return nil, 0, false, false
+	}
+	matches = []graphMatch{}
+	for n, hit := range semantic.Results {
+		if n == maxGraphMatches {
+			break
+		}
+		matches = append(matches, graphMatch{ID: hit.EntityID, Type: entityTypeSegment(hit.EntityID), VectorRank: n + 1})
+	}
+	total = len(semantic.Results)
+	truncated = total > len(matches) || total >= gtypes.MaxSimilarityLimit
+	return matches, total, truncated, true
+}
+
 // communitySummary is one community group holding matches whose record the
 // substrate read: its identifier and level (an identifier resolves only within
 // its level), and the record's own values.

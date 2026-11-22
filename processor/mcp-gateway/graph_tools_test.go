@@ -75,7 +75,7 @@ func TestTierOneDescriptionsStateTheMergedScale(t *testing.T) {
 		descriptions[tool.Name] = tool.Description
 	}
 	want := map[string][]string{
-		"graph_search": {"tier 1", "2/61", "not the word scale", "word_rank", "vector_rank", "merge.honoured false"},
+		"graph_search": {"tier 1", "2/61", "not the word scale", "word_rank", "vector_rank", "when merge.honoured", "honoured false"},
 		"code_search":  {"Tier 1", "`provenance`", "`similarity`", "2/61"},
 		"code_context": {"Tier 1", "`provenance`", "`similarity`", "2/61"},
 		"doc_context":  {"Tier 1", "`provenance`", "`similarity`", "2/61"},

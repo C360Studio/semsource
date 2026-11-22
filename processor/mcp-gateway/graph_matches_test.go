@@ -316,3 +316,38 @@ func TestHonouredHintsKeepTheirAnswers(t *testing.T) {
 		}
 	})
 }
+
+// TestEmbeddingOnlyReplyRendersVectorOrderBounded: an embedding-only answer
+// renders at most maxGraphMatches hits in vector order, and a full list of
+// MaxSimilarityLimit hits reads as truncated, since searchGraph asked for no
+// more. A null word list with no such merge stays the unknown rung.
+// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: graph_search discloses the merged answer at Tier 1
+func TestEmbeddingOnlyReplyRendersVectorOrderBounded(t *testing.T) {
+	hits := make([]gtypes.SimilarityHit, gtypes.MaxSimilarityLimit)
+	for i := range hits {
+		hits[i] = gtypes.SimilarityHit{EntityID: "acme.semsource.repo.golang.function.f" + strconv.Itoa(i), Similarity: 0.9}
+	}
+	semantic, err := json.Marshal(gtypes.SemanticData{Results: hits})
+	if err != nil {
+		t.Fatal(err)
+	}
+	merge := &gtypes.GlobalSearchHint{Hint: "semantic", Detail: mergeDetailIndexNotReady, Honoured: true}
+	got := buildGraphSearchResult(&gtypes.GlobalSearchData{Semantic: semantic, Merge: merge, Hints: []gtypes.GlobalSearchHint{}})
+	if len(got.Matches) != maxGraphMatches || got.TotalMatches != gtypes.MaxSimilarityLimit || !got.Truncated {
+		t.Fatalf("matches=%d total=%d truncated=%v, want %d/%d/true",
+			len(got.Matches), got.TotalMatches, got.Truncated, maxGraphMatches, gtypes.MaxSimilarityLimit)
+	}
+	for i, m := range got.Matches {
+		if m.VectorRank != i+1 || m.ID != hits[i].EntityID || m.Relevance != 0 {
+			t.Fatalf("match %d = %+v, want vector order with no relevance", i, m)
+		}
+	}
+	if got.Retrieval.Rung != rungEntitiesOnly || got.Merge != merge {
+		t.Errorf("retrieval=%+v merge=%+v", got.Retrieval, got.Merge)
+	}
+
+	unknown := buildGraphSearchResult(&gtypes.GlobalSearchData{Hints: []gtypes.GlobalSearchHint{}})
+	if unknown.Retrieval.Rung != rungUnknown || unknown.Matches != nil {
+		t.Errorf("null word list with no merge = %+v, want the unknown rung and no matches", unknown)
+	}
+}

@@ -73,6 +73,8 @@ func deriveDisclosure(data *gtypes.GlobalSearchData, communities []communitySumm
 func disclosureNote(d retrievalDisclosure, merge *gtypes.GlobalSearchHint) string {
 	hits := "word-search hits"
 	switch {
+	case merge != nil && merge.Honoured && merge.Detail == mergeDetailIndexNotReady:
+		hits = "embedding hits only (the word index is not ready; ranked by vector_rank)"
 	case merge != nil && merge.Honoured:
 		hits = "word and embedding search hits merged by rank"
 	case merge != nil:
