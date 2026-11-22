@@ -90,10 +90,13 @@ services:
   semembed:
     profiles: ["semantic"]
     # Pinned by immutable index digest (compose-packaging-hardening D6): a moved
-    # `latest` must never silently change what an install runs. Refresh with:
-    #   docker buildx imagetools inspect ghcr.io/c360studio/semembed:latest
+    # tag must never silently change what an install runs. 0.2.1 (rev ac52a62)
+    # is the first release that reads input_type and applies the model's query
+    # instruction itself, which tier 1 relies on (no product query_prefix, #234);
+    # the earlier pin (rev 7ceb528) ignored it. Refresh with:
+    #   docker buildx imagetools inspect ghcr.io/c360studio/semembed:<version>
     # and update the digest below to the reported index Digest.
-    image: ghcr.io/c360studio/semembed:latest@sha256:7972174f8e3462fd38bf3ad95d94870f406bb3d1350e0ea3280ce002cb2e09b2
+    image: ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33bcb8ae9bfd4f08888340824ed48dbc0c85b981b19a69557a292e
     environment:
       - SEMEMBED_PORT=8081
       - SEMEMBED_MODEL=${SEMEMBED_MODEL:-Snowflake/snowflake-arctic-embed-s}

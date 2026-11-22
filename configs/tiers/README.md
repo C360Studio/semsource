@@ -91,8 +91,8 @@ with the `semantic` profile:
 SEMSOURCE_CONFIG=tiers/tier1-semantic.json docker compose --profile semantic up
 ```
 
-**Set no `query_prefix` for semembed.** The embedder sends `input_type` (`query` or `document`) with
-every request, and semembed applies the model's own query instruction (arctic: `"Represent this sentence
+**Set no `query_prefix` for semembed 0.2.1 or later** (the compose pin). The embedder sends `input_type`
+(`query` or `document`) with every request, and semembed applies the model's own query instruction (arctic: `"Represent this sentence
 for searching relevant passages: "`). A `query_prefix` is only for a provider that does not apply the
 instruction itself.
 
@@ -119,7 +119,7 @@ The URL must end in `/v1` (the client adds `/embeddings`), and a reply naming an
 To run semembed outside compose, point the URL at `http://localhost:8081/v1`:
 
 ```bash
-docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:latest   # OpenAI-compatible embeddings
+docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33bcb8ae9bfd4f08888340824ed48dbc0c85b981b19a69557a292e   # OpenAI-compatible embeddings
 ```
 
 > **Resource footprint — semembed is CPU-heavy on the first index (local-dev caveat).** semembed runs
