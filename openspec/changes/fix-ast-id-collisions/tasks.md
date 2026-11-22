@@ -65,7 +65,17 @@
 
 ## 5. Acceptance
 
-- [ ] 5.1 Probe reruns: zero collisions on dogfood and OSH, and zero hybrids from `/tmp/hybrid`-style replay. Numbers recorded on #329.
+- [x] 5.1 Probe reruns at `6fc7e40`, 2026-11-22. The probe uses the branch's parsers over go/ts/js/svelte/java, models the asset guard's name and twin rules, and replays through `graph.ReplaceBySource`.
+
+  | Corpus | Entities (before → after) | Colliding IDs, in-file or anywhere (before → after) | Hybrids (before → after) |
+  |---|---|---|---|
+  | dogfood | 6,888 → 6,353 | 56 → **0** | 0 → **0** |
+  | OSH core | 77,405 → 27,903 | 2,264 → **0** | 233 → **0** |
+  | this branch's own tree | 6,593 | **0** | **0** |
+
+  - OSH skips 14 vendored files under the guard: 10 `.min.js` and 4 twins.
+  - Sensitivity: the branch tree includes the `testdata/idcollisions` fixtures, which collide under `main` and are now clean.
+  - Numbers posted on #329.
 - [ ] 5.2 Fresh-seed and restart ENTITY_STATES dumps are identical apart from `dc.terms.created`. This is the #324 shape.
 - [ ] 5.3 Scorecard on the reseeded store: R1 36/36 (closes #324), OSH arm not below 10/10, dogfood loose band not below the beta.10 regrade.
 - [ ] 5.4 Release note and SETUP 03A record the identity break and the reseed, plus the visible losses:
