@@ -52,22 +52,82 @@ type Parser struct {
 	defaultImports   map[string]string // local default-import name -> module specifier
 	moduleInfoMemo   map[string]moduleCallInfo
 
-	// Walk state: the namespace chain enclosing the node being walked, and per
-	// namespace the function names it declares. Pushed and popped by walkNode
-	// around a namespace body; empty at module level, so module-level IDs are
-	// built with no scope and do not change.
-	nsScope []string
-	nsFuncs []nsFrame
+	// Walk state: the namespace chain enclosing the node being walked, and the
+	// namespace bodies being walked. Pushed and popped by EnterNamespace; empty
+	// at module level, so module-level IDs are built with no scope and do not
+	// change. nsExported is refreshed per file with every namespace chain's
+	// exported members, merged across all of that chain's declarations.
+	nsScope    []string
+	nsFrames   []nsFrame
+	nsExported map[string]nsMembers
 }
 
-// nsFrame is one namespace on the walk stack: its full scope chain and the
-// functions and types declared directly in its body, so a bare call or type
-// reference inside the namespace resolves to the namespace's own member
-// (calls.go, imports.go) before falling back to an outer one.
-type nsFrame struct {
-	scope []string
+// nsMembers is the functions and types a namespace body declares.
+type nsMembers struct {
 	funcs map[string]bool
 	kinds map[string]ast.CodeEntityType
+}
+
+func newNSMembers() nsMembers {
+	return nsMembers{funcs: make(map[string]bool), kinds: make(map[string]ast.CodeEntityType)}
+}
+
+// add records the function or type a direct child of a namespace body declares.
+func (m nsMembers) add(node *sitter.Node, source []byte) {
+	collectTopLevelFuncNode(node, source, m.funcs)
+	collectTopLevelKind(node, source, m.kinds)
+}
+
+// nsFrame is one namespace body on the walk stack: its full scope chain and
+// every member it declares, exported or not, since inside its own body a
+// non-exported member is visible too.
+type nsFrame struct {
+	scope []string
+	own   nsMembers
+}
+
+// chainKey keys a namespace chain. The separator is not a legal identifier
+// character, so `declare module "a.b"` (one segment) and `namespace a.b` (two)
+// stay distinct chains.
+func chainKey(chain []string) string { return strings.Join(chain, "\x00") }
+
+// collectNamespaceExports pre-scans a file for every namespace or module
+// declaration outside a local scope and merges, per full scope chain, the
+// members other declarations of that chain can see: exported ones, or all of
+// them in an ambient (`declare`) context, where members are implicitly
+// exported. TypeScript merges same-chain declarations this way.
+func collectNamespaceExports(root *sitter.Node, source []byte) map[string]nsMembers {
+	out := make(map[string]nsMembers)
+	var walk func(n *sitter.Node, chain []string, ambient bool)
+	walk = func(n *sitter.Node, chain []string, ambient bool) {
+		if IsLocalScope(n) {
+			return
+		}
+		if n.Type() == "ambient_declaration" {
+			ambient = true
+		}
+		if segments := NamespaceSegments(n, source); segments != nil {
+			chain = append(append([]string(nil), chain...), segments...)
+			if body := n.ChildByFieldName("body"); body != nil {
+				key := chainKey(chain)
+				m, ok := out[key]
+				if !ok {
+					m = newNSMembers()
+					out[key] = m
+				}
+				for i := 0; i < int(body.NamedChildCount()); i++ {
+					if c := body.NamedChild(i); ambient || c.Type() == "export_statement" {
+						m.add(c, source)
+					}
+				}
+			}
+		}
+		for i := 0; i < int(n.NamedChildCount()); i++ {
+			walk(n.NamedChild(i), chain, ambient)
+		}
+	}
+	walk(root, nil, false)
+	return out
 }
 
 // NewParser creates a new TypeScript/JavaScript parser
@@ -157,7 +217,8 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	p.namespaceImports = extractNamespaceImports(rootNode, content)
 	p.defaultImports = extractDefaultImports(rootNode, content)
 	p.moduleInfoMemo = make(map[string]moduleCallInfo)
-	p.nsScope, p.nsFuncs = nil, nil
+	p.nsScope, p.nsFrames = nil, nil
+	p.nsExported = collectNamespaceExports(rootNode, content)
 
 	entities := p.extractEntities(rootNode, content, relPath, lang, fileEntity.ID)
 	for _, entity := range entities {
@@ -426,7 +487,11 @@ func NamespaceSegments(node *sitter.Node, source []byte) []string {
 	}
 	name := nodeText(nameNode, source)
 	if nameNode.Type() == "string" {
-		name = strings.Trim(name, "\"'`")
+		// A module specifier is one name, dots and all.
+		if name = strings.Trim(name, "\"'`"); name == "" {
+			return nil
+		}
+		return []string{name}
 	}
 	if name == "" {
 		return nil
@@ -450,32 +515,61 @@ func (p *Parser) EnterNamespace(node *sitter.Node, source []byte) func() {
 	if segments == nil {
 		return func() {}
 	}
-	prevScope, prevFuncs := p.nsScope, p.nsFuncs
+	prevScope, prevFrames := p.nsScope, p.nsFrames
 	p.nsScope = p.scopeWith(segments...)
-	frame := nsFrame{scope: p.nsScope, funcs: make(map[string]bool), kinds: make(map[string]ast.CodeEntityType)}
+	frame := nsFrame{scope: p.nsScope, own: newNSMembers()}
 	if body := node.ChildByFieldName("body"); body != nil {
 		for i := 0; i < int(body.NamedChildCount()); i++ {
-			collectTopLevelFuncNode(body.NamedChild(i), source, frame.funcs)
-			collectTopLevelKind(body.NamedChild(i), source, frame.kinds)
+			frame.own.add(body.NamedChild(i), source)
 		}
 	}
-	p.nsFuncs = append(append([]nsFrame(nil), p.nsFuncs...), frame)
-	return func() { p.nsScope, p.nsFuncs = prevScope, prevFuncs }
+	p.nsFrames = append(append([]nsFrame(nil), p.nsFrames...), frame)
+	return func() { p.nsScope, p.nsFrames = prevScope, prevFrames }
 }
 
 // NamespaceScope returns the namespace chain enclosing the node being walked,
 // empty at module level.
 func (p *Parser) NamespaceScope() []string { return p.nsScope }
 
-// namespaceType finds name among the enclosing namespaces' own types,
-// innermost first, returning that namespace's scope and the type's kind.
-func (p *Parser) namespaceType(name string) ([]string, ast.CodeEntityType, bool) {
-	for i := len(p.nsFuncs) - 1; i >= 0; i-- {
-		if kind, ok := p.nsFuncs[i].kinds[name]; ok {
-			return p.nsFuncs[i].scope, kind, true
+// namespaceChain finds the innermost enclosing namespace chain whose visible
+// members satisfy has, and returns that chain. At each chain, innermost first,
+// the visible members are the body being walked, if it declares that chain,
+// plus the exported members of every declaration of the chain (merging).
+// `namespace A.B {}` encloses chain A without walking an A body, so only A's
+// exported members are visible there, as in TypeScript.
+func (p *Parser) namespaceChain(has func(nsMembers) bool) ([]string, bool) {
+	for n := len(p.nsScope); n > 0; n-- {
+		chain := p.nsScope[:n]
+		key := chainKey(chain)
+		for i := len(p.nsFrames) - 1; i >= 0; i-- {
+			if chainKey(p.nsFrames[i].scope) == key && has(p.nsFrames[i].own) {
+				return chain, true
+			}
+		}
+		if m, ok := p.nsExported[key]; ok && has(m) {
+			return chain, true
 		}
 	}
-	return nil, "", false
+	return nil, false
+}
+
+// namespaceFunc finds name among the enclosing namespaces' visible functions.
+func (p *Parser) namespaceFunc(name string) ([]string, bool) {
+	return p.namespaceChain(func(m nsMembers) bool { return m.funcs[name] })
+}
+
+// namespaceType finds name among the enclosing namespaces' visible types,
+// returning the declaring chain and the type's kind.
+func (p *Parser) namespaceType(name string) ([]string, ast.CodeEntityType, bool) {
+	var kind ast.CodeEntityType
+	scope, ok := p.namespaceChain(func(m nsMembers) bool {
+		k, found := m.kinds[name]
+		if found {
+			kind = k
+		}
+		return found
+	})
+	return scope, kind, ok
 }
 
 // memberInstanceName is the identity a class member is built under: its name,

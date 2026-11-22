@@ -144,8 +144,20 @@ func collectTopLevelKind(node *sitter.Node, source []byte, kinds map[string]ast.
 		}
 		return
 	case "ambient_declaration":
+		// `declare class X {}` wraps one declaration; `declare global {}` wraps
+		// a statement_block whose members are module-level for references and
+		// are emitted unscoped. `declare module "m" {}` and `declare namespace`
+		// are namespaces: their members resolve through the namespace frames.
+		// A bare statement_block anywhere else is a local scope (#329).
 		for i := 0; i < int(node.NamedChildCount()); i++ {
-			collectTopLevelKind(node.NamedChild(i), source, kinds)
+			child := node.NamedChild(i)
+			if child.Type() == "statement_block" {
+				for j := 0; j < int(child.NamedChildCount()); j++ {
+					collectTopLevelKind(child.NamedChild(j), source, kinds)
+				}
+				continue
+			}
+			collectTopLevelKind(child, source, kinds)
 		}
 		return
 	}

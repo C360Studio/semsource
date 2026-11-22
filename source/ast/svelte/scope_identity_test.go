@@ -74,7 +74,8 @@ func TestSvelteScriptBlockLocalsAndNamespaceMembers(t *testing.T) {
 
 // TestSvelteNamespaceCallsResolveToNamespaceMember applies the TS parser's
 // namespace call rule to a component script: a bare call inside a namespace
-// targets the namespace's own member, a top-level call the top-level one.
+// targets the namespace's own member, including an exported member of another
+// declaration of the same namespace, and a top-level call the top-level one.
 // spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestSvelteNamespaceCallsResolveToNamespaceMember(t *testing.T) {
 	src := `<script lang="ts">
@@ -82,6 +83,7 @@ func TestSvelteNamespaceCallsResolveToNamespaceMember(t *testing.T) {
     export function g() { return 1; }
     export function caller() { return g(); }
   }
+  namespace N { export function merged() { return g(); } }
   function g() { return 2; }
   function topCaller() { return g(); }
 </script>
@@ -106,6 +108,7 @@ func TestSvelteNamespaceCallsResolveToNamespaceMember(t *testing.T) {
 	for caller, want := range map[string]string{
 		fn([]string{"N"}, "caller"): fn([]string{"N"}, "g"),
 		fn(nil, "topCaller"):        fn(nil, "g"),
+		fn([]string{"N"}, "merged"): fn([]string{"N"}, "g"),
 	} {
 		e := byID[caller]
 		if e == nil {

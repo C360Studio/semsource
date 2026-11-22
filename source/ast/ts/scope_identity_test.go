@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semsource/source/ast"
@@ -340,4 +341,103 @@ export namespace A {
 			}
 		}
 	}
+}
+
+// refEdges is the exact edge set one entity carries.
+type refEdges struct{ calls, extends, params, returns []string }
+
+// assertRefEdges pins each entity's edges exactly and requires every target
+// to be carried by an entity of the same parse: a dangling target is as wrong
+// as a wrong one.
+func assertRefEdges(t *testing.T, ents []*ast.CodeEntity, want map[string]refEdges) {
+	t.Helper()
+	byID := map[string]*ast.CodeEntity{}
+	for _, e := range ents {
+		byID[e.ID] = e
+	}
+	for id, w := range want {
+		e := byID[id]
+		if e == nil {
+			t.Errorf("missing entity %s", id)
+			continue
+		}
+		for _, c := range []struct {
+			field     string
+			got, want []string
+		}{
+			{"Calls", e.Calls, w.calls},
+			{"Extends", e.Extends, w.extends},
+			{"Parameters", e.Parameters, w.params},
+			{"Returns", e.Returns, w.returns},
+		} {
+			if !equalStrings(c.got, c.want) {
+				t.Errorf("%s %s = %v, want %v", id, c.field, c.got, c.want)
+			}
+			for _, target := range c.got {
+				if byID[target] == nil && !strings.HasPrefix(target, "builtin:") && !strings.HasPrefix(target, "external:") {
+					t.Errorf("%s %s targets %s, which no entity carries", id, c.field, target)
+				}
+			}
+		}
+	}
+}
+
+// TestAmbientTypeReferencesResolveToTheirDeclarations pins that a type
+// declared in `declare global {}` is a module-level type for references, and
+// one in `declare module "m" {}` resolves within that module's scope.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestAmbientTypeReferencesResolveToTheirDeclarations(t *testing.T) {
+	src := `declare global { interface Win { x: number } }
+declare module "m" {
+  export interface Mod {}
+  export interface Sub extends Mod {}
+}
+export function useWin(w: Win): Win { return w; }
+`
+	auth := testAuthority("test-org")
+	mod := func(typ ast.CodeEntityType, name string) string {
+		return ast.NewCodeEntity(auth, "typescript", "test-project", typ, name, "a.ts").ID
+	}
+	inM := ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, []string{"m"}, "Mod", "a.ts").ID
+	assertRefEdges(t, parseTSFile(t, "a.ts", src), map[string]refEdges{
+		mod(ast.TypeFunction, "useWin"): {params: []string{mod(ast.TypeInterface, "Win")}, returns: []string{mod(ast.TypeInterface, "Win")}},
+		ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, []string{"m"}, "Sub", "a.ts").ID: {extends: []string{inM}},
+	})
+}
+
+// TestMergedNamespaceDeclarationsShareExportedMembers pins TypeScript's
+// namespace merging for bare names: a call or type reference inside one
+// declaration of a namespace chain resolves to an exported member of any
+// declaration of that chain or of an enclosing chain, while a non-exported
+// member stays visible only inside its own body and the name falls back to
+// module level.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestMergedNamespaceDeclarationsShareExportedMembers(t *testing.T) {
+	src := `namespace N { export function g() {} function priv() {} }
+namespace N { export function f() { return g(); } export function q() { return priv(); } }
+namespace M { export interface T {} }
+namespace M { export function useT(t: T): T { return t; } }
+namespace Outer { export function shared() {} export interface Sh {} function hidden() {} }
+namespace Outer.Inner { export function use(s: Sh): void { shared(); hidden(); } }
+function g() {}
+function priv() {}
+function shared() {}
+function hidden() {}
+interface T {}
+interface Sh {}
+export function topT(t: T): T { g(); return t; }
+`
+	auth := testAuthority("test-org")
+	id := func(typ ast.CodeEntityType, scope []string, name string) string {
+		return ast.NewScopedCodeEntity(auth, "typescript", "test-project", typ, scope, name, "merge.ts").ID
+	}
+	fn := func(scope []string, name string) string { return id(ast.TypeFunction, scope, name) }
+	n, m, outer := []string{"N"}, []string{"M"}, []string{"Outer"}
+	assertRefEdges(t, parseTSFile(t, "merge.ts", src), map[string]refEdges{
+		fn(n, "f"):                            {calls: []string{fn(n, "g")}},
+		fn(n, "q"):                            {calls: []string{fn(nil, "priv")}},
+		fn(m, "useT"):                         {params: []string{id(ast.TypeInterface, m, "T")}, returns: []string{id(ast.TypeInterface, m, "T")}},
+		fn([]string{"Outer", "Inner"}, "use"): {calls: []string{fn(outer, "shared"), fn(nil, "hidden")}, params: []string{id(ast.TypeInterface, outer, "Sh")}, returns: []string{"builtin:void"}},
+		fn(nil, "topT"):                       {calls: []string{fn(nil, "g")}, params: []string{id(ast.TypeInterface, nil, "T")}, returns: []string{id(ast.TypeInterface, nil, "T")}},
+	})
 }
