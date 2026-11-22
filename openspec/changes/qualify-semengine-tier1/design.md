@@ -112,10 +112,12 @@ disambiguation); #686 (query prefix carried by SemSource) closed in alpha.7; any
   against the GRAPH stream ceiling is remeasured here.
 - **Merged score scale.** Clients that threshold `relevance` on the word scale break at Tier 1. That
   is why the tool description and the adoption notes say so explicitly.
-- **Restart re-embeds most of the corpus.** httpembedder reports width 0 until its first reply, so on
-  each restart graph-embedding cannot vouch for the stored vectors it replays before that reply and
-  embeds them again (graph-embedding README, "Changing the embedder"; semengine#722). Every restart pays
-  the first-index CPU and seed time again.
+- **A restart re-embeds what hop 1 replays before the first reply.** httpembedder reports width 0
+  until its first reply, so graph-embedding cannot vouch for vectors it replays before that reply and
+  embeds them again (graph-embedding README, "Changing the embedder"; semengine#722). Measured on
+  dogfood (7,271 seed requests): a same-config restart repeated 10 requests and settled in 121 s
+  (`SUMMARY-tier1-alpha7.md`). The cost grows with how much hop 1 replays before the first reply;
+  OSH was not measured because its restart hit the GRAPH ceiling (#160).
 - **Outage recovery needs a restart.** graph-embedding's Worker does not retry a failed embedding; it
   waits for a new revision of the entity or a restart (graph-embedding README, "Failed entities and the
   repair lane"; semengine#724). After a provider outage the failed entities stay failed, and the index

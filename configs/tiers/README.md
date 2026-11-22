@@ -127,9 +127,10 @@ docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33
 > burst of inference and, by default, ONNX fans out across every core: **measured ~561% CPU (≈5.6 cores)
 > embedding a 21.5k-entity graph on a laptop** — fine on a server, rough on a dev machine. It is **not a
 > one-time cost on this pin**: vectors land in `EMBEDDING_INDEX` and steady-state watch is cheap, but the
-> HTTP embedder learns its vector width from its first reply, so on every restart graph-embedding cannot
-> vouch for the stored vectors it replays before that reply and embeds most of the corpus again
-> ([semengine#722](https://github.com/C360Studio/semengine/issues/722)). Expect the burst on each restart.
+> HTTP embedder learns its vector width from its first reply, so on a restart graph-embedding cannot
+> vouch for the stored vectors it replays before that reply and embeds those again
+> ([semengine#722](https://github.com/C360Studio/semengine/issues/722)). Measured on the dogfood corpus:
+> 10 repeated requests against 7,271 for the seed, settled in 121 s. A small burst on each restart.
 > Levers if it's hammering your machine:
 > - **Cap the container CPU** — `docker run --cpus=2 ...` up front, or **live with no restart / no lost
 >   progress**: `docker update --cpus=2 semembed` (drops ~561%→~200%; the initial index just takes
