@@ -13,6 +13,7 @@
 
 ## 3. Composition and config
 
+- [ ] 3.0 Owner ruling 2026-11-21: implementation waits for an answer on semengine#706 (fusion nl stays word-only at alpha.6). Hold: OPEN-Q semengine#706 must be answered before implementation
 - [ ] 3.1 `graph.semantic_search` with its validation (embedding capability resolves; lexical on); tests for both refusals.
 - [ ] 3.2 Compose graph-embedding via `RegisterWithEmbedder` + `httpembedder`, set `embedding_enabled`, generation 6 and its fingerprint.
 - [ ] 3.3 Make the three "no graph-embedding" tests tier-conditional.
