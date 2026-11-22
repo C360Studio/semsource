@@ -51,6 +51,23 @@ type Parser struct {
 	namespaceImports map[string]string // local namespace name -> module specifier
 	defaultImports   map[string]string // local default-import name -> module specifier
 	moduleInfoMemo   map[string]moduleCallInfo
+
+	// Walk state: the namespace chain enclosing the node being walked, and per
+	// namespace the function names it declares. Pushed and popped by walkNode
+	// around a namespace body; empty at module level, so module-level IDs are
+	// built with no scope and do not change.
+	nsScope []string
+	nsFuncs []nsFrame
+}
+
+// nsFrame is one namespace on the walk stack: its full scope chain and the
+// functions and types declared directly in its body, so a bare call or type
+// reference inside the namespace resolves to the namespace's own member
+// (calls.go, imports.go) before falling back to an outer one.
+type nsFrame struct {
+	scope []string
+	funcs map[string]bool
+	kinds map[string]ast.CodeEntityType
 }
 
 // NewParser creates a new TypeScript/JavaScript parser
@@ -140,6 +157,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	p.namespaceImports = extractNamespaceImports(rootNode, content)
 	p.defaultImports = extractDefaultImports(rootNode, content)
 	p.moduleInfoMemo = make(map[string]moduleCallInfo)
+	p.nsScope, p.nsFuncs = nil, nil
 
 	entities := p.extractEntities(rootNode, content, relPath, lang, fileEntity.ID)
 	for _, entity := range entities {
@@ -270,7 +288,7 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 			// Extract methods from the class body. Scope passes the class name
 			// so two methods named "submit" in different classes within the
 			// same file get distinct entity IDs.
-			methods := p.extractClassMethods(node, source, filePath, lang, entity.ID, []string{entity.Name})
+			methods := p.extractClassMethods(node, source, filePath, lang, entity.ID, p.scopeWith(entity.Name))
 			for _, method := range methods {
 				entity.Contains = append(entity.Contains, method.ID)
 				entities = append(entities, method)
@@ -318,13 +336,16 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 		entities = append(entities, varEntities...)
 	}
 
-	// Everything below a function-like node is local to it and not emitted
-	// (#331): a declaration's identity must not depend on which callback or
-	// block it sits in, and nothing addresses a local from outside its scope.
-	// The node itself was handled by the switch above.
-	if localScopeTypes[nodeType] {
+	// Everything below a local scope is not emitted (#331, #329): a
+	// declaration's identity must not depend on which callback or block it
+	// sits in, and nothing addresses a local from outside its scope. The node
+	// itself was handled by the switch above.
+	if IsLocalScope(node) {
 		return entities
 	}
+
+	// A namespace's members are scoped by its namespace chain (#329).
+	defer p.EnterNamespace(node, source)()
 
 	// Recursively process children
 	if cursor.GoToFirstChild() {
@@ -341,8 +362,16 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 }
 
 // localScopeTypes are the node types that open a scope whose declarations are
-// local: functions of every form, methods, and class static blocks. A namespace
-// body is a statement_block too, but its members are not local.
+// local: functions of every form, methods, class static blocks (#331), and the
+// module-level statements that open a block scope (#329) — if/else, every
+// loop form, try/catch/finally, switch, with and labeled statements. Listing
+// the statements, not only their statement_block bodies, also covers the
+// unbraced forms (`if (a) var x = 1;`, a `case` clause's bare declarations)
+// and loop-head and catch bindings.
+//
+// var is local here too, though JS hoists it to the module: the #329 ruling
+// scopes identity by block, and a block's var is conditional, so it is no
+// more addressable as a module symbol than the block's const.
 var localScopeTypes = map[string]bool{
 	"function_declaration":           true,
 	"generator_function_declaration": true,
@@ -352,11 +381,102 @@ var localScopeTypes = map[string]bool{
 	"arrow_function":                 true,
 	"method_definition":              true,
 	"class_static_block":             true,
+	"if_statement":                   true,
+	"for_statement":                  true,
+	"for_in_statement":               true,
+	"while_statement":                true,
+	"do_statement":                   true,
+	"try_statement":                  true,
+	"switch_statement":               true,
+	"with_statement":                 true,
+	"labeled_statement":              true,
 }
 
-// IsLocalScope reports whether declarations beneath a node of this type are
-// local to it, and so not emitted. Shared with the Svelte script walk.
-func IsLocalScope(nodeType string) bool { return localScopeTypes[nodeType] }
+// IsLocalScope reports whether declarations beneath node are local to it, and
+// so not emitted. A bare statement_block is local; one that is the body of a
+// namespace, module or `declare global` is not, since its members are
+// addressable from outside it. Shared with the Svelte script walk.
+func IsLocalScope(node *sitter.Node) bool {
+	if node.Type() != "statement_block" {
+		return localScopeTypes[node.Type()]
+	}
+	parent := node.Parent()
+	if parent == nil {
+		return true
+	}
+	switch parent.Type() {
+	case "internal_module", "module", "ambient_declaration":
+		return false
+	}
+	return true
+}
+
+// NamespaceSegments returns the scope segments a namespace or module
+// declaration adds for its members — `namespace A.B {}` adds A and B, and
+// `declare module "m" {}` adds m — or nil when node is not one. A `declare
+// global {}` block adds none: its members are globals. Shared with the Svelte
+// script walk.
+func NamespaceSegments(node *sitter.Node, source []byte) []string {
+	if t := node.Type(); t != "internal_module" && t != "module" {
+		return nil
+	}
+	nameNode := node.ChildByFieldName("name")
+	if nameNode == nil {
+		return nil
+	}
+	name := nodeText(nameNode, source)
+	if nameNode.Type() == "string" {
+		name = strings.Trim(name, "\"'`")
+	}
+	if name == "" {
+		return nil
+	}
+	return strings.Split(name, ".")
+}
+
+// scopeWith returns the current namespace chain extended by name, as a fresh
+// slice, for a member scope such as a class inside a namespace.
+func (p *Parser) scopeWith(names ...string) []string {
+	return append(append([]string(nil), p.nsScope...), names...)
+}
+
+// EnterNamespace pushes node onto the walk's namespace stack when it is a
+// namespace or module declaration, and returns the func that pops it (a no-op
+// otherwise). While pushed, declarations are scoped by the namespace chain and
+// bare calls and type names resolve against the namespace's own members
+// first. Shared with the Svelte script walk, whose calls this Parser resolves.
+func (p *Parser) EnterNamespace(node *sitter.Node, source []byte) func() {
+	segments := NamespaceSegments(node, source)
+	if segments == nil {
+		return func() {}
+	}
+	prevScope, prevFuncs := p.nsScope, p.nsFuncs
+	p.nsScope = p.scopeWith(segments...)
+	frame := nsFrame{scope: p.nsScope, funcs: make(map[string]bool), kinds: make(map[string]ast.CodeEntityType)}
+	if body := node.ChildByFieldName("body"); body != nil {
+		for i := 0; i < int(body.NamedChildCount()); i++ {
+			collectTopLevelFuncNode(body.NamedChild(i), source, frame.funcs)
+			collectTopLevelKind(body.NamedChild(i), source, frame.kinds)
+		}
+	}
+	p.nsFuncs = append(append([]nsFrame(nil), p.nsFuncs...), frame)
+	return func() { p.nsScope, p.nsFuncs = prevScope, prevFuncs }
+}
+
+// NamespaceScope returns the namespace chain enclosing the node being walked,
+// empty at module level.
+func (p *Parser) NamespaceScope() []string { return p.nsScope }
+
+// namespaceType finds name among the enclosing namespaces' own types,
+// innermost first, returning that namespace's scope and the type's kind.
+func (p *Parser) namespaceType(name string) ([]string, ast.CodeEntityType, bool) {
+	for i := len(p.nsFuncs) - 1; i >= 0; i-- {
+		if kind, ok := p.nsFuncs[i].kinds[name]; ok {
+			return p.nsFuncs[i].scope, kind, true
+		}
+	}
+	return nil, "", false
+}
 
 // memberInstanceName is the identity a class member is built under: its name,
 // plus a discriminator for the forms that may share a name in one class body.
@@ -399,7 +519,7 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeClass, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeClass, p.nsScope, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -541,7 +661,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeInterface, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeInterface, p.nsScope, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -578,7 +698,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeType, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeType, p.nsScope, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -599,7 +719,7 @@ func (p *Parser) extractEnum(node *sitter.Node, source []byte, filePath, lang, p
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeEnum, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeEnum, p.nsScope, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -620,7 +740,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeFunction, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeFunction, p.nsScope, name, filePath)
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine
@@ -725,7 +845,7 @@ func (p *Parser) destructuredEntities(patternNode *sitter.Node, source []byte, f
 		if name == "" {
 			continue
 		}
-		entity := ast.NewCodeEntity(p.authority, lang, p.project, entityType, name, filePath)
+		entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, entityType, p.nsScope, name, filePath)
 		entity.ContainedBy = parentID
 		entity.StartLine = int(binding.StartPoint().Row) + 1
 		entity.EndLine = int(binding.EndPoint().Row) + 1
@@ -757,7 +877,7 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 	var metadata string
 	if isArrowFunc {
 		// Create function entity for arrow functions
-		entity = ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeFunction, name, filePath)
+		entity = ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeFunction, p.nsScope, name, filePath)
 
 		// Check for async arrow function
 		if valueNode != nil {
@@ -785,9 +905,9 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 			}
 		}
 	} else if kind == "const" {
-		entity = ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeConst, name, filePath)
+		entity = ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeConst, p.nsScope, name, filePath)
 	} else {
-		entity = ast.NewCodeEntity(p.authority, lang, p.project, ast.TypeVar, name, filePath)
+		entity = ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeVar, p.nsScope, name, filePath)
 	}
 
 	entity.ContainedBy = parentID

@@ -53,7 +53,7 @@ func equalStrings(a, b []string) bool {
 
 // TestLocalsAreNotEntities pins #331: declarations local to a function, arrow,
 // method or static block are not emitted in any form, while module-level
-// declarations and namespace members are, under their unchanged IDs.
+// declarations (under their unchanged IDs) and namespace members are.
 // spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestLocalsAreNotEntities(t *testing.T) {
 	src := `export const shared = 1;
@@ -145,5 +145,199 @@ func TestClassMemberFormsGetDistinctStableIDs(t *testing.T) {
 	}
 	if calls := byID[id("make")].Calls; len(calls) != 1 || calls[0] != id("clone") {
 		t.Errorf("instance make calls %v, want [%s]", calls, id("clone"))
+	}
+}
+
+// TestModuleLevelBlockDeclarationsAreLocals pins the owner ruling on #329:
+// a declaration in a module-level block, loop, try or switch is a local, not
+// an entity, so it can neither collide with a sibling block's namesake nor
+// displace the module-level declaration of the same name. var is included:
+// it hoists in JS, but the ruling scopes identity by block, not by runtime
+// binding.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestModuleLevelBlockDeclarationsAreLocals(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"if/else branches", "if (A) { const cfg = 1 } else { const cfg = 2 }\n", nil},
+		{"block-local beside a module export", "if (globalThis.x) { const cfg = 1; }\nexport const cfg = 2;\n", []string{"const:cfg"}},
+		{"try/catch/finally", "try { const t = 1 } catch (e) { const c = e } finally { const f = 1 }\nexport const keep = 1;\n", []string{"const:keep"}},
+		{"loops", "for (const tmp of xs) { const inOf = tmp }\nfor (const k in o) { let inIn = k }\nfor (let i = 0; i < 1; i++) { const inFor = i }\nwhile (w) { const inWhile = 1 }\ndo { const inDo = 1 } while (w)\nexport const keep = 1;\n", []string{"const:keep"}},
+		{"switch cases", "switch (k) { case 1: const s = 1; break; default: { const d = 2 } }\nexport const keep = 1;\n", []string{"const:keep"}},
+		{"bare and labeled blocks", "{ const bare = 1; function inBlock() {} class InBlock {} }\nlbl: { const labeled = 1 }\nexport const keep = 1;\n", []string{"const:keep"}},
+		{"var in a block", "if (a) var hoisted = 1;\nif (b) { var hoisted = 2 }\nexport var keep = 1;\n", []string{"var:keep"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ents := parseTSFile(t, "a.ts", tt.src)
+			if got := sortedNames(ents); !equalStrings(got, tt.want) {
+				t.Fatalf("entities = %v, want %v", got, tt.want)
+			}
+			for _, e := range ents {
+				if want := ast.NewCodeEntity(testAuthority("test-org"), "typescript", "test-project", e.Type, e.Name, "a.ts").ID; e.ID != want {
+					t.Errorf("module-level ID = %s, want unchanged %s", e.ID, want)
+				}
+			}
+		})
+	}
+
+	// The surviving cfg is the export on line 2, not the block-local.
+	ents := parseTSFile(t, "a.ts", "if (globalThis.x) { const cfg = 1; }\nexport const cfg = 2;\n")
+	if len(ents) != 1 || ents[0].StartLine != 2 {
+		t.Fatalf("cfg entity = %+v, want the line-2 export", ents)
+	}
+}
+
+// TestNamespaceMembersAreScopedByNamespaceChain pins the owner ruling on
+// #329: a namespace member's ID carries its namespace chain, so namesakes in
+// two namespaces, or in a namespace and at module level, stay distinct, while
+// module-level IDs are unchanged. Bare calls inside a namespace resolve to the
+// namespace's own member, and class members inside one keep this.-resolution.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestNamespaceMembersAreScopedByNamespaceChain(t *testing.T) {
+	src := `export namespace A {
+  export const v = 1;
+  export function g() { return 1; }
+  export function caller() { return g(); }
+  export class K { run() { return this.stop(); } stop() {} }
+}
+export namespace B { export const v = 1; export function g() {} }
+namespace Outer.Inner { export const deep = 1; }
+namespace Outer { namespace Nested { export const n = 1; } }
+module Legacy { export function g() {} }
+declare namespace Ambient { const amb: number; }
+export function g() { return 2; }
+export function topCaller() { return g(); }
+export const v = 2;
+`
+	auth := testAuthority("test-org")
+	id := func(typ ast.CodeEntityType, scope []string, name string) string {
+		return ast.NewScopedCodeEntity(auth, "typescript", "test-project", typ, scope, name, "ns.ts").ID
+	}
+	want := map[string]bool{
+		id(ast.TypeConst, []string{"A"}, "v"):                                                            true,
+		id(ast.TypeFunction, []string{"A"}, "g"):                                                         true,
+		id(ast.TypeFunction, []string{"A"}, "caller"):                                                    true,
+		id(ast.TypeClass, []string{"A"}, "K"):                                                            true,
+		id(ast.TypeMethod, []string{"A", "K"}, "run"):                                                    true,
+		id(ast.TypeMethod, []string{"A", "K"}, "stop"):                                                   true,
+		id(ast.TypeConst, []string{"B"}, "v"):                                                            true,
+		id(ast.TypeFunction, []string{"B"}, "g"):                                                         true,
+		id(ast.TypeConst, []string{"Outer", "Inner"}, "deep"):                                            true,
+		id(ast.TypeConst, []string{"Outer", "Nested"}, "n"):                                              true,
+		id(ast.TypeFunction, []string{"Legacy"}, "g"):                                                    true,
+		id(ast.TypeConst, []string{"Ambient"}, "amb"):                                                    true,
+		ast.NewCodeEntity(auth, "typescript", "test-project", ast.TypeFunction, "g", "ns.ts").ID:         true,
+		ast.NewCodeEntity(auth, "typescript", "test-project", ast.TypeFunction, "topCaller", "ns.ts").ID: true,
+		ast.NewCodeEntity(auth, "typescript", "test-project", ast.TypeConst, "v", "ns.ts").ID:            true,
+	}
+	byID := map[string]*ast.CodeEntity{}
+	for _, e := range parseTSFile(t, "ns.ts", src) {
+		if byID[e.ID] != nil {
+			t.Errorf("duplicate ID %s", e.ID)
+		}
+		byID[e.ID] = e
+		if !want[e.ID] {
+			t.Errorf("unexpected entity %s", e.ID)
+		}
+	}
+	for w := range want {
+		if byID[w] == nil {
+			t.Errorf("missing entity %s", w)
+		}
+	}
+
+	calls := func(e *ast.CodeEntity) []string {
+		if e == nil {
+			return nil
+		}
+		return e.Calls
+	}
+	if got, w := calls(byID[id(ast.TypeFunction, []string{"A"}, "caller")]), id(ast.TypeFunction, []string{"A"}, "g"); len(got) != 1 || got[0] != w {
+		t.Errorf("A.caller calls %v, want [%s]", got, w)
+	}
+	topG := ast.NewCodeEntity(auth, "typescript", "test-project", ast.TypeFunction, "g", "ns.ts").ID
+	if got := calls(byID[ast.NewCodeEntity(auth, "typescript", "test-project", ast.TypeFunction, "topCaller", "ns.ts").ID]); len(got) != 1 || got[0] != topG {
+		t.Errorf("topCaller calls %v, want [%s]", got, topG)
+	}
+	if got, w := calls(byID[id(ast.TypeMethod, []string{"A", "K"}, "run")]), id(ast.TypeMethod, []string{"A", "K"}, "stop"); len(got) != 1 || got[0] != w {
+		t.Errorf("A.K.run calls %v, want [%s]", got, w)
+	}
+}
+
+// TestNamespaceTypeReferencesResolveInnermostFirst pins that a type reference
+// inside a namespace — extends, implements, a parameter or return annotation —
+// targets the namespace's own sibling type, falling back to module level for a
+// name the namespace does not declare, and that the same names at module level
+// still target the module-level types. Every edge is pinned exactly: a
+// dangling target is as wrong as a wrong one.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestNamespaceTypeReferencesResolveInnermostFirst(t *testing.T) {
+	src := `export class Base {}
+export interface Shape {}
+export class Top extends Base implements Shape { take(s: Shape): Base { return new Base(); } }
+export function topFn(b: Base): Shape { return b; }
+export namespace A {
+  export class Base {}
+  export interface Shape {}
+  export interface Wide extends Shape {}
+  export type Id = string;
+  export class Kid extends Base implements Shape { take(s: Shape): Base { return new Base(); } }
+  export function nsFn(b: Base, i: Id): Shape { return b; }
+  export function outer(t: Top): Kid { return new Kid(); }
+}
+`
+	auth := testAuthority("test-org")
+	mod := func(typ ast.CodeEntityType, name string) string {
+		return ast.NewCodeEntity(auth, "typescript", "test-project", typ, name, "refs.ts").ID
+	}
+	in := func(typ ast.CodeEntityType, scope []string, name string) string {
+		return ast.NewScopedCodeEntity(auth, "typescript", "test-project", typ, scope, name, "refs.ts").ID
+	}
+	a := []string{"A"}
+	byID := map[string]*ast.CodeEntity{}
+	for _, e := range parseTSFile(t, "refs.ts", src) {
+		byID[e.ID] = e
+	}
+	type edges struct{ extends, implements, params, returns []string }
+	tests := []struct {
+		id   string
+		want edges
+	}{
+		{mod(ast.TypeClass, "Top"), edges{extends: []string{mod(ast.TypeClass, "Base")}, implements: []string{mod(ast.TypeInterface, "Shape")}}},
+		{in(ast.TypeMethod, []string{"Top"}, "take"), edges{params: []string{mod(ast.TypeInterface, "Shape")}, returns: []string{mod(ast.TypeClass, "Base")}}},
+		{mod(ast.TypeFunction, "topFn"), edges{params: []string{mod(ast.TypeClass, "Base")}, returns: []string{mod(ast.TypeInterface, "Shape")}}},
+		{in(ast.TypeInterface, a, "Wide"), edges{extends: []string{in(ast.TypeInterface, a, "Shape")}}},
+		{in(ast.TypeClass, a, "Kid"), edges{extends: []string{in(ast.TypeClass, a, "Base")}, implements: []string{in(ast.TypeInterface, a, "Shape")}}},
+		{in(ast.TypeMethod, []string{"A", "Kid"}, "take"), edges{params: []string{in(ast.TypeInterface, a, "Shape")}, returns: []string{in(ast.TypeClass, a, "Base")}}},
+		{in(ast.TypeFunction, a, "nsFn"), edges{params: []string{in(ast.TypeClass, a, "Base"), in(ast.TypeType, a, "Id")}, returns: []string{in(ast.TypeInterface, a, "Shape")}}},
+		{in(ast.TypeFunction, a, "outer"), edges{params: []string{mod(ast.TypeClass, "Top")}, returns: []string{in(ast.TypeClass, a, "Kid")}}},
+	}
+	for _, tt := range tests {
+		e := byID[tt.id]
+		if e == nil {
+			t.Errorf("missing entity %s", tt.id)
+			continue
+		}
+		for _, c := range []struct {
+			field     string
+			got, want []string
+		}{
+			{"Extends", e.Extends, tt.want.extends},
+			{"Implements", e.Implements, tt.want.implements},
+			{"Parameters", e.Parameters, tt.want.params},
+			{"Returns", e.Returns, tt.want.returns},
+		} {
+			if !equalStrings(c.got, c.want) {
+				t.Errorf("%s %s = %v, want %v", tt.id, c.field, c.got, c.want)
+			}
+			for _, target := range c.got {
+				if byID[target] == nil {
+					t.Errorf("%s %s targets %s, which no entity carries", tt.id, c.field, target)
+				}
+			}
+		}
 	}
 }
