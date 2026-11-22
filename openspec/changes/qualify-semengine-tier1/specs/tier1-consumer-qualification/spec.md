@@ -73,7 +73,7 @@ every compared run. A run whose provider was configured but unreachable SHALL be
 unavailable evidence, never as a pass. Readiness SHALL report the semantic index ready only while
 graph-lexical and graph-embedding both report their index caught up. Readiness is index coverage,
 not provider liveness: each answer reports liveness itself, through `merge.honoured` on
-`graph_search` and `provenance` on the fusion tools.
+`graph_search`; fusion `provenance` cannot tell provider loss apart (semengine#723).
 
 #### Scenario: Provider missing during a qualification run
 

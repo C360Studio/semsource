@@ -55,8 +55,9 @@ const embeddingIndexLabel = "Embedding index"
 // embedding that failed while the provider was down leaves graph-embedding
 // degraded and not ready (semengine graph/follower envelope), but a provider
 // that goes down after the index caught up, with no new write to embed, still
-// reads ready here. Liveness is reported per answer: merge.honoured false on
-// searchGraph and the word-only provenance on fusion.
+// reads ready here. Liveness is reported per answer: merge.honoured on
+// graph_search; fusion provenance cannot tell provider loss apart
+// (semengine#723).
 func foldSemanticReadiness(lexical, embedding workbenchIndexReadiness) workbenchIndexReadiness {
 	halves := []workbenchIndexReadiness{embedding, lexical}
 	for _, half := range halves {

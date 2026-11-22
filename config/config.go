@@ -338,11 +338,16 @@ func (c *Config) validateSemanticSearch() error {
 	return nil
 }
 
-// checkEmbeddingURL checks offline what httpembedder needs of a base URL: an
-// absolute http or https URL with a host whose path ends in /v1, since the
-// client adds /embeddings. httpembedder refuses the first two only at Start, and
-// a wrong path only on the first request, so a Tier 1 boot would come up
-// degraded on a typo; validation names it instead. Nothing is dialled.
+// checkEmbeddingURL checks a tier 1 base URL offline: an absolute http or https
+// URL with a host, which httpembedder itself requires but refuses only at
+// Start, and a path ending in /v1, semembed's convention (the client adds
+// /embeddings), which httpembedder does not check and a wrong path fails only on
+// the first request. Validation names a typo instead of booting degraded.
+// Nothing is dialled.
+//
+// shortcut: /v1 is required because semembed is the only provider SemSource
+// ships for; drop it or make it per-provider when a provider with another API
+// root is supported.
 func checkEmbeddingURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -355,7 +360,7 @@ func checkEmbeddingURL(raw string) error {
 		return fmt.Errorf("has no host")
 	}
 	if !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), "/v1") {
-		return fmt.Errorf("must end in /v1 (the embedder adds /embeddings), for example http://semembed:8081/v1")
+		return fmt.Errorf("must end in /v1, the semembed convention (the embedder adds /embeddings), for example http://semembed:8081/v1")
 	}
 	return nil
 }
