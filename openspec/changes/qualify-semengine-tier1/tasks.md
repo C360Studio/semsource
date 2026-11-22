@@ -14,7 +14,7 @@
 
 ## 3. Composition and config
 
-- [ ] 3.0 semengine#706 answered by alpha.7 (2026-11-22); design revised for it. Hold: OPEN-Q owner re-approval of the alpha.7 revision before implementation
+- [x] 3.0 semengine#706 answered by alpha.7 (2026-11-22); owner re-approved the alpha.7 revision the same day (sha256:2f717b5b2e6e; line entered by claude at the owner's instruction).
 - [ ] 3.1 `graph.semantic_search` with its validation (embedding capability resolves; lexical on); tests for both refusals.
 - [ ] 3.2 Compose graph-embedding via `RegisterWithEmbedder` + `httpembedder`, set `embedding_enabled`, generation 6 and its fingerprint.
 - [ ] 3.3 Make the three "no graph-embedding" tests tier-conditional.
