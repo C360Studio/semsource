@@ -123,6 +123,11 @@ type Component struct {
 	// error: those trees belong to their own source scope.
 	boundariesSkipped atomic.Int64
 
+	// idCollisions counts declarations dropped because an earlier one in the
+	// same pass already holds their entity ID (dropDuplicateIDs). Non-zero
+	// means a parser identity bug, not lost input.
+	idCollisions atomic.Int64
+
 	// Pre-publish seed liveness (async-source-seed 5.7 residual): a large seed
 	// spends minutes parsing and offloading bodies before anything publishes,
 	// and a frozen publish count alone cannot separate that from a hang. These
@@ -370,6 +375,10 @@ func (c *Component) runSeed(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
 		}
+
+		// One entity per ID across the whole watch path, before anything reads
+		// the results: path sanitizing folds a/b.ts and a-b.ts onto one segment.
+		c.dropDuplicateIDs(results)
 
 		// Resolve cross-file type references now that the whole watch path is
 		// parsed. Languages whose names map deterministically onto paths (Go,
@@ -781,6 +790,9 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
 func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, pw *pathWatcher) error {
+	// Watch and reindex arrive here one file at a time; the initial index has
+	// already deduplicated across the watch path, so this is a no-op for it.
+	c.dropDuplicateIDs([]*semsourceast.ParseResult{result})
 	bodies := c.bodiesForResult(ctx, result, pw.root)
 	for _, entity := range result.Entities {
 		// Stamp raw source identity + version (ADR-0008 #2) so the entity's triple
@@ -981,6 +993,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		// Nested git trees the walk refused to enter (submodules, foreign
 		// repos) — informational: those trees are other sources' scope.
 		BoundariesSkipped: c.boundariesSkipped.Load(),
+		IDCollisions:      c.idCollisions.Load(),
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).

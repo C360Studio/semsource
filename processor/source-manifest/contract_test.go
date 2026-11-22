@@ -62,6 +62,7 @@ func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 		FilesParsed:       11,
 		BodiesOffloaded:   4,
 		BoundariesSkipped: 2,
+		IDCollisions:      3,
 		ErrorCount:        1,
 		Backpressure:      true,
 		Submodules: []sourcestatus.SubmoduleStatus{
@@ -96,6 +97,9 @@ func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 	}
 	if s.BoundariesSkipped != 2 {
 		t.Errorf("boundaries_skipped = %d, want 2", s.BoundariesSkipped)
+	}
+	if s.IDCollisions != 3 {
+		t.Errorf("id_collisions = %d, want 3", s.IDCollisions)
 	}
 	if s.FilesParsed != 11 || s.BodiesOffloaded != 4 {
 		t.Errorf("seed-liveness counters lost: %+v", s)

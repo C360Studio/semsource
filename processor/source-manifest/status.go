@@ -113,6 +113,7 @@ func (a *statusAggregator) buildStatus(namespace string) *StatusPayload {
 			FilesParsed:       r.FilesParsed,
 			BodiesOffloaded:   r.BodiesOffloaded,
 			BoundariesSkipped: r.BoundariesSkipped,
+			IDCollisions:      r.IDCollisions,
 			ErrorCount:        r.ErrorCount,
 			TypeCounts:        r.TypeCounts,
 			Backpressure:      r.Backpressure,

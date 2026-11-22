@@ -51,9 +51,12 @@ type SourceStatus struct {
 	BodiesOffloaded int64 `json:"bodies_offloaded,omitempty"`
 	// BoundariesSkipped counts nested git trees the ingest walk refused to
 	// enter — informational: those trees are other sources' scope.
-	BoundariesSkipped int64            `json:"boundaries_skipped,omitempty"`
-	ErrorCount        int64            `json:"error_count"`
-	TypeCounts        map[string]int64 `json:"type_counts,omitempty"`
+	BoundariesSkipped int64 `json:"boundaries_skipped,omitempty"`
+	// IDCollisions counts declarations an AST source dropped because an
+	// earlier one held their entity ID — a parser identity bug (#329).
+	IDCollisions int64            `json:"id_collisions,omitempty"`
+	ErrorCount   int64            `json:"error_count"`
+	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`
 	// Backpressure is true while this source's publisher is retrying against
 	// a refusing or saturated transport — no drops, no errors, functionally
 	// stalled. It separates "slow" from "stalled" without reading logs.

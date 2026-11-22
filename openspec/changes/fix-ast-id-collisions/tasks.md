@@ -43,8 +43,8 @@
 
 ## 3. Guard (additive; lands first and fails)
 
-- [ ] 3.1 `source/ast` test: per-class fixtures (Java overloads, TS scoped consts, Go `_`) fail on duplicate IDs today. Proven by `TestParseResultIDsAreUnique` failing before 4.x.
-- [ ] 3.2 `processor/ast-source`: dedup by ID before `bodiesForResult`, keeping the first, plus the cross-file check over the initial index; `id_collisions` status field; one aggregated warning per file. Proven by a unit test that feeds a result with a duplicate and asserts one publish, one body, and a count of 1. The status field is reviewed by `go-component-reviewer`.
+- [x] 3.1 `source/ast` test: per-class fixtures (Java overloads, TS scoped consts, Go `_`) fail on duplicate IDs today. Proven by `TestParseResultIDsAreUnique` failing before 4.x. Done 2026-11-22 (`source/ast/idcollision_guard_test.go`, fixtures in `source/ast/testdata/idcollisions/`). It fails on all three classes, and `TestRepositoryTreeIDsAreUnique` fails on dogfood. **Both are expected red until 4.6**, so the draft's CI `test` job is red until then.
+- [x] 3.2 `processor/ast-source`: dedup by ID before `bodiesForResult`, keeping the first, plus the cross-file check over the initial index; `id_collisions` status field; one aggregated warning per file. Proven by a unit test that feeds a result with a duplicate and asserts one publish, one body, and a count of 1. The status field is reviewed by `go-component-reviewer`. Done 2026-11-22 (`processor/ast-source/idguard.go`, `idguard_test.go`). A mutant that removes the per-result call fails the test (2 publishes, not 1).
 
 ## 4. Identity fixes (breaking; one storage break)
 
