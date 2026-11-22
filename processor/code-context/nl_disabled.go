@@ -34,8 +34,8 @@ var errNLNotEnabled = errs.ClassifiedCode(errs.ErrorInvalid, semgraph.ErrorCodeN
 
 // nlDisabledClient refuses every natural-language resolve as not_enabled and
 // passes symbol and prefix resolves through (#291). Without a search index an
-// nl resolve goes to graph.lexical.query.search, which nothing answers, and the
-// substrate reports that as a transient outage: a caller would retry a request
+// nl resolve goes to graph.query.mergedSearch, whose word search nothing
+// answers, and the substrate reports that as a transient outage: a caller would retry a request
 // this composition can never answer. Refusing at the resolve covers every verb
 // and both lenses, including doc_context, which resolves its query in nl mode.
 type nlDisabledClient struct {

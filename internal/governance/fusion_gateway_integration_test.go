@@ -311,7 +311,7 @@ func pollNeighbors(t *testing.T, ctx context.Context, gc *fusionnats.Client, id 
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		edges, err := gc.Neighbors(ctx, id, preds, dir)
+		neighbors, err := gc.Neighbors(ctx, id, preds, dir)
 		if err != nil {
 			// The readiness gate is not a failure — it is the condition this
 			// loop exists to wait out. #99 widened this deadline for cold CI
@@ -323,8 +323,8 @@ func pollNeighbors(t *testing.T, ctx context.Context, gc *fusionnats.Client, id 
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		if len(edges) > 0 {
-			return edges
+		if len(neighbors.Edges) > 0 {
+			return neighbors.Edges
 		}
 		time.Sleep(50 * time.Millisecond)
 	}

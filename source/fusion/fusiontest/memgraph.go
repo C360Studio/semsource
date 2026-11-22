@@ -111,7 +111,7 @@ func (m *MemGraph) Entities(_ context.Context, ids []string) (fusion.Hydration, 
 }
 
 // Neighbors implements fusion.RetrievalClient (Incoming returns sources as Target).
-func (m *MemGraph) Neighbors(_ context.Context, id string, preds []string, dir fusion.Direction) ([]fusion.Edge, error) {
+func (m *MemGraph) Neighbors(_ context.Context, id string, preds []string, dir fusion.Direction) (fusion.Neighbors, error) {
 	if dir == fusion.Outgoing {
 		var out []fusion.Edge
 		for _, e := range m.out[id] {
@@ -119,7 +119,7 @@ func (m *MemGraph) Neighbors(_ context.Context, id string, preds []string, dir f
 				out = append(out, e)
 			}
 		}
-		return out, nil
+		return fusion.Neighbors{Edges: out}, nil
 	}
 	var in []fusion.Edge
 	for src, edges := range m.out {
@@ -129,13 +129,13 @@ func (m *MemGraph) Neighbors(_ context.Context, id string, preds []string, dir f
 			}
 		}
 	}
-	return in, nil
+	return fusion.Neighbors{Edges: in}, nil
 }
 
 // Names implements fusion.RetrievalClient.
-func (m *MemGraph) Names(_ context.Context, _ string, limit int) ([]string, error) {
+func (m *MemGraph) Names(_ context.Context, _ string, limit int) (fusion.Names, error) {
 	if len(m.names) > limit {
-		return m.names[:limit], nil
+		return fusion.Names{Names: m.names[:limit]}, nil
 	}
-	return m.names, nil
+	return fusion.Names{Names: m.names}, nil
 }
