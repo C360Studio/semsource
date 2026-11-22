@@ -78,8 +78,9 @@ func (c *Component) docContext(ctx context.Context, _ *mcp.CallToolRequest, in Q
 
 // graphSearch answers a corpus-wide thematic question. It routes to
 // graph.query.searchGraph, which the pinned substrate answers as globalSearch:
-// a word search over every entity, grouped by community afterwards. It carries
-// no semantic fallback; a question whose words match nothing answers empty.
+// a word search over every entity, grouped by community afterwards. At tier 0
+// it is words only, so a question whose words match nothing answers empty; at
+// tier 1 it merges the word and embedding lists (see buildGraphSearchResult).
 //
 // The result is a RANKED, BOUNDED match list plus a disclosure of the rung the
 // answer reached. It is deliberately not the substrate payload verbatim: on a

@@ -152,13 +152,15 @@ func TestIntegration_GraphSearchDisclosesTheTierOneMerge(t *testing.T) {
 	}
 
 	// The indexes refuse index_not_ready until they have caught up, and the
-	// merge is not honoured until the embedding search answers.
+	// merge is not honoured until the embedding search answers. While the word
+	// index is still loading, an honoured embedding-only answer (detail
+	// index_not_ready) is a legal reply too, so wait for the merged detail.
 	var out graphSearchResult
 	var last string
 	merged := testutil.WaitFor(t, 30*time.Second, func() bool {
 		var ok bool
 		out, last, ok = search("glowing lamp")
-		return ok && out.Merge != nil && out.Merge.Honoured && len(out.Matches) > 0
+		return ok && out.Merge != nil && out.Merge.Honoured && out.Merge.Detail == "merged" && len(out.Matches) > 0
 	})
 	if !merged {
 		t.Fatalf("graph_search never answered a merged reply; last result: %s", last)

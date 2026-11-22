@@ -38,8 +38,9 @@ type Config struct {
 
 	// EmbeddingEnabled reports that the composition runs graph-embedding
 	// (tier 1). The semantic index is then ready only while graph-lexical and
-	// graph-embedding both report ready, so an unreachable provider never
-	// reads as a ready semantic index.
+	// graph-embedding both report ready. That is index coverage, not provider
+	// liveness: a provider lost after catch-up can still read ready, and each
+	// answer reports it through merge.honoured.
 	EmbeddingEnabled bool `json:"embedding_enabled,omitempty" schema:"type:bool,description:Whether the composition runs graph-embedding (tier 1),default:false,category:advanced"`
 
 	// Discovered records the component names boot-time discovery admitted,
