@@ -12,8 +12,9 @@ import (
 )
 
 // symbolsFor parses each file through the asset guard and returns, per base
-// name, how many non-container entities it yielded.
-func symbolsFor(t *testing.T, indexVendored bool, files map[string]string) map[string]int {
+// name, how many non-container entities it yielded, plus the component so a
+// caller can read its guard counters.
+func symbolsFor(t *testing.T, indexVendored bool, files map[string]string) (map[string]int, *Component) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "js"), 0o755); err != nil {
@@ -47,13 +48,20 @@ func symbolsFor(t *testing.T, indexVendored bool, files map[string]string) map[s
 		if res.FileEntity == nil {
 			t.Errorf("%s has no file entity", name)
 		}
+		published := false
 		for _, e := range res.Entities {
+			if e == res.FileEntity && e.Type == semsourceast.TypeFile {
+				published = true
+			}
 			if !containerTypes[e.Type] {
 				out[name]++
 			}
 		}
+		if !published {
+			t.Errorf("%s does not publish its file entity", name)
+		}
 	}
-	return out
+	return out, c
 }
 
 var twinFiles = map[string]string{
@@ -65,15 +73,21 @@ var twinFiles = map[string]string{
 // TestVendoredTwinIsFileEntityOnly pins asset-ingestion-guards, "Unminified
 // twins of minified assets are indexed as files": a vendored X.js beside
 // X.min.js keeps its file entity and yields no symbols; first-party JS is
-// untouched.
+// untouched. The twin is counted as a twin, not as a minified file.
 // spec: openspec/specs/asset-ingestion-guards/spec.md#Requirement: Unminified twins of minified assets are indexed as files
 func TestVendoredTwinIsFileEntityOnly(t *testing.T) {
-	got := symbolsFor(t, false, twinFiles)
+	got, c := symbolsFor(t, false, twinFiles)
 	if got["jquery.js"] != 0 || got["jquery.min.js"] != 0 {
 		t.Errorf("vendored files yielded symbols: %v", got)
 	}
 	if got["process_flow.js"] == 0 {
 		t.Errorf("first-party process_flow.js yielded no symbols: %v", got)
+	}
+	if n := c.vendoredTwinFiles.Load(); n != 1 {
+		t.Errorf("vendored_twin_files = %d, want 1 (jquery.js)", n)
+	}
+	if n := c.minifiedFiles.Load(); n != 1 {
+		t.Errorf("minified_files = %d, want 1 (jquery.min.js only)", n)
 	}
 }
 
@@ -81,9 +95,12 @@ func TestVendoredTwinIsFileEntityOnly(t *testing.T) {
 // off, so jquery.js yields its symbols again.
 // spec: openspec/specs/asset-ingestion-guards/spec.md#Requirement: Unminified twins of minified assets are indexed as files
 func TestIndexVendoredJSOptsBackIn(t *testing.T) {
-	got := symbolsFor(t, true, twinFiles)
+	got, c := symbolsFor(t, true, twinFiles)
 	if got["jquery.js"] == 0 {
 		t.Errorf("index_vendored_js: jquery.js yielded no symbols: %v", got)
+	}
+	if n := c.vendoredTwinFiles.Load(); n != 0 {
+		t.Errorf("vendored_twin_files = %d with the opt-in, want 0", n)
 	}
 	if got["process_flow.js"] == 0 {
 		t.Errorf("first-party process_flow.js yielded no symbols: %v", got)

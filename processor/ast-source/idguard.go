@@ -29,13 +29,22 @@ const maxCollisionIDsLogged = 5
 // When a result's file entity itself collides with an earlier one (path
 // sanitizing folds a/b.ts and a-b.ts onto one segment), the whole result is
 // dropped: its symbols would otherwise hang off, and its folder would contain,
-// the other file's entity.
-func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult) {
+// the other file's entity. Those results' paths are returned so the caller
+// can refuse them on the per-file watch path, which never sees the survivor.
+//
+// quiet, when non-nil, marks results whose drops were already counted by an
+// earlier pass: the periodic reindex re-runs this over every file, and an
+// unchanged file it will not republish must not re-count on every interval.
+// A quiet result is deduplicated exactly like any other; only the count and
+// the warning are skipped.
+func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult, quiet func(*semsourceast.ParseResult) bool) []string {
 	seen := make(map[string]bool)
+	var foldedFiles []string
 	for _, result := range results {
 		if result == nil {
 			continue
 		}
+		counted := quiet == nil || !quiet(result)
 		var dropped []string
 		if result.FileEntity != nil && seen[result.FileEntity.ID] {
 			for _, e := range result.Entities {
@@ -45,7 +54,10 @@ func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult) {
 			}
 			result.Entities = nil
 			result.FileEntity = nil
-			c.recordDropped(result.Path, dropped)
+			foldedFiles = append(foldedFiles, result.Path)
+			if counted {
+				c.recordDropped(result.Path, dropped)
+			}
 			continue
 		}
 		kept := result.Entities[:0]
@@ -65,8 +77,30 @@ func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult) {
 			result.Entities[i] = nil
 		}
 		result.Entities = kept
-		c.recordDropped(result.Path, dropped)
+		if counted {
+			c.recordDropped(result.Path, dropped)
+		}
 	}
+	return foldedFiles
+}
+
+// refuseFoldedFile withholds a watch-path parse of a file the last full pass
+// dropped as a folded duplicate (see pathWatcher.folded). Publishing it would
+// write its declarations under the survivor's IDs, a hybrid only a reseed
+// clears (graph-ingest never removes predicates, #336). Counted and warned
+// like any other drop: this pass would have published those declarations.
+func (c *Component) refuseFoldedFile(pw *pathWatcher, result *semsourceast.ParseResult) bool {
+	if result == nil || !pw.isFolded(result.Path) {
+		return false
+	}
+	var dropped []string
+	for _, e := range result.Entities {
+		if e != nil {
+			dropped = append(dropped, e.ID)
+		}
+	}
+	c.recordDropped(result.Path, dropped)
+	return true
 }
 
 // recordDropped counts and logs, once per file, the declarations one pass dropped.
@@ -95,4 +129,34 @@ func sampleIDs(ids []string) string {
 		return strings.Join(uniq[:maxCollisionIDsLogged], ",") + ",..."
 	}
 	return strings.Join(uniq, ",")
+}
+
+// setFolded replaces the folded-path set with the latest full pass's verdict
+// and returns the paths that left it. Every full pass (seed, periodic
+// reindex) recomputes the set from scratch, so a fold whose survivor was
+// deleted is un-dropped by the next reindex, which then promotes that file.
+func (pw *pathWatcher) setFolded(paths []string) (released map[string]bool) {
+	next := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		next[p] = true
+	}
+	pw.foldedMu.Lock()
+	defer pw.foldedMu.Unlock()
+	for p := range pw.folded {
+		if !next[p] {
+			if released == nil {
+				released = make(map[string]bool)
+			}
+			released[p] = true
+		}
+	}
+	pw.folded = next
+	return released
+}
+
+// isFolded reports whether the last full pass dropped path as a folded duplicate.
+func (pw *pathWatcher) isFolded(path string) bool {
+	pw.foldedMu.Lock()
+	defer pw.foldedMu.Unlock()
+	return pw.folded[path]
 }

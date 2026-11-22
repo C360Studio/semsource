@@ -130,7 +130,7 @@ func TestDropDuplicateIDs_FoldedFileDropsTheWholeResult(t *testing.T) {
 		Entities: []*semsourceast.CodeEntity{secondFile, {ID: "x.a-b-ts-baz"}}}
 	c := &Component{logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))}
 
-	c.dropDuplicateIDs([]*semsourceast.ParseResult{first, second})
+	c.dropDuplicateIDs([]*semsourceast.ParseResult{first, second}, nil)
 
 	if len(first.Entities) != 2 || first.FileEntity != firstFile {
 		t.Errorf("first result changed: %+v", first)
@@ -156,7 +156,7 @@ func TestDropDuplicateIDs_AcrossResultsKeepsFirstInWalkOrder(t *testing.T) {
 	}}
 	c := &Component{logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))}
 
-	c.dropDuplicateIDs([]*semsourceast.ParseResult{first, second})
+	c.dropDuplicateIDs([]*semsourceast.ParseResult{first, second}, nil)
 
 	if len(first.Entities) != 2 {
 		t.Errorf("first result lost entities: %d left, want 2", len(first.Entities))

@@ -151,10 +151,11 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 
 	// 2. AST source — code structure analysis
 	astEntry := SourceEntry{
-		Type:       "ast",
-		Path:       localPath,
-		Watch:      src.Watch,
-		BranchSlug: src.BranchSlug,
+		Type:            "ast",
+		Path:            localPath,
+		Watch:           src.Watch,
+		BranchSlug:      src.BranchSlug,
+		IndexVendoredJS: src.IndexVendoredJS,
 	}
 	if src.Language != "" {
 		astEntry.Language = src.Language
@@ -313,10 +314,11 @@ func expandBranchSources(src SourceEntry, bs workspace.BranchState) []SourceEntr
 
 	// 2. AST source pointing at worktree
 	astEntry := SourceEntry{
-		Type:       "ast",
-		Path:       bs.WorktreePath,
-		Watch:      src.Watch,
-		BranchSlug: bs.Slug,
+		Type:            "ast",
+		Path:            bs.WorktreePath,
+		Watch:           src.Watch,
+		BranchSlug:      bs.Slug,
+		IndexVendoredJS: src.IndexVendoredJS,
 	}
 	if src.Language != "" {
 		astEntry.Language = src.Language

@@ -152,6 +152,11 @@ func (c *Component) minifiedFileResult(pw *pathWatcher, filePath, routeLang stri
 	}
 	c.logger.Debug("minified asset — indexing file entity only, skipping symbol extraction",
 		"path", relPath, "detected_by", how)
+	if twin {
+		c.vendoredTwinFiles.Add(1)
+	} else {
+		c.minifiedFiles.Add(1)
+	}
 
 	hash := semsourceast.ComputeHash(content)
 	ext := strings.ToLower(filepath.Ext(filePath))
@@ -216,12 +221,13 @@ func (c *Component) enforceSymbolCap(result *semsourceast.ParseResult) *semsourc
 // minified skip's symbol count is unknowable by design — the file is never
 // parsed — so symbols are reported for cap breaches only.
 func (c *Component) logGuardSummary() {
-	minified, capped := c.minifiedFiles.Load(), c.cappedFiles.Load()
-	if minified+capped == 0 {
+	minified, twins, capped := c.minifiedFiles.Load(), c.vendoredTwinFiles.Load(), c.cappedFiles.Load()
+	if minified+twins+capped == 0 {
 		return
 	}
 	c.logger.Info("asset guards withheld symbol extraction",
 		"minified_files", minified,
+		"vendored_twin_files", twins,
 		"capped_files", capped,
 		"capped_symbols", c.cappedSymbols.Load())
 }

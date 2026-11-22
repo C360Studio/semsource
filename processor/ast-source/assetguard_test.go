@@ -286,6 +286,7 @@ func (l *logCapture) messages() []string {
 
 // TestGuardSummary — one aggregate line when something was withheld, silence
 // on a clean seed.
+// spec: openspec/specs/asset-ingestion-guards/spec.md#Requirement: Withholding is summarized, not sprayed
 func TestGuardSummary(t *testing.T) {
 	t.Run("nonzero emits exactly one line", func(t *testing.T) {
 		capture := newLogCapture(slog.LevelInfo)
@@ -297,6 +298,23 @@ func TestGuardSummary(t *testing.T) {
 		msgs := capture.messages()
 		if len(msgs) != 1 || msgs[0] != "asset guards withheld symbol extraction" {
 			t.Errorf("expected exactly the summary line, got %v", msgs)
+		}
+	})
+	t.Run("vendored twins alone emit the line with their own count", func(t *testing.T) {
+		capture := newLogCapture(slog.LevelInfo)
+		c := &Component{logger: slog.New(capture)}
+		c.vendoredTwinFiles.Store(2)
+		c.logGuardSummary()
+		if len(capture.records) != 1 {
+			t.Fatalf("expected exactly the summary line, got %v", capture.messages())
+		}
+		attrs := map[string]int64{}
+		capture.records[0].Attrs(func(a slog.Attr) bool {
+			attrs[a.Key] = a.Value.Int64()
+			return true
+		})
+		if attrs["vendored_twin_files"] != 2 || attrs["minified_files"] != 0 {
+			t.Errorf("summary attrs = %v, want vendored_twin_files=2 minified_files=0", attrs)
 		}
 	})
 	t.Run("clean seed is silent", func(t *testing.T) {
