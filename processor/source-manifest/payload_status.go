@@ -52,8 +52,8 @@ type SourceStatus struct {
 	// BoundariesSkipped counts nested git trees the ingest walk refused to
 	// enter — informational: those trees are other sources' scope.
 	BoundariesSkipped int64 `json:"boundaries_skipped,omitempty"`
-	// IDCollisions counts declarations an AST source dropped because an
-	// earlier one held their entity ID — a parser identity bug (#329).
+	// IDCollisions counts declarations an AST source has dropped since start
+	// because an earlier one held their entity ID — a parser identity bug (#329).
 	IDCollisions int64            `json:"id_collisions,omitempty"`
 	ErrorCount   int64            `json:"error_count"`
 	TypeCounts   map[string]int64 `json:"type_counts,omitempty"`

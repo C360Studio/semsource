@@ -605,6 +605,9 @@ func (c *Component) performFullIndex(ctx context.Context) {
 		}
 
 		// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
+		// shortcut: no cross-file ID dedup here (re-running it every interval would
+		// re-count unchanged files); a path fold that first appears on reindex or
+		// watch is caught at the next initial index (fix-ast-id-collisions D1).
 		c.publishHierarchy(ctx, results, pw.scopedSystem)
 
 		for _, result := range results {

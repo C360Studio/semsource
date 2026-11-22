@@ -64,7 +64,8 @@ func TestPublishParseResult_DuplicateIDPublishesFirstDeclarationOnce(t *testing.
 	}
 
 	client := &recordingClient{}
-	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
 	pub, err := entitypub.New(client, logger)
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +107,37 @@ func TestPublishParseResult_DuplicateIDPublishesFirstDeclarationOnce(t *testing.
 	}
 	if r := c.buildStatusReport("watching"); r.IDCollisions != 1 {
 		t.Errorf("status report id_collisions = %d, want 1", r.IDCollisions)
+	}
+	if n := bytes.Count(logs.Bytes(), []byte("share an entity ID")); n != 1 {
+		t.Errorf("collision warnings = %d, want 1 aggregated warning", n)
+	}
+	if !bytes.Contains(logs.Bytes(), []byte("path=a.test.ts")) {
+		t.Errorf("collision warning does not name the file: %s", logs.String())
+	}
+}
+
+// TestDropDuplicateIDs_FoldedFileDropsTheWholeResult covers a file entity that
+// collides across results: keeping the later file's symbols would make them,
+// and its folder, point at the other file's entity.
+func TestDropDuplicateIDs_FoldedFileDropsTheWholeResult(t *testing.T) {
+	firstFile := &semsourceast.CodeEntity{ID: "x.file.a-b-ts"}
+	secondFile := &semsourceast.CodeEntity{ID: "x.file.a-b-ts"}
+	first := &semsourceast.ParseResult{Path: "a/b.ts", FileEntity: firstFile,
+		Entities: []*semsourceast.CodeEntity{firstFile, {ID: "x.a-b-ts-foo"}}}
+	second := &semsourceast.ParseResult{Path: "a-b.ts", FileEntity: secondFile,
+		Entities: []*semsourceast.CodeEntity{secondFile, {ID: "x.a-b-ts-baz"}}}
+	c := &Component{logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))}
+
+	c.dropDuplicateIDs([]*semsourceast.ParseResult{first, second})
+
+	if len(first.Entities) != 2 || first.FileEntity != firstFile {
+		t.Errorf("first result changed: %+v", first)
+	}
+	if second.FileEntity != nil || len(second.Entities) != 0 {
+		t.Errorf("second result kept entities under a folded file ID: file=%v entities=%+v", second.FileEntity, second.Entities)
+	}
+	if n := c.idCollisions.Load(); n != 2 {
+		t.Errorf("id_collisions = %d, want 2 (file and symbol)", n)
 	}
 }
 

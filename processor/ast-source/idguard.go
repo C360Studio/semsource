@@ -25,6 +25,11 @@ const maxCollisionIDsLogged = 5
 //
 // Parsers emit in source order, so the survivor is deterministic. Across
 // results the initial index passes them in walk order, which is lexical.
+//
+// When a result's file entity itself collides with an earlier one (path
+// sanitizing folds a/b.ts and a-b.ts onto one segment), the whole result is
+// dropped: its symbols would otherwise hang off, and its folder would contain,
+// the other file's entity.
 func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult) {
 	seen := make(map[string]bool)
 	for _, result := range results {
@@ -32,6 +37,17 @@ func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult) {
 			continue
 		}
 		var dropped []string
+		if result.FileEntity != nil && seen[result.FileEntity.ID] {
+			for _, e := range result.Entities {
+				if e != nil {
+					dropped = append(dropped, e.ID)
+				}
+			}
+			result.Entities = nil
+			result.FileEntity = nil
+			c.recordDropped(result.Path, dropped)
+			continue
+		}
 		kept := result.Entities[:0]
 		for _, e := range result.Entities {
 			if e == nil {
@@ -49,15 +65,20 @@ func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult) {
 			result.Entities[i] = nil
 		}
 		result.Entities = kept
-		if len(dropped) == 0 {
-			continue
-		}
-		c.idCollisions.Add(int64(len(dropped)))
-		c.logger.Warn("dropped declarations that share an entity ID with an earlier one",
-			"path", result.Path,
-			"dropped", len(dropped),
-			"ids", sampleIDs(dropped))
+		c.recordDropped(result.Path, dropped)
 	}
+}
+
+// recordDropped counts and logs, once per file, the declarations one pass dropped.
+func (c *Component) recordDropped(path string, dropped []string) {
+	if len(dropped) == 0 {
+		return
+	}
+	c.idCollisions.Add(int64(len(dropped)))
+	c.logger.Warn("dropped declarations that share an entity ID with an earlier one",
+		"path", path,
+		"dropped", len(dropped),
+		"ids", sampleIDs(dropped))
 }
 
 func sampleIDs(ids []string) string {

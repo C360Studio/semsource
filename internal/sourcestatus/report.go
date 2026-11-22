@@ -57,8 +57,9 @@ type Report struct {
 	// enter (submodules, foreign repos) — informational: those trees are
 	// other sources' scope.
 	BoundariesSkipped int64 `json:"boundaries_skipped,omitempty"`
-	// IDCollisions counts declarations an AST source dropped because an
-	// earlier one in the same pass held their entity ID. Non-zero is a parser
+	// IDCollisions counts declarations an AST source has dropped since start
+	// because an earlier one in the same pass held their entity ID; a file
+	// still colliding adds again on each re-parse. Non-zero is a parser
 	// identity bug (#329), surfaced instead of merged into a hybrid entity.
 	IDCollisions int64            `json:"id_collisions,omitempty"`
 	ErrorCount   int64            `json:"error_count"`
