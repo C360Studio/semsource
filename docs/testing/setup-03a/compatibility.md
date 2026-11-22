@@ -349,7 +349,7 @@ re-ingest is not equivalent, because re-ingest never removes predicates
 | --- | --- | --- |
 | Java signature discriminator | Every method and constructor ID gains a stable suffix | None by itself |
 | Java arity-selected call edges | None | Same-arity overload calls emit no edge |
-| TS/JS/Svelte locals dropped; accessors and statics distinct | Accessor and static member IDs change; module-level IDs unchanged | Locals (test files included) and IIFE/AMD/UMD bodies |
+| TS/JS/Svelte locals dropped (function and module-level block scopes); accessors, statics and namespace members distinct | Accessor, static and namespace member IDs change; other module-level IDs unchanged | Locals (test files and module-level blocks included) and IIFE/AMD/UMD bodies |
 | Go blank and `init` skipped | Those IDs disappear | Callers seen only from `init` |
 | Vendored twin of `X.min.js` is file-only | Its symbol IDs disappear | Opt back in with `index_vendored_js` |
 | AST-source runtime guard | Duplicates published once, counted as `id_collisions` | None |

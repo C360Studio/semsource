@@ -97,3 +97,15 @@
   - `init` callers are gone;
   - same-arity Java overload calls have no edge;
   - test-file locals are no longer entities.
+
+## 6. Review round (owner rulings 2026-11-22, #329 comment 7083497665)
+
+- [x] 6.1 TS/JS/Svelte block-scoped declarations at module level are locals: `IsLocalScope(node)`, plus the if/for/while/do/try/switch/with/labeled statements and non-namespace `statement_block`s; `var` included. Tests: `TestModuleLevelBlockDeclarationsAreLocals`, `TestSvelteScriptBlockLocalsAndNamespaceMembers`, fixture `testdata/idcollisions/ts/blocks_and_namespaces.ts`.
+- [x] 6.2 Namespace members are scoped by the namespace chain. Calls and type references resolve innermost namespace first, Svelte included. Tests: `TestNamespaceMembersAreScopedByNamespaceChain`, `TestNamespaceTypeReferencesResolveInnermostFirst`, `TestSvelteNamespaceCallsResolveToNamespaceMember`.
+- [x] 6.3 Reindex repeats the seed's cross-file dedup before `publishHierarchy`, without re-counting unchanged files (`TestReindexKeepsSeedHierarchyOverAFold`).
+- [x] 6.4 Watch refuses a file dropped as a fold, under `foldedMu`, and a reindex releases it once the survivor is gone. Tests: `TestWatchRefusesAFoldedFile`, `TestWatchRefusalRacesReindex` (`-race`), `TestReindexPromotesAFoldWhoseSurvivorIsGone`.
+- [x] 6.5 `index_vendored_js` is forwarded from `repo` sources (`config/expand.go`; `expand_vendored_test.go`, `spawned_config_test.go` end to end through the strict decode). `index_interval` is deliberately not forwarded, because its documented scope is ast-only.
+- [x] 6.6 Vendored-twin skips are counted as `vendored_twin_files` in the guard summary, separate from `minified_files`.
+- [x] 6.7 Migration note: guard coverage, block-scoped and namespace identity, and the Java override-spelling and varargs edge losses.
+- [ ] 6.8 Rerun 5.2 and 5.3 at the review-fix head.
+

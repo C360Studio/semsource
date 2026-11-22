@@ -30,7 +30,7 @@ The races are ours, in identity. graph-ingest is behaving as documented.
      - It keeps the first declaration in parse order. Every parser emits in tree-sitter child order or `file.Decls` order, never in map order, so "first" is deterministic.
      - It counts the rest on a new `id_collisions` status field and logs one aggregated warning per file.
      - Dropping beats merging, because a merge fabricates edges. The count stays out of `ErrorCount`, since the entity that is kept is valid.
-     - During the initial index the same check runs across the watch path's whole result set (`component.go:389`). `SanitizePathSegment` is many-to-one: `a/b.ts` and `a-b.ts` both fold to `a-b-ts`. *Limit:* a fold that first appears through watch or reindex is caught only by the next initial index.
+     - During the initial index the same check runs across the watch path's whole result set (`component.go:389`). `SanitizePathSegment` is many-to-one: `a/b.ts` and `a-b.ts` both fold to `a-b-ts`. *Limit:* a fold that first appears through watch or reindex is caught only by the next initial index. *Amended at review (owner ruling, #329 comment 7083497665):* every reindex now repeats the cross-file pass without re-counting unchanged files, and watch refuses files dropped by the last full pass. A fold is released when its survivor disappears.
    - *Alternative rejected:* failing the parse result, which would turn one parser bug into lost files.
 2. **Java discriminator (#330).** Every method and constructor instance gets `-<6 hex>`, a SHA-256 prefix over:
    - the **kind**: a constructor `Foo(…)` and a method `void Foo(…)` are both `TypeMethod`;
