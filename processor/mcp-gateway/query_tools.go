@@ -107,7 +107,8 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 
 	result := graphSearchResult{Retrieval: unknownDisclosure()}
 	var reply graphSearchReply
-	if err := json.Unmarshal(resp, &reply); err == nil && reply.Data.Text != nil {
+	decodeErr := json.Unmarshal(resp, &reply)
+	if decodeErr == nil && reply.Data.Text != nil {
 		text := reply.Data.Text
 		matches, total, truncated := deriveMatches(text)
 		communities := deriveCommunities(text)
@@ -123,6 +124,11 @@ func (c *Component) graphSearch(ctx context.Context, _ *mcp.CallToolRequest, in 
 			Path:               path,
 			Hints:              hints,
 		}
+	}
+	// The merge disclosure rides even when the word list is null (the word
+	// index not ready at tier 1), so the reason is not lost with the matches.
+	if decodeErr == nil {
+		result.Merge = reply.Data.Merge
 	}
 	// An unreadable payload reports the unknown rung rather than failing the
 	// call, and says nothing about matches we cannot see.

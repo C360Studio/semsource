@@ -59,11 +59,18 @@ var valuePredicates = []string{
 // graphMatch is one ranked hit: enough to judge relevance and to follow up with
 // a deterministic tool, and nothing else — plus the entity's own allowlisted
 // value facts when the substrate response already carried its triples.
+//
+// At tier 1 Relevance is the substrate's merged score when the merge was
+// honoured (the sum of 1/(60+place) over the word and embedding lists, at most
+// 2/61), not a word-index score, and WordRank / VectorRank are the match's
+// 1-based places in each list, absent when it is not in that list.
 type graphMatch struct {
 	ID         string            `json:"id"`
 	Type       string            `json:"type,omitempty"`
 	Label      string            `json:"label,omitempty"`
 	Relevance  float64           `json:"relevance,omitempty"`
+	WordRank   int               `json:"word_rank,omitempty"`
+	VectorRank int               `json:"vector_rank,omitempty"`
 	Tags       []string          `json:"tags,omitempty"`
 	Properties map[string]string `json:"properties,omitempty"`
 }
@@ -113,7 +120,10 @@ func deriveMatches(text *gtypes.TextSearchData) (matches []graphMatch, total int
 		return nil, 0, false
 	}
 	for _, m := range text.Matches {
-		gm := graphMatch{ID: m.ID, Type: entityTypeSegment(m.ID), Label: m.Label, Relevance: m.Score}
+		gm := graphMatch{
+			ID: m.ID, Type: entityTypeSegment(m.ID), Label: m.Label, Relevance: m.Score,
+			WordRank: m.WordRank, VectorRank: m.VectorRank,
+		}
 		var e substrateEntity
 		if len(m.Entity) > 0 && json.Unmarshal(m.Entity, &e) == nil {
 			if gm.Label == "" {
@@ -243,9 +253,12 @@ func truncateValue(v string) string {
 // derived disclosure, and nothing invented. The match list is bounded;
 // TotalMatches and Truncated keep that honest rather than presenting a cap as
 // the whole result. Hints say what the question asked for beyond its words
-// (a time range, an area, a count) and whether it was applied.
+// (a time range, an area, a count) and whether it was applied. Merge is the
+// substrate's tier 1 merge step, verbatim: honoured false means the matches
+// are the word list alone, and it is never dropped. Tier 0 sends none.
 type graphSearchResult struct {
 	Retrieval          retrievalDisclosure       `json:"retrieval"`
+	Merge              *gtypes.GlobalSearchHint  `json:"merge,omitempty"`
 	Answer             string                    `json:"answer,omitempty"`
 	Matches            []graphMatch              `json:"matches"`
 	TotalMatches       int                       `json:"total_matches"`

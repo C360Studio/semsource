@@ -60,19 +60,29 @@ func deriveDisclosure(data *gtypes.GlobalSearchData, communities []communitySumm
 	if data.Text != nil && data.Text.Answer != "" {
 		d.AnswerSource = answerSourceTemplate
 	}
-	d.Note = disclosureNote(d)
+	d.Note = disclosureNote(d, data.Merge)
 	return d
 }
 
 // disclosureNote renders the disclosure as a sentence an agent reads directly.
 // The structured fields are for routing; this is what stops a thin answer from
 // being read as a rich one.
-func disclosureNote(d retrievalDisclosure) string {
+//
+// merge is the tier 1 merge step, nil at tier 0: it decides whether the hits
+// are word-search hits or the merge of word and embedding hits.
+func disclosureNote(d retrievalDisclosure, merge *gtypes.GlobalSearchHint) string {
+	hits := "word-search hits"
+	switch {
+	case merge != nil && merge.Honoured:
+		hits = "word and embedding search hits merged by rank"
+	case merge != nil:
+		hits = "word-search hits only (the embedding merge was not honoured; see merge)"
+	}
 	var b strings.Builder
 	if d.CommunityBacked {
 		b.WriteString("Community-backed: matches are grouped by graph communities whose records are included. ")
 	} else {
-		b.WriteString("NOT community-backed: these are word-search hits, not community or thematic " +
+		b.WriteString("NOT community-backed: these are " + hits + ", not community or thematic " +
 			"reasoning — enable graph.enable_clustering for community-backed answers. ")
 	}
 	if d.AnswerSource == answerSourceTemplate {
