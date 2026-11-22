@@ -289,3 +289,35 @@ func TestReindexPromotesAFoldWhoseSurvivorIsGone(t *testing.T) {
 		t.Error("a-b.ts is still refused after its survivor was deleted")
 	}
 }
+
+// TestReindexCountsANewFoldOfAnUnchangedFile pins that a fold first formed
+// between passes is surfaced. The newcomer a/b.ts walks before the
+// already-published a-b.ts, so it takes the shared file ID, and a-b.ts, whose
+// hash never changed, is dropped whole. That drop must count, or
+// id_collisions would read zero over a hybrid.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestReindexCountsANewFoldOfAnUnchangedFile(t *testing.T) {
+	f := newFoldFixture(t)
+	if err := os.RemoveAll(filepath.Join(f.root, "a")); err != nil {
+		t.Fatal(err)
+	}
+	f.seed()
+	if n := f.c.idCollisions.Load(); n != 0 {
+		t.Fatalf("seed without a fold counted %d collisions", n)
+	}
+
+	f.write("a/b.ts", "export function foo() {}\n")
+	f.reindex()
+	if !f.pw.isFolded("a-b.ts") {
+		t.Fatal("a-b.ts was not dropped as the new fold")
+	}
+	first := f.c.idCollisions.Load()
+	if first == 0 {
+		t.Error("the new fold was dropped silently: id_collisions = 0")
+	}
+
+	f.reindex()
+	if n := f.c.idCollisions.Load(); n != first {
+		t.Errorf("an unchanged reindex re-counted the known fold: %d -> %d", first, n)
+	}
+}

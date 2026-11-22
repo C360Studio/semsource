@@ -72,7 +72,9 @@ type pathWatcher struct {
 	//
 	// shortcut: only full passes write it, so a fold whose second file is
 	// first created between passes publishes via watch (a hybrid until
-	// reseed), and a survivor's deletion releases its fold only at the next
+	// reseed); on reindex, a newcomer that walks before the published file
+	// takes the shared ID (counted on id_collisions, still a hybrid until
+	// reseed); and a survivor's deletion releases its fold only at the next
 	// reindex, never when index_interval is off; upgrade to a file-entity-ID
 	// owner map maintained by watch events if either shows up in the field.
 	foldedMu sync.Mutex
@@ -670,9 +672,11 @@ func (c *Component) reindexPath(ctx context.Context, pw *pathWatcher) (scanned, 
 	// gain a contains edge to the survivor's file entity). Quiet for
 	// unchanged files: the seed or an earlier reindex counted their drops,
 	// and this pass republishes nothing for them. A changed file counts
-	// again, as it does on the per-file path.
-	released := pw.setFolded(c.dropDuplicateIDs(results, func(r *semsourceast.ParseResult) bool {
-		return unchanged[r]
+	// again, as it does on the per-file path. An unchanged file dropped
+	// whole for the first time is a NEW fold (a newcomer walked first and
+	// took the shared ID), so it counts too.
+	released := pw.setFolded(c.dropDuplicateIDs(results, func(r *semsourceast.ParseResult, wholeFile bool) bool {
+		return unchanged[r] && (!wholeFile || pw.isFolded(r.Path))
 	}))
 
 	// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).

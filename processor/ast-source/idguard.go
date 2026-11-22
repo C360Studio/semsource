@@ -37,16 +37,16 @@ const maxCollisionIDsLogged = 5
 // unchanged file it will not republish must not re-count on every interval.
 // A quiet result is deduplicated exactly like any other; only the count and
 // the warning are skipped.
-func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult, quiet func(*semsourceast.ParseResult) bool) []string {
+func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult, quiet func(r *semsourceast.ParseResult, wholeFile bool) bool) []string {
 	seen := make(map[string]bool)
 	var foldedFiles []string
 	for _, result := range results {
 		if result == nil {
 			continue
 		}
-		counted := quiet == nil || !quiet(result)
 		var dropped []string
 		if result.FileEntity != nil && seen[result.FileEntity.ID] {
+			counted := quiet == nil || !quiet(result, true)
 			for _, e := range result.Entities {
 				if e != nil {
 					dropped = append(dropped, e.ID)
@@ -77,7 +77,7 @@ func (c *Component) dropDuplicateIDs(results []*semsourceast.ParseResult, quiet 
 			result.Entities[i] = nil
 		}
 		result.Entities = kept
-		if counted {
+		if quiet == nil || !quiet(result, false) {
 			c.recordDropped(result.Path, dropped)
 		}
 	}
