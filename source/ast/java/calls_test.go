@@ -645,6 +645,7 @@ func TestTabIndentedAnnotatedPrivateFieldStaysInert(t *testing.T) {
 // ancestor walk resolves the supers of a class in ANOTHER package, a referrer
 // whose layout sourceRootPrefix cannot recognise; that answer must not stand
 // for the parsed file's own lookups for the rest of the parse.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java calls to overloaded methods resolve to one overload or none
 func TestForeignAncestorDoesNotHideOtherModules(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"lib/core/src/main/java/u/Util.java": "package u;\npublic class Util { public static void x() {} }\n",

@@ -11,6 +11,7 @@ import (
 // TestParseFile_BlankAndInitDeclarationsAreNotEntities pins #332 and owner
 // ruling Q4: blank declarations and package init functions name no symbol, so
 // they are not emitted, while their named neighbours are.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestParseFile_BlankAndInitDeclarationsAreNotEntities(t *testing.T) {
 	tmpDir := t.TempDir()
 	code := `package example

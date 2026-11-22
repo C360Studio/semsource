@@ -48,6 +48,7 @@ func (r *recordingClient) containing(needle string) [][]byte {
 // graph-ingest as ONE entity carrying the FIRST declaration's body, never two
 // writes it would merge into a hybrid, and never a body picked by whichever
 // offload goroutine finished last.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestPublishParseResult_DuplicateIDPublishesFirstDeclarationOnce(t *testing.T) {
 	root := t.TempDir()
 	src := "describe(() => {\n  const fetcher = () => 1;\n});\ndescribe(() => {\n  const fetcher = () => 22222;\n});\n"
@@ -119,6 +120,7 @@ func TestPublishParseResult_DuplicateIDPublishesFirstDeclarationOnce(t *testing.
 // TestDropDuplicateIDs_FoldedFileDropsTheWholeResult covers a file entity that
 // collides across results: keeping the later file's symbols would make them,
 // and its folder, point at the other file's entity.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestDropDuplicateIDs_FoldedFileDropsTheWholeResult(t *testing.T) {
 	firstFile := &semsourceast.CodeEntity{ID: "x.file.a-b-ts"}
 	secondFile := &semsourceast.CodeEntity{ID: "x.file.a-b-ts"}
@@ -144,6 +146,7 @@ func TestDropDuplicateIDs_FoldedFileDropsTheWholeResult(t *testing.T) {
 // TestDropDuplicateIDs_AcrossResultsKeepsFirstInWalkOrder covers the initial
 // index's cross-file pass: path sanitizing can fold two files onto one ID
 // segment, and the later file in walk order loses only the colliding entity.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestDropDuplicateIDs_AcrossResultsKeepsFirstInWalkOrder(t *testing.T) {
 	first := &semsourceast.ParseResult{Path: "a/b.ts", Entities: []*semsourceast.CodeEntity{
 		{ID: "x.a-b-ts-foo"}, {ID: "x.a-b-ts-bar"},

@@ -50,6 +50,7 @@ func assertDistinctIDs(t *testing.T, ents []*ast.CodeEntity, name string, want i
 
 // --- identity (entity-identity-safety) --------------------------------------
 
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestJavaOverloadIdentityIsDistinct(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -76,6 +77,7 @@ func TestJavaOverloadIdentityIsDistinct(t *testing.T) {
 
 // TestJavaOverloadIDIsStable pins the discriminator's inputs: an edit that
 // changes neither the kind nor the erased parameter types keeps the ID.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestJavaOverloadIDIsStable(t *testing.T) {
 	const base = "package a;\npublic class Foo {\n  void visit(Text t) {}\n  void visit(Count c) {}\n}\n"
 	tests := []struct {
@@ -106,6 +108,7 @@ func TestJavaOverloadIDIsStable(t *testing.T) {
 // TestJavaOverloadHashErasesTypeArgumentsAndVariables checks the hash sees the
 // erased signature: type arguments drop, and a type variable reads as its first
 // bound, whether the method or the class declares it.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestJavaOverloadHashErasesTypeArgumentsAndVariables(t *testing.T) {
 	tests := []struct {
 		name string
@@ -140,6 +143,7 @@ func TestJavaOverloadHashErasesTypeArgumentsAndVariables(t *testing.T) {
 
 // --- call edges (code-call-graph) -------------------------------------------
 
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java calls to overloaded methods resolve to one overload or none
 func TestJavaArityCallResolution(t *testing.T) {
 	tests := []struct {
 		name  string

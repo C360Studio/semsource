@@ -54,6 +54,7 @@ func equalStrings(a, b []string) bool {
 // TestLocalsAreNotEntities pins #331: declarations local to a function, arrow,
 // method or static block are not emitted in any form, while module-level
 // declarations and namespace members are, under their unchanged IDs.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestLocalsAreNotEntities(t *testing.T) {
 	src := `export const shared = 1;
 export function top(): number { return shared; }
@@ -99,6 +100,7 @@ export namespace Ns {
 // TestClassMemberFormsGetDistinctStableIDs pins #331's member discriminators:
 // accessor pairs and static/instance namesakes get distinct IDs, applied to
 // every such member, and keep their source name.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestClassMemberFormsGetDistinctStableIDs(t *testing.T) {
 	src := `export class Box {
   private n = 0;

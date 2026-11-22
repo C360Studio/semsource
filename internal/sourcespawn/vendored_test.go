@@ -9,6 +9,7 @@ import (
 // TestAstComponentConfig_IndexVendoredJS pins that the semsource.json opt-in
 // reaches the AST component's watch path, and that its absence leaves the
 // watch path byte-identical to before.
+// spec: openspec/specs/asset-ingestion-guards/spec.md#Requirement: Unminified twins of minified assets are indexed as files
 func TestAstComponentConfig_IndexVendoredJS(t *testing.T) {
 	for _, on := range []bool{false, true} {
 		src := config.SourceEntry{Type: "ast", Path: "./src", Language: "javascript", IndexVendoredJS: on}

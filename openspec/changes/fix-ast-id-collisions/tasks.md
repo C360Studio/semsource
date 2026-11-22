@@ -61,7 +61,7 @@
   - `isVendoredTwin` lives in `processor/ast-source/assetguard.go`, tested by `vendored_twin_test.go`.
   - The opt-in flows from `semsource.json` `index_vendored_js` through `internal/sourcespawn` to the watch path (`vendored_test.go`).
   - The watch-time twin limit is marked `// shortcut:`.
-- [ ] 4.6 3.1 passes on all fixtures, and the repo-tree guard reports zero collisions.
+- [x] 4.6 3.1 passes on all fixtures, and the repo-tree guard reports zero collisions. Done 2026-11-22 at `c45cac9`: `TestParseResultIDsAreUnique` (java, ts, golang) and `TestRepositoryTreeIDsAreUnique` pass with no skips, and `go test ./...`, `task lint` and `task spec:check` are green. The 18 new or changed tests now carry `// spec:` citations. They cite `openspec/specs/`, so the 17 that point at this change's ADDED requirements resolve only after archive; `scripts/ateam test-spec` is red on them until then.
 
 ## 5. Acceptance
 

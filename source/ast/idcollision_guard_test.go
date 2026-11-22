@@ -99,6 +99,7 @@ func reportDuplicates(t *testing.T, dups map[string][]string) {
 // TestParseResultIDsAreUnique parses one fixture per known collision class
 // (#329: Java overloads, TS block-scoped locals and accessors, Go blanks and
 // init) and fails on any entity ID declared twice in one file.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestParseResultIDsAreUnique(t *testing.T) {
 	for _, class := range []string{"java", "ts", "golang"} {
 		t.Run(class, func(t *testing.T) {
@@ -110,6 +111,7 @@ func TestParseResultIDsAreUnique(t *testing.T) {
 
 // TestRepositoryTreeIDsAreUnique runs the same check over this repository's
 // own source, the dogfood corpus.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestRepositoryTreeIDsAreUnique(t *testing.T) {
 	if testing.Short() {
 		t.Skip("parses the whole repository")

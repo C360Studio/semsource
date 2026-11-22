@@ -66,6 +66,7 @@ var twinFiles = map[string]string{
 // twins of minified assets are indexed as files": a vendored X.js beside
 // X.min.js keeps its file entity and yields no symbols; first-party JS is
 // untouched.
+// spec: openspec/specs/asset-ingestion-guards/spec.md#Requirement: Unminified twins of minified assets are indexed as files
 func TestVendoredTwinIsFileEntityOnly(t *testing.T) {
 	got := symbolsFor(t, false, twinFiles)
 	if got["jquery.js"] != 0 || got["jquery.min.js"] != 0 {
@@ -78,6 +79,7 @@ func TestVendoredTwinIsFileEntityOnly(t *testing.T) {
 
 // TestIndexVendoredJSOptsBackIn pins the opt-in scenario: the twin rule is
 // off, so jquery.js yields its symbols again.
+// spec: openspec/specs/asset-ingestion-guards/spec.md#Requirement: Unminified twins of minified assets are indexed as files
 func TestIndexVendoredJSOptsBackIn(t *testing.T) {
 	got := symbolsFor(t, true, twinFiles)
 	if got["jquery.js"] == 0 {

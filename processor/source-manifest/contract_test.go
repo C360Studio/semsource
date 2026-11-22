@@ -50,6 +50,7 @@ func TestHandleStatusReport_UnknownFieldRejectedLoudly(t *testing.T) {
 // half: every populated field of the shared report — including the
 // previously dropped backpressure and boundaries_skipped — lands on the
 // served per-source status.
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 	c := slowSeedComponent(t)
 	ctx := context.Background()

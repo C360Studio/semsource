@@ -7,6 +7,7 @@ import (
 
 // TestSvelteScriptLocalsAreNotEntities applies #331's local rule to a
 // component script: only the script's top-level declarations are entities.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestSvelteScriptLocalsAreNotEntities(t *testing.T) {
 	src := `<script lang="ts">
   const count = 1;
