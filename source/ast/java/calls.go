@@ -238,17 +238,19 @@ func (p *Parser) fileMembers(relPath string) map[string][]*classMembers {
 	}
 	members := make(map[string][]*classMembers)
 	imports := make(map[string]string)
+	var pkg string
 	mp := sitter.NewParser()
 	mp.SetLanguage(java.GetLanguage())
 	if tree, terr := mp.ParseCtx(context.Background(), nil, content); terr == nil {
 		members, _ = p.collectFileMembers(tree.RootNode(), content)
 		imports = extractImportMap(tree.RootNode(), content)
+		pkg = p.extractPackageName(tree.RootNode(), content)
 		tree.Close()
 	}
 	if p.memberCache == nil {
 		p.memberCache = make(map[string]cachedMembers)
 	}
-	p.memberCache[relPath] = cachedMembers{hash: hash, members: members, imports: imports}
+	p.memberCache[relPath] = cachedMembers{hash: hash, members: members, imports: imports, pkg: pkg}
 	return members
 }
 
@@ -266,6 +268,18 @@ func (p *Parser) importsFor(relPath string) map[string]string {
 	return p.memberCache[relPath].imports
 }
 
+// packageFor returns the package declared by the file a name was written in,
+// read the same way importsFor reads that file's imports.
+func (p *Parser) packageFor(relPath string) string {
+	if relPath == p.selfRel {
+		return p.pkg
+	}
+	if _, ok := p.memberCache[relPath]; !ok {
+		p.fileMembers(relPath) // populates the cache
+	}
+	return p.memberCache[relPath].pkg
+}
+
 // cachedMembers pairs a file's parsed type index with the content hash it was
 // built from, so a stale entry is detected rather than served. It also carries
 // that file's OWN import map: an ancestor walk resolves names as they were
@@ -275,6 +289,7 @@ type cachedMembers struct {
 	hash    string
 	members map[string][]*classMembers
 	imports map[string]string
+	pkg     string
 }
 
 // uniqueMember returns the single class a simple name denotes in one file, or nil

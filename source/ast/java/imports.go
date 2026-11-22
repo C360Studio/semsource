@@ -304,13 +304,16 @@ func layoutSuffix(sourceRoot string) string {
 
 // sourceRootPrefix returns the referrer's directory with its package path suffix
 // removed — the on-disk root that fully-qualified names are resolved against.
-// Returns "" (repoRoot) when the layout does not mirror the package.
+// Returns "" (repoRoot) when the layout does not mirror the package. The package
+// is the REFERRER's: during an ancestor walk that is another file, often in
+// another module, and stripping the parsed file's package from it finds no root.
 func (p *Parser) sourceRootPrefix(fromRelPath string) string {
 	dir := filepath.Dir(fromRelPath)
-	if p.pkg == "" {
+	pkg := p.packageFor(fromRelPath)
+	if pkg == "" {
 		return dir
 	}
-	pkgPath := filepath.FromSlash(strings.ReplaceAll(p.pkg, ".", "/"))
+	pkgPath := filepath.FromSlash(strings.ReplaceAll(pkg, ".", "/"))
 	if dir == pkgPath {
 		return ""
 	}

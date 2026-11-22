@@ -655,3 +655,18 @@ func TestForeignAncestorDoesNotHideOtherModules(t *testing.T) {
 	})
 	assertCalls(t, ents, "run", "x")
 }
+
+// TestInheritedFieldTypedInAnotherModuleLinks pins the OSH P01 shape: a field
+// inherited from an ancestor in another module is typed as written in the
+// ancestor's file, so that file's source root must come from ITS package. Using
+// the parsed file's package found no root and emitted an `external:` edge.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java calls to overloaded methods resolve to one overload or none
+func TestInheritedFieldTypedInAnotherModuleLinks(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"core/src/main/java/m/Base.java": "package m;\nimport s.Perm;\npublic class Base { public final Perm root = null; }\n",
+		"core/src/main/java/s/Perm.java": "package s;\npublic class Perm { public Perm grant(String label) { return this; } }\n",
+		"svc/src/main/java/c/Svc.java": "package c;\nimport m.Base;\npublic class Svc extends Base {\n" +
+			"  public void run() { root.grant(\"x\"); }\n}\n",
+	})
+	assertCallsExactly(t, ents, "run", entityNamed(t, ents, "grant").ID)
+}
