@@ -92,7 +92,7 @@
   - OSH 13/13 (beta.10: 12/13; C03 now correct, recorded and not claimed).
   - Dogfood 32/36 with every verdict identical to beta.10, and the loose band 5/7 = beta.10.
   - The first OSH leg at `396123d` caught a regression: P01 lost its three callers, because an inherited field's type was resolved with the parsed file's package. Fixed in `08227da` (`packageFor`, `TestInheritedFieldTypedInAnotherModuleLinks`) and rerun.
-- [ ] 5.4 Release note and SETUP 03A record the identity break and the reseed, plus the visible losses:
+- [x] 5.4 Release note and SETUP 03A record the identity break and the reseed, plus the visible losses (done 2026-11-22: `docs/migration/ast-entity-identity.md`, the ROADMAP "Recently Shipped" entry, and the SETUP 03A section "Post-beta.10 identity break"; the note also names Go blanks, vendored twins and `index_vendored_js`):
   - IIFE/AMD-wrapped JS indexes as files only;
   - `init` callers are gone;
   - same-arity Java overload calls have no edge;

@@ -335,3 +335,32 @@ history and successfully recreates the entity. Desired source deregistration mus
 until the old producer is retired, then durably replay the removal projection after restart. The
 current implementation persists the desired component/manifest deletion but has no such replay.
 Retained entities can therefore continue to look current. No independent review has approved that gap.
+
+## Post-beta.10 identity break: one entity ID per code declaration
+
+[#329](https://github.com/C360Studio/semsource/issues/329) (OpenSpec change `fix-ast-id-collisions`) is a second
+clean storage break after the SemEngine cutover. Same-key collisions inside one AST parse were stored as hybrids:
+graph-ingest merges same-key writes per (predicate, source) set. The fix changes code entity IDs, so the rules above
+apply unchanged: provision fresh storage and re-ingest. No aliases, no old-ID rewrite, no dual reader. An in-place
+re-ingest is not equivalent, because re-ingest never removes predicates
+([#336](https://github.com/C360Studio/semsource/issues/336)).
+
+| Change | Identity effect | Visible loss |
+| --- | --- | --- |
+| Java signature discriminator | Every method and constructor ID gains a stable suffix | None by itself |
+| Java arity-selected call edges | None | Same-arity overload calls emit no edge |
+| TS/JS/Svelte locals dropped; accessors and statics distinct | Accessor and static member IDs change; module-level IDs unchanged | Locals (test files included) and IIFE/AMD/UMD bodies |
+| Go blank and `init` skipped | Those IDs disappear | Callers seen only from `init` |
+| Vendored twin of `X.min.js` is file-only | Its symbol IDs disappear | Opt back in with `index_vendored_js` |
+| AST-source runtime guard | Duplicates published once, counted as `id_collisions` | None |
+
+Evidence, all at `08227da` unless noted:
+
+- Restart and order (task 5.2, at `396123d`): fresh seed, retained-store restart and reversed-source fresh seed gave
+  identical `ENTITY_STATES` content across 7,828 dogfood entities, apart from `dc.terms.created`. The fix in
+  `08227da` touches only Java, and the dogfood corpus has none.
+- Tier 0 scorecard (task 5.3): R1 36/36, rank-stable; OSH 13/13; dogfood 32/36, with every verdict equal to beta.10
+  ([record](../../../scripts/scorecard/results/SUMMARY-fix329-tier0.md)).
+- Collision probe (task 5.1, at `6fc7e40`): 0 colliding IDs and 0 hybrids on dogfood and OSH core.
+
+The operator note is [`docs/migration/ast-entity-identity.md`](../../migration/ast-entity-identity.md).

@@ -149,6 +149,14 @@ cannot be upgraded in place. Consumers should read the
 
 ## Recently Shipped
 
+- **On `main` since beta.10, for the next tag (breaking; fresh storage and
+  re-ingest):** one entity ID per code declaration (#329). Java methods and
+  constructors carry a signature discriminator, locals and Go `init`/blank
+  declarations are no longer entities, same-arity Java overload calls emit no
+  edge, IIFE/AMD-wrapped JS and vendored twins index as files only, and the
+  AST source reports any remaining duplicate as `id_collisions`. R1 is
+  rank-stable again (#324). See the
+  [migration note](docs/migration/ast-entity-identity.md).
 - `v1.0.0-beta.10`: the first SemEngine release (breaking; fresh storage and
   re-ingest) — Tier 0 on SemEngine `v0.1.0-alpha.6` with embeddings off, the
   reordered entity ID, `/ws` as `ENTITY_STATES` KV-watch frames, and the consumer
