@@ -123,3 +123,61 @@ func TestSvelteNamespaceCallsResolveToNamespaceMember(t *testing.T) {
 		}
 	}
 }
+
+// TestSvelteMergedNamespacePrivatesAreLocals applies the merged-namespace
+// private rule through the Svelte shared resolver: a merged body's private is
+// not an entity and calls to it are inert, never reaching a top-level
+// namesake, while a single-declaration namespace keeps its private.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestSvelteMergedNamespacePrivatesAreLocals(t *testing.T) {
+	src := `<script lang="ts">
+  namespace N { function priv() { return 1; } export function a() { return priv(); } }
+  namespace N { function priv() { return 2; } export function b() { return priv(); } }
+  namespace S { function helper() { return 1; } export function run() { return helper(); } }
+  function priv() { return 3; }
+</script>
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Component.svelte")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := NewParser(testAuthority("test-org"), "test-project", dir).ParseFile(context.Background(), path)
+	if err != nil {
+		t.Fatalf("ParseFile failed: %v", err)
+	}
+	auth := testAuthority("test-org")
+	fn := func(scope []string, name string) string {
+		return ast.NewScopedCodeEntity(auth, "svelte", "test-project", ast.TypeFunction, scope, name, "Component.svelte").ID
+	}
+	want := map[string][]string{
+		fn([]string{"N"}, "a"):      nil,
+		fn([]string{"N"}, "b"):      nil,
+		fn([]string{"S"}, "helper"): nil,
+		fn([]string{"S"}, "run"):    {fn([]string{"S"}, "helper")},
+		fn(nil, "priv"):             nil,
+	}
+	got := map[string][]string{}
+	for _, e := range result.Entities {
+		if e.Type != ast.TypeFunction {
+			continue
+		}
+		if _, dup := got[e.ID]; dup {
+			t.Errorf("duplicate ID %s", e.ID)
+		}
+		got[e.ID] = e.Calls
+	}
+	if len(got) != len(want) {
+		t.Errorf("function entities = %d, want %d: %v", len(got), len(want), got)
+	}
+	for id, calls := range want {
+		g, ok := got[id]
+		if !ok {
+			t.Errorf("missing entity %s", id)
+			continue
+		}
+		if len(g) != len(calls) || (len(calls) == 1 && g[0] != calls[0]) {
+			t.Errorf("%s calls %v, want %v", id, g, calls)
+		}
+	}
+}

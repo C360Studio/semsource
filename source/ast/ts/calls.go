@@ -626,7 +626,9 @@ func (p *Parser) callNameToEntityID(name, filePath, lang string) string {
 		return ""
 	}
 	// Inside a namespace, its own members shadow outer ones, innermost first.
-	if scope, ok := p.namespaceFunc(name); ok {
+	if scope, found, inert := p.namespaceFunc(name); inert {
+		return "" // a merged namespace body's local: shadows outer names, not an entity
+	} else if found {
 		return ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeFunction, scope, name, filePath).ID
 	}
 	if p.localFuncs[name] {
@@ -729,7 +731,7 @@ func (p *Parser) PrepareCallResolution(root *sitter.Node, content []byte) {
 	p.defaultImports = extractDefaultImports(root, content)
 	p.moduleInfoMemo = make(map[string]moduleCallInfo)
 	p.nsScope, p.nsFrames = nil, nil
-	p.nsExported = collectNamespaceExports(root, content)
+	p.nsExported, p.nsDecls = collectNamespaceExports(root, content)
 }
 
 // ExtractCalls resolves body's call_expression sites to callee entity IDs; see

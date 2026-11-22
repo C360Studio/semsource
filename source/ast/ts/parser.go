@@ -60,6 +60,7 @@ type Parser struct {
 	nsScope    []string
 	nsFrames   []nsFrame
 	nsExported map[string]nsMembers
+	nsDecls    map[string]int // namespace chain -> declarations with a body
 }
 
 // nsMembers is the functions and types a namespace body declares.
@@ -81,9 +82,22 @@ func (m nsMembers) add(node *sitter.Node, source []byte) {
 // nsFrame is one namespace body on the walk stack: its full scope chain and
 // every member it declares, exported or not, since inside its own body a
 // non-exported member is visible too.
+//
+// Merged-namespace privates (#329): when a chain is declared more than once
+// in the file and the body is not ambient, each body's non-exported members
+// are locals of that body. TypeScript scopes them per declaration, and two
+// same-named ones share path, chain and name, so no intrinsic discriminator
+// tells them apart (a source-order index would break rule 1). They are not
+// emitted (IsNamespaceLocal), and a reference to one from inside its body is
+// inert: it neither targets the dropped ID nor falls through to an outer or
+// module-level namesake, which it shadows. Exported and ambient members keep
+// their scoped IDs; a chain declared once keeps its private members.
 type nsFrame struct {
-	scope []string
-	own   nsMembers
+	scope   []string
+	own     nsMembers
+	body    *sitter.Node
+	ambient bool
+	locals  *nsMembers // the body's non-exported members, when they are locals
 }
 
 // chainKey keys a namespace chain. The separator is not a legal identifier
@@ -96,8 +110,9 @@ func chainKey(chain []string) string { return strings.Join(chain, "\x00") }
 // members other declarations of that chain can see: exported ones, or all of
 // them in an ambient (`declare`) context, where members are implicitly
 // exported. TypeScript merges same-chain declarations this way.
-func collectNamespaceExports(root *sitter.Node, source []byte) map[string]nsMembers {
+func collectNamespaceExports(root *sitter.Node, source []byte) (map[string]nsMembers, map[string]int) {
 	out := make(map[string]nsMembers)
+	decls := make(map[string]int)
 	var walk func(n *sitter.Node, chain []string, ambient bool)
 	walk = func(n *sitter.Node, chain []string, ambient bool) {
 		if IsLocalScope(n) {
@@ -110,6 +125,7 @@ func collectNamespaceExports(root *sitter.Node, source []byte) map[string]nsMemb
 			chain = append(append([]string(nil), chain...), segments...)
 			if body := n.ChildByFieldName("body"); body != nil {
 				key := chainKey(chain)
+				decls[key]++
 				m, ok := out[key]
 				if !ok {
 					m = newNSMembers()
@@ -127,7 +143,7 @@ func collectNamespaceExports(root *sitter.Node, source []byte) map[string]nsMemb
 		}
 	}
 	walk(root, nil, false)
-	return out
+	return out, decls
 }
 
 // NewParser creates a new TypeScript/JavaScript parser
@@ -218,7 +234,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	p.defaultImports = extractDefaultImports(rootNode, content)
 	p.moduleInfoMemo = make(map[string]moduleCallInfo)
 	p.nsScope, p.nsFrames = nil, nil
-	p.nsExported = collectNamespaceExports(rootNode, content)
+	p.nsExported, p.nsDecls = collectNamespaceExports(rootNode, content)
 
 	entities := p.extractEntities(rootNode, content, relPath, lang, fileEntity.ID)
 	for _, entity := range entities {
@@ -339,6 +355,9 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 
 	node := cursor.CurrentNode()
 	nodeType := node.Type()
+	if p.IsNamespaceLocal(node) {
+		return nil
+	}
 
 	// Extract entity based on node type
 	switch nodeType {
@@ -517,10 +536,24 @@ func (p *Parser) EnterNamespace(node *sitter.Node, source []byte) func() {
 	}
 	prevScope, prevFrames := p.nsScope, p.nsFrames
 	p.nsScope = p.scopeWith(segments...)
-	frame := nsFrame{scope: p.nsScope, own: newNSMembers()}
-	if body := node.ChildByFieldName("body"); body != nil {
-		for i := 0; i < int(body.NamedChildCount()); i++ {
-			frame.own.add(body.NamedChild(i), source)
+	frame := nsFrame{scope: p.nsScope, own: newNSMembers(), body: node.ChildByFieldName("body")}
+	if parent := node.Parent(); parent != nil && parent.Type() == "ambient_declaration" {
+		frame.ambient = true
+	}
+	if n := len(p.nsFrames); n > 0 && p.nsFrames[n-1].ambient {
+		frame.ambient = true
+	}
+	if !frame.ambient && p.nsDecls[chainKey(p.nsScope)] > 1 {
+		locals := newNSMembers()
+		frame.locals = &locals
+	}
+	if frame.body != nil {
+		for i := 0; i < int(frame.body.NamedChildCount()); i++ {
+			child := frame.body.NamedChild(i)
+			frame.own.add(child, source)
+			if frame.locals != nil && child.Type() != "export_statement" {
+				frame.locals.add(child, source)
+			}
 		}
 	}
 	p.nsFrames = append(append([]nsFrame(nil), p.nsFrames...), frame)
@@ -531,45 +564,73 @@ func (p *Parser) EnterNamespace(node *sitter.Node, source []byte) func() {
 // empty at module level.
 func (p *Parser) NamespaceScope() []string { return p.nsScope }
 
+// IsNamespaceLocal reports whether node is a non-exported member of the
+// namespace body being walked whose chain is merged, and so a local that is
+// not emitted (see nsFrame). Shared with the Svelte script walk.
+func (p *Parser) IsNamespaceLocal(node *sitter.Node) bool {
+	n := len(p.nsFrames)
+	if n == 0 || p.nsFrames[n-1].locals == nil || node.Type() == "export_statement" {
+		return false
+	}
+	parent := node.Parent()
+	return parent != nil && p.nsFrames[n-1].body != nil && parent.Equal(p.nsFrames[n-1].body)
+}
+
 // namespaceChain finds the innermost enclosing namespace chain whose visible
 // members satisfy has, and returns that chain. At each chain, innermost first,
 // the visible members are the body being walked, if it declares that chain,
 // plus the exported members of every declaration of the chain (merging).
 // `namespace A.B {}` encloses chain A without walking an A body, so only A's
-// exported members are visible there, as in TypeScript.
-func (p *Parser) namespaceChain(has func(nsMembers) bool) ([]string, bool) {
+// exported members are visible there, as in TypeScript. inert reports a name
+// bound by a merged body's local (see nsFrame): the reference resolves to
+// nothing, and the caller must not fall back to an outer definition.
+func (p *Parser) namespaceChain(has func(nsMembers) bool) (scope []string, found, inert bool) {
 	for n := len(p.nsScope); n > 0; n-- {
 		chain := p.nsScope[:n]
 		key := chainKey(chain)
 		for i := len(p.nsFrames) - 1; i >= 0; i-- {
-			if chainKey(p.nsFrames[i].scope) == key && has(p.nsFrames[i].own) {
-				return chain, true
+			f := p.nsFrames[i]
+			if chainKey(f.scope) != key {
+				continue
+			}
+			if f.locals != nil && has(*f.locals) {
+				return nil, false, true
+			}
+			if has(f.own) {
+				return chain, true, false
 			}
 		}
 		if m, ok := p.nsExported[key]; ok && has(m) {
-			return chain, true
+			return chain, true, false
 		}
 	}
-	return nil, false
+	return nil, false, false
 }
 
 // namespaceFunc finds name among the enclosing namespaces' visible functions.
-func (p *Parser) namespaceFunc(name string) ([]string, bool) {
+func (p *Parser) namespaceFunc(name string) (scope []string, found, inert bool) {
 	return p.namespaceChain(func(m nsMembers) bool { return m.funcs[name] })
 }
 
 // namespaceType finds name among the enclosing namespaces' visible types,
 // returning the declaring chain and the type's kind.
-func (p *Parser) namespaceType(name string) ([]string, ast.CodeEntityType, bool) {
-	var kind ast.CodeEntityType
-	scope, ok := p.namespaceChain(func(m nsMembers) bool {
-		k, found := m.kinds[name]
-		if found {
+func (p *Parser) namespaceType(name string) (scope []string, kind ast.CodeEntityType, found, inert bool) {
+	scope, found, inert = p.namespaceChain(func(m nsMembers) bool {
+		k, ok := m.kinds[name]
+		if ok {
 			kind = k
 		}
-		return found
+		return ok
 	})
-	return scope, kind, ok
+	return scope, kind, found, inert
+}
+
+// appendRef appends a resolved reference, dropping an inert one ("").
+func appendRef(refs []string, id string) []string {
+	if id == "" {
+		return refs
+	}
+	return append(refs, id)
 }
 
 // memberInstanceName is the identity a class member is built under: its name,
@@ -636,7 +697,7 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 						typeNode := heritage.Child(k)
 						if typeNode.Type() == "identifier" || typeNode.Type() == "type_identifier" {
 							superClass := nodeText(typeNode, source)
-							entity.Extends = append(entity.Extends, p.hierarchyRefID(superClass, ast.TypeClass, filePath))
+							entity.Extends = appendRef(entity.Extends, p.hierarchyRefID(superClass, ast.TypeClass, filePath))
 						}
 					}
 				} else if heritageType == "implements_clause" {
@@ -645,7 +706,7 @@ func (p *Parser) extractClass(node *sitter.Node, source []byte, filePath, lang, 
 						typeNode := heritage.Child(k)
 						if typeNode.Type() == "identifier" || typeNode.Type() == "type_identifier" {
 							iface := nodeText(typeNode, source)
-							entity.Implements = append(entity.Implements, p.hierarchyRefID(iface, ast.TypeInterface, filePath))
+							entity.Implements = appendRef(entity.Implements, p.hierarchyRefID(iface, ast.TypeInterface, filePath))
 						}
 					}
 				}
@@ -772,7 +833,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 				nodeType := typeNode.Type()
 				if nodeType == "identifier" || nodeType == "type_identifier" {
 					extType := nodeText(typeNode, source)
-					entity.Extends = append(entity.Extends, p.hierarchyRefID(extType, ast.TypeInterface, filePath))
+					entity.Extends = appendRef(entity.Extends, p.hierarchyRefID(extType, ast.TypeInterface, filePath))
 				}
 			}
 		}
@@ -1083,7 +1144,7 @@ func (p *Parser) extractFunctionSignature(node *sitter.Node, source []byte, enti
 				typeNode := child.ChildByFieldName("type")
 				if typeNode != nil {
 					paramType := nodeText(typeNode, source)
-					entity.Parameters = append(entity.Parameters, p.typeRefID(paramType, entity.Path))
+					entity.Parameters = appendRef(entity.Parameters, p.typeRefID(paramType, entity.Path))
 				}
 			}
 		}
@@ -1095,7 +1156,7 @@ func (p *Parser) extractFunctionSignature(node *sitter.Node, source []byte, enti
 		returnType := nodeText(returnTypeNode, source)
 		// Remove leading colon if present
 		returnType = strings.TrimPrefix(strings.TrimSpace(returnType), ":")
-		entity.Returns = append(entity.Returns, p.typeRefID(returnType, entity.Path))
+		entity.Returns = appendRef(entity.Returns, p.typeRefID(returnType, entity.Path))
 	}
 }
 

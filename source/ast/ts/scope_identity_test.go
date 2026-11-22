@@ -441,3 +441,73 @@ export function topT(t: T): T { g(); return t; }
 		fn(nil, "topT"):                       {calls: []string{fn(nil, "g")}, params: []string{id(ast.TypeInterface, nil, "T")}, returns: []string{id(ast.TypeInterface, nil, "T")}},
 	})
 }
+
+// TestMergedNamespacePrivatesAreLocals pins the #329 ruling on merged
+// namespaces: in a namespace chain declared more than once in a file, each
+// body's non-exported members are locals of that body — TypeScript scopes them
+// per declaration, and no intrinsic discriminator tells two same-named ones
+// apart — so they are not entities, and a reference to one from inside its
+// body is inert rather than a call to a dropped ID or a module-level namesake.
+// A namespace declared once keeps its private members as entities.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
+func TestMergedNamespacePrivatesAreLocals(t *testing.T) {
+	merged := `namespace N { function priv() { return 1; } export function a() { return priv(); } }
+namespace N { function priv() { return 2; } export function b() { return priv(); } }
+`
+	tests := []struct {
+		name string
+		src  string
+		want map[string]refEdges // exact entity set (file entity excluded) and edges
+	}{
+		{"merged privates", merged, map[string]refEdges{
+			"N.a": {}, "N.b": {},
+		}},
+		{"merged privates beside a module namesake", merged + "function priv() { return 3; }\n", map[string]refEdges{
+			"N.a": {}, "N.b": {}, ".priv": {},
+		}},
+		{"single declaration keeps its private", "namespace S { function helper() { return 1; } export function run() { return helper(); } }\nfunction helper() { return 2; }\n", map[string]refEdges{
+			"S.helper": {}, "S.run": {calls: []string{"S.helper"}}, ".helper": {},
+		}},
+		{"merged private type reference is inert", "namespace T { interface P {} export function use(p: P): void {} }\nnamespace T { export interface Q {} }\ninterface P {}\n", map[string]refEdges{
+			"T.use": {returns: []string{"builtin:void"}}, "T.Q": {}, ".P": {},
+		}},
+	}
+	auth := testAuthority("test-org")
+	// "N.a" names a function or type a in namespace N; ".priv" a module-level one.
+	resolve := func(ents []*ast.CodeEntity, short string) string {
+		scope, name, _ := strings.Cut(short, ".")
+		for _, e := range ents {
+			var sc []string
+			if scope != "" {
+				sc = []string{scope}
+			}
+			if e.Name == name && e.ID == ast.NewScopedCodeEntity(auth, "typescript", "test-project", e.Type, sc, name, "m.ts").ID {
+				return e.ID
+			}
+		}
+		return "missing:" + short
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ents := parseTSFile(t, "m.ts", tt.src)
+			seen := map[string]bool{}
+			for _, e := range ents {
+				if seen[e.ID] {
+					t.Errorf("duplicate ID %s", e.ID)
+				}
+				seen[e.ID] = true
+			}
+			if len(ents) != len(tt.want) {
+				t.Errorf("entities = %v, want %d", sortedNames(ents), len(tt.want))
+			}
+			want := map[string]refEdges{}
+			for short, w := range tt.want {
+				for i, c := range w.calls {
+					w.calls[i] = resolve(ents, c)
+				}
+				want[resolve(ents, short)] = w
+			}
+			assertRefEdges(t, ents, want)
+		})
+	}
+}

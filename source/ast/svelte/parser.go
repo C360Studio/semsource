@@ -381,6 +381,9 @@ func (p *Parser) walkScriptNode(cursor *sitter.TreeCursor, source []byte, filePa
 
 	node := cursor.CurrentNode()
 	nodeType := node.Type()
+	if p.callResolver.IsNamespaceLocal(node) {
+		return nil // a merged namespace body's private (ts.nsFrame)
+	}
 
 	switch nodeType {
 	case "function_declaration":

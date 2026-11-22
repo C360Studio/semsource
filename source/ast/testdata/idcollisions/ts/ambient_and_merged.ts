@@ -12,3 +12,6 @@ export function g() { return 2; }
 export interface Mod {}
 export interface Sh {}
 export function useWin(w: Win): Win { return w; }
+
+namespace P { function priv() { return 1; } export function a() { return priv(); } }
+namespace P { function priv() { return 2; } export function b() { return priv(); } }

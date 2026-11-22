@@ -186,7 +186,9 @@ func (p *Parser) hierarchyRefID(name string, kind ast.CodeEntityType, fromRelPat
 	if strings.Contains(name, ".") {
 		return "external:" + name // e.g. React.Component / NS.Type
 	}
-	if scope, _, ok := p.namespaceType(name); ok {
+	if scope, _, found, inert := p.namespaceType(name); inert {
+		return "" // a merged namespace body's local: not an entity
+	} else if found {
 		// A sibling in an enclosing namespace shadows imports and module-level
 		// types; the kind stays positional (D2).
 		return ast.NewScopedCodeEntity(p.authority, p.detectLanguage(fromRelPath), p.project, kind, scope, name, fromRelPath).ID
@@ -216,7 +218,9 @@ func (p *Parser) typeRefID(name, fromRelPath string) string {
 		return "external:" + name
 	}
 	lang := p.detectLanguage(fromRelPath)
-	if scope, kind, ok := p.namespaceType(name); ok {
+	if scope, kind, found, inert := p.namespaceType(name); inert {
+		return "" // a merged namespace body's local: not an entity
+	} else if found {
 		return ast.NewScopedCodeEntity(p.authority, lang, p.project, kind, scope, name, fromRelPath).ID
 	}
 	if kind, ok := p.localKinds[name]; ok {
