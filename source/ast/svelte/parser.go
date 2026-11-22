@@ -381,6 +381,9 @@ func (p *Parser) walkScriptNode(cursor *sitter.TreeCursor, source []byte, filePa
 
 	node := cursor.CurrentNode()
 	nodeType := node.Type()
+	if p.callResolver.IsNamespaceLocal(node) {
+		return nil // a merged namespace body's private (ts.nsFrame)
+	}
 
 	switch nodeType {
 	case "function_declaration":
@@ -406,6 +409,17 @@ func (p *Parser) walkScriptNode(cursor *sitter.TreeCursor, source []byte, filePa
 		entities = append(entities, varEntities...)
 	}
 
+	// Declarations local to a function, method, static block or module-level
+	// block are not emitted (#331, #329), and namespace members are scoped by
+	// their namespace chain — the same rules as the TS parser's.
+	if ts.IsLocalScope(node) {
+		return entities
+	}
+	// The namespace stack lives on the shared call resolver, so a bare call
+	// inside a namespace resolves to the namespace's own member, and entity
+	// IDs read their scope from it; empty at the script's top level.
+	defer p.callResolver.EnterNamespace(node, source)()
+
 	if cursor.GoToFirstChild() {
 		for {
 			entities = append(entities, p.walkScriptNode(cursor, source, filePath, lang, parentID)...)
@@ -430,7 +444,7 @@ func (p *Parser) extractFunction(node *sitter.Node, source []byte, filePath, lan
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeFunction, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, "svelte", p.project, ast.TypeFunction, p.callResolver.NamespaceScope(), name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -467,7 +481,7 @@ func (p *Parser) extractInterface(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeInterface, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, "svelte", p.project, ast.TypeInterface, p.callResolver.NamespaceScope(), name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -489,7 +503,7 @@ func (p *Parser) extractTypeAlias(node *sitter.Node, source []byte, filePath, la
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeType, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, "svelte", p.project, ast.TypeType, p.callResolver.NamespaceScope(), name, filePath)
 	entity.Language = lang
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
@@ -574,7 +588,7 @@ func (p *Parser) destructuredEntities(patternNode *sitter.Node, source []byte, f
 		if name == "" {
 			continue
 		}
-		entity := ast.NewCodeEntity(p.authority, "svelte", p.project, entityType, name, filePath)
+		entity := ast.NewScopedCodeEntity(p.authority, "svelte", p.project, entityType, p.callResolver.NamespaceScope(), name, filePath)
 		entity.Language = lang
 		entity.ContainedBy = parentID
 		entity.StartLine = int(binding.StartPoint().Row) + 1
@@ -601,7 +615,7 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 	var metadata string
 	switch {
 	case isArrowFunc:
-		entity = ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeFunction, name, filePath)
+		entity = ast.NewScopedCodeEntity(p.authority, "svelte", p.project, ast.TypeFunction, p.callResolver.NamespaceScope(), name, filePath)
 		metadata = "Arrow function"
 		entity.Signature = ast.RenderTSArrowSignature(name, valueNode, source)
 		// Resolved call edges from the arrow body (design D3), via the shared ts
@@ -610,9 +624,9 @@ func (p *Parser) simpleDeclaratorEntity(node, nameNode *sitter.Node, source []by
 			entity.Calls = p.callResolver.ExtractCalls(ts.ArrowParamsNode(valueNode), bodyNode, source, filePath, "svelte", nil, nil)
 		}
 	case kind == "const":
-		entity = ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeConst, name, filePath)
+		entity = ast.NewScopedCodeEntity(p.authority, "svelte", p.project, ast.TypeConst, p.callResolver.NamespaceScope(), name, filePath)
 	default:
-		entity = ast.NewCodeEntity(p.authority, "svelte", p.project, ast.TypeVar, name, filePath)
+		entity = ast.NewScopedCodeEntity(p.authority, "svelte", p.project, ast.TypeVar, p.callResolver.NamespaceScope(), name, filePath)
 	}
 
 	entity.Language = lang

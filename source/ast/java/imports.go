@@ -248,15 +248,19 @@ func (p *Parser) probeFQN(fqn, fromRelPath string) (relPath string, found, ambig
 // by bounded globbing rather than a tree walk, and memoized for the duration of
 // one ParseFile so the result cannot go stale across a watch-mode re-parse.
 // A repo with no recognised layout yields none, leaving behavior unchanged.
+//
+// The memo is keyed by the referrer's LAYOUT, not taken once per ParseFile: an
+// ancestor walk resolves names as written in other files, and the first such
+// referrer may have no recognised layout (its package does not mirror its
+// directory). A single memo let that referrer's empty answer stand for every
+// later lookup in the file, so which edges resolved depended on walk order.
 func (p *Parser) siblingSourceRoots(fromRelPath string) []string {
-	if p.sourceRootsDone {
-		return p.sourceRoots
-	}
-	p.sourceRootsDone = true
-
 	layout := layoutSuffix(p.sourceRootPrefix(fromRelPath))
 	if layout == "" {
 		return nil
+	}
+	if roots, ok := p.sourceRoots[layout]; ok {
+		return roots
 	}
 	var roots []string
 	// Modules sit one or two levels below the repo root in practice
@@ -275,7 +279,10 @@ func (p *Parser) siblingSourceRoots(fromRelPath string) []string {
 	}
 	// Sorted so resolution never depends on filesystem enumeration order.
 	sort.Strings(roots)
-	p.sourceRoots = roots
+	if p.sourceRoots == nil {
+		p.sourceRoots = make(map[string][]string)
+	}
+	p.sourceRoots[layout] = roots
 	return roots
 }
 
@@ -297,13 +304,16 @@ func layoutSuffix(sourceRoot string) string {
 
 // sourceRootPrefix returns the referrer's directory with its package path suffix
 // removed — the on-disk root that fully-qualified names are resolved against.
-// Returns "" (repoRoot) when the layout does not mirror the package.
+// Returns "" (repoRoot) when the layout does not mirror the package. The package
+// is the REFERRER's: during an ancestor walk that is another file, often in
+// another module, and stripping the parsed file's package from it finds no root.
 func (p *Parser) sourceRootPrefix(fromRelPath string) string {
 	dir := filepath.Dir(fromRelPath)
-	if p.pkg == "" {
+	pkg := p.packageFor(fromRelPath)
+	if pkg == "" {
 		return dir
 	}
-	pkgPath := filepath.FromSlash(strings.ReplaceAll(p.pkg, ".", "/"))
+	pkgPath := filepath.FromSlash(strings.ReplaceAll(pkg, ".", "/"))
 	if dir == pkgPath {
 		return ""
 	}

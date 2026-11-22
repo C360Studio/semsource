@@ -205,6 +205,9 @@ func (p *Parser) extractDeclaration(fset *token.FileSet, decl goast.Decl, _ /* p
 
 	switch d := decl.(type) {
 	case *goast.FuncDecl:
+		if unaddressableFunc(d) {
+			break
+		}
 		entity := p.extractFunction(fset, d, filePath)
 		if entity != nil {
 			entities = append(entities, entity)
@@ -214,7 +217,7 @@ func (p *Parser) extractDeclaration(fset *token.FileSet, decl goast.Decl, _ /* p
 		switch d.Tok {
 		case token.TYPE:
 			for _, spec := range d.Specs {
-				if ts, ok := spec.(*goast.TypeSpec); ok {
+				if ts, ok := spec.(*goast.TypeSpec); ok && ts.Name.Name != "_" {
 					entity := p.extractTypeSpec(fset, ts, d.Doc, filePath)
 					if entity != nil {
 						entities = append(entities, entity)
@@ -225,6 +228,9 @@ func (p *Parser) extractDeclaration(fset *token.FileSet, decl goast.Decl, _ /* p
 			for _, spec := range d.Specs {
 				if vs, ok := spec.(*goast.ValueSpec); ok {
 					for _, name := range vs.Names {
+						if name.Name == "_" {
+							continue // a blank binds nothing anyone can look up (#332)
+						}
 						entity := p.extractValueSpec(fset, name, vs, d.Doc, ast.TypeConst, filePath)
 						if entity != nil {
 							entities = append(entities, entity)
@@ -236,6 +242,9 @@ func (p *Parser) extractDeclaration(fset *token.FileSet, decl goast.Decl, _ /* p
 			for _, spec := range d.Specs {
 				if vs, ok := spec.(*goast.ValueSpec); ok {
 					for _, name := range vs.Names {
+						if name.Name == "_" {
+							continue // a blank binds nothing anyone can look up (#332)
+						}
 						entity := p.extractValueSpec(fset, name, vs, d.Doc, ast.TypeVar, filePath)
 						if entity != nil {
 							entities = append(entities, entity)
@@ -247,6 +256,17 @@ func (p *Parser) extractDeclaration(fset *token.FileSet, decl goast.Decl, _ /* p
 	}
 
 	return entities
+}
+
+// unaddressableFunc reports a function declaration that names no symbol: a
+// blank `func _()`, or a package `init`, of which a file may declare several
+// and which nothing can call. Neither is emitted (#332, owner ruling Q4): any
+// ID for them would have to come from source order, which rule 1 forbids.
+func unaddressableFunc(fn *goast.FuncDecl) bool {
+	if fn.Name.Name == "_" {
+		return true
+	}
+	return fn.Name.Name == "init" && fn.Recv == nil
 }
 
 // extractFunction extracts a function or method entity

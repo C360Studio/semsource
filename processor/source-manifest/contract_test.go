@@ -50,6 +50,7 @@ func TestHandleStatusReport_UnknownFieldRejectedLoudly(t *testing.T) {
 // half: every populated field of the shared report — including the
 // previously dropped backpressure and boundaries_skipped — lands on the
 // served per-source status.
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Source status reflects delivery truth
 func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 	c := slowSeedComponent(t)
 	ctx := context.Background()
@@ -62,6 +63,7 @@ func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 		FilesParsed:       11,
 		BodiesOffloaded:   4,
 		BoundariesSkipped: 2,
+		IDCollisions:      3,
 		ErrorCount:        1,
 		Backpressure:      true,
 		Submodules: []sourcestatus.SubmoduleStatus{
@@ -96,6 +98,9 @@ func TestStatusPassthrough_FullReportReachesTheSurface(t *testing.T) {
 	}
 	if s.BoundariesSkipped != 2 {
 		t.Errorf("boundaries_skipped = %d, want 2", s.BoundariesSkipped)
+	}
+	if s.IDCollisions != 3 {
+		t.Errorf("id_collisions = %d, want 3", s.IDCollisions)
 	}
 	if s.FilesParsed != 11 || s.BodiesOffloaded != 4 {
 		t.Errorf("seed-liveness counters lost: %+v", s)

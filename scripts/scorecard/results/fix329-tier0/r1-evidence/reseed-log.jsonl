@@ -1,0 +1,6 @@
+{"time":"2026-11-22T18:50:51.094603708Z","level":"INFO","msg":"Starting cfgfile-source initial ingest","paths":["/workspace"],"org":"c360","watch_enabled":false}
+{"time":"2026-11-22T18:50:51.096610083Z","level":"INFO","msg":"Starting initial code index","paths":1}
+{"time":"2026-11-22T18:50:51.096687417Z","level":"INFO","msg":"Starting doc-source initial ingest","paths":["/workspace"],"org":"c360","watch_enabled":false}
+{"time":"2026-11-22T18:50:51.838601792Z","level":"INFO","msg":"Cfgfile-source initial ingest complete","paths":["/workspace"],"entities_published":126}
+{"time":"2026-11-22T18:50:52.464409667Z","level":"INFO","msg":"Doc-source initial ingest complete","paths":["/workspace"],"entities_published":1225}
+{"time":"2026-11-22T18:50:57.439212461Z","level":"INFO","msg":"Initial index complete","paths":1,"files":627,"entities":6477,"parse_failures":0}

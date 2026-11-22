@@ -55,6 +55,25 @@ func isMinifiedName(base string) bool {
 	return false
 }
 
+// isVendoredTwin reports an X.js whose minified twin X.min.js sits in the
+// same directory: the shape vendored front-end bundles ship in (jquery.js with
+// jquery.min.js). Such a file is third-party code, and its minifier-friendly
+// names collide by the thousand (#334).
+//
+// shortcut: a twin that appears after X.js does not re-trigger X.js, and an
+// unchanged hash skips reindex, so X.js keeps its symbols until the next
+// lifecycle pass; upgrade if a watch-time twin turns out to matter.
+func isVendoredTwin(filePath string) bool {
+	base := filepath.Base(filePath)
+	lower := strings.ToLower(base)
+	if !strings.HasSuffix(lower, ".js") || isMinifiedName(base) {
+		return false
+	}
+	twin := filepath.Join(filepath.Dir(filePath), base[:len(base)-len(".js")]+".min.js")
+	info, err := os.Stat(twin)
+	return err == nil && !info.IsDir()
+}
+
 // isMinifiedContent applies the bytes-per-line shape rule to a probe sample.
 // fileSize is the FULL file size, which gates the probe; the sample may be
 // truncated at minifiedProbeLimit.
@@ -96,8 +115,9 @@ func entityDomainForRoute(routeLang, ext string) string {
 func (c *Component) minifiedFileResult(pw *pathWatcher, filePath, routeLang string) *semsourceast.ParseResult {
 	base := filepath.Base(filePath)
 	byName := isMinifiedName(base)
+	twin := !byName && !pw.config.IndexVendoredJS && isVendoredTwin(filePath)
 
-	if !byName {
+	if !byName && !twin {
 		info, err := os.Stat(filePath)
 		if err != nil || info.Size() < minifiedProbeMinSize {
 			return nil
@@ -124,11 +144,19 @@ func (c *Component) minifiedFileResult(pw *pathWatcher, filePath, routeLang stri
 	}
 
 	how := "shape"
-	if byName {
+	switch {
+	case byName:
 		how = "name"
+	case twin:
+		how = "vendored_twin"
 	}
 	c.logger.Debug("minified asset — indexing file entity only, skipping symbol extraction",
 		"path", relPath, "detected_by", how)
+	if twin {
+		c.vendoredTwinFiles.Add(1)
+	} else {
+		c.minifiedFiles.Add(1)
+	}
 
 	hash := semsourceast.ComputeHash(content)
 	ext := strings.ToLower(filepath.Ext(filePath))
@@ -193,12 +221,13 @@ func (c *Component) enforceSymbolCap(result *semsourceast.ParseResult) *semsourc
 // minified skip's symbol count is unknowable by design — the file is never
 // parsed — so symbols are reported for cap breaches only.
 func (c *Component) logGuardSummary() {
-	minified, capped := c.minifiedFiles.Load(), c.cappedFiles.Load()
-	if minified+capped == 0 {
+	minified, twins, capped := c.minifiedFiles.Load(), c.vendoredTwinFiles.Load(), c.cappedFiles.Load()
+	if minified+twins+capped == 0 {
 		return
 	}
 	c.logger.Info("asset guards withheld symbol extraction",
 		"minified_files", minified,
+		"vendored_twin_files", twins,
 		"capped_files", capped,
 		"capped_symbols", c.cappedSymbols.Load())
 }

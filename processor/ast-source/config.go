@@ -43,6 +43,11 @@ type WatchPathConfig struct {
 
 	// Excludes are directory names to skip
 	Excludes []string `json:"excludes" schema:"type:array,description:Directory names to skip"`
+
+	// IndexVendoredJS extracts symbols from an X.js that sits beside X.min.js.
+	// Off by default: such a twin is a vendored bundle and is indexed as its
+	// file entity only (asset-ingestion-guards, #334).
+	IndexVendoredJS bool `json:"index_vendored_js,omitempty" schema:"type:bool,description:Extract symbols from X.js files that sit beside X.min.js (vendored bundles),default:false"`
 }
 
 // Validate checks the WatchPathConfig for errors.

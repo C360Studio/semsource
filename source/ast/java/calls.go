@@ -44,9 +44,16 @@ type classMembers struct {
 	// with — the enclosing chain plus this type's own name, matching the
 	// childScope extractClass/extractInterface pass to their members.
 	methodScope []string
-	methods     map[string]bool
-	hasCtor     bool
-	supers      []string // extends + implements, as written
+	// methods maps a method name to each overload's signature, in declaration
+	// order; ctors lists the explicit constructors. A call selects among them
+	// by arity (overloads.go), and the signature's suffix builds the target ID.
+	methods map[string][]callableSig
+	ctors   []callableSig
+	// typeVars maps the type variables in scope for this type's members — its
+	// own and its enclosing types' — to their first bound, for the overload
+	// hash.
+	typeVars map[string]string
+	supers   []string // extends + implements, as written
 	// fields maps a class body's field names to their declared type and
 	// visibility. Carried here so an INHERITED field can type a receiver:
 	// `rootPerm.m()` in a subclass of the class declaring `public final
@@ -105,7 +112,7 @@ func (p *Parser) collectFileMembers(root *sitter.Node, content []byte) (map[stri
 	byName := make(map[string][]*classMembers)
 	byScope := make(map[string]*classMembers)
 	for i := 0; i < int(root.NamedChildCount()); i++ {
-		p.collectTypeMembers(root.NamedChild(i), content, nil, byName, byScope)
+		p.collectTypeMembers(root.NamedChild(i), content, nil, nil, byName, byScope)
 	}
 	return byName, byScope
 }
@@ -114,7 +121,7 @@ func (p *Parser) collectFileMembers(root *sitter.Node, content []byte) (map[stri
 // types that parser.go also extracts. The recursion mirrors extractClassBody
 // exactly — a class body yields nested class/interface/enum entities, an
 // interface body yields only methods — so the two views cannot diverge.
-func (p *Parser) collectTypeMembers(node *sitter.Node, content []byte, scope []string,
+func (p *Parser) collectTypeMembers(node *sitter.Node, content []byte, scope []string, outerVars map[string]string,
 	byName map[string][]*classMembers, byScope map[string]*classMembers) {
 	switch node.Type() {
 	case "class_declaration", "interface_declaration", "enum_declaration", "record_declaration":
@@ -130,7 +137,8 @@ func (p *Parser) collectTypeMembers(node *sitter.Node, content []byte, scope []s
 	cm := &classMembers{
 		name:        name,
 		methodScope: extendScope(scope, name),
-		methods:     make(map[string]bool),
+		methods:     make(map[string][]callableSig),
+		typeVars:    typeVarBounds(node.ChildByFieldName("type_parameters"), content, outerVars),
 		supers:      p.superNames(node, content),
 	}
 	byName[name] = append(byName[name], cm)
@@ -147,29 +155,37 @@ func (p *Parser) collectTypeMembers(node *sitter.Node, content []byte, scope []s
 			child := body.NamedChild(i)
 			switch child.Type() {
 			case "method_declaration":
-				if mn := child.ChildByFieldName("name"); mn != nil {
-					cm.methods[string(content[mn.StartByte():mn.EndByte()])] = true
-				}
+				cm.addMethod(child, content)
 			case "constructor_declaration":
-				cm.hasCtor = true
+				if child.ChildByFieldName("name") != nil {
+					cm.ctors = append(cm.ctors, callableSignature(child, content, true, cm.typeVars))
+				}
 			case "class_declaration", "interface_declaration", "enum_declaration":
-				p.collectTypeMembers(child, content, cm.methodScope, byName, byScope)
+				p.collectTypeMembers(child, content, cm.methodScope, cm.typeVars, byName, byScope)
 			}
 		}
 	case "interface_declaration":
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			child := body.NamedChild(i)
-			if child.Type() != "method_declaration" {
-				continue
-			}
-			if mn := child.ChildByFieldName("name"); mn != nil {
-				cm.methods[string(content[mn.StartByte():mn.EndByte()])] = true
+			if child.Type() == "method_declaration" {
+				cm.addMethod(child, content)
 			}
 		}
 	}
 	// enum_declaration / record_declaration deliberately expose no members:
 	// extractEnum and extractRecord create the type entity and stop, so a call
 	// to an enum method has no entity to target and must stay inert.
+}
+
+// addMethod records one method_declaration's overload signature under its name,
+// mirroring the entity extractMethod creates for it.
+func (cm *classMembers) addMethod(decl *sitter.Node, content []byte) {
+	mn := decl.ChildByFieldName("name")
+	if mn == nil {
+		return
+	}
+	name := string(content[mn.StartByte():mn.EndByte()])
+	cm.methods[name] = append(cm.methods[name], callableSignature(decl, content, false, cm.typeVars))
 }
 
 // superNames returns a type's extends and implements targets as written.
@@ -222,17 +238,19 @@ func (p *Parser) fileMembers(relPath string) map[string][]*classMembers {
 	}
 	members := make(map[string][]*classMembers)
 	imports := make(map[string]string)
+	var pkg string
 	mp := sitter.NewParser()
 	mp.SetLanguage(java.GetLanguage())
 	if tree, terr := mp.ParseCtx(context.Background(), nil, content); terr == nil {
 		members, _ = p.collectFileMembers(tree.RootNode(), content)
 		imports = extractImportMap(tree.RootNode(), content)
+		pkg = p.extractPackageName(tree.RootNode(), content)
 		tree.Close()
 	}
 	if p.memberCache == nil {
 		p.memberCache = make(map[string]cachedMembers)
 	}
-	p.memberCache[relPath] = cachedMembers{hash: hash, members: members, imports: imports}
+	p.memberCache[relPath] = cachedMembers{hash: hash, members: members, imports: imports, pkg: pkg}
 	return members
 }
 
@@ -250,6 +268,18 @@ func (p *Parser) importsFor(relPath string) map[string]string {
 	return p.memberCache[relPath].imports
 }
 
+// packageFor returns the package declared by the file a name was written in,
+// read the same way importsFor reads that file's imports.
+func (p *Parser) packageFor(relPath string) string {
+	if relPath == p.selfRel {
+		return p.pkg
+	}
+	if _, ok := p.memberCache[relPath]; !ok {
+		p.fileMembers(relPath) // populates the cache
+	}
+	return p.memberCache[relPath].pkg
+}
+
 // cachedMembers pairs a file's parsed type index with the content hash it was
 // built from, so a stale entry is detected rather than served. It also carries
 // that file's OWN import map: an ancestor walk resolves names as they were
@@ -259,6 +289,7 @@ type cachedMembers struct {
 	hash    string
 	members map[string][]*classMembers
 	imports map[string]string
+	pkg     string
 }
 
 // uniqueMember returns the single class a simple name denotes in one file, or nil
@@ -342,51 +373,87 @@ func simpleTypeName(name string) string {
 	return name
 }
 
-// declaringClass finds the class that actually declares method, starting at the
-// receiver's own class and walking extends/implements breadth-first to the
-// NEAREST declaring ancestor. It reports failure when nothing declares the
-// method, when an ancestor name cannot be bound, or when more than one ancestor
-// at the same depth declares it — a tie is dropped rather than picked.
-func (p *Parser) declaringClass(start classRef, method string) (classRef, bool) {
-	if start.cm == nil || method == "" {
-		return classRef{}, false
-	}
-	if start.cm.methods[method] {
-		return start, true
-	}
+// overloadCandidate is one declaration a call may bind to. ambiguous marks a
+// signature two same-depth ancestors both declare: it still occupies its arity,
+// so a call it would accept emits no edge rather than picking one of them.
+type overloadCandidate struct {
+	decl      classRef
+	sig       callableSig
+	ambiguous bool
+}
+
+// methodCandidates collects every in-repo declaration of method visible from
+// start: the receiver's own class, then its extends/implements ancestors
+// breadth-first. An identical signature (an override) is taken from the
+// NEAREST declaring class. Ancestors whose names do not resolve in-tree —
+// external or unresolved supers — contribute nothing and do not stop the walk
+// (Q1, option B): a unique in-repo match still links.
+func (p *Parser) methodCandidates(start classRef, method string) []overloadCandidate {
+	var cands []overloadCandidate
+	seen := make(map[string]bool) // signature keys already taken by a nearer class
 	visited := map[string]bool{classKey(start): true}
 	level := []classRef{start}
-	for depth := 0; depth < ancestorDepthCap && len(level) > 0; depth++ {
-		var next []classRef
+	for depth := 0; depth <= ancestorDepthCap && len(level) > 0; depth++ {
+		levelIdx := make(map[string]int) // key -> index in cands, this level only
 		for _, cr := range level {
-			for _, super := range cr.cm.supers {
-				scm, srel, _ := p.resolveClass(super, cr.rel)
-				if scm == nil {
+			for _, sig := range cr.cm.methods[method] {
+				if seen[sig.key] {
 					continue
 				}
-				ref := classRef{cm: scm, rel: srel}
-				if visited[classKey(ref)] {
+				if i, ok := levelIdx[sig.key]; ok {
+					if cands[i].decl != cr {
+						cands[i].ambiguous = true
+					}
 					continue
 				}
-				visited[classKey(ref)] = true
-				next = append(next, ref)
+				levelIdx[sig.key] = len(cands)
+				cands = append(cands, overloadCandidate{decl: cr, sig: sig})
 			}
 		}
-		var found []classRef
-		for _, cr := range next {
-			if cr.cm.methods[method] {
-				found = append(found, cr)
-			}
+		for key := range levelIdx {
+			seen[key] = true
 		}
-		if len(found) == 1 {
-			return found[0], true
-		}
-		if len(found) > 1 {
-			return classRef{}, false // ambiguous inheritance — drop, never choose
-		}
-		level = next
+		level = p.nextAncestors(level, visited)
 	}
-	return classRef{}, false
+	return cands
+}
+
+// nextAncestors resolves one BFS level's supers to the in-tree classes not yet
+// visited. An unresolvable super is skipped.
+func (p *Parser) nextAncestors(level []classRef, visited map[string]bool) []classRef {
+	var next []classRef
+	for _, cr := range level {
+		for _, super := range cr.cm.supers {
+			scm, srel, _ := p.resolveClass(super, cr.rel)
+			if scm == nil {
+				continue
+			}
+			ref := classRef{cm: scm, rel: srel}
+			if visited[classKey(ref)] {
+				continue
+			}
+			visited[classKey(ref)] = true
+			next = append(next, ref)
+		}
+	}
+	return next
+}
+
+// selectByArity returns the unique candidate whose parameter count accepts
+// argc. None, several, or an ambiguous one is a failure: no edge, never a
+// guess. The check applies even to a single candidate, so a call that cannot
+// bind it (the right overload lives on an external ancestor) emits nothing.
+func selectByArity(cands []overloadCandidate, argc int) (overloadCandidate, bool) {
+	var match []overloadCandidate
+	for _, c := range cands {
+		if c.sig.accepts(argc) {
+			match = append(match, c)
+		}
+	}
+	if len(match) != 1 || match[0].ambiguous {
+		return overloadCandidate{}, false
+	}
+	return match[0], true
 }
 
 func classKey(cr classRef) string {
@@ -700,11 +767,12 @@ func (p *Parser) callTargetID(node *sitter.Node, content []byte, cs callScope) s
 	}
 	method := string(content[nameNode.StartByte():nameNode.EndByte()])
 	obj := node.ChildByFieldName("object")
+	argc := argCount(node)
 
 	// Unqualified and `this.` calls target the enclosing class, or the nearest
 	// ancestor that declares the method.
 	if obj == nil || obj.Type() == "this" {
-		return p.methodIDIn(cs.self, method)
+		return p.methodIDIn(cs.self, method, argc)
 	}
 	// Anything that is not a plain name receiver — a chained call, `super`, a
 	// field access, a literal, a cast — stays inert: typing it would need
@@ -724,39 +792,50 @@ func (p *Parser) callTargetID(node *sitter.Node, content []byte, cs callScope) s
 		if external != "" {
 			return "external:" + external + "." + method
 		}
-		return p.methodIDIn(classRef{cm: cm, rel: rel}, method)
+		return p.methodIDIn(classRef{cm: cm, rel: rel}, method, argc)
 	}
 	// Not a declared variable: treat the name as a type, i.e. a static call.
 	cm, rel, external := p.resolveClass(name, cs.relPath)
 	if external != "" {
 		return "external:" + external + "." + method
 	}
-	return p.methodIDIn(classRef{cm: cm, rel: rel}, method)
+	return p.methodIDIn(classRef{cm: cm, rel: rel}, method, argc)
 }
 
-// methodIDIn builds the callee ID once a class is confirmed to declare it,
-// through the same NewScopedCodeEntity path the definition uses so the edge
-// byte-matches the definition instead of dangling.
-func (p *Parser) methodIDIn(start classRef, method string) string {
-	decl, ok := p.declaringClass(start, method)
+// methodIDIn resolves a call with argc arguments to the one in-repo overload
+// it binds by arity, built through the same callableID path the definition
+// uses so the edge byte-matches it instead of dangling.
+func (p *Parser) methodIDIn(start classRef, method string, argc int) string {
+	if start.cm == nil || method == "" || argc < 0 {
+		return ""
+	}
+	c, ok := selectByArity(p.methodCandidates(start, method), argc)
 	if !ok {
 		return ""
 	}
-	return ast.NewScopedCodeEntity(p.authority, "java", p.project, ast.TypeMethod,
-		decl.cm.methodScope, method, decl.rel).ID
+	return p.callableID(c.decl.cm.methodScope, method, c.decl.rel, c.sig.suffix)
 }
 
-// constructorTargetID resolves `new Type(...)` to Type's constructor entity. A
-// class with only the implicit default constructor has no constructor entity, so
-// it emits nothing rather than a dangling target.
+// constructorTargetID resolves `new Type(...)` to the one constructor of Type
+// that accepts its argument count. A class with only the implicit default
+// constructor has no constructor entity, so it emits nothing rather than a
+// dangling target; so does a call no single constructor accepts.
 func (p *Parser) constructorTargetID(node *sitter.Node, content []byte, cs callScope) string {
 	typeName := p.extractTypeReference(node.ChildByFieldName("type"), content)
 	cm, rel, _ := p.resolveClass(typeName, cs.relPath)
-	if cm == nil || !cm.hasCtor {
+	argc := argCount(node)
+	if cm == nil || argc < 0 {
 		return ""
 	}
-	return ast.NewScopedCodeEntity(p.authority, "java", p.project, ast.TypeMethod,
-		cm.methodScope, cm.name, rel).ID
+	cands := make([]overloadCandidate, 0, len(cm.ctors))
+	for _, sig := range cm.ctors {
+		cands = append(cands, overloadCandidate{sig: sig})
+	}
+	c, ok := selectByArity(cands, argc)
+	if !ok {
+		return ""
+	}
+	return p.callableID(cm.methodScope, cm.name, rel, c.sig.suffix)
 }
 
 // callScopeFor builds the resolution context for a member declared at scope.

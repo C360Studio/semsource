@@ -64,6 +64,21 @@ type pathWatcher struct {
 	// The fsnotify watcher and the periodic-reindex goroutine — both on by default —
 	// otherwise drive the same parser instance concurrently.
 	parseMu sync.Mutex
+
+	// folded holds the root-relative paths the last full pass dropped whole
+	// because their file entity folded onto an earlier file's (idguard.go).
+	// Written by the seed and the periodic reindex, read by the watch
+	// goroutine, which parses one file and so cannot see the survivor itself.
+	//
+	// shortcut: only full passes write it, so a fold whose second file is
+	// first created between passes publishes via watch (a hybrid until
+	// reseed); on reindex, a newcomer that walks before the published file
+	// takes the shared ID (counted on id_collisions, still a hybrid until
+	// reseed); and a survivor's deletion releases its fold only at the next
+	// reindex, never when index_interval is off; upgrade to a file-entity-ID
+	// owner map maintained by watch events if either shows up in the field.
+	foldedMu sync.Mutex
+	folded   map[string]bool
 }
 
 // Component implements the ast-source processor.
@@ -123,6 +138,11 @@ type Component struct {
 	// error: those trees belong to their own source scope.
 	boundariesSkipped atomic.Int64
 
+	// idCollisions counts declarations dropped because an earlier one in the
+	// same pass already holds their entity ID (dropDuplicateIDs). Non-zero
+	// means a parser identity bug, not lost input.
+	idCollisions atomic.Int64
+
 	// Pre-publish seed liveness (async-source-seed 5.7 residual): a large seed
 	// spends minutes parsing and offloading bodies before anything publishes,
 	// and a frozen publish count alone cannot separate that from a hang. These
@@ -136,9 +156,12 @@ type Component struct {
 	// into one seed-end summary; a skipped minified file's symbol count is
 	// unknowable by design (it is never parsed), so symbols are counted for
 	// cap breaches only.
-	minifiedFiles atomic.Int64
-	cappedFiles   atomic.Int64
-	cappedSymbols atomic.Int64
+	// vendoredTwinFiles counts X.js files withheld beside an X.min.js twin;
+	// they are not minified, so minifiedFiles does not claim them.
+	minifiedFiles     atomic.Int64
+	vendoredTwinFiles atomic.Int64
+	cappedFiles       atomic.Int64
+	cappedSymbols     atomic.Int64
 
 	lastActivityMu sync.RWMutex
 	lastActivity   time.Time
@@ -366,39 +389,11 @@ func (c *Component) runSeed(ctx context.Context) error {
 
 	totalFiles := 0
 	for _, pw := range c.watchers {
-		results, err := c.parseDirectory(ctx, pw)
+		n, err := c.seedPath(ctx, pw)
 		if err != nil {
-			return fmt.Errorf("initial index failed for %s: %w", pw.root, err)
+			return err
 		}
-
-		// Resolve cross-file type references now that the whole watch path is
-		// parsed. Languages whose names map deterministically onto paths (Go,
-		// Java, Python) resolve inside the parser; C++ cannot, because nothing
-		// ties `class Foo` to a file without a preprocessor and include paths.
-		// Doing it here — over the complete result set — keeps it deterministic
-		// and independent of walk order.
-		for _, parser := range pw.parsers {
-			if r, ok := parser.(typeRefResolver); ok {
-				r.ResolveTypeRefs(results)
-			}
-		}
-
-		// Publish repo and folder hierarchy entities before file/symbol entities.
-		// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
-		c.publishHierarchy(ctx, results, pw.scopedSystem)
-
-		for _, result := range results {
-			if err := c.publishParseResult(ctx, result, pw); err != nil {
-				c.logger.Warn("Failed to publish parse result",
-					"path", result.Path,
-					"error", err)
-				c.incrementErrors()
-			}
-			if result.Hash != "" {
-				c.setFileHash(result.Path, result.Hash)
-			}
-		}
-		totalFiles += len(results)
+		totalFiles += n
 	}
 
 	c.logger.Info("Initial index complete",
@@ -439,6 +434,48 @@ func (c *Component) runSeed(ctx context.Context) error {
 	c.mu.Unlock()
 
 	return nil
+}
+
+// seedPath runs the initial index of one watch path and returns how many files
+// it parsed.
+func (c *Component) seedPath(ctx context.Context, pw *pathWatcher) (int, error) {
+	results, err := c.parseDirectory(ctx, pw)
+	if err != nil {
+		return 0, fmt.Errorf("initial index failed for %s: %w", pw.root, err)
+	}
+
+	// One entity per ID across the whole watch path, before anything reads
+	// the results: path sanitizing folds a/b.ts and a-b.ts onto one segment.
+	pw.setFolded(c.dropDuplicateIDs(results, nil))
+
+	// Resolve cross-file type references now that the whole watch path is
+	// parsed. Languages whose names map deterministically onto paths (Go,
+	// Java, Python) resolve inside the parser; C++ cannot, because nothing
+	// ties `class Foo` to a file without a preprocessor and include paths.
+	// Doing it here — over the complete result set — keeps it deterministic
+	// and independent of walk order.
+	for _, parser := range pw.parsers {
+		if r, ok := parser.(typeRefResolver); ok {
+			r.ResolveTypeRefs(results)
+		}
+	}
+
+	// Publish repo and folder hierarchy entities before file/symbol entities.
+	// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
+	c.publishHierarchy(ctx, results, pw.scopedSystem)
+
+	for _, result := range results {
+		if err := c.publishParseResult(ctx, result, pw); err != nil {
+			c.logger.Warn("Failed to publish parse result",
+				"path", result.Path,
+				"error", err)
+			c.incrementErrors()
+		}
+		if result.Hash != "" {
+			c.setFileHash(result.Path, result.Hash)
+		}
+	}
+	return len(results), nil
 }
 
 // markRunning marks the component live. "Running" means started, NOT seeded —
@@ -522,7 +559,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 
 	switch event.Operation {
 	case semsourceast.OpCreate, semsourceast.OpModify:
-		if event.Result != nil {
+		if event.Result != nil && !c.refuseFoldedFile(pw, event.Result) {
 			// Publish folder chain for new/modified files so containment
 			// edges exist even for directories created between full reindexes.
 			c.publishFolderChain(ctx, event.Path, pw.scopedSystem)
@@ -586,7 +623,7 @@ func (c *Component) performFullIndex(ctx context.Context) {
 	totalFiles := 0
 	published := 0
 	for _, pw := range c.watchers {
-		results, err := c.parseDirectory(ctx, pw)
+		scanned, pub, err := c.reindexPath(ctx, pw)
 		if err != nil {
 			c.logger.Error("Periodic reindex failed",
 				"path", pw.root,
@@ -594,28 +631,8 @@ func (c *Component) performFullIndex(ctx context.Context) {
 			c.incrementErrors()
 			continue
 		}
-
-		// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
-		c.publishHierarchy(ctx, results, pw.scopedSystem)
-
-		for _, result := range results {
-			totalFiles++
-
-			if result.Hash != "" {
-				if oldHash, ok := c.getFileHash(result.Path); ok && oldHash == result.Hash {
-					continue
-				}
-				c.setFileHash(result.Path, result.Hash)
-			}
-
-			if err := c.publishParseResult(ctx, result, pw); err != nil {
-				c.logger.Warn("Failed to publish parse result during reindex",
-					"path", result.Path,
-					"error", err)
-				c.incrementErrors()
-			}
-			published++
-		}
+		totalFiles += scanned
+		published += pub
 
 		// Every sweep announces scope to the staleness lifecycle pass — not
 		// just sweeps that observed a change — so a delete that happened
@@ -629,6 +646,64 @@ func (c *Component) performFullIndex(ctx context.Context) {
 		"files_scanned", totalFiles,
 		"files_published", published,
 		"files_skipped", totalFiles-published)
+}
+
+// reindexPath reparses one watch path and republishes what changed. It
+// returns how many files it scanned and how many it republished.
+func (c *Component) reindexPath(ctx context.Context, pw *pathWatcher) (scanned, published int, err error) {
+	results, err := c.parseDirectory(ctx, pw)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Decide what changed before deduplicating: the dedup needs it to
+	// know whose drops are already counted.
+	unchanged := make(map[*semsourceast.ParseResult]bool, len(results))
+	for _, result := range results {
+		if result.Hash != "" {
+			if oldHash, ok := c.getFileHash(result.Path); ok && oldHash == result.Hash {
+				unchanged[result] = true
+			}
+		}
+	}
+
+	// The same cross-file dedup as the seed, so the hierarchy below never
+	// re-adds a folded file the seed dropped (its folder or the repo would
+	// gain a contains edge to the survivor's file entity). Quiet for
+	// unchanged files: the seed or an earlier reindex counted their drops,
+	// and this pass republishes nothing for them. A changed file counts
+	// again, as it does on the per-file path. An unchanged file dropped
+	// whole for the first time is a NEW fold (a newcomer walked first and
+	// took the shared ID), so it counts too.
+	released := pw.setFolded(c.dropDuplicateIDs(results, func(r *semsourceast.ParseResult, wholeFile bool) bool {
+		return unchanged[r] && (!wholeFile || pw.isFolded(r.Path))
+	}))
+
+	// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
+	c.publishHierarchy(ctx, results, pw.scopedSystem)
+
+	for _, result := range results {
+		scanned++
+
+		// A file the fold no longer covers (its survivor is gone) was
+		// never published under its own entities, whatever its hash says.
+		if unchanged[result] && !released[result.Path] {
+			continue
+		}
+		if result.Hash != "" {
+			c.setFileHash(result.Path, result.Hash)
+		}
+
+		if err := c.publishParseResult(ctx, result, pw); err != nil {
+			c.logger.Warn("Failed to publish parse result during reindex",
+				"path", result.Path,
+				"error", err)
+			c.incrementErrors()
+		}
+		published++
+	}
+
+	return scanned, published, nil
 }
 
 // deleteTriggersLifecycleRun reports whether an OpDelete event should
@@ -758,7 +833,6 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 	// route resolution so watch events and periodic reindex are covered
 	// identically, and before parseMu so a 3.5MB bundle never holds the lock.
 	if res := c.minifiedFileResult(pw, filePath, lang); res != nil {
-		c.minifiedFiles.Add(1)
 		c.filesParsed.Add(1)
 		c.seedMetrics.IncFilesParsed()
 		return res, nil
@@ -781,6 +855,9 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
 func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, pw *pathWatcher) error {
+	// Watch and reindex arrive here one file at a time; the initial index has
+	// already deduplicated across the watch path, so this is a no-op for it.
+	c.dropDuplicateIDs([]*semsourceast.ParseResult{result}, nil)
 	bodies := c.bodiesForResult(ctx, result, pw.root)
 	for _, entity := range result.Entities {
 		// Stamp raw source identity + version (ADR-0008 #2) so the entity's triple
@@ -981,6 +1058,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 		// Nested git trees the walk refused to enter (submodules, foreign
 		// repos) — informational: those trees are other sources' scope.
 		BoundariesSkipped: c.boundariesSkipped.Load(),
+		IDCollisions:      c.idCollisions.Load(),
 		// Delivery truth: parse failures and publisher losses (overflow drops +
 		// terminal publish failures) surface here — a healthy-looking status must
 		// imply entities actually reached the substrate (no-silent-entity-loss).

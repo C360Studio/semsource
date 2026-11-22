@@ -112,35 +112,61 @@ func addNamedImport(spec2 *sitter.Node, source []byte, spec string, bindings map
 	bindings[local] = tsBinding{spec: spec, origin: origin}
 }
 
-// extractLocalKinds pre-scans a file's top-level type declarations into a
+// extractLocalKinds pre-scans a file's module-level type declarations into a
 // name -> entity-kind table (D5), so a same-file unknown-kind reference (a
-// parameter/return type) resolves to that type's real kind.
+// parameter/return type) resolves to that type's real kind. Namespace members
+// and locals are not module-level types: a namespace's own types are resolved
+// through its walk frame (namespaceType), and locals are not entities (#329).
 func extractLocalKinds(root *sitter.Node, source []byte) map[string]ast.CodeEntityType {
 	kinds := make(map[string]ast.CodeEntityType)
-	var walk func(n *sitter.Node)
-	walk = func(n *sitter.Node) {
-		var kind ast.CodeEntityType
-		switch n.Type() {
-		case "class_declaration":
-			kind = ast.TypeClass
-		case "interface_declaration":
-			kind = ast.TypeInterface
-		case "type_alias_declaration":
-			kind = ast.TypeType
-		case "enum_declaration":
-			kind = ast.TypeEnum
-		}
-		if kind != "" {
-			if nameNode := n.ChildByFieldName("name"); nameNode != nil {
-				kinds[nodeText(nameNode, source)] = kind
-			}
-		}
-		for i := 0; i < int(n.NamedChildCount()); i++ {
-			walk(n.NamedChild(i))
-		}
+	for i := 0; i < int(root.NamedChildCount()); i++ {
+		collectTopLevelKind(root.NamedChild(i), source, kinds)
 	}
-	walk(root)
 	return kinds
+}
+
+// collectTopLevelKind records the kind of a type declared by node, a direct
+// child of a module or namespace body, unwrapping `export` and `declare`.
+func collectTopLevelKind(node *sitter.Node, source []byte, kinds map[string]ast.CodeEntityType) {
+	var kind ast.CodeEntityType
+	switch node.Type() {
+	case "class_declaration":
+		kind = ast.TypeClass
+	case "interface_declaration":
+		kind = ast.TypeInterface
+	case "type_alias_declaration":
+		kind = ast.TypeType
+	case "enum_declaration":
+		kind = ast.TypeEnum
+	case "export_statement":
+		if decl := node.ChildByFieldName("declaration"); decl != nil {
+			collectTopLevelKind(decl, source, kinds)
+		}
+		return
+	case "ambient_declaration":
+		// `declare class X {}` wraps one declaration; `declare global {}` wraps
+		// a statement_block whose members are module-level for references and
+		// are emitted unscoped. `declare module "m" {}` and `declare namespace`
+		// are namespaces: their members resolve through the namespace frames.
+		// A bare statement_block anywhere else is a local scope (#329).
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			child := node.NamedChild(i)
+			if child.Type() == "statement_block" {
+				for j := 0; j < int(child.NamedChildCount()); j++ {
+					collectTopLevelKind(child.NamedChild(j), source, kinds)
+				}
+				continue
+			}
+			collectTopLevelKind(child, source, kinds)
+		}
+		return
+	}
+	if kind == "" {
+		return
+	}
+	if nameNode := node.ChildByFieldName("name"); nameNode != nil {
+		kinds[nodeText(nameNode, source)] = kind
+	}
 }
 
 // hierarchyRefID builds the entity ID for an `extends`/`implements` target whose
@@ -159,6 +185,13 @@ func (p *Parser) hierarchyRefID(name string, kind ast.CodeEntityType, fromRelPat
 	}
 	if strings.Contains(name, ".") {
 		return "external:" + name // e.g. React.Component / NS.Type
+	}
+	if scope, _, found, inert := p.namespaceType(name); inert {
+		return "" // a merged namespace body's local: not an entity
+	} else if found {
+		// A sibling in an enclosing namespace shadows imports and module-level
+		// types; the kind stays positional (D2).
+		return ast.NewScopedCodeEntity(p.authority, p.detectLanguage(fromRelPath), p.project, kind, scope, name, fromRelPath).ID
 	}
 	if rel, origin, ok := p.resolveTSImport(name, fromRelPath); ok {
 		return ast.NewCodeEntity(p.authority, p.detectLanguage(rel), p.project, kind, origin, rel).ID
@@ -185,6 +218,11 @@ func (p *Parser) typeRefID(name, fromRelPath string) string {
 		return "external:" + name
 	}
 	lang := p.detectLanguage(fromRelPath)
+	if scope, kind, found, inert := p.namespaceType(name); inert {
+		return "" // a merged namespace body's local: not an entity
+	} else if found {
+		return ast.NewScopedCodeEntity(p.authority, lang, p.project, kind, scope, name, fromRelPath).ID
+	}
 	if kind, ok := p.localKinds[name]; ok {
 		return ast.NewCodeEntity(p.authority, lang, p.project, kind, name, fromRelPath).ID
 	}

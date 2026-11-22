@@ -24,6 +24,7 @@ func fullReport() Report {
 		FilesParsed:       120,
 		BodiesOffloaded:   80,
 		BoundariesSkipped: 2,
+		IDCollisions:      3,
 		ErrorCount:        1,
 		TypeCounts:        map[string]int64{"function": 30, "file": 12},
 		Backpressure:      true,
