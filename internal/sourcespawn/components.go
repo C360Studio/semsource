@@ -128,6 +128,9 @@ func astComponentConfig(src config.SourceEntry, org string) (string, map[string]
 	if src.Version != "" {
 		watchPath["version"] = src.Version
 	}
+	if src.IndexVendoredJS {
+		watchPath["index_vendored_js"] = true
+	}
 	compCfg := map[string]any{
 		"ports":          outputPorts(),
 		"watch_paths":    []map[string]any{watchPath},

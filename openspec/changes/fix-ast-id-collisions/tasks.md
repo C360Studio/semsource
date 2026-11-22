@@ -57,7 +57,10 @@
   - Design decision 4's "a static method is reached through `ClassName.m()`" is wrong. `ClassName.m()` never resolved, before or after this change (`ts/calls.go:605-610` handles namespace imports only), so it stays out of scope.
   - IIFE, AMD and UMD-wrapped JS now emits only its file entity, because everything inside the wrapper function is local. **Owner accepted this on 2026-11-22**; the release note names it (5.4). The guard's `ts` fixture and the repository-tree pass now hold.
 - [x] 4.4 Go: skip blank `var`, `const` and `func`, and identify `init` per Q4. Test: the blank-declaration scenario, plus an `init` test under the ruling. Done 2026-11-22 (`source/ast/golang/blank_decls_test.go`). A method named `init` is still emitted, and `type _` is skipped too (review). Functions called only from `init` lose that caller; the release note has to name it (5.4).
-- [ ] 4.5 Asset guard: an `X.js` with an `X.min.js` sibling is file-entity-only, plus `index_vendored_js`. Tests are both asset-ingestion-guards scenarios.
+- [x] 4.5 Asset guard: an `X.js` with an `X.min.js` sibling is file-entity-only, plus `index_vendored_js`. Tests are both asset-ingestion-guards scenarios. Done 2026-11-22.
+  - `isVendoredTwin` lives in `processor/ast-source/assetguard.go`, tested by `vendored_twin_test.go`.
+  - The opt-in flows from `semsource.json` `index_vendored_js` through `internal/sourcespawn` to the watch path (`vendored_test.go`).
+  - The watch-time twin limit is marked `// shortcut:`.
 - [ ] 4.6 3.1 passes on all fixtures, and the repo-tree guard reports zero collisions.
 
 ## 5. Acceptance

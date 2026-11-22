@@ -137,6 +137,13 @@ type SourceEntry struct {
 	// Only applicable to "ast" source type.
 	IndexInterval string `json:"index_interval,omitempty"`
 
+	// IndexVendoredJS opts an ast source back into extracting symbols from an
+	// unminified JS file that sits beside its minified twin (jquery.js next to
+	// jquery.min.js). By default such a twin is indexed as its file entity only,
+	// like the minified file itself (asset-ingestion-guards, #334).
+	// Only applicable to "ast" source type.
+	IndexVendoredJS bool `json:"index_vendored_js,omitempty"`
+
 	// Branches is a list of branch name patterns to track in multi-branch mode.
 	// Supports glob patterns: ["*"], ["main", "scenario/*"].
 	// When empty, single-branch mode is used (tracks Branch field only).
