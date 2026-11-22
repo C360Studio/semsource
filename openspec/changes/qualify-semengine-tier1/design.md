@@ -2,7 +2,7 @@
 
 ## Context
 
-Main runs SemEngine `v0.1.0-alpha.6` at Tier 0 (`compositionGeneration = 5`,
+Main ran SemEngine `v0.1.0-alpha.6` at Tier 0; this change moves the pin to `v0.1.0-alpha.7` (line refs below are at alpha.6 unless marked) (`compositionGeneration = 5`,
 `cmd/semsource/run.go:527`). `graphSubsystemComponents` (`run.go:771`) composes graph-query with
 ports only. `embedding_enabled` is left unset and reads false (`run.go:787-791`). graph-lexical is
 added when `cfg.Graph.LexicalSearchEnabled()` (`run.go:865-878`). No graph-embedding is
@@ -13,6 +13,9 @@ but nothing resolves it at Tier 0. `GraphConfig` has no embedding key (`config/c
 Upstream at alpha.6 (`$SE` = the module dir):
 
 - `graph/embedding/httpembedder`: `Config{BaseURL, Model, APIKey, QueryPrefix}` (`httpembedder.go:26-43`).
+  alpha.7 adds `OmitInputType` and by default sends `input_type` (`query` / `document`), so semembed
+  applies the model's own instruction; semembed leaves a query that already starts with it unchanged, so
+  a product on semembed sets no `QueryPrefix` (alpha.7 `httpembedder.go:39-52`, semengine#686).
   `BaseURL` must end in `/v1`, and a reply naming another model is refused. It has no timeout of its
   own, and `Dimensions()` is learned from the first reply (`:106`).
 - `processor/graph-embedding.RegisterWithEmbedder(registry, embedderType, newEmbedder)`
@@ -26,6 +29,12 @@ Upstream at alpha.6 (`$SE` = the module dir):
 - If the embedding side fails, the reply is the word list with `merge.honoured: false`, one Warn,
   and `semengine_graph_query_search_merge_failed_total` (`textsearch.go:65-71,116-120`). If word
   search is not ready, `semanticAlone` answers (`:241-250`).
+- alpha.7 (semengine#706): `fusionnats` sends an `nl` resolve to the new `graph.query.mergedSearch`,
+  which returns only ranked IDs from the same merge step as `searchGraph`. It waits at most 4 s (or
+  `query_timeout_ms` when shorter) for the embedding search, then answers from words. The fusion
+  response's `provenance` is `embedding` when a returned seed came from the embedding list and
+  `lexical` otherwise; with `include_scores`, a merged seed's `similarity` is the merged score
+  (`pkg/fusion/MIGRATION.md`).
 
 The tests that pin "no graph-embedding" today are
 `TestGraphSubsystemComponents_GraphLexicalDefersToDefaultPorts` (`run_test.go:364`),
@@ -38,14 +47,14 @@ for lack of a Tier 1 config (`:384`), and it carries `TestProviderFailureAndReco
 
 ## Goals / Non-Goals
 
-**Goals:** an opt-in Tier 1 composition built only from admitted alpha.6 APIs; an honest
-`graph_search` answer when merged; provider identity recorded well enough to reproduce; a fault
+**Goals:** an opt-in Tier 1 composition built only from admitted alpha.7 APIs; an honest
+`graph_search` answer when merged, and fusion tools whose Tier 1 answers say where their seeds came from; provider identity recorded well enough to reproduce; a fault
 story where a missing provider can never read as a pass; acceptance graded against #230 and the
 alpha.6 Tier 0 run.
 
 **Non-Goals:** changing the default composition (it stays Tier 0); LLM community summaries
-(semengine#485); working around upstream gaps semengine#667 (unmeasured truncation), #686 (query
-prefix carried by SemSource) and #683 (sibling disambiguation); any entity-identity change.
+(semengine#485); working around upstream gaps semengine#667 (unmeasured truncation) and #683 (sibling
+disambiguation); #686 (query prefix carried by SemSource) closed in alpha.7; any entity-identity change.
 
 ## Decisions
 
@@ -60,11 +69,13 @@ prefix carried by SemSource) and #683 (sibling disambiguation); any entity-ident
    Compose graph-embedding and set graph-query `embedding_enabled: true`. Bump `compositionGeneration`
    to 6 with a new entry in `compositionFingerprints` (`composition_fingerprint_test.go:87`). Tier 0
    fingerprints stay byte-identical, which the test asserts.
-3. **Fusion NL stays on the word index until proven otherwise.** Before implementation, verify
-   whether `pkg/fusion/fusionnats` at alpha.6 resolves nl seeds through the merged `searchGraph` or
-   only through `graph.lexical.query.search`. If only lexical, Tier 1 changes `graph_search` and
-   leaves the fusion tools unchanged, and the change says so. It does not route fusion through a
-   bespoke path.
+3. **Fusion NL follows the substrate's merge; SemSource adds no path of its own.** At alpha.6
+   fusion `nl` was word-only (task 2.1, semengine#706). At alpha.7 it asks `mergedSearch`, so at Tier 1
+   `code_search`, `code_context` and `doc_context` seed from the merged list with no SemSource code
+   change. Their replies pass `provenance` through, and the tool descriptions state that a Tier 1
+   `similarity` (with `include_scores`) is on the merged scale, within the 8 KB budget. At Tier 0 the
+   answers are byte-identical to alpha.6's word list. The acceptance arm grades the fusion tools as
+   well as `graph_search`.
 4. **`graph_search` disclosure.** At Tier 1, `graphMatch.Relevance` (`graph_matches.go:116`) is the
    merged RRF score, so the tool description states that it is at most 2/61 and is not on the word
    scale. Each match gains `word_rank` and `vector_rank` when present, and the reply gains a `merge`
@@ -72,8 +83,8 @@ prefix carried by SemSource) and #683 (sibling disambiguation); any entity-ident
    `TestToolsListSchemaBudget` (8 KB, `schema_budget_test.go:18`) must still pass; if it can't, the
    ranks move into the description, not the schema.
 5. **Provider identity is evidence, not config.** The qualification record pins the semembed image
-   digest, build SHA, served model id and revision, ONNX hash, dimensions (384), query prefix and
-   preprocessing, as SETUP 03A did. The same provider instance serves both comparison points. The
+   digest, build SHA, served model id and revision, ONNX hash, dimensions (384), the instruction semembed
+   applies via `input_type` (no product query prefix) and preprocessing, as SETUP 03A did. The same provider instance serves both comparison points. The
    runtime only checks `Model` (upstream refuses a mismatched reply); the rest is recorded and checked
    by the harness.
 6. **Fault semantics.** A configured-but-unreachable provider leaves boot up (upstream constructs
@@ -82,8 +93,9 @@ prefix carried by SemSource) and #683 (sibling disambiguation); any entity-ident
    ready. setup03a's neural lane and the scorecard refuse to grade a run whose provider
    `/metrics` was unreachable, so it is never a pass.
 7. **Configs and compose.** Restore `configs/tiers/tier1-semantic.json`: `graph.semantic_search:
-   true`, registry `semembed` at `http://semembed:8081/v1`, model `Snowflake/snowflake-arctic-embed-s`
-   with its query prefix. The documented launch is `docker compose --profile semantic up`. The three
+   true`, registry `semembed` at `http://semembed:8081/v1`, model `Snowflake/snowflake-arctic-embed-s`,
+   no `query_prefix` (semembed applies the instruction; `isEmbeddingEndpoint`'s model-name backstop
+   still classifies it). The documented launch is `docker compose --profile semantic up`. The three
    "no graph-embedding" tests become tier-conditional: Tier 0 keeps asserting absence, and Tier 1
    asserts presence plus `embedding_enabled: true`.
 
@@ -101,6 +113,5 @@ prefix carried by SemSource) and #683 (sibling disambiguation); any entity-ident
 
 ## Open Questions (owner)
 
-- Is `graph.semantic_search` the right name and shape, or should Tier 1 be a named profile
-  (`graph.tier`)?
-- Should a Tier 1 boot with an unreachable provider stay up degraded (proposed), or refuse to start?
+Both ruled 2026-11-21 (tasks 1.2): `graph.semantic_search` boolean; an unreachable provider boots
+degraded.

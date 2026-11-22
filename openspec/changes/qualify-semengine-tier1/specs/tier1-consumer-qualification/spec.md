@@ -46,10 +46,29 @@ merged. The tools-list SHALL stay within its byte budget.
 - **WHEN** an agent calls `graph_search`
 - **THEN** the answer is the word list and the reply reports the merge not honoured
 
+### Requirement: Fusion tools disclose where Tier 1 seeds came from
+
+At Tier 1 the fusion tools (`code_search`, `code_context`, `doc_context`) SHALL seed natural-language
+questions only through the substrate's merged search, with no SemSource-owned search path, and SHALL
+return the fusion response's `provenance`. Their descriptions SHALL state that `similarity` is on the
+merged scale at Tier 1.
+
+#### Scenario: Merged seeds at Tier 1
+
+- **GIVEN** a Tier 1 composition whose embedding provider answers
+- **WHEN** an agent asks `code_search` a natural-language question whose answer includes an embedding-list seed
+- **THEN** the reply reports `provenance: embedding`
+
+#### Scenario: Tier 0 unchanged
+
+- **GIVEN** the default Tier 0 composition
+- **WHEN** an agent asks a fusion tool a natural-language question
+- **THEN** the seeds are the word list and the reply reports `provenance: lexical`
+
 ### Requirement: Tier 1 acceptance needs a reachable, identified provider
 
 Tier 1 qualification SHALL record the embedding provider's image digest, build SHA, served model id
-and revision, model artifact hash, dimensions and query prefix, and SHALL use one provider instance for
+and revision, model artifact hash, dimensions and the query instruction applied (by the provider via `input_type`, or a product prefix), and SHALL use one provider instance for
 every compared run. A run whose provider was configured but unreachable SHALL be reported as
 unavailable evidence, never as a pass. Readiness SHALL NOT report the semantic index ready while the
 provider is unreachable.
