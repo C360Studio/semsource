@@ -36,4 +36,4 @@
 
 ## 6. Close
 
-- [ ] 6.1 Archive this change before the implementing PR is marked ready.
+- [x] 6.1 Archive this change before the implementing PR is marked ready.
