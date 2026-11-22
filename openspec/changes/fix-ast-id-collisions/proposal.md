@@ -1,6 +1,6 @@
 # One entity ID per declaration in the AST parsers
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-22) sha256:d24556775c82
 
 Track: design (Requirements in three capabilities, entity identity, a publish-path guard).
 

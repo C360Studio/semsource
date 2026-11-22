@@ -2,7 +2,12 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md`, and rules on Q1–Q4. Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-22, sha256:d24556775c82; line entered by claude at the owner's instruction).
+- [x] 1.2 Owner rulings 2026-11-22, all four at the design's defaults:
+  - **Q1:** Java edges use arity only and stay conservative past external ancestors. Task 2.2's numbers are recorded, but they don't reopen Q1 without a new ruling.
+  - **Q2:** test-file locals are dropped.
+  - **Q3:** vendored twins become file-entity-only, with opt-in via `index_vendored_js`. This refines the #334 "exclude" ruling.
+  - **Q4:** `func init()` is skipped, keeping rule 1 intact.
 
 ## 2. Verify before code
 
