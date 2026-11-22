@@ -318,6 +318,14 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 		entities = append(entities, varEntities...)
 	}
 
+	// Everything below a function-like node is local to it and not emitted
+	// (#331): a declaration's identity must not depend on which callback or
+	// block it sits in, and nothing addresses a local from outside its scope.
+	// The node itself was handled by the switch above.
+	if localScopeTypes[nodeType] {
+		return entities
+	}
+
 	// Recursively process children
 	if cursor.GoToFirstChild() {
 		for {
@@ -330,6 +338,54 @@ func (p *Parser) walkNode(cursor *sitter.TreeCursor, source []byte, filePath, la
 	}
 
 	return entities
+}
+
+// localScopeTypes are the node types that open a scope whose declarations are
+// local: functions of every form, methods, and class static blocks. A namespace
+// body is a statement_block too, but its members are not local.
+var localScopeTypes = map[string]bool{
+	"function_declaration":           true,
+	"generator_function_declaration": true,
+	"function_expression":            true,
+	"function":                       true,
+	"generator_function":             true,
+	"arrow_function":                 true,
+	"method_definition":              true,
+	"class_static_block":             true,
+}
+
+// IsLocalScope reports whether declarations beneath a node of this type are
+// local to it, and so not emitted. Shared with the Svelte script walk.
+func IsLocalScope(nodeType string) bool { return localScopeTypes[nodeType] }
+
+// memberInstanceName is the identity a class member is built under: its name,
+// plus a discriminator for the forms that may share a name in one class body.
+// A getter and setter pair become name-get / name-set, and a static member
+// name-static. Applied to every such member, never only to colliding ones, so
+// adding a sibling never re-identifies an existing member (#331).
+func memberInstanceName(node *sitter.Node, name string) string {
+	instance := name
+	for i := 0; i < int(node.ChildCount()); i++ {
+		switch node.Child(i).Type() {
+		case "static":
+			instance += "-static"
+		case "get":
+			instance += "-get"
+		case "set":
+			instance += "-set"
+		}
+	}
+	return instance
+}
+
+// isStaticMember reports a class member declared static.
+func isStaticMember(node *sitter.Node) bool {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if node.Child(i).Type() == "static" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractClass extracts a class entity
@@ -408,11 +464,18 @@ func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, file
 	// Computed once per class and threaded through so a this.-call inside any
 	// of its methods resolves against the same own-class method set the
 	// entities below were built from (calls.go).
-	classMethods := classMethodNames(bodyNode, source)
+	instanceMethods := classMethodNames(bodyNode, source, false)
+	staticMethods := classMethodNames(bodyNode, source, true)
 
 	for i := 0; i < int(bodyNode.ChildCount()); i++ {
 		child := bodyNode.Child(i)
 		if child.Type() == "method_definition" {
+			// `this` in a static method is the class, so its this.-calls reach
+			// the static members; in an instance method, the instance members.
+			classMethods := instanceMethods
+			if isStaticMember(child) {
+				classMethods = staticMethods
+			}
 			method := p.extractMethod(child, source, filePath, lang, parentID, scope, classMethods)
 			if method != nil {
 				methods = append(methods, method)
@@ -423,10 +486,10 @@ func (p *Parser) extractClassMethods(classNode *sitter.Node, source []byte, file
 	return methods
 }
 
-// extractMethod extracts a method entity. classMethods is the enclosing
-// class's own method-name set (calls.go's classMethodNames), used to resolve
-// this.-calls in the method body.
-func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang, parentID string, scope []string, classMethods map[string]bool) *ast.CodeEntity {
+// extractMethod extracts a method entity. classMethods maps the enclosing
+// class's callable method names to their instance names (calls.go's
+// classMethodNames), used to resolve this.-calls in the method body.
+func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang, parentID string, scope []string, classMethods map[string]string) *ast.CodeEntity {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return nil
@@ -442,7 +505,8 @@ func (p *Parser) extractMethod(node *sitter.Node, source []byte, filePath, lang,
 	lineNum := int(node.StartPoint().Row) + 1
 	endLine := int(node.EndPoint().Row) + 1
 
-	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeMethod, scope, name, filePath)
+	entity := ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeMethod, scope, memberInstanceName(node, name), filePath)
+	entity.Name = name
 	entity.ContainedBy = parentID
 	entity.StartLine = lineNum
 	entity.EndLine = endLine

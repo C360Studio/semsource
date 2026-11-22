@@ -406,6 +406,12 @@ func (p *Parser) walkScriptNode(cursor *sitter.TreeCursor, source []byte, filePa
 		entities = append(entities, varEntities...)
 	}
 
+	// Declarations local to a function, method or static block are not emitted
+	// (#331), the same rule as the TS parser's.
+	if ts.IsLocalScope(nodeType) {
+		return entities
+	}
+
 	if cursor.GoToFirstChild() {
 		for {
 			entities = append(entities, p.walkScriptNode(cursor, source, filePath, lang, parentID)...)

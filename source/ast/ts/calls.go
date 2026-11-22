@@ -362,11 +362,15 @@ func addDefaultImport(node *sitter.Node, source []byte, bindings map[string]stri
 // `this.m()` call resolves only when m is actually a method of THIS class — an
 // inherited/mixin method stays inert (mirrors python/calls.go's
 // classMethodNames; D3 explicitly rules out a supers walk for TS).
-func classMethodNames(classBody *sitter.Node, source []byte) map[string]bool {
-	names := make(map[string]bool)
+//
+// static selects the static or the instance members; accessors are left out,
+// because `this.x` reads a property and `this.x()` never invokes a getter. Each
+// name maps to the instance name its entity is built under (memberInstanceName).
+func classMethodNames(classBody *sitter.Node, source []byte, static bool) map[string]string {
+	names := make(map[string]string)
 	for i := 0; i < int(classBody.ChildCount()); i++ {
 		child := classBody.Child(i)
-		if child.Type() != "method_definition" {
+		if child.Type() != "method_definition" || isStaticMember(child) != static || isAccessor(child) {
 			continue
 		}
 		nameNode := child.ChildByFieldName("name")
@@ -377,9 +381,19 @@ func classMethodNames(classBody *sitter.Node, source []byte) map[string]bool {
 		if name == "constructor" {
 			continue
 		}
-		names[name] = true
+		names[name] = memberInstanceName(child, name)
 	}
 	return names
+}
+
+// isAccessor reports a get or set member.
+func isAccessor(node *sitter.Node) bool {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if t := node.Child(i).Type(); t == "get" || t == "set" {
+			return true
+		}
+	}
+	return false
 }
 
 // thisIsRebound reports whether a `this` reference at node is shadowed by an
@@ -529,7 +543,7 @@ func localValueNames(params, body *sitter.Node, source []byte) map[string]bool {
 // function-like node's own parameter node (nil when it has none), used with
 // body to build the local-shadow guard (localValueNames) before any call site
 // is resolved.
-func (p *Parser) extractCalls(params, body *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods map[string]bool) []string {
+func (p *Parser) extractCalls(params, body *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods map[string]string) []string {
 	if body == nil {
 		return nil
 	}
@@ -563,7 +577,7 @@ func (p *Parser) extractCalls(params, body *sitter.Node, source []byte, filePath
 // or local declaration is a call through that VALUE, not a reference to any
 // module-level/imported definition of the same name, so it must not resolve —
 // not even to an "external:" marker.
-func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods, locals map[string]bool) string {
+func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath, lang string, scope []string, classMethods map[string]string, locals map[string]bool) string {
 	if fn == nil {
 		return ""
 	}
@@ -583,10 +597,11 @@ func (p *Parser) callTargetID(fn, bodyRoot *sitter.Node, source []byte, filePath
 		method := nodeText(prop, source)
 		switch obj.Type() {
 		case "this":
-			if len(scope) == 0 || !classMethods[method] || thisIsRebound(fn, bodyRoot) {
+			instance, ok := classMethods[method]
+			if len(scope) == 0 || !ok || thisIsRebound(fn, bodyRoot) {
 				return ""
 			}
-			return ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeMethod, scope, method, filePath).ID
+			return ast.NewScopedCodeEntity(p.authority, lang, p.project, ast.TypeMethod, scope, instance, filePath).ID
 		case "identifier":
 			ns := nodeText(obj, source)
 			if locals[ns] {
@@ -723,6 +738,6 @@ func (p *Parser) PrepareCallResolution(root *sitter.Node, content []byte) {
 // TARGET file's own extension (never a .svelte file — components are not
 // import()-able as named function modules), so cross-module edges are correct
 // regardless of caller.
-func (p *Parser) ExtractCalls(params, body *sitter.Node, content []byte, filePath, lang string, scope []string, classMethods map[string]bool) []string {
+func (p *Parser) ExtractCalls(params, body *sitter.Node, content []byte, filePath, lang string, scope []string, classMethods map[string]string) []string {
 	return p.extractCalls(params, body, content, filePath, lang, scope, classMethods)
 }
