@@ -70,7 +70,22 @@ func foldSemanticReadiness(lexical, embedding workbenchIndexReadiness) workbench
 			return half
 		}
 	}
-	return lexical
+	// Both halves are ready but may cover different revisions. A caller
+	// compares indexed_revision with its write's revision (ReadinessNote), so
+	// the folded watermark is the lower one; it is unknown if either is.
+	folded := lexical
+	folded.IndexedRevision, folded.TargetRevision, folded.Lag = nil, nil, nil
+	if lexical.IndexedRevision == nil || embedding.IndexedRevision == nil {
+		return folded
+	}
+	indexed := min(*lexical.IndexedRevision, *embedding.IndexedRevision)
+	folded.IndexedRevision = &indexed
+	if lexical.TargetRevision != nil && embedding.TargetRevision != nil {
+		target := max(*lexical.TargetRevision, *embedding.TargetRevision, indexed)
+		lag := target - indexed
+		folded.TargetRevision, folded.Lag = &target, &lag
+	}
+	return folded
 }
 
 // SemanticReadinessJSON is the tier 1 form of IndexReadinessJSON for the

@@ -26,7 +26,7 @@ func unreachableProviderStatus(revision uint64) semgraph.IndexStatusResponse {
 // both the capabilities document and /status, is ready only while graph-lexical
 // and graph-embedding both are. A missing or failing provider must never read
 // as a ready semantic index, because search then quietly answers words only.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
 func TestSemanticReadinessWaitsOnGraphEmbedding(t *testing.T) {
 	building := semgraph.IndexStatusResponse{State: "building", IndexedRevision: 30, TargetRevision: 42}
 	for _, tc := range []struct {
@@ -132,7 +132,7 @@ func TestSemanticReadinessWaitsOnGraphEmbedding(t *testing.T) {
 
 // TestSemanticReadinessJSONFoldsBothHalves: the MCP gateway's form of the fold
 // gives the same verdict from raw envelopes.
-// spec: openspec/changes/qualify-semengine-tier1/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
 func TestSemanticReadinessJSONFoldsBothHalves(t *testing.T) {
 	ready, err := json.Marshal(readyIndexStatus(42))
 	if err != nil {
@@ -162,4 +162,110 @@ func TestSemanticReadinessJSONFoldsBothHalves(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSemanticReadinessFoldsTheLowerWatermark: when both halves are ready but
+// cover different revisions, every surface reports the lower indexed revision,
+// so a caller's read-your-write comparison never trusts a write graph-embedding
+// has not covered. A half without a revision makes the folded one unknown.
+// spec: openspec/specs/tier1-consumer-qualification/spec.md#Requirement: Tier 1 acceptance needs a reachable, identified provider
+func TestSemanticReadinessFoldsTheLowerWatermark(t *testing.T) {
+	rev := func(v uint64) *uint64 { return &v }
+	noRevision := []byte(`{"ready":true,"state":"ready"}`)
+	for _, tc := range []struct {
+		name                    string
+		lexical, embedding      capabilityStatusResult
+		wantIndexed, wantTarget *uint64
+		wantLag                 *uint64
+	}{
+		{
+			name:    "embedding covers less than the word index",
+			lexical: capabilityStatusResult{status: readyIndexStatus(100)}, embedding: capabilityStatusResult{status: readyIndexStatus(90)},
+			wantIndexed: rev(90), wantTarget: rev(100), wantLag: rev(10),
+		},
+		{
+			name:    "word index covers less than embedding",
+			lexical: capabilityStatusResult{status: readyIndexStatus(80)}, embedding: capabilityStatusResult{status: readyIndexStatus(95)},
+			wantIndexed: rev(80), wantTarget: rev(95), wantLag: rev(15),
+		},
+		{
+			name:    "same revision",
+			lexical: capabilityStatusResult{status: readyIndexStatus(42)}, embedding: capabilityStatusResult{status: readyIndexStatus(42)},
+			wantIndexed: rev(42), wantTarget: rev(42), wantLag: rev(0),
+		},
+		{
+			name:    "embedding revision unknown",
+			lexical: capabilityStatusResult{status: readyIndexStatus(100)}, embedding: capabilityStatusResult{raw: noRevision},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			check := func(surface string, got workbenchIndexReadiness) {
+				t.Helper()
+				if !got.Ready || !got.Available {
+					t.Fatalf("%s: both halves are ready, got %+v", surface, got)
+				}
+				for _, f := range []struct {
+					field     string
+					got, want *uint64
+				}{
+					{"indexed_revision", got.IndexedRevision, tc.wantIndexed},
+					{"target_revision", got.TargetRevision, tc.wantTarget},
+					{"lag", got.Lag, tc.wantLag},
+				} {
+					if (f.got == nil) != (f.want == nil) || (f.got != nil && *f.got != *f.want) {
+						t.Errorf("%s %s = %v, want %v", surface, f.field, deref(f.got), deref(f.want))
+					}
+				}
+			}
+
+			c := newCapabilityTestComponent(t, PhaseReady, true, map[string]capabilityStatusResult{
+				"graph-index": {status: readyIndexStatus(100)}, "graph-lexical": tc.lexical, "graph-embedding": tc.embedding,
+			})
+			c.config.EmbeddingEnabled = true
+			rec := httptest.NewRecorder()
+			c.handleWorkbenchCapabilities(rec, httptest.NewRequest(http.MethodGet, "/source-manifest/capabilities", nil))
+			var caps workbenchCapabilitiesResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
+				t.Fatalf("decode capabilities: %v: %s", err, rec.Body.String())
+			}
+			check("capabilities", caps.Readiness.SemanticIndex)
+
+			rec = httptest.NewRecorder()
+			c.handleStatus(rec, httptest.NewRequest(http.MethodGet, "/source-manifest/status", nil))
+			var status struct {
+				Embedding workbenchIndexReadiness `json:"embedding"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+				t.Fatalf("decode status: %v: %s", err, rec.Body.String())
+			}
+			check("status", status.Embedding)
+
+			// The MCP gateway's source_status folds raw envelopes the same way.
+			var mcp workbenchIndexReadiness
+			if err := json.Unmarshal(SemanticReadinessJSON(rawStatus(t, tc.lexical), nil, rawStatus(t, tc.embedding), nil,
+				"semantic index"), &mcp); err != nil {
+				t.Fatal(err)
+			}
+			check("source_status", mcp)
+		})
+	}
+}
+
+func rawStatus(t *testing.T, r capabilityStatusResult) []byte {
+	t.Helper()
+	if r.raw != nil {
+		return r.raw
+	}
+	data, err := json.Marshal(r.status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func deref(v *uint64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }

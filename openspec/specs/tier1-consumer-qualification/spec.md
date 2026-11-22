@@ -74,7 +74,8 @@ Tier 1 qualification SHALL record the embedding provider's image digest, build S
 and revision, model artifact hash, dimensions and the query instruction applied (by the provider via `input_type`, or a product prefix), and SHALL use one provider instance for
 every compared run. A run whose provider was configured but unreachable SHALL be reported as
 unavailable evidence, never as a pass. Readiness SHALL report the semantic index ready only while
-graph-lexical and graph-embedding both report their index caught up. Readiness is index coverage,
+graph-lexical and graph-embedding both report their index caught up, and SHALL then report the lower
+of their indexed revisions, unknown when either is unknown. Readiness is index coverage,
 not provider liveness: each answer reports liveness itself, through `merge.honoured` on
 `graph_search`; fusion `provenance` cannot tell provider loss apart (semengine#723).
 
@@ -89,6 +90,12 @@ not provider liveness: each answer reports liveness itself, through `merge.honou
 - **GIVEN** a Tier 1 composition whose provider does not answer while entities are embedded
 - **WHEN** a client reads readiness
 - **THEN** the semantic index is not ready, because graph-embedding's failed entities hold its index back
+
+#### Scenario: Both halves ready at different revisions
+
+- **GIVEN** a Tier 1 composition whose word index has indexed revision 100 and whose graph-embedding has indexed revision 90, both ready
+- **WHEN** a client reads the semantic index on `/source-manifest/status`, the capabilities document or MCP `source_status`
+- **THEN** it reports `indexed_revision: 90`, so a write after revision 90 is not read as covered
 
 #### Scenario: Provider goes down after the index caught up
 
