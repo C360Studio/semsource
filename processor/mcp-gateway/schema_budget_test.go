@@ -48,10 +48,18 @@ func TestToolsListSchemaBudget(t *testing.T) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].total > rows[j].total })
 
+	// Gate on the marshalled result, not the per-tool sum: the list framing
+	// rides the wire too, and a sum under-counts it.
+	wire, err := json.Marshal(res)
+	if err != nil {
+		t.Fatalf("marshal tools/list: %v", err)
+	}
+	total = len(wire)
+
 	for _, r := range rows {
 		t.Logf("%-16s %5d B (description %4d B, schema+envelope %4d B)", r.name, r.total, r.desc, r.total-r.desc)
 	}
-	t.Logf("tools/list total: %d bytes across %d tools (budget %d)", total, len(rows), toolsListBudgetBytes)
+	t.Logf("tools/list result: %d bytes across %d tools (budget %d)", total, len(rows), toolsListBudgetBytes)
 
 	if total > toolsListBudgetBytes {
 		t.Errorf("tools/list = %d bytes, over the %d-byte budget: trim the largest tools above or raise the budget deliberately (#126)",

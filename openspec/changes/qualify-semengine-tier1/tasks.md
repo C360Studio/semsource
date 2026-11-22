@@ -25,7 +25,7 @@
 
 - [x] 4.1 Merged `relevance`, `word_rank`, `vector_rank` and the `merge` disclosure; description states the score scale. Evidence: `processor/mcp-gateway/graph_matches.go:72,261`, `query_tools.go:131`, retrieval note in `disclosure.go`; live graph-query + graph-embedding test `processor/mcp-gateway/graph_search_tier1_integration_test.go:85` (honoured and `honoured:false`); review fix: the embedding-only answer (`text: null`, merge `index_not_ready`) renders `data.semantic` in vector order with hints kept, `buildGraphSearchResult` in `graph_matches.go`, test `TestIntegration_GraphSearchRendersEmbeddingOnlyAnswer`.
 - [x] 4.2 Fusion tools pass `provenance` through, and their descriptions state the Tier 1 `similarity` scale. Evidence: `processor/code-context/provenance_integration_test.go:28` (real fusionnats over `mergedSearch`: `embedding`, `lexical`, unhonoured merge `lexical`); descriptions in `processor/mcp-gateway/component.go`, pinned by `graph_tools_test.go:67`.
-- [x] 4.3 `TestToolsListSchemaBudget` passes. Evidence: tools/list 8,121 of 8,192 B (was 7,603; `graph_search` 1,215 B).
+- [x] 4.3 `TestToolsListSchemaBudget` passes. Evidence: the gate now measures the marshalled tools/list result, 8,141 of 8,192 B (the earlier per-tool sum read 8,121 and missed the list framing; the scorecard's 8,175 B adds the JSON-RPC envelope). Was 7,603; `graph_search` 1,215 B.
 
 ## 5. Acceptance
 
