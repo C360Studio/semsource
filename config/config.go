@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -330,6 +331,31 @@ func (c *Config) validateSemanticSearch() error {
 		return fmt.Errorf("config: graph.semantic_search: model_registry capability %q resolves to endpoint %q (model %q), "+
 			"which is not recognisably an embedding endpoint; bind %q to an embedding model", model.CapabilityEmbedding,
 			name, ep.Model, model.CapabilityEmbedding)
+	}
+	if err := checkEmbeddingURL(ep.URL); err != nil {
+		return fmt.Errorf("config: graph.semantic_search: model_registry endpoint %q url %q %w", name, ep.URL, err)
+	}
+	return nil
+}
+
+// checkEmbeddingURL checks offline what httpembedder needs of a base URL: an
+// absolute http or https URL with a host whose path ends in /v1, since the
+// client adds /embeddings. httpembedder refuses the first two only at Start, and
+// a wrong path only on the first request, so a Tier 1 boot would come up
+// degraded on a typo; validation names it instead. Nothing is dialled.
+func checkEmbeddingURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("does not parse: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("is not an http or https URL")
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("has no host")
+	}
+	if !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), "/v1") {
+		return fmt.Errorf("must end in /v1 (the embedder adds /embeddings), for example http://semembed:8081/v1")
 	}
 	return nil
 }
