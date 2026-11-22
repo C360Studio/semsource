@@ -11,7 +11,7 @@ no embedder is composed. It has two compositions — Structural (`graph.lexical_
 |------|------|--------------------|------------------|------------------------------|
 | **0 — Structural** | graph-ingest / index / query / gateway | refused: `501 not_enabled` (byName / prefix / relations / impact only) | none | ✅ (`tier0-foundation.json`, `graph.lexical_search: false`) |
 | **0 — Lexical** (default) | graph-lexical (**BM25** word index) | keyword-statistical: good for term overlap, weak for paraphrase | none | ✅ (`mvp.json`, `tier0-statistical.json`) |
-| **1 — Semantic** | graph-embedding (**HTTP → semembed**) | true semantic similarity, paraphrase-robust (needs `query_prefix`) | **semembed** (:8081, OpenAI-compatible embeddings) | ❌ not composed on this pin, no config ships; qualifies after the tag ([#234](https://github.com/C360Studio/semsource/issues/234)) |
+| **1 — Semantic** | graph-embedding (**HTTP → semembed**), merged with the word index | word and embedding hits merged by rank, paraphrase-robust | **semembed** (:8081, OpenAI-compatible embeddings) | ✅ opt-in (`tier1-semantic.json`, `graph.semantic_search: true`); acceptance is [#234](https://github.com/C360Studio/semsource/issues/234) |
 | **2 — Generative** | graph-clustering + LLM community summaries (**seminstruct**) | + community/summary reasoning | **seminstruct** (:8083, inference proxy) | ❌ LLM summaries are not shipped ([semengine#485](https://github.com/C360Studio/semengine/issues/485)); no config ships |
 
 The structural verbs — `code_context`, `code_impact`, and byName/prefix resolution — don't depend on the word
@@ -19,13 +19,13 @@ index or an embedder and work at every tier. `doc_context` needs a source that p
 [Tier 0 — Structural](#tier-0--structural-tier0-foundationjson--works-today)). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
 
-> **On `semengine v0.1.0-alpha.6` only Tier 0 runs (Structural and Lexical).** Tier 0 word search is
-> `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. SemSource
-> composes no tier 1 embedder on this pin, so the tier 1 and tier 2 configs and the tier 2 dev overlay
-> were removed. Tier 1 returns with [#234](https://github.com/C360Studio/semsource/issues/234); LLM
-> community summaries wait on [semengine#485](https://github.com/C360Studio/semengine/issues/485). The
-> Tier 1 and Tier 2 sections below describe that wiring as it stood on the SemStreams pin: they are not
-> runnable here, and the keys and files they name are retired or gone.
+> **On `semengine v0.1.0-alpha.7` Tier 0 is the default and Tier 1 is opt-in.** Tier 0 word search is
+> `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. Tier 1 is
+> `graph.semantic_search: true` with a `model_registry` embedding endpoint (`tier1-semantic.json`); its
+> qualification against the measured floors is [#234](https://github.com/C360Studio/semsource/issues/234).
+> LLM community summaries wait on [semengine#485](https://github.com/C360Studio/semengine/issues/485); the
+> Tier 2 section below describes the generative wiring as it stood on the SemStreams pin and is not
+> runnable here.
 
 > **Paths in these files are Docker-container paths** (`/workspace`) — exactly the mount the shipped
 > compose stack creates (`SEMSOURCE_TARGET` on the host → `/workspace` in the container, defaulting to
@@ -75,35 +75,46 @@ semsource run --config configs/tiers/tier0-statistical.json
 > `embedding` block reports the `graph-lexical` index; `index.ready` gates the structural tools; the old
 > "total_entities is stable" heuristic is retired — counts are no longer a readiness proxy).
 
-## Tier 1 — Semantic (semembed) — returns with 04C (#234)
+## Tier 1 — Semantic (semembed) — opt-in
 
-> **Not runnable on this pin.** No `graph-embedding` is composed, `graph.embedder_type` is refused at load
-> (any value, `null` included), and no Tier 1 config ships. What follows is the wiring as it stood on the
-> SemStreams pin, kept as the starting point for [#234](https://github.com/C360Studio/semsource/issues/234).
+`tier1-semantic.json` sets `graph.semantic_search: true` and binds the `model_registry` **`embedding`**
+capability to semembed. SemSource then composes **graph-embedding** (registered with an HTTP embedder
+built from that endpoint) beside graph-lexical, and sets graph-query's `embedding_enabled`, so
+`searchGraph` and fusion's natural-language resolve merge the word list and the embedding list by rank.
+Validation refuses `graph.semantic_search: true` unless `embedding` resolves to an embedding endpoint
+and `graph.lexical_search` is on, so a Tier 1 config never boots silently as Tier 0. With the compose
+stack, start semembed with the `semantic` profile:
 
-Tier 1 swapped the embedder to `http`, which resolved the `model_registry` **`embedding`** capability
-(graph-embedding). semstreams centralized endpoints in a `model_registry` (ADR-0002 / alpha.29 — it
-removed per-component `embedder_url` in favour of the registry); semsource passes `config.ModelRegistry`
-straight through to `ssCfg.ModelRegistry`, and the ComponentManager injects it into
-`deps.ModelRegistry`. The pass-through still exists, but on this pin nothing resolves from it:
-`embedder_type` is refused outright rather than validated against the registry.
+```bash
+SEMSOURCE_CONFIG=tiers/tier1-semantic.json docker compose --profile semantic up
+```
 
-**Set `query_prefix` for arctic/BGE/E5 models** (see the caveat below): it applies to the query side
-only (documents are embedded raw). Without it, retrieval quality collapses toward short generic entities.
+**Set no `query_prefix` for semembed.** The embedder sends `input_type` (`query` or `document`) with
+every request, and semembed applies the model's own query instruction (arctic: `"Represent this sentence
+for searching relevant passages: "`). A `query_prefix` is only for a provider that does not apply the
+instruction itself.
 
 ```jsonc
 {
   "namespace": "acme",
   "sources": [ /* ... */ ],
+  "graph": { "semantic_search": true },
   "model_registry": {
     "endpoints": {
-      "semembed": { "provider": "openai", "url": "http://localhost:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s",
-        "query_prefix": "Represent this sentence for searching relevant passages: " }
+      "semembed": { "provider": "openai", "url": "http://semembed:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s" }
     },
     "capabilities": { "embedding": { "preferred": ["semembed"] } }
   }
 }
 ```
+
+**Switching a running deployment to Tier 1:** a booted deployment keeps its retained composition until the
+file's `config_revision` exceeds the retained one, so raise `config_revision` with the switch or the
+retained Tier 0 wiring stays. Whether graph-embedding backfills a retained store is still being measured
+(#234); until then, reseed.
+
+The URL must end in `/v1` (the client adds `/embeddings`), and a reply naming another model is refused.
+To run semembed outside compose, point the URL at `http://localhost:8081/v1`:
 
 ```bash
 docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:latest   # OpenAI-compatible embeddings
@@ -164,17 +175,24 @@ and binding a capability nothing runs would invent coverage.
 > `doc_context` do not use — so that path remains unexercised here, and this table should not be
 > read as evidence it works end to end.
 
-> **Query prefix — REQUIRED for arctic/BGE/E5 (resolved semstreams#438, beta.129).** These retrieval
-> models are *asymmetric*: the query must carry an instruction prefix (arctic:
-> `"Represent this sentence for searching relevant passages: "`) while documents are embedded raw.
-> semstreams beta.129 (PR #440) added `EndpointConfig.query_prefix` + `GenerateQuery` — set it on the
-> endpoint (as above) and the semantic-search path applies it to the query only. **Measured impact
-> (dogfood, 21k entities):** with the prefix the arctic relevant-vs-noise cosine margin ~doubles
-> (+0.090 → +0.158), and end-to-end `code_search` beats tier-0 BM25 on paraphrase queries where the
-> query words don't appear in the code (e.g. *"prevent processing the same message twice"* →
-> `publish_msgid_integration_test.go`; *"compute a sha256 hash"* → `graph/embedding/cache.go`) — BM25
-> whiffs those (no lexical overlap). Omit the prefix and tier-1 ranks *below* BM25. A code-specialized
-> or larger embedder is a complementary product-side lever.
+> **The query instruction still matters; semembed applies it.** arctic/BGE/E5 are *asymmetric*: the
+> query must carry an instruction while documents are embedded raw. On semembed the instruction comes from
+> `input_type`, so no `query_prefix` is set. **Measured on the SemStreams pin (dogfood, 21k entities),
+> when the prefix was set by the product:** the arctic relevant-vs-noise cosine margin ~doubled
+> (+0.090 → +0.158), and `code_search` beat tier-0 BM25 on paraphrase queries whose words don't appear in
+> the code (e.g. *"prevent processing the same message twice"* → `publish_msgid_integration_test.go`).
+> Without the instruction tier 1 ranked *below* BM25. Re-measured for this pin in #234.
+
+**Scores at Tier 1 are on a different scale.** A merged score is the sum of 1/(60 + place) over the two
+lists, at most 2/61. `graph_search` reports it as `relevance` with each match's `word_rank` and
+`vector_rank`, and a `merge` block; `merge.honoured: false` means the embedding search failed and the
+matches are the word list alone. The fusion tools report `provenance: embedding` when a returned seed came
+from the embedding list, and `lexical` otherwise. A client that thresholds `relevance` on the word scale
+breaks at Tier 1.
+
+**An unreachable provider leaves SemSource up, degraded.** Search answers from words with the merge not
+honoured, and the readiness `embedding` block (on `/source-manifest/status` and `source_status`) and the
+`semantic_index` capability stay not ready until graph-embedding reports ready.
 
 ## Tier 2 — Generative (seminstruct) — not shipped
 
@@ -251,11 +269,7 @@ not currently expose, so it is off in every deployment.
   composes graph-clustering, but the community-backed rung of `graph_search`'s disclosure is covered by
   unit tests over substrate-shaped replies (`processor/mcp-gateway/disclosure_test.go`), not by a live
   clustered stack.
-- **Tier 1 is not composed on this pin.** The `config.ModelRegistry` → `ssCfg.ModelRegistry` pass-through
-  is the wiring that exists. The earlier end-to-end validation against local semembed (http embedder
-  active, embeddings generated with 0 errors, `provenance: embedding` on `code_search`) ran on the
-  SemStreams pin and does not carry over to [#234](https://github.com/C360Studio/semsource/issues/234).
-- **Tier-1 beat BM25 with the query prefix set** (semstreams#438 resolved, beta.129), measured on the
-  SemStreams pin. On the dogfood corpus, semembed + `query_prefix` nailed paraphrase queries that BM25
-  misses; omitting the prefix regressed below BM25. A code-specialized or larger embedder is the
-  complementary product-side lever. Re-measure for #234.
+- **Tier 1 is opt-in** (`tier1-semantic.json`, `graph.semantic_search: true`). Its acceptance against
+  the measured floors (setup03a's neural lane and the scorecard Tier 1 arm) is
+  [#234](https://github.com/C360Studio/semsource/issues/234); until it lands, treat Tier 1 answer quality
+  on this pin as unmeasured.
