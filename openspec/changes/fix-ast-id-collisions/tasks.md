@@ -34,7 +34,7 @@
   - Checking only the in-repo hierarchy would keep 3,616 of the (c) sites: about 12.3 points.
   - 18,782 of 23,319 edges are kept (80.5%). 1,549 of 8,564 callers (18.1%) lose every outgoing edge.
   - Top (b) callees: `Asserts.checkNotNull` 315, `getStringValue` 138, `new OWSException` 81.
-  - **This was surfaced to the owner for a new Q1 ruling. Implementation of 4.2 waits on it.** Hold: OPEN-Q Q1 edge-cost ruling after 2.2 measurement
+  - **Owner re-ruled Q1, 2026-11-22: option B.** When the receiver's hierarchy leaves the repo, the call still links if exactly one **in-repo** candidate accepts the argument count. This **amends design decision 3** (its "or when the ancestor chain leaves the repo … no edge" clause) and the code-call-graph delta. Accepted risk: an external ancestor that declares a same-named method of the same arity, a risk today's name-only edges already carry. The expected keep rate is about 92%. Same-arity overloads (7.0%) still emit no edge. Task 5.3 confirms OSH at 10/10 or better.
 - [x] 2.3 **The claim holds** on dogfood, measured 2026-11-22.
   - Dogfood has 475 local entities (330 distinct IDs): 352 TS const, 67 JS const, 31 var, 13 Svelte const, 10 TS function.
   - The only statements pointing at them are `code.structure.contains` from their own file. Zero `calls`, references, `extends`, `implements`, `parameter`, `returns` or `belongs` edges come from a non-local subject.
@@ -49,7 +49,7 @@
 ## 4. Identity fixes (breaking; one storage break)
 
 - [ ] 4.1 Java discriminator (kind, type text without type arguments, array dimensions kept, type variables to their first bound) on every method and constructor. Tests: the constructor-versus-method and `int`/`int[]` scenarios, plus stability under a sibling-overload add and a parameter rename.
-- [ ] 4.2 Java call edges collect overloads across the in-repo hierarchy and select by arity even with one candidate, or emit none; constructor calls likewise. Tests are the five code-call-graph scenarios.
+- [ ] 4.2 Java call edges collect overloads across the in-repo hierarchy and select by arity even with one candidate. A unique in-repo match links even when the chain leaves the repo (Q1, option B); otherwise no edge. Constructor calls likewise. Tests are the six code-call-graph scenarios.
 - [ ] 4.3 TS/JS/Svelte: stop emitting locals of every form (namespace members kept); always discriminate accessor pairs and static members, and carry the discriminated ID through `classMethodNames` for `this.` calls. Tests: a `this.` call to a method and a `ClassName.` call to a static method still edge correctly, plus the `fetcher`, local-function and accessor scenarios, with module-level IDs unchanged.
 - [ ] 4.4 Go: skip blank `var`, `const` and `func`, and identify `init` per Q4. Test: the blank-declaration scenario, plus an `init` test under the ruling.
 - [ ] 4.5 Asset guard: an `X.js` with an `X.min.js` sibling is file-entity-only, plus `index_vendored_js`. Tests are both asset-ingestion-guards scenarios.
