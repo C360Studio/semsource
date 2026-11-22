@@ -82,8 +82,10 @@ capability to semembed. SemSource then composes **graph-embedding** (registered 
 built from that endpoint) beside graph-lexical, and sets graph-query's `embedding_enabled`, so
 `searchGraph` and fusion's natural-language resolve merge the word list and the embedding list by rank.
 Validation refuses `graph.semantic_search: true` unless `embedding` resolves to an embedding endpoint
-and `graph.lexical_search` is on, so a Tier 1 config never boots silently as Tier 0. With the compose
-stack, start semembed with the `semantic` profile:
+and `graph.lexical_search` is on, so a fresh Tier 1 config never boots silently as Tier 0. A deployment
+that already retains a composition is the exception: it keeps the retained wiring until `config_revision`
+is raised (see "Switching a running deployment to Tier 1" below). With the compose stack, start semembed
+with the `semantic` profile:
 
 ```bash
 SEMSOURCE_CONFIG=tiers/tier1-semantic.json docker compose --profile semantic up
@@ -123,9 +125,12 @@ docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:latest   # OpenAI-compati
 > **Resource footprint — semembed is CPU-heavy on the first index (local-dev caveat).** semembed runs
 > real embedding inference (fastembed-rs / ONNX, arctic-embed-s). Embedding a full initial index is a
 > burst of inference and, by default, ONNX fans out across every core: **measured ~561% CPU (≈5.6 cores)
-> embedding a 21.5k-entity graph on a laptop** — fine on a server, rough on a dev machine. It's a
-> **one-time first-index cost** (vectors land in `EMBEDDING_INDEX`, content hashes in `EMBEDDING_DEDUP`;
-> steady-state watch is cheap), not continuous. Levers if it's hammering your machine:
+> embedding a 21.5k-entity graph on a laptop** — fine on a server, rough on a dev machine. It is **not a
+> one-time cost on this pin**: vectors land in `EMBEDDING_INDEX` and steady-state watch is cheap, but the
+> HTTP embedder learns its vector width from its first reply, so on every restart graph-embedding cannot
+> vouch for the stored vectors it replays before that reply and embeds most of the corpus again
+> ([semengine#722](https://github.com/C360Studio/semengine/issues/722)). Expect the burst on each restart.
+> Levers if it's hammering your machine:
 > - **Cap the container CPU** — `docker run --cpus=2 ...` up front, or **live with no restart / no lost
 >   progress**: `docker update --cpus=2 semembed` (drops ~561%→~200%; the initial index just takes
 >   longer). In compose, `deploy.resources.limits.cpus: "2"`.
@@ -190,9 +195,21 @@ matches are the word list alone. The fusion tools report `provenance: embedding`
 from the embedding list, and `lexical` otherwise. A client that thresholds `relevance` on the word scale
 breaks at Tier 1.
 
-**An unreachable provider leaves SemSource up, degraded.** Search answers from words with the merge not
-honoured, and the readiness `embedding` block (on `/source-manifest/status` and `source_status`) and the
-`semantic_index` capability stay not ready until graph-embedding reports ready.
+When the word index is still loading after a start, `graph_search` answers from the embedding search
+alone: `merge.detail` is `index_not_ready`, and the matches carry `vector_rank` only.
+
+**An unreachable provider leaves SemSource up, degraded.** Search answers from words with
+`merge.honoured: false` (fusion tools: `provenance: lexical`). Readiness is index coverage, not provider
+liveness: the `embedding` block (on `/source-manifest/status` and `source_status`) and the
+`semantic_index` capability are ready only while graph-lexical and graph-embedding both are, so
+embeddings that fail during the build keep them not ready, but a provider that stops after the index
+caught up leaves them ready. Read `merge.honoured` on each answer for liveness. The fusion response does
+not carry the merge step itself ([semengine#723](https://github.com/C360Studio/semengine/issues/723)).
+
+**Recovering from a provider outage needs a restart.** graph-embedding does not retry an entity whose
+embedding failed: it waits for a new revision of that entity or a restart
+([semengine#724](https://github.com/C360Studio/semengine/issues/724)). After the provider is back, restart
+SemSource so the failed entities are embedded again.
 
 ## Tier 2 — Generative (seminstruct) — not shipped
 
