@@ -1,6 +1,6 @@
 # Qualify SemSource on SemEngine Tier 1 (neural search)
 
-Approved-by: Coby Leuschke (2026-11-22) sha256:e94c7d0f214e
+Approved-by: Coby Leuschke (2026-11-22) sha256:3a0e0ca2ae2f
 
 Track: design (adds a capability, touches the composition boot path and the composition
 generation, and changes the MCP `graph_search` answer at Tier 1).
