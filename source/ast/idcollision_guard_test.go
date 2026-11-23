@@ -23,9 +23,9 @@ import (
 
 // guardLanguages are the parsers whose declarations must never share an entity
 // ID (entity-identity-safety, "One entity ID per declaration within a parse
-// pass"). Python, C and C++ still collide (#338) and are guarded at runtime by
-// the AST source instead.
-var guardLanguages = []string{"go", "java", "typescript", "javascript", "svelte"}
+// pass). C precedes C++ so ".h" is read as C, the routing that folds C++
+// overloads in a C-routed header (#338).
+var guardLanguages = []string{"go", "java", "typescript", "javascript", "svelte", "python", "c", "cpp"}
 
 // duplicateIDs parses every file under root with the guarded parsers and
 // returns, per entity ID declared more than once within one file, the
@@ -98,10 +98,11 @@ func reportDuplicates(t *testing.T, dups map[string][]string) {
 
 // TestParseResultIDsAreUnique parses one fixture per known collision class
 // (#329: Java overloads, TS block-scoped locals and accessors, Go blanks and
-// init) and fails on any entity ID declared twice in one file.
+// init; #338: Python accessors, overload stubs and redefinitions, C/C++
+// prototypes, #if twins and redefined macros) and fails on any entity ID declared twice in one file.
 // spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestParseResultIDsAreUnique(t *testing.T) {
-	for _, class := range []string{"java", "ts", "golang"} {
+	for _, class := range []string{"java", "ts", "golang", "python", "c", "cpp"} {
 		t.Run(class, func(t *testing.T) {
 			root := filepath.Join("testdata", "idcollisions", class)
 			reportDuplicates(t, duplicateIDs(t, root, func(string) bool { return false }))

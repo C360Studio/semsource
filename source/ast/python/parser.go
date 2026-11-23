@@ -47,6 +47,10 @@ type Parser struct {
 	// used to confirm an imported callee is a function before emitting a call edge.
 	moduleRelPathMemo map[string]moduleRelPath
 	moduleFuncsMemo   map[string]map[string]bool
+
+	// stubs marks the current file's @overload stubs, which give way to the
+	// implementation in the same-ID fold.
+	stubs map[*ast.CodeEntity]bool
 }
 
 // moduleRelPath is a memoized module→file resolution result.
@@ -132,6 +136,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	result.Entities = append(result.Entities, fileEntity)
 
 	// Extract entities from the AST
+	p.stubs = map[*ast.CodeEntity]bool{}
 	childIDs := make([]string, 0)
 	for i := 0; i < int(rootNode.NamedChildCount()); i++ {
 		child := rootNode.NamedChild(i)
@@ -149,6 +154,15 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		}
 	}
 	fileEntity.Contains = childIDs
+
+	// A name bound twice in one scope is one symbol, and Python runs the last
+	// binding, so a later definition replaces an earlier one. An @overload stub
+	// never replaces anything: the implementation carries the symbol, and a
+	// stub-only name keeps its first stub (#338).
+	result.Entities = ast.FoldDeclarations(result.Entities, func(candidate, _ *ast.CodeEntity) bool {
+		return !p.stubs[candidate]
+	})
+	p.stubs = nil
 
 	return result, nil
 }
@@ -288,6 +302,7 @@ func (p *Parser) extractNode(node *sitter.Node, content []byte, _ /* parentID */
 			case "function_definition":
 				entity := p.extractFunction(definition, content, filePath, false, nil, nil)
 				if entity != nil {
+					p.markStub(entity, decorators)
 					if len(decorators) > 0 {
 						entity.DocComment = p.prependDecorators(entity.DocComment, decorators)
 					}
@@ -364,6 +379,10 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 						decorators := p.extractDecorators(child, content)
 						method := p.extractFunction(def, content, filePath, true, classScope, methodNames)
 						if method != nil {
+							p.markStub(method, decorators)
+							if suffix := accessorSuffix(decorators, method.Name); suffix != "" {
+								method.ID = ast.NewScopedCodeEntity(p.authority, "python", p.project, ast.TypeMethod, classScope, method.Name+suffix, filePath).ID
+							}
 							method.ContainedBy = entity.ID
 							method.Receiver = entity.ID
 							if len(decorators) > 0 {
@@ -540,6 +559,39 @@ func (p *Parser) extractImports(node *sitter.Node, content []byte) []string {
 	}
 
 	return imports
+}
+
+// markStub records an @overload (or @typing.overload) stub.
+func (p *Parser) markStub(entity *ast.CodeEntity, decorators []string) {
+	for _, dec := range decorators {
+		name := strings.TrimPrefix(dec, "@")
+		if i := strings.IndexByte(name, '('); i >= 0 {
+			name = name[:i]
+		}
+		if name == "overload" || strings.HasSuffix(name, ".overload") {
+			if p.stubs != nil {
+				p.stubs[entity] = true
+			}
+			return
+		}
+	}
+}
+
+// accessorSuffix is the instance discriminator for a property's setter and
+// deleter, which Python requires to share the getter's name. The getter is the
+// property itself and keeps the plain name. Applied to every setter and
+// deleter, never only to colliding ones, so adding a setter never
+// re-identifies the getter (#338, the #331 precedent).
+func accessorSuffix(decorators []string, name string) string {
+	for _, dec := range decorators {
+		switch strings.TrimSpace(dec) {
+		case "@" + name + ".setter":
+			return "-setter"
+		case "@" + name + ".deleter":
+			return "-deleter"
+		}
+	}
+	return ""
 }
 
 // extractDecorators extracts decorator names from a decorated definition.
