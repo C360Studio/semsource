@@ -106,7 +106,7 @@ type Publisher struct {
 	latestMu         sync.Mutex
 	latest           map[string]uint64
 	reconcileSeq     uint64 // guarded by latestMu
-	metrics         *pubMetrics
+	metrics          *pubMetrics
 
 	// backpressure tracks whether the publisher is CURRENTLY in sustained
 	// backpressure, so the condition is logged on the transition into and out of
@@ -127,7 +127,14 @@ type Publisher struct {
 	settledCh chan struct{}
 
 	// Lifecycle
-	cancel   context.CancelFunc
+	cancel context.CancelFunc
+	// reconcileCancel cancels the reconcile worker's context at Stop.
+	reconcileCancel context.CancelFunc
+	// lastAt is the previous envelope time; only the drain goroutine reads
+	// or writes it.
+	lastAt time.Time
+	// now is the envelope clock; tests freeze it.
+	now      func() time.Time
 	done     chan struct{}
 	stop     chan struct{}
 	stopOnce sync.Once
@@ -237,6 +244,7 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		done:            make(chan struct{}),
 		stop:            make(chan struct{}),
 		reconcileQ:      make(chan reconcileJob, reconcileQueueSize),
+		now:             time.Now,
 		reconcileDone:   make(chan struct{}),
 		latest:          map[string]uint64{},
 	}, nil
@@ -249,7 +257,11 @@ func (p *Publisher) Start(ctx context.Context) {
 	drainCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	p.cancel = cancel
 	p.started = true
-	go p.reconcileWorker(drainCtx)
+	// Reconciles are abandoned at Stop, so their context is cancelled there:
+	// an in-flight request never holds Stop past its deadline.
+	reconcileCtx, reconcileCancel := context.WithCancel(drainCtx)
+	p.reconcileCancel = reconcileCancel
+	go p.reconcileWorker(reconcileCtx)
 	go p.drainLoop(drainCtx)
 }
 
@@ -261,12 +273,20 @@ func (p *Publisher) Stop(ctx context.Context) error {
 	if !p.started {
 		return nil
 	}
-	p.stopOnce.Do(func() { close(p.stop) })
+	p.stopOnce.Do(func() {
+		close(p.stop)
+		p.reconcileCancel()
+	})
 	select {
 	case <-p.done:
 		// The drain loop closed the reconcile queue on exit; the worker
 		// discards what is left once Stop has begun.
-		<-p.reconcileDone
+		select {
+		case <-p.reconcileDone:
+		case <-ctx.Done():
+			p.cancel()
+			return fmt.Errorf("entitypub settlement incomplete: %w", ctx.Err())
+		}
 		if lost := p.Lost(); lost > 0 {
 			return fmt.Errorf("entitypub stopped with %d undelivered entities", lost)
 		}
@@ -482,7 +502,13 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	// The envelope time is fixed here, at the millisecond precision the
 	// envelope is encoded with, so the reconcile that follows stamps the same
 	// time graph-ingest gives the stream statements.
-	at := time.Now().Truncate(time.Millisecond)
+	// It is also strictly increasing per publisher, so no two publishes share
+	// one: the reconcile's applied-write fence tells them apart by it.
+	at := p.now().Truncate(time.Millisecond)
+	if !at.After(p.lastAt) {
+		at = p.lastAt.Add(time.Millisecond)
+	}
+	p.lastAt = at
 	msg := message.NewBaseMessage(graph.EntityType, payload, envelopeSource, message.WithTime(at))
 	data, err := json.Marshal(msg)
 	if err != nil {

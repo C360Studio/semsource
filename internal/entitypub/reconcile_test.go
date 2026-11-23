@@ -29,8 +29,9 @@ type fakeGraph struct {
 	state      map[string][]message.Triple
 	rev        map[string]uint64
 	reconciles []projection.ReconcileMutation
-	readErr    error   // returned by ReadAuthoritative when set
-	recErr     []error // returned by successive Reconcile calls, then nil
+	readErr    error         // returned by ReadAuthoritative when set
+	blockRead  chan struct{} // when set, ReadAuthoritative waits on it or ctx
+	recErr     []error       // returned by successive Reconcile calls, then nil
 	envelopes  []time.Time
 }
 
@@ -99,7 +100,17 @@ func (g *fakeGraph) applyLocked() {
 	g.queue = nil
 }
 
-func (g *fakeGraph) ReadAuthoritative(_ context.Context, id string) (*gtypes.ExactEntity, error) {
+func (g *fakeGraph) ReadAuthoritative(ctx context.Context, id string) (*gtypes.ExactEntity, error) {
+	g.mu.Lock()
+	block := g.blockRead
+	g.mu.Unlock()
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.readErr != nil {
@@ -173,7 +184,7 @@ func send(t *testing.T, pub *Publisher, payload *graph.EntityPayload) {
 	}
 }
 
-func settle(t *testing.T, ctx context.Context, pub *Publisher) {
+func settle(ctx context.Context, t *testing.T, pub *Publisher) {
 	t.Helper()
 	if err := pub.WaitSettled(ctx); err != nil {
 		t.Fatal(err)
@@ -216,7 +227,7 @@ func TestNoReconcileWithoutTheOption(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g)
 	send(t, pub, runPayload(5, false))
-	settle(t, ctx, pub)
+	settle(ctx, t, pub)
 	if n := len(g.reconcileCalls()); n != 0 || pub.Reconciled() != 0 {
 		t.Errorf("reconcile ran without WithReconcile: calls=%d reconciled=%d", n, pub.Reconciled())
 	}
@@ -230,7 +241,7 @@ func TestReconcileWaitsForItsStreamWriteAndMatchesItsStamping(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
 	send(t, pub, runPayload(6, true)) // stored without a reconcile in flight
-	settle(t, ctx, pub)
+	settle(ctx, t, pub)
 	before := len(g.reconcileCalls())
 
 	g.mu.Lock()
@@ -238,12 +249,12 @@ func TestReconcileWaitsForItsStreamWriteAndMatchesItsStamping(t *testing.T) {
 	g.mu.Unlock()
 	send(t, pub, runPayload(5, false))
 	// The write is acknowledged but not applied: no replace may run yet.
-	waitUntil(t, ctx, func() bool { return pub.reconcilePending.Load() == 1 && len(g.queue2()) == 1 })
+	waitUntil(ctx, t, func() bool { return pub.reconcilePending.Load() == 1 && len(g.queue2()) == 1 })
 	if n := len(g.reconcileCalls()); n != before {
 		t.Fatalf("reconcile replaced the group before its stream write applied (%d calls)", n-before)
 	}
 	g.release()
-	settle(t, ctx, pub)
+	settle(ctx, t, pub)
 
 	calls := g.reconcileCalls()[before:]
 	if len(calls) != 1 {
@@ -286,16 +297,16 @@ func TestOlderQueuedWriteCannotRestoreADroppedPredicate(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
 	send(t, pub, runPayload(7, true))
-	settle(t, ctx, pub)
+	settle(ctx, t, pub)
 
 	g.mu.Lock()
 	g.hold = true
 	g.mu.Unlock()
 	send(t, pub, runPayload(6, true))  // N-1 still carries the call
 	send(t, pub, runPayload(5, false)) // N drops it
-	waitUntil(t, ctx, func() bool { return len(g.queue2()) == 2 })
+	waitUntil(ctx, t, func() bool { return len(g.queue2()) == 2 })
 	g.release()
-	settle(t, ctx, pub)
+	settle(ctx, t, pub)
 
 	if has(g.snapshot(reconcileID), semast.CodeCalls) {
 		t.Error("an older queued write restored the dropped call")
@@ -318,7 +329,7 @@ func TestSkipReconcilePayloadIsNeverReconciled(t *testing.T) {
 	payload := runPayload(5, true)
 	payload.SkipReconcile = true
 	send(t, pub, payload)
-	settle(t, ctx, pub)
+	settle(ctx, t, pub)
 	if n := len(g.reconcileCalls()); n != 0 {
 		t.Errorf("skip-reconcile payload reconciled %d times", n)
 	}
@@ -348,7 +359,7 @@ func TestReconcileOutcomes(t *testing.T) {
 			g.readErr, g.recErr = tc.readErr, tc.recErr
 			pub, ctx := startPublisher(t, g, WithReconcile(g))
 			send(t, pub, runPayload(5, false))
-			settle(t, ctx, pub)
+			settle(ctx, t, pub)
 			if n := len(g.reconcileCalls()); n != tc.wantCalls {
 				t.Errorf("replace calls = %d, want %d", n, tc.wantCalls)
 			}
@@ -375,7 +386,7 @@ func TestStopAbandonsAWaitingReconcileUncounted(t *testing.T) {
 	send(t, pub, runPayload(5, false))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	waitUntil(t, ctx, func() bool { return pub.Published() == 1 })
+	waitUntil(ctx, t, func() bool { return pub.Published() == 1 })
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer stopCancel()
 	if err := pub.Stop(stopCtx); err != nil {
@@ -387,7 +398,7 @@ func TestStopAbandonsAWaitingReconcileUncounted(t *testing.T) {
 }
 
 // waitUntil polls cond until it holds or ctx ends; cond reads published state.
-func waitUntil(t *testing.T, ctx context.Context, cond func() bool) {
+func waitUntil(ctx context.Context, t *testing.T, cond func() bool) {
 	t.Helper()
 	for !cond() {
 		select {
@@ -395,5 +406,110 @@ func waitUntil(t *testing.T, ctx context.Context, cond func() bool) {
 			t.Fatal("condition never held")
 		case <-time.After(5 * time.Millisecond):
 		}
+	}
+}
+
+// Stored A, then queued B (adds the call) and A again (drops it), published
+// back to back: the fence must not mistake the stored A for the final one.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+func TestReconcileFenceTellsARepeatedWriteFromTheStoredOne(t *testing.T) {
+	g := newFakeGraph()
+	pub, ctx := startPublisher(t, g, WithReconcile(g))
+	// Every publish reads the same wall-clock millisecond.
+	frozen := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	pub.now = func() time.Time { return frozen }
+	send(t, pub, runPayload(5, false))
+	settle(ctx, t, pub)
+
+	g.mu.Lock()
+	g.hold = true
+	g.mu.Unlock()
+	send(t, pub, runPayload(5, true))
+	send(t, pub, runPayload(5, false))
+	waitUntil(ctx, t, func() bool { return len(g.queue2()) == 2 })
+	g.release()
+	settle(ctx, t, pub)
+
+	if has(g.snapshot(reconcileID), semast.CodeCalls) {
+		t.Error("the repeated write's reconcile ran against the stored copy; the call survived")
+	}
+	envs := g.envelopes
+	for i := 1; i < len(envs); i++ {
+		if !envs[i].After(envs[i-1]) {
+			t.Errorf("envelope times not strictly increasing: %v then %v", envs[i-1], envs[i])
+		}
+	}
+}
+
+// Stop returns within its deadline while a reconcile is blocked in a request.
+func TestStopIsNotHeldByAnInFlightReconcileRequest(t *testing.T) {
+	g := newFakeGraph()
+	g.blockRead = make(chan struct{}) // never released
+	pub, err := New(g, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), WithReconcile(g))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub.Start(context.Background())
+	send(t, pub, runPayload(5, false))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	waitUntil(ctx, t, func() bool { return pub.Published() == 1 })
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), time.Second)
+	defer stopCancel()
+	done := make(chan error, 1)
+	go func() { done <- pub.Stop(stopCtx) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Stop: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop held past its deadline by a blocked reconcile request")
+	}
+	if pub.ReconcileFailed() != 0 {
+		t.Errorf("an abandoned shutdown reconcile counted as failed (%d)", pub.ReconcileFailed())
+	}
+}
+
+// A dropped job (full queue) leaves no tracking entry behind.
+func TestQueueOverflowLeavesNoTrackingEntry(t *testing.T) {
+	g := newFakeGraph()
+	g.blockRead = make(chan struct{})
+	pub, err := New(g, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), WithReconcile(g))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub.reconcileQ = make(chan reconcileJob, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pub.Start(ctx)
+	t.Cleanup(func() { _ = pub.Stop(context.Background()) })
+
+	for i, id := range []string{"a", "b", "c"} {
+		p := runPayload(5, false)
+		p.ID = "acme.test.svc.golang.function." + id
+		for j := range p.TripleData {
+			p.TripleData[j].Subject = p.ID
+		}
+		send(t, pub, p)
+		if i == 0 { // the worker takes the first job and blocks in its read
+			waitUntil(ctx, t, func() bool { return pub.Published() == 1 && len(pub.reconcileQ) == 0 })
+		}
+	}
+	waitUntil(ctx, t, func() bool { return pub.Published() == 3 })
+	pub.latestMu.Lock()
+	tracked := len(pub.latest)
+	pub.latestMu.Unlock()
+	if tracked != 2 || pub.ReconcileFailed() != 1 {
+		t.Errorf("tracked=%d failed=%d, want 2 (running + queued) and 1 dropped", tracked, pub.ReconcileFailed())
+	}
+	close(g.blockRead)
+	settle(ctx, t, pub)
+	pub.latestMu.Lock()
+	tracked = len(pub.latest)
+	pub.latestMu.Unlock()
+	if tracked != 0 {
+		t.Errorf("tracking entries left after drain: %d", tracked)
 	}
 }

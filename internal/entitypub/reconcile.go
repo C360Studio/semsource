@@ -87,7 +87,9 @@ func groupPredicates() map[string]bool {
 // graph-ingest stamps the stream arrival: an empty source becomes semsource
 // and a zero timestamp becomes the envelope's. Statements another source
 // owns are left out, never re-stamped, so the reconcile cannot claim them.
-func desiredGroup(triples []message.Triple, at time.Time) []message.Triple {
+// fenced reports whether any of them took the envelope time, which is unique
+// per publish and so identifies this write in the stored state.
+func desiredGroup(triples []message.Triple, at time.Time) (desired []message.Triple, fenced bool) {
 	group := groupPredicates()
 	out := make([]message.Triple, 0, len(triples))
 	for _, t := range triples {
@@ -97,10 +99,11 @@ func desiredGroup(triples []message.Triple, at time.Time) []message.Triple {
 		t.Source = envelopeSource
 		if t.Timestamp.IsZero() {
 			t.Timestamp = at
+			fenced = true
 		}
 		out = append(out, t)
 	}
-	return out
+	return out, fenced
 }
 
 // reconcileJob is one delivered publish whose group the worker reconciles.
@@ -118,9 +121,18 @@ func (p *Publisher) enqueueReconcile(payload *graph.EntityPayload, at time.Time)
 	if p.reconciler == nil || payload.SkipReconcile || p.stopping() {
 		return
 	}
+	desired, fenced := desiredGroup(payload.TripleData, at)
+	if !fenced {
+		// Every group statement carries its own timestamp, so the stored
+		// state cannot show which write applied: an older identical write
+		// would pass for this one. Not reconciled; no enabled handler
+		// publishes such a payload today.
+		p.logger.Debug("entity reconcile skipped: no envelope-stamped statement to fence on", "id", payload.ID)
+		return
+	}
 	p.latestMu.Lock()
 	p.reconcileSeq++
-	job := reconcileJob{id: payload.ID, seq: p.reconcileSeq, desired: desiredGroup(payload.TripleData, at)}
+	job := reconcileJob{id: payload.ID, seq: p.reconcileSeq, desired: desired}
 	p.latest[job.id] = job.seq
 	p.latestMu.Unlock()
 	p.reconcilePending.Add(1)
@@ -128,6 +140,7 @@ func (p *Publisher) enqueueReconcile(payload *graph.EntityPayload, at time.Time)
 	case p.reconcileQ <- job:
 	default:
 		p.reconcilePending.Add(-1)
+		p.forget(job)
 		p.reconcileFailure(job.id, errors.New("reconcile queue full"))
 	}
 }
@@ -141,14 +154,20 @@ func (p *Publisher) reconcileWorker(ctx context.Context) {
 		if !p.stopping() && !p.superseded(job) {
 			p.reconcile(ctx, job)
 		}
-		p.latestMu.Lock()
-		if p.latest[job.id] == job.seq {
-			delete(p.latest, job.id)
-		}
-		p.latestMu.Unlock()
+		p.forget(job)
 		p.reconcilePending.Add(-1)
 		p.noteOutcome()
 	}
+}
+
+// forget drops job's entry from latest unless a later publish replaced it,
+// so latest holds only entities with a queued or running reconcile.
+func (p *Publisher) forget(job reconcileJob) {
+	p.latestMu.Lock()
+	if p.latest[job.id] == job.seq {
+		delete(p.latest, job.id)
+	}
+	p.latestMu.Unlock()
 }
 
 // superseded reports whether a later publish of the same entity was queued:
@@ -238,10 +257,11 @@ func applied(stored *gtypes.EntityState, desired []message.Triple) bool {
 	return true
 }
 
-// statementKey identifies a statement by the fields a publish stamps. The
-// object goes through fmt so a JSON round trip's number types compare equal.
+// statementKey identifies a statement by the fields a publish stamps, its
+// timestamp to the nanosecond (the stored form keeps it). The object goes
+// through fmt so a JSON round trip's number types compare equal.
 func statementKey(t message.Triple) string {
-	return fmt.Sprintf("%s\x00%s\x00%v\x00%s\x00%d", t.Subject, t.Predicate, t.Object, t.Source, t.Timestamp.UnixMilli())
+	return fmt.Sprintf("%s\x00%s\x00%v\x00%s\x00%d", t.Subject, t.Predicate, t.Object, t.Source, t.Timestamp.UnixNano())
 }
 
 func isNotFound(err error) bool {
