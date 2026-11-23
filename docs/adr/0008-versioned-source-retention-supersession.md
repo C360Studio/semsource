@@ -10,6 +10,9 @@
 > a lifecycle pass with caller-announced scope, marker clearing via the mutation lane's `RemoveTriples`,
 > path-anchored doc identity, and true-freeze `watch:false`. Mechanics: `openspec/specs/entity-staleness/`.
 > Hard deletion/GC remains gated on the asks above; the marker is the future GC key.
+> **Within-entity scope clarified (2026-11-23, #336):** retain-and-relate governs entities and
+> versions, not the statements inside one entity. A source's statements on one entity ID form a
+> complete set per publish, so a predicate the source stops emitting is removed (§6).
 
 ## Context
 
@@ -127,6 +130,27 @@ clean the query indexes (**#433**) *and* fix dangling referrer triples (**refere
 Neither is complete in the framework today, so this path stays gated (see Guardrail). Because we
 **retain by default**, this gate no longer blocks the flagship — it fences off only the mistake-cleanup
 path.
+
+### 6. Retention applies to entities and versions; within one entity ID, a source's statements are a complete set
+
+"Nothing is deleted" (§1) is about **entities and version scopes**. History lives in distinct,
+retained version scopes related by supersession edges. It does not live inside one entity. Within a
+single entity ID, the statements one source publishes are that source's **complete set** as of that
+publish. If the source no longer emits a predicate, the predicate is gone, not retained (#336).
+Keeping it would assert something the source no longer says: a call the code no longer makes, or a
+doc comment that was deleted. That is a false fact, not history.
+
+This is scoped by the **source** that wrote the statements. A `semsource` republish never removes
+statements written by `supersession` (lineage edges) or `lifecycle` (the stale marker). The scope
+carries no ownership machinery. It holds only under the single-writer assumption: each entity ID has
+one producer, which sends its complete set. That assumption is proven per handler by test, not
+enforced at runtime.
+
+**Mechanics.** These live in `openspec/specs/entity-publish-integrity/` (change
+`reconcile-source-group-on-republish`). Today it is a reconcile of the `source` predicate group after
+the stream publish. It runs only for content the producer knows changed, so an edit made while
+semsource was down keeps its dropped predicates until the next edit. SemEngine#730 asks for a
+per-message complete-set intent on the stream lane; that would replace the workaround and close the gap.
 
 ## Task #36, folded in
 

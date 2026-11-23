@@ -39,7 +39,7 @@
 
 ## 6. Records and review
 
-- [ ] 6.1 ADR-0008 note: retain-and-relate governs entities and versions, and within one entity ID a source's statements are a complete set per publish.
+- [x] 6.1 ADR-0008 note: a header line and §6 ("Retention applies to entities and versions; within one entity ID, a source's statements are a complete set"), with the single-writer assumption, source scoping, the known gap and semengine#730.
 - [ ] 6.2 `openspec validate --strict` and `task spec:check` green. Lint and unit, integration and race tests green.
 - [ ] 6.3 Independent review by `graph-event-reviewer` and `go-component-reviewer`, then `ateam review request 346`.
 - [x] 6.4 Upstream ask filed: C360Studio/semengine#730 (per-message complete-set intent). When it ships, the local reconcile and the D4 bound come out.
