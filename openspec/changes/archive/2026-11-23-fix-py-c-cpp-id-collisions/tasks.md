@@ -16,4 +16,4 @@
 
 - [x] 3.1 The collision probe reports zero on llama.cpp (both `.h` routings; 2,673 and 2,659 before), the carnot site-packages tree (1,996 before) and semselect (5 before), 2026-11-23.
 - [x] 3.2 `task lint`, `go test ./...` and `go test -race ./source/ast/...` pass.
-- [ ] 3.3 Independent review (`graph-event-reviewer`).
+- [x] 3.3 Independent review: `graph-event-reviewer` approved at `2d91a30` after W1 (decorator trailing comment) was fixed; owner ruled W2 (no prototype doc carry-over) on #338. The gate review runs through `ateam review request`.
