@@ -43,6 +43,10 @@ type Parser struct {
 	defNameFiles map[string]map[string]bool
 	revalidated  map[string]bool
 	hasCPP       *bool
+
+	// defs marks the current file's entities built from a definition rather
+	// than a prototype or forward declaration, for the same-ID fold.
+	defs map[*ast.CodeEntity]bool
 }
 
 // NewParser creates a new C AST parser.
@@ -101,6 +105,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	result.FileEntity = fileEntity
 	result.Entities = append(result.Entities, fileEntity)
 
+	p.defs = map[*ast.CodeEntity]bool{}
 	childIDs := make([]string, 0)
 	for i := 0; i < int(root.NamedChildCount()); i++ {
 		node := root.NamedChild(i)
@@ -120,6 +125,14 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 		}
 	}
 	fileEntity.Contains = childIDs
+
+	// One name declared more than once in a file is one symbol: a prototype and
+	// its definition, the branches of an #if, a redefined macro. A definition
+	// supplies the facts; otherwise the first in source order does (#338).
+	result.Entities = ast.FoldDeclarations(result.Entities, func(candidate, kept *ast.CodeEntity) bool {
+		return p.defs[candidate] && !p.defs[kept]
+	})
+	p.defs = nil
 
 	return result, nil
 }
@@ -166,7 +179,8 @@ func (p *Parser) extractTopLevel(node *sitter.Node, content []byte, relPath stri
 		// blocks would otherwise contribute nothing at all.
 		//
 		// A symbol declared in two mutually exclusive branches lands on one
-		// entity ID, which is correct: it is one logical symbol.
+		// entity ID, which is correct: it is one logical symbol, and ParseFile
+		// folds the twins into one entity.
 		var out []*ast.CodeEntity
 		for i := 0; i < int(node.NamedChildCount()); i++ {
 			out = append(out, p.extractTopLevel(node.NamedChild(i), content, relPath)...)
@@ -279,7 +293,16 @@ func (p *Parser) newEntity(t ast.CodeEntityType, name, relPath string, node *sit
 	entity := ast.NewCodeEntity(p.authority, "c", p.project, t, name, relPath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
+	if p.defs != nil && isDefinition(node) {
+		p.defs[entity] = true
+	}
 	return entity
+}
+
+// isDefinition reports a node that defines its symbol rather than declaring
+// it: a function with a body, or a struct, union or enum with a member list.
+func isDefinition(node *sitter.Node) bool {
+	return node.Type() == "function_definition" || node.ChildByFieldName("body") != nil
 }
 
 // specifierType maps a tree-sitter specifier node type to an entity type. C's

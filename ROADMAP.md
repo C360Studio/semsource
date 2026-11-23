@@ -154,7 +154,10 @@ cannot be upgraded in place. Consumers should read the
   constructors carry a signature discriminator, locals and Go `init`/blank
   declarations are no longer entities, same-arity Java overload calls emit no
   edge, IIFE/AMD-wrapped JS and vendored twins index as files only, and the
-  AST source reports any remaining duplicate as `id_collisions`. R1 is
+  AST source reports any remaining duplicate as `id_collisions`. Python, C and
+  C++ follow (#338): C/C++ prototypes, `#if` twins and redefined macros fold
+  onto one entity, Python setters/deleters get distinct IDs, and `@overload`
+  stubs give way to the implementation. R1 is
   rank-stable again (#324). See the
   [migration note](docs/migration/ast-entity-identity.md).
 - `v1.0.0-beta.10`: the first SemEngine release (breaking; fresh storage and

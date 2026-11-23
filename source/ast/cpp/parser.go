@@ -39,6 +39,10 @@ type Parser struct {
 	project   string
 	repoRoot  string
 	parser    *sitter.Parser
+
+	// defs marks the current file's entities built from a definition rather
+	// than a prototype, for the same-ID fold.
+	defs map[*ast.CodeEntity]bool
 }
 
 // NewParser creates a new C++ AST parser.
@@ -89,6 +93,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	result.FileEntity = fileEntity
 	result.Entities = append(result.Entities, fileEntity)
 
+	p.defs = map[*ast.CodeEntity]bool{}
 	childIDs := make([]string, 0)
 	p.walk(root, content, relPath, nil, func(entity *ast.CodeEntity, topLevel bool) {
 		if topLevel {
@@ -106,6 +111,14 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	}
 
 	fileEntity.Contains = childIDs
+
+	// A prototype and its definition, or a symbol in both branches of an #if,
+	// share one ID: they are one symbol. A definition supplies the facts;
+	// otherwise the first in source order does (#338).
+	result.Entities = ast.FoldDeclarations(result.Entities, func(candidate, kept *ast.CodeEntity) bool {
+		return p.defs[candidate] && !p.defs[kept]
+	})
+	p.defs = nil
 	return result, nil
 }
 
@@ -192,7 +205,7 @@ func (p *Parser) visit(node *sitter.Node, content []byte, relPath string, scope 
 		"preproc_ifdef_in_field_declaration_list", "preproc_if_in_field_declaration_list":
 		// Both branches are read — see the C parser for why. A symbol appearing
 		// in two mutually exclusive branches is one logical symbol and correctly
-		// shares one entity ID.
+		// shares one entity ID; ParseFile folds the twins into one entity.
 		p.walk(node, content, relPath, scope, out)
 
 	case "linkage_specification":
@@ -422,6 +435,9 @@ func (p *Parser) newEntity(t ast.CodeEntityType, name, relPath string, scope []s
 	entity := ast.NewScopedCodeEntity(p.authority, "cpp", p.project, t, scope, name, relPath)
 	entity.StartLine = int(node.StartPoint().Row) + 1
 	entity.EndLine = int(node.EndPoint().Row) + 1
+	if p.defs != nil && (node.Type() == "function_definition" || node.ChildByFieldName("body") != nil) {
+		p.defs[entity] = true
+	}
 	return entity
 }
 
