@@ -26,10 +26,11 @@ When a reconcile-enabled publisher republishes an entity ID whose producer knows
 - **WHEN** it is republished with fewer `code.*` predicates
 - **THEN** the lineage edge, the stale marker and `entity.ontology.class` are unchanged
 
-#### Scenario: A birth needs no reconcile write
-- **GIVEN** an entity ID that is absent from `ENTITY_STATES`
-- **WHEN** the reconcile reports `entity_not_found`
-- **THEN** the publisher treats it as nothing to clear and counts no error
+#### Scenario: A birth is reconciled once its write applies
+- **GIVEN** an entity ID that is absent from `ENTITY_STATES` when its reconcile first reads it
+- **WHEN** the read reports `entity_not_found`
+- **THEN** the publisher counts no error and reads again until the stream write applies, within the reconcile budget
+- **AND** the reconcile then commits without removing any statement the publish carried
 
 #### Scenario: A reconcile failure is visible but does not fail delivery
 - **GIVEN** a stream publish that succeeded

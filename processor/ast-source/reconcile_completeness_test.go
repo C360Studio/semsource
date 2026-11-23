@@ -293,3 +293,30 @@ func TestWatchPublishCarriesTheSeedGroupSet_PerLanguage(t *testing.T) {
 		})
 	}
 }
+
+// A file truncated between its parse and the body read leaves the parsed
+// symbols without a body; they are faulted, so no reconcile clears the body
+// handles a previous pass stored.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+func TestBodyTruncatedBetweenParseAndOffloadIsFaulted(t *testing.T) {
+	f := newLangFixture(t, "go", ".go", map[string]string{"svc.go": "package svc\n\n\n\nfunc Run() {}\n"})
+	result, err := f.pw.parsers["go"].ParseFile(f.ctx, f.root+"/svc.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.write("svc.go", "package svc\n")
+	bodies := f.c.bodiesForResult(f.ctx, result, f.root)
+	found := false
+	for _, e := range result.Entities {
+		if e.Type != semsourceast.TypeFunction {
+			continue
+		}
+		found = true
+		if !bodies[e.ID].faulted {
+			t.Errorf("%s lost its body but is not faulted, so reconcile would clear its handles", e.ID)
+		}
+	}
+	if !found {
+		t.Fatal("no function parsed")
+	}
+}

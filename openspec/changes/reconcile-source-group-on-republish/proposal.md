@@ -27,7 +27,7 @@ Ruling: [#336 comment 7100421719](https://github.com/C360Studio/semsource/issues
 - **Reconcile after republish.** The shared publisher (`internal/entitypub`) follows a successful stream publish with
   one `Reconcile` of group `source` for that entity. Its desired set is the statements the producer just built, limited
   to the group's predicates. A group predicate with no desired statement is cleared. Births need no special path: an
-  absent entity returns `entity_not_found`, which counts as nothing to clear.
+  absent entity returns `entity_not_found`, which is not an error; the reconcile reads again until the write applies.
 - **Opt-in per handler.** Reconcile is a publisher option. A handler is switched on only after a test proves its
   publish carries the entity's complete statement set (the single-writer requirement below). The supersession publisher
   never enables it.

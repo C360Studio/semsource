@@ -130,9 +130,10 @@ type Publisher struct {
 	cancel context.CancelFunc
 	// reconcileCancel cancels the reconcile worker's context at Stop.
 	reconcileCancel context.CancelFunc
-	// lastAt is the previous envelope time; only the drain goroutine reads
-	// or writes it.
-	lastAt time.Time
+	// lastAt is the previous envelope time and lastIDs the entities already
+	// published at it; only the drain goroutine reads or writes them.
+	lastAt  time.Time
+	lastIDs map[string]bool
 	// now is the envelope clock; tests freeze it.
 	now      func() time.Time
 	done     chan struct{}
@@ -502,13 +503,7 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	// The envelope time is fixed here, at the millisecond precision the
 	// envelope is encoded with, so the reconcile that follows stamps the same
 	// time graph-ingest gives the stream statements.
-	// It is also strictly increasing per publisher, so no two publishes share
-	// one: the reconcile's applied-write fence tells them apart by it.
-	at := p.now().Truncate(time.Millisecond)
-	if !at.After(p.lastAt) {
-		at = p.lastAt.Add(time.Millisecond)
-	}
-	p.lastAt = at
+	at := p.envelopeTime(payload.ID)
 	msg := message.NewBaseMessage(graph.EntityType, payload, envelopeSource, message.WithTime(at))
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -604,4 +599,23 @@ func (p *Publisher) flush(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// envelopeTime returns the wall-clock millisecond for a publish of id, never
+// earlier than the previous publish's. No two publishes of one entity share
+// it, so the reconcile's applied-write fence tells them apart. Only a repeat
+// of an entity within one millisecond moves it past the clock, by one
+// millisecond, and any other entity in the same millisecond shares the time
+// instead of pushing it further: a burst does not run ahead of the clock, so
+// a restarted publisher's writes are not older than those already stored.
+func (p *Publisher) envelopeTime(id string) time.Time {
+	at := p.now().Truncate(time.Millisecond)
+	switch {
+	case at.After(p.lastAt):
+		p.lastAt, p.lastIDs = at, map[string]bool{}
+	case p.lastIDs[id]:
+		p.lastAt, p.lastIDs = p.lastAt.Add(time.Millisecond), map[string]bool{}
+	}
+	p.lastIDs[id] = true
+	return p.lastAt
 }

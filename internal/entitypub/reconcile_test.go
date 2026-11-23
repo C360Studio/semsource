@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -375,6 +376,7 @@ func TestReconcileOutcomes(t *testing.T) {
 
 // Stop while a reconcile waits on an unapplied write returns promptly and
 // does not count the abandoned reconcile as a failure.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestStopAbandonsAWaitingReconcileUncounted(t *testing.T) {
 	g := newFakeGraph()
 	g.hold = true
@@ -442,6 +444,7 @@ func TestReconcileFenceTellsARepeatedWriteFromTheStoredOne(t *testing.T) {
 }
 
 // Stop returns within its deadline while a reconcile is blocked in a request.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestStopIsNotHeldByAnInFlightReconcileRequest(t *testing.T) {
 	g := newFakeGraph()
 	g.blockRead = make(chan struct{}) // never released
@@ -473,6 +476,7 @@ func TestStopIsNotHeldByAnInFlightReconcileRequest(t *testing.T) {
 }
 
 // A dropped job (full queue) leaves no tracking entry behind.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestQueueOverflowLeavesNoTrackingEntry(t *testing.T) {
 	g := newFakeGraph()
 	g.blockRead = make(chan struct{})
@@ -511,5 +515,32 @@ func TestQueueOverflowLeavesNoTrackingEntry(t *testing.T) {
 	pub.latestMu.Unlock()
 	if tracked != 0 {
 		t.Errorf("tracking entries left after drain: %d", tracked)
+	}
+}
+
+// A burst of distinct entities inside one millisecond shares that millisecond
+// rather than running ahead of the clock, so a restarted publisher's write is
+// not older than the stored one under the stream lane's merge rule.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+func TestEnvelopeTimeBurstDoesNotOutrunTheClock(t *testing.T) {
+	frozen := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	before := &Publisher{now: func() time.Time { return frozen }}
+	var last time.Time
+	for i := range 1000 {
+		last = before.envelopeTime(fmt.Sprintf("e%d", i))
+	}
+	if !last.Equal(frozen) {
+		t.Fatalf("burst of distinct entities ran ahead of the clock: %v, want %v", last, frozen)
+	}
+	if again := before.envelopeTime("e0"); !again.After(last) {
+		t.Fatalf("a repeat of e0 in one millisecond shares its time %v", again)
+	}
+
+	const id = "acme.test.svc.golang.function.e0"
+	stored := []message.Triple{{Subject: id, Predicate: semast.CodeDocComment, Object: "old", Source: envelopeSource, Timestamp: before.lastAt}}
+	restarted := &Publisher{now: func() time.Time { return frozen.Add(2 * time.Millisecond) }}
+	arrival := []message.Triple{{Subject: id, Predicate: semast.CodeDocComment, Object: "new", Source: envelopeSource, Timestamp: restarted.envelopeTime(id)}}
+	if res := gtypes.ReplaceBySource(stored, arrival); len(res.Stale) != 0 {
+		t.Fatalf("restarted publisher's write rejected as older: %+v", res.Stale)
 	}
 }

@@ -103,26 +103,10 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 	// bodies, slicing is 11ms and sha256 43ms. The cost is entirely in the Puts
 	// below, which is why they are deduped and issued concurrently rather than
 	// one blocking round trip per entity.
-	type pending struct {
-		entity string
-		key    string
-		body   string
-	}
-	work := make([]pending, 0, len(result.Entities))
-	for _, e := range result.Entities {
-		if e == nil || containerTypes[e.Type] {
-			continue
-		}
-		body := sliceLines(lines, e.StartLine, e.EndLine)
-		if body == "" {
-			continue
-		}
-		work = append(work, pending{entity: e.ID, key: bodyKeyPrefix + hashBody(body), body: body})
-	}
+	work, out := sliceBodies(result, lines)
 
 	var mu sync.Mutex
-	out := make(map[string]codeBody, len(work))
-	attach := func(w pending) {
+	attach := func(w bodyWork) {
 		// Counts fresh puts and dedupe hits alike: either way one more body is
 		// resolved to a blob, and this advancing while the publish count is
 		// flat is what separates a slow offload phase from a hang.
@@ -157,7 +141,7 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(w pending) {
+		go func(w bodyWork) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			if err := c.bodyStore.Put(ctx, w.key, []byte(w.body)); err != nil {
@@ -225,4 +209,34 @@ func sliceLines(lines []string, start, end int) string {
 func hashBody(body string) string {
 	sum := sha256.Sum256([]byte(body))
 	return hex.EncodeToString(sum[:])
+}
+
+// bodyWork is one body to offload for one entity.
+type bodyWork struct {
+	entity string
+	key    string
+	body   string
+}
+
+// sliceBodies cuts each body-bearing entity's source from lines. A symbol
+// the parse placed on lines the read no longer has (the file changed between
+// them) is returned faulted: no body this pass, and no reconcile that would
+// clear the handles a previous pass stored.
+func sliceBodies(result *semsourceast.ParseResult, lines []string) ([]bodyWork, map[string]codeBody) {
+	work := make([]bodyWork, 0, len(result.Entities))
+	out := make(map[string]codeBody, len(result.Entities))
+	for _, e := range result.Entities {
+		if e == nil || containerTypes[e.Type] {
+			continue
+		}
+		body := sliceLines(lines, e.StartLine, e.EndLine)
+		if body == "" {
+			if e.StartLine > 0 {
+				out[e.ID] = codeBody{faulted: true}
+			}
+			continue
+		}
+		work = append(work, bodyWork{entity: e.ID, key: bodyKeyPrefix + hashBody(body), body: body})
+	}
+	return work, out
 }

@@ -39,7 +39,9 @@ single worker runs off the drain loop so a slow mutation lane never delays deliv
 - `Contract: SourceEntityContract().Name`, `Group: GroupSource`, `EntityID: payload.ID`, `ExpectedRevision` (below);
 - `Desired`: the payload's statements whose predicate is in that contract's `source` group and whose source is
   `semsource` or empty, an empty source stamped `semsource` and a zero timestamp the envelope's (fixed at millisecond
-  precision), matching what graph-ingest stores for the stream arrival;
+  precision), matching what graph-ingest stores for the stream arrival. The envelope time is the wall-clock
+  millisecond, never earlier than the previous publish's; only a repeat of one entity within a millisecond moves it
+  on by 1 ms, so no two publishes of an entity share it and a burst does not run ahead of the clock;
 - `Metadata.Source: semsource` and no metadata timestamp, which the client would refuse against a statement's own.
 
 **Alternatives rejected by the ruling:** reading back and diffing, producer memory of past emissions, ownership.
