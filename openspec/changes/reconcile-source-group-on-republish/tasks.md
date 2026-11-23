@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md` (ruling: #336 comments 7100421719 and 7100564191).
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85; line entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
 
 ## 2. Repro and completeness audit (before code)
 
