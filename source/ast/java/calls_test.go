@@ -670,3 +670,46 @@ func TestInheritedFieldTypedInAnotherModuleLinks(t *testing.T) {
 	})
 	assertCallsExactly(t, ents, "run", entityNamed(t, ents, "grant").ID)
 }
+
+// --- nested class bodies (#339) --------------------------------------------
+
+// An unqualified call inside an anonymous class body binds to the anonymous
+// type (and its supertype) first, never to the enclosing class. Resolving it
+// against the enclosing class is a wrong edge, so the body stays inert. The
+// `new Task(...)` creation itself is still a confirmed constructor call.
+func TestAnonymousClassBodyCallsAreInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Task.java": "package a;\npublic abstract class Task {\n" +
+			"  public Task(int n) {}\n" +
+			"  public void cancel() {}\n" +
+			"  public abstract void tick();\n}\n",
+		"a/Svc.java": "package a;\npublic class Svc {\n" +
+			"  public void schedule() {\n" +
+			"    Task t = new Task(1) { public void tick() { cancel(); this.cancel(); } };\n" +
+			"  }\n" +
+			"  public void cancel() {}\n}\n",
+	})
+	var taskCtor string
+	for _, e := range ents {
+		if e.Name == "Task" && e.Type == ast.TypeMethod {
+			taskCtor = e.ID
+		}
+	}
+	if taskCtor == "" {
+		t.Fatal("no Task constructor entity was extracted")
+	}
+	assertCallsExactly(t, ents, "schedule", taskCtor)
+}
+
+// A local class declared in a method body rebinds unqualified calls the same
+// way an anonymous class does.
+func TestLocalClassBodyCallsAreInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Svc.java": "package a;\npublic class Svc {\n" +
+			"  public void schedule() {\n" +
+			"    class Local { void go() { cancel(); } void cancel() {} }\n" +
+			"  }\n" +
+			"  public void cancel() {}\n}\n",
+	})
+	assertNoCalls(t, ents, "schedule")
+}
