@@ -685,8 +685,9 @@ func TestAnonymousClassBodyCallsAreInert(t *testing.T) {
 			"  public abstract void tick();\n}\n",
 		"a/Svc.java": "package a;\npublic class Svc {\n" +
 			"  public void schedule() {\n" +
-			"    Task t = new Task(1) { public void tick() { cancel(); this.cancel(); } };\n" +
+			"    Task t = new Task(helper()) { public void tick() { cancel(); this.cancel(); } };\n" +
 			"  }\n" +
+			"  public int helper() { return 1; }\n" +
 			"  public void cancel() {}\n}\n",
 	})
 	var taskCtor string
@@ -698,7 +699,8 @@ func TestAnonymousClassBodyCallsAreInert(t *testing.T) {
 	if taskCtor == "" {
 		t.Fatal("no Task constructor entity was extracted")
 	}
-	assertCallsExactly(t, ents, "schedule", taskCtor)
+	// The argument list is still walked: only the class body is skipped.
+	assertCallsExactly(t, ents, "schedule", taskCtor, entityNamed(t, ents, "helper").ID)
 }
 
 // A local class declared in a method body rebinds unqualified calls the same
@@ -712,4 +714,34 @@ func TestLocalClassBodyCallsAreInert(t *testing.T) {
 			"  public void cancel() {}\n}\n",
 	})
 	assertNoCalls(t, ents, "schedule")
+}
+
+// Local interfaces and enums (Java 16+) are implicitly static: a call in their
+// bodies can never mean the enclosing instance's method, and it belongs to the
+// nested method, not to the enclosing caller.
+func TestLocalInterfaceAndEnumBodyCallsAreInert(t *testing.T) {
+	for name, decl := range map[string]string{
+		"interface": "interface LI { default void d() { cancel(); } }",
+		"enum":      "enum LE { A; void y() { cancel(); } }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			ents := parseTree(t, map[string]string{
+				"a/Svc.java": "package a;\npublic class Svc {\n" +
+					"  public void schedule() {\n    " + decl + "\n  }\n" +
+					"  public void cancel() {}\n}\n",
+			})
+			assertNoCalls(t, ents, "schedule")
+		})
+	}
+}
+
+// A lambda does not rebind `this` or unqualified names, so its calls stay
+// edges of the enclosing caller. Guards against widening the stop list to it.
+func TestLambdaBodyCallsResolveToEnclosingClass(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Svc.java": "package a;\npublic class Svc {\n" +
+			"  public void schedule() { Runnable r = () -> cancel(); }\n" +
+			"  public void cancel() {}\n}\n",
+	})
+	assertCallsExactly(t, ents, "schedule", entityNamed(t, ents, "cancel").ID)
 }
