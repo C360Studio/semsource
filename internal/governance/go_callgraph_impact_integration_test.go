@@ -176,7 +176,10 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 			}
 		}
 		resp = r
-		if !resp.Deferred && len(resp.Nodes) > 0 && resp.Impact != nil && resp.Impact.Nodes > 0 {
+		// Wait for everything asserted below, the named caller included: the
+		// impact count can be ready before the relations projection is (#352).
+		if !resp.Deferred && len(resp.Nodes) > 0 && resp.Impact != nil && resp.Impact.Nodes > 0 &&
+			namesCaller(resp.Nodes[0].Relations["caller"], "Run") {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -198,14 +201,17 @@ func TestIntegration_GoCallGraphImpact(t *testing.T) {
 	}
 
 	// And the dependent is NAMED (D5): Run appears as a caller ref.
-	callers := resp.Nodes[0].Relations["caller"]
-	found := false
-	for _, ref := range callers {
-		if ref.Name == "Run" {
-			found = true
-		}
-	}
-	if !found {
+	if !namesCaller(resp.Nodes[0].Relations["caller"], "Run") {
 		t.Fatalf("impact response names no caller: relations = %+v", resp.Nodes[0].Relations)
 	}
+}
+
+// namesCaller reports whether refs carries a caller named name.
+func namesCaller(refs []fusion.Ref, name string) bool {
+	for _, ref := range refs {
+		if ref.Name == name {
+			return true
+		}
+	}
+	return false
 }
