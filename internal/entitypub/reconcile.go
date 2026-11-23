@@ -111,11 +111,15 @@ func (p *Publisher) reconcile(ctx context.Context, payload *graph.EntityPayload,
 	for attempt := 0; attempt < reconcileAttempts; attempt++ {
 		if _, err = p.reconciler.Reconcile(ctx, request); err == nil {
 			p.reconciled.Add(1)
+			p.metrics.incReconciled()
 			return
 		}
 		var me *projection.MutationError
 		if !errors.As(err, &me) || me.Kind != projection.MutationRevisionConflict {
 			break
+		}
+		if attempt < reconcileAttempts-1 {
+			p.metrics.incReconcileRetries()
 		}
 	}
 	var ce *errs.ClassifiedError

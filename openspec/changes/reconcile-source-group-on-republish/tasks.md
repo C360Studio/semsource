@@ -34,7 +34,7 @@
 
 ## 5. Cost on OSH
 
-- [ ] 5.1 (Note: AST `dc.terms.created` is wall-clock per parse, so `unchanged` happens only when the stream write lands before the reconcile reads.) Measure a restart over a retained OSH core store (~32k entities), reconcile off versus on: wall clock to `phase: ready`, reconcile applied/`unchanged`/failed counts. Post the numbers on #336. Report how often the reconcile wrote, compared with the share expected from arrival order. Any write on an entity whose stream statement had already landed means a stamping mismatch, and it is found before going further.
+- [x] 5.1 Measured 2026-11-23 on OSH core (results are on #336, comment 7103565093). Warm restart settles in 46–49 s with reconcile off and 294–377 s with it on. Ready takes 41–44 s off and 122 s on, and with it on the phase is `degraded` because the seed times out. Entity writes are the same (28,464). 27,917 reconciles needed 27,914–27,917 retries: every first attempt loses to its own stream write. Counters added: `reconciled_total`, `reconcile_retries_total`.
 - [ ] 5.2 Owner decides "always reconcile" versus a bounded form, with 5.1's number in hand.
 
 ## 6. Records and review
