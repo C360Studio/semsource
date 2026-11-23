@@ -84,6 +84,7 @@ type Publisher struct {
 	sendTimeout     time.Duration
 	retryBackoff    time.Duration
 	maxRetryBackoff time.Duration
+	reconciler      Reconciler
 
 	// Metrics
 	accepted  atomic.Int64
@@ -91,7 +92,12 @@ type Publisher struct {
 	dropped   atomic.Int64
 	failed    atomic.Int64
 	retries   atomic.Int64
-	metrics   *pubMetrics
+	// reconciled and reconcileFailed count the group reconcile that follows a
+	// stream publish when WithReconcile is set; neither moves the delivery
+	// counters above.
+	reconciled      atomic.Int64
+	reconcileFailed atomic.Int64
+	metrics         *pubMetrics
 
 	// backpressure tracks whether the publisher is CURRENTLY in sustained
 	// backpressure, so the condition is logged on the transition into and out of
@@ -131,6 +137,7 @@ type publisherConfig struct {
 	maxRetryBackoff time.Duration
 	metricsRegistry *metric.MetricsRegistry
 	metricsPrefix   string
+	reconciler      Reconciler
 }
 
 // WithCapacity sets the buffer capacity (default 5000).
@@ -216,6 +223,7 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		sendTimeout:     cfg.sendTimeout,
 		retryBackoff:    cfg.retryBackoff,
 		maxRetryBackoff: cfg.maxRetryBackoff,
+		reconciler:      cfg.reconciler,
 		metrics:         newPubMetrics(cfg.metricsRegistry, cfg.metricsPrefix),
 		done:            make(chan struct{}),
 		stop:            make(chan struct{}),
@@ -453,7 +461,11 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 // (entity ID + content hash) so an ambiguous timeout retried is deduped
 // server-side instead of double-applying triples downstream.
 func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload) error {
-	msg := message.NewBaseMessage(graph.EntityType, payload, "semsource")
+	// The envelope time is fixed here, at the millisecond precision the
+	// envelope is encoded with, so the reconcile that follows stamps the same
+	// time graph-ingest gives the stream statements.
+	at := time.Now().Truncate(time.Millisecond)
+	msg := message.NewBaseMessage(graph.EntityType, payload, envelopeSource, message.WithTime(at))
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal entity message (terminal, not retried): %w", err)
@@ -469,6 +481,9 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
 		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
+			// Reconcile before the delivery counters move, so WaitSettled
+			// also covers it.
+			p.reconcile(ctx, payload, at)
 			// Recovery state settles before the delivery counter moves: a
 			// WaitSettled caller can return the moment published advances, and
 			// its report must not pair full delivery with stale backpressure.
