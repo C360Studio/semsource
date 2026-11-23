@@ -27,7 +27,7 @@
 
 ## 4. Enable per handler
 
-- [ ] 4.1a ast watch path sets the file entity's `ContainedBy` (today only `BuildHierarchy` does, `source/ast/hierarchy.go:189-204`), so a watch publish no longer drops `code.structure.belongs`. Proved by: test comparing the watch-path and seed payloads for one file, group predicates equal except `dc.terms.created`.
+- [x] 4.1a ast watch path sets the file entity's `ContainedBy` (today only `BuildHierarchy` does, `source/ast/hierarchy.go:189-204`), so a watch publish no longer drops `code.structure.belongs`. Proved by: `TestWatchPublishCarriesTheSeedGroupSet` (fails without the fix: the file has no `code.structure.belongs`).
 - [ ] 4.1b ast body-offload faults go through 3.5.
 - [ ] 4.1 ast-source opts in, with its completeness test (D3) green. Proved by: `TestIntegration_ReingestDropsRemovedPredicates` passing, plus a new integration case asserting a `supersession` lineage edge, the `lifecycle` stale marker and `entity.ontology.class` survive a republish.
 - [ ] 4.2 Each remaining handler that the audit (2.2) clears opts in, with its own completeness test. Handlers not cleared are listed on #336 with the blocking issue.

@@ -563,6 +563,11 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 			// Publish folder chain for new/modified files so containment
 			// edges exist even for directories created between full reindexes.
 			c.publishFolderChain(ctx, event.Path, pw.scopedSystem)
+			// The watch result never passes through BuildHierarchy, so the
+			// file's parent edge is set here to match the full index.
+			if fe := event.Result.FileEntity; fe != nil {
+				fe.ContainedBy = semsourceast.FileParentID(event.Result.Path, c.authority, pw.scopedSystem)
+			}
 
 			if err := c.publishParseResult(ctx, event.Result, pw); err != nil {
 				c.logger.Warn("Failed to publish parse result",

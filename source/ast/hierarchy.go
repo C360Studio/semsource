@@ -122,6 +122,19 @@ func BuildFolderChain(filePath string, authority entityid.Authority, project str
 	return out
 }
 
+// FileParentID returns the ID of the folder or repo that directly contains the
+// file at filePath (root-relative), matching what BuildHierarchy assigns. The
+// watch path uses it so a single-file publish carries the same
+// code.structure.belongs edge as the full index (#336 task 4.1a).
+func FileParentID(filePath string, authority entityid.Authority, project string) string {
+	systemSlug := entityid.SystemSlug(project)
+	dir := filepath.Dir(filePath)
+	if dir == "." || dir == "" {
+		return buildRepoID(authority, systemSlug)
+	}
+	return authority.Build(systemSlug, DomainCode, string(TypeFolder), SanitizePathSegment(dir))
+}
+
 // buildRepoID constructs the deterministic entity ID for a repository.
 // systemSlug must already be processed through entityid.SystemSlug().
 func buildRepoID(authority entityid.Authority, systemSlug string) string {
