@@ -45,13 +45,14 @@ func newPageEntity(authority entityid.Authority, rawURL, contentType, etag, cont
 
 // Triples converts the PageEntity to a slice of message.Triple using canonical
 // vocabulary predicates from source/vocabulary.
+// Triples carry no Timestamp: graph-ingest stamps the envelope time, which
+// is what lets a reconcile identify this write in the stored state (#336).
 func (e *PageEntity) Triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.WebType, Object: "web", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.WebURL, Object: e.RawURL, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.WebContentType, Object: e.ContentType, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.WebDomain, Object: e.System, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.WebType, Object: "web", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.WebURL, Object: e.RawURL, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.WebContentType, Object: e.ContentType, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.WebDomain, Object: e.System, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	if e.ETag != "" {
 		triples = append(triples, message.Triple{
@@ -59,7 +60,6 @@ func (e *PageEntity) Triples() []message.Triple {
 			Predicate:  source.WebETag,
 			Object:     e.ETag,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -69,7 +69,6 @@ func (e *PageEntity) Triples() []message.Triple {
 			Predicate:  source.WebContentHash,
 			Object:     e.ContentHash,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}

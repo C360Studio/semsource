@@ -36,24 +36,25 @@ type Entity struct {
 }
 
 // Triples converts the Entity to a slice of message.Triple for graph storage.
+// Triples carry no Timestamp: graph-ingest stamps the envelope time, which
+// is what lets a reconcile identify this write in the stored state (#336).
 func (e *Entity) Triples() []message.Triple {
-	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	return []message.Triple{
-		{Subject: e.ID, Predicate: source.MediaType, Object: "video", Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFilePath, Object: e.FilePath, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaMimeType, Object: e.MimeType, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFileHash, Object: e.FileHash, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFileSize, Object: e.FileSize, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFormat, Object: e.Format, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaDuration, Object: e.Duration, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFrameRate, Object: e.FrameRate, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaWidth, Object: e.Width, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaHeight, Object: e.Height, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaCodec, Object: e.Codec, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaBitrate, Object: e.Bitrate, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaKeyframeCount, Object: e.KeyframeCount, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaStorageRef, Object: e.StorageRef, Source: src, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaType, Object: "video", Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFilePath, Object: e.FilePath, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaMimeType, Object: e.MimeType, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFileHash, Object: e.FileHash, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFileSize, Object: e.FileSize, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFormat, Object: e.Format, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaDuration, Object: e.Duration, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFrameRate, Object: e.FrameRate, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaWidth, Object: e.Width, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaHeight, Object: e.Height, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaCodec, Object: e.Codec, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaBitrate, Object: e.Bitrate, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaKeyframeCount, Object: e.KeyframeCount, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaStorageRef, Object: e.StorageRef, Source: src, Confidence: 1.0},
 	}
 }
 
@@ -94,20 +95,21 @@ type KeyframeEntity struct {
 }
 
 // Triples converts the KeyframeEntity to a slice of message.Triple for graph storage.
+// Triples carry no Timestamp: graph-ingest stamps the envelope time, which
+// is what lets a reconcile identify this write in the stored state (#336).
 func (e *KeyframeEntity) Triples() []message.Triple {
-	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.MediaType, Object: "keyframe", Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaTimestamp, Object: e.Timestamp, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFrameIndex, Object: e.FrameIndex, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaWidth, Object: e.Width, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaHeight, Object: e.Height, Source: src, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaType, Object: "keyframe", Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaTimestamp, Object: e.Timestamp, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFrameIndex, Object: e.FrameIndex, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaWidth, Object: e.Width, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaHeight, Object: e.Height, Source: src, Confidence: 1.0},
 	}
 	if e.StorageRef != "" {
 		triples = append(triples, message.Triple{
 			Subject: e.ID, Predicate: source.MediaStorageRef, Object: e.StorageRef,
-			Source: src, Timestamp: now, Confidence: 1.0,
+			Source: src, Confidence: 1.0,
 		})
 	}
 	// Relationship triple: this keyframe belongs to its parent video entity.
@@ -118,7 +120,6 @@ func (e *KeyframeEntity) Triples() []message.Triple {
 			Object:     e.VideoID,
 			Datatype:   message.EntityReferenceDatatype,
 			Source:     src,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}

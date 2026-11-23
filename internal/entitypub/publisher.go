@@ -84,6 +84,7 @@ type Publisher struct {
 	sendTimeout     time.Duration
 	retryBackoff    time.Duration
 	maxRetryBackoff time.Duration
+	reconciler      Reconciler
 
 	// Metrics
 	accepted  atomic.Int64
@@ -91,7 +92,21 @@ type Publisher struct {
 	dropped   atomic.Int64
 	failed    atomic.Int64
 	retries   atomic.Int64
-	metrics   *pubMetrics
+	// reconciled and reconcileFailed count the group reconcile that follows a
+	// stream publish when WithReconcile is set; neither moves the delivery
+	// counters above.
+	reconciled      atomic.Int64
+	reconcileFailed atomic.Int64
+	// reconcilePending counts queued reconciles; they are in flight for
+	// WaitSettled. latest maps an entity ID to the reconcile intent its
+	// delivered publishes leave standing (see noteDelivery).
+	reconcilePending atomic.Int64
+	reconcileQ       chan reconcileJob
+	reconcileDone    chan struct{}
+	latestMu         sync.Mutex
+	latest           map[string]intent
+	reconcileSeq     uint64 // guarded by latestMu
+	metrics          *pubMetrics
 
 	// backpressure tracks whether the publisher is CURRENTLY in sustained
 	// backpressure, so the condition is logged on the transition into and out of
@@ -112,7 +127,15 @@ type Publisher struct {
 	settledCh chan struct{}
 
 	// Lifecycle
-	cancel   context.CancelFunc
+	cancel context.CancelFunc
+	// reconcileCancel cancels the reconcile worker's context at Stop.
+	reconcileCancel context.CancelFunc
+	// lastAt is the previous envelope time and lastIDs the entities already
+	// published at it; only the drain goroutine reads or writes them.
+	lastAt  time.Time
+	lastIDs map[string]bool
+	// now is the envelope clock; tests freeze it.
+	now      func() time.Time
 	done     chan struct{}
 	stop     chan struct{}
 	stopOnce sync.Once
@@ -131,6 +154,7 @@ type publisherConfig struct {
 	maxRetryBackoff time.Duration
 	metricsRegistry *metric.MetricsRegistry
 	metricsPrefix   string
+	reconciler      Reconciler
 }
 
 // WithCapacity sets the buffer capacity (default 5000).
@@ -216,9 +240,14 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		sendTimeout:     cfg.sendTimeout,
 		retryBackoff:    cfg.retryBackoff,
 		maxRetryBackoff: cfg.maxRetryBackoff,
+		reconciler:      cfg.reconciler,
 		metrics:         newPubMetrics(cfg.metricsRegistry, cfg.metricsPrefix),
 		done:            make(chan struct{}),
 		stop:            make(chan struct{}),
+		reconcileQ:      make(chan reconcileJob, reconcileQueueSize),
+		now:             time.Now,
+		reconcileDone:   make(chan struct{}),
+		latest:          map[string]intent{},
 	}, nil
 }
 
@@ -229,6 +258,11 @@ func (p *Publisher) Start(ctx context.Context) {
 	drainCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	p.cancel = cancel
 	p.started = true
+	// Reconciles are abandoned at Stop, so their context is cancelled there:
+	// an in-flight request never holds Stop past its deadline.
+	reconcileCtx, reconcileCancel := context.WithCancel(drainCtx)
+	p.reconcileCancel = reconcileCancel
+	go p.reconcileWorker(reconcileCtx)
 	go p.drainLoop(drainCtx)
 }
 
@@ -240,9 +274,20 @@ func (p *Publisher) Stop(ctx context.Context) error {
 	if !p.started {
 		return nil
 	}
-	p.stopOnce.Do(func() { close(p.stop) })
+	p.stopOnce.Do(func() {
+		close(p.stop)
+		p.reconcileCancel()
+	})
 	select {
 	case <-p.done:
+		// The drain loop closed the reconcile queue on exit; the worker
+		// discards what is left once Stop has begun.
+		select {
+		case <-p.reconcileDone:
+		case <-ctx.Done():
+			p.cancel()
+			return fmt.Errorf("entitypub settlement incomplete: %w", ctx.Err())
+		}
 		if lost := p.Lost(); lost > 0 {
 			return fmt.Errorf("entitypub stopped with %d undelivered entities", lost)
 		}
@@ -320,7 +365,7 @@ func (p *Publisher) Retries() int64 { return p.retries.Load() }
 // the result too high (wait longer), never a false zero.
 func (p *Publisher) inFlight() int64 {
 	settled := p.published.Load() + p.failed.Load()
-	return p.accepted.Load() - settled
+	return p.accepted.Load() - settled + p.reconcilePending.Load()
 }
 
 // noteOutcome wakes WaitSettled callers when the last in-flight entity
@@ -402,6 +447,8 @@ func (p *Publisher) clearBackpressure() {
 // On circuit breaker errors it backs off before retrying.
 func (p *Publisher) drainLoop(ctx context.Context) {
 	defer close(p.done)
+	// Only this loop enqueues reconciles, so it closes their queue.
+	defer close(p.reconcileQ)
 
 	ticker := time.NewTicker(defaultDrainInterval)
 	defer ticker.Stop()
@@ -453,7 +500,11 @@ func (p *Publisher) drainBatch(ctx context.Context) {
 // (entity ID + content hash) so an ambiguous timeout retried is deduped
 // server-side instead of double-applying triples downstream.
 func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload) error {
-	msg := message.NewBaseMessage(graph.EntityType, payload, "semsource")
+	// The envelope time is fixed here, at the millisecond precision the
+	// envelope is encoded with, so the reconcile that follows stamps the same
+	// time graph-ingest gives the stream statements.
+	at := p.envelopeTime(payload.ID)
+	msg := message.NewBaseMessage(graph.EntityType, payload, envelopeSource, message.WithTime(at))
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal entity message (terminal, not retried): %w", err)
@@ -465,10 +516,26 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	maxBackoff := p.maxRetryBackoff
 	deadline := time.Now().Add(deliveryBudget)
 
+	// The reconcile intent is registered before the send, so no reconcile
+	// can see this write applied without knowing about it.
+	job, reconcile := p.noteDelivery(payload, at)
+	delivered := false
+	defer func() {
+		if reconcile && !delivered {
+			p.forget(job)
+		}
+	}()
+
 	var attempts int
 	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
 		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
+			delivered = true
+			// Queue the reconcile before the delivery counters move, so
+			// WaitSettled also covers it. It runs off this loop.
+			if reconcile {
+				p.enqueueReconcile(job)
+			}
 			// Recovery state settles before the delivery counter moves: a
 			// WaitSettled caller can return the moment published advances, and
 			// its report must not pair full delivery with stale backpressure.
@@ -545,4 +612,23 @@ func (p *Publisher) flush(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// envelopeTime returns the wall-clock millisecond for a publish of id, never
+// earlier than the previous publish's. No two publishes of one entity share
+// it, so the reconcile's applied-write fence tells them apart. Only a repeat
+// of an entity within one millisecond moves it past the clock, by one
+// millisecond, and any other entity in the same millisecond shares the time
+// instead of pushing it further: a burst does not run ahead of the clock, so
+// a restarted publisher's writes are not older than those already stored.
+func (p *Publisher) envelopeTime(id string) time.Time {
+	at := p.now().Truncate(time.Millisecond)
+	switch {
+	case at.After(p.lastAt):
+		p.lastAt, p.lastIDs = at, map[string]bool{}
+	case p.lastIDs[id]:
+		p.lastAt, p.lastIDs = p.lastAt.Add(time.Millisecond), map[string]bool{}
+	}
+	p.lastIDs[id] = true
+	return p.lastAt
 }

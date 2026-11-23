@@ -2,6 +2,7 @@ package urlsource
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"github.com/c360studio/semsource/entityid"
@@ -9,11 +10,14 @@ import (
 	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
 	"reflect"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/c360studio/semengine/component"
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semengine/natsclient"
 	"github.com/c360studio/semengine/types"
 
@@ -99,6 +103,9 @@ type Component struct {
 	// (publish counters inflate under periodic reindex — audit 2026-07-19).
 	distinct *entitypub.DistinctTracker
 
+	// sent gates reconcile to pages this process knows changed (#336).
+	sent sentContent
+
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
 	workers     workerjoin.Group
@@ -120,10 +127,22 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 	h := urlhandler.NewWithAuthority(deps.GetLogger(), authority)
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+	pubOpts := []entitypub.Option{
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
+	}
+	if deps.NATSClient != nil {
+		// Every url-source publish carries the page's complete semsource set
+		// (TestChangedPagePublishCarriesTheCompleteGroupSet); only content
+		// this process saw change is reconciled (#336).
+		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
+		if err != nil {
+			return nil, fmt.Errorf("create source reconciler: %w", err)
+		}
+		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
+	}
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
@@ -362,9 +381,55 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		"operation", event.Operation)
 }
 
-// publishEntity enqueues an EntityPayload for buffered publishing via the entity publisher.
+// publishEntity enqueues an EntityPayload for buffered publishing via the
+// entity publisher. It is reconciled only when this process already sent the
+// page with different statements (owner ruling, #336 task 5.2): the first
+// pass after a start, and the watcher's first fetch, publish with
+// SkipReconcile unless the content differs from what this process sent.
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+	sum := fingerprint(payload.TripleData)
+	payload.SkipReconcile = !c.sent.differs(payload.ID, sum)
+	if err := c.publisher.Send(payload); err != nil {
+		return err
+	}
+	c.sent.record(payload.ID, sum)
+	return nil
+}
+
+// sentContent records, per entity ID, a fingerprint of the statements this
+// process last handed to the publisher.
+type sentContent struct {
+	mu   sync.Mutex
+	sums map[string][sha256.Size]byte
+}
+
+// differs reports whether this process sent id before with other statements.
+func (s *sentContent) differs(id string, sum [sha256.Size]byte) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev, ok := s.sums[id]
+	return ok && prev != sum
+}
+
+func (s *sentContent) record(id string, sum [sha256.Size]byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sums == nil {
+		s.sums = make(map[string][sha256.Size]byte)
+	}
+	s.sums[id] = sum
+}
+
+// fingerprint hashes a payload's statements order-independently, leaving out
+// the timestamp so a refetch of unchanged content matches.
+func fingerprint(triples []message.Triple) [sha256.Size]byte {
+	lines := make([]string, len(triples))
+	for i, t := range triples {
+		lines[i] = fmt.Sprintf("%s\x00%s\x00%v\x00%s\x00%s\x00%v",
+			t.Subject, t.Predicate, t.Object, t.Datatype, t.Source, t.Confidence)
+	}
+	sort.Strings(lines)
+	return sha256.Sum256([]byte(strings.Join(lines, "\n")))
 }
 
 // updateLastActivity safely updates the last activity timestamp.

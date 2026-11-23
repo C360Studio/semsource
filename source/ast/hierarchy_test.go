@@ -478,3 +478,20 @@ func TestSanitizePathSegment(t *testing.T) {
 		}
 	}
 }
+
+// TestFileParentID_MatchesBuildHierarchy pins the watch path's parent edge to
+// the full index's for a root file, nested files, and a version-scoped
+// system (#336 task 4.1a).
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+func TestFileParentID_MatchesBuildHierarchy(t *testing.T) {
+	auth := testAuthority("acme")
+	for _, project := range []string{"my-project", entityid.ScopedSystemSlug("my-project", "v1.9.0")} {
+		for _, path := range []string{"main.go", "a/b.go", "a/b/c/d.go"} {
+			file := &ast.CodeEntity{ID: auth.Build(project, "golang", "file", ast.SanitizePathSegment(path)), Type: ast.TypeFile, Path: path}
+			ast.BuildHierarchy([]*ast.ParseResult{{FileEntity: file, Entities: []*ast.CodeEntity{file}, Path: path}}, auth, project)
+			if got := ast.FileParentID(path, auth, project); got != file.ContainedBy {
+				t.Errorf("project %q, %s: FileParentID = %q, BuildHierarchy parent = %q", project, path, got, file.ContainedBy)
+			}
+		}
+	}
+}

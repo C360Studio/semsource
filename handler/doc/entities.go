@@ -88,21 +88,24 @@ func DocumentEntityID(authority entityid.Authority, system, logicalPath string) 
 
 // Triples converts the Entity to a slice of message.Triple using canonical
 // vocabulary predicates. No body triples: the parent carries none.
+//
+// Statements carry no Timestamp: graph-ingest stamps them with the envelope
+// time, which is what the #336 reconcile fences its write on. The same holds
+// for PassageEntity.Triples.
 func (e *Entity) Triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DocType, Object: "document", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.DocFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.DocMimeType, Object: e.MimeType, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.DocFileHash, Object: e.ContentHash, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.DocChunkCount, Object: e.ChunkCount, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DocType, Object: "document", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DocFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DocMimeType, Object: e.MimeType, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DocFileHash, Object: e.ContentHash, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Title, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DocChunkCount, Object: e.ChunkCount, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		// The parent is navigable, not readable: it holds no body, so it must not
 		// outrank the passages that do. Without this it does — a title-only vector
 		// scores well on a title-shaped query and the caller's first citation is
 		// empty. Measured before this marker: 5 of 11 doc answers led with an
 		// empty-bodied node.
-		{Subject: e.ID, Predicate: source.EntityRoleNavigational, Object: source.NavigationalDocument, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.EntityRoleNavigational, Object: source.NavigationalDocument, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	return triples
 }
@@ -187,29 +190,28 @@ func newPassageEntity(authority entityid.Authority, system, parentID, parentTitl
 // Triples builds the passage's typed facts. DocChunkIndex is 0-indexed so the
 // retraction rule is a plain comparison against the parent's DocChunkCount.
 func (p *PassageEntity) Triples() []message.Triple {
-	now := p.IndexedAt
 	triples := []message.Triple{
-		{Subject: p.ID, Predicate: source.DocType, Object: "passage", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: p.ID, Predicate: source.DocFilePath, Object: p.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: p.ID, Predicate: source.DocMimeType, Object: p.MimeType, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: p.ID, Predicate: source.DcTitle, Object: p.Title, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: p.ID, Predicate: source.DocChunkIndex, Object: p.Ordinal, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocType, Object: "passage", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocFilePath, Object: p.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocMimeType, Object: p.MimeType, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DcTitle, Object: p.Title, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: p.ID, Predicate: source.DocChunkIndex, Object: p.Ordinal, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{
 			Subject: p.ID, Predicate: source.CodeBelongs, Object: p.ParentID,
 			Datatype: message.EntityReferenceDatatype,
-			Source:   entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
+			Source:   entityid.PlatformSemsource, Confidence: 1.0,
 		},
 	}
 	if p.Section != "" {
 		triples = append(triples, message.Triple{
 			Subject: p.ID, Predicate: source.DocSection, Object: p.Section,
-			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
+			Source: entityid.PlatformSemsource, Confidence: 1.0,
 		})
 	}
 	if p.bodyKey != "" && p.bodyInstance != "" {
 		triples = append(triples,
-			message.Triple{Subject: p.ID, Predicate: source.DocBodyStore, Object: p.bodyInstance, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-			message.Triple{Subject: p.ID, Predicate: source.DocBodyKey, Object: p.bodyKey, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+			message.Triple{Subject: p.ID, Predicate: source.DocBodyStore, Object: p.bodyInstance, Source: entityid.PlatformSemsource, Confidence: 1.0},
+			message.Triple{Subject: p.ID, Predicate: source.DocBodyKey, Object: p.bodyKey, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		)
 	}
 	return triples

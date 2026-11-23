@@ -27,5 +27,7 @@ func snapshotPayload(payload *graph.EntityPayload) (*graph.EntityPayload, error)
 	if err := decoder.Decode(&owned); err != nil {
 		return nil, fmt.Errorf("decode entity payload snapshot: %w", err)
 	}
+	// SkipReconcile is not serialized, so the round trip drops it.
+	owned.SkipReconcile = payload.SkipReconcile
 	return (*graph.EntityPayload)(&owned), nil
 }

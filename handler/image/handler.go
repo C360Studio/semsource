@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"  // register GIF decoder
@@ -31,6 +32,23 @@ var defaultExtensions = map[string]bool{
 	".gif":  true,
 	".webp": true,
 	".svg":  true,
+}
+
+// propStoreFault marks a RawEntity whose binary or thumbnail write failed,
+// so its state lacks a reference it normally carries. It is not a fact: no
+// entity builder reads it into a triple.
+const propStoreFault = "store_fault"
+
+// StoreFaulted reports whether a store write failed for any of entities. A
+// state built from such an entity is missing a storage or thumbnail
+// reference, so its publish must not be reconciled (#336).
+func StoreFaulted(entities []handler.RawEntity) bool {
+	for _, e := range entities {
+		if faulted, _ := e.Properties[propStoreFault].(bool); faulted {
+			return true
+		}
+	}
+	return false
 }
 
 // Handler handles image file sources.
@@ -195,12 +213,18 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 		storageKey := fmt.Sprintf("images/%s/%s/original", slugify(root), instance)
 		if err := h.store.Put(ctx, storageKey, content); err != nil {
 			h.logger.Warn("failed to store image binary", "path", path, "error", err)
+			entity.Properties[propStoreFault] = true
 		} else {
 			entity.Properties["storage_ref"] = storageKey
 
 			thumbKey, err := h.generateAndStoreThumbnail(ctx, content, path, root, instance)
 			if err == nil && thumbKey != "" {
 				entity.Properties["thumbnail_ref"] = thumbKey
+			}
+			// A decode or encode failure repeats for the same bytes, and the
+			// entity ID is built from them, so only a failed write is a fault.
+			if errors.Is(err, errThumbnailStore) {
+				entity.Properties[propStoreFault] = true
 			}
 		}
 	}

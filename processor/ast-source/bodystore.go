@@ -59,6 +59,7 @@ func (c *Component) initBodyStore(ctx context.Context) {
 	})
 	if err != nil {
 		c.logger.Warn("verbatim body store unavailable; code bodies will not be offloaded", "error", err)
+		c.bodyStoreDown = true
 		return
 	}
 	c.bodyStore = store
@@ -71,6 +72,10 @@ func (c *Component) initBodyStore(ctx context.Context) {
 type codeBody struct {
 	triples []message.Triple
 	ref     *message.StorageReference
+	// faulted marks an entity whose body offload failed, so its publish is
+	// missing the body handles it should carry and must not be reconciled
+	// (#336): a reconcile would delete the still-valid stored handles.
+	faulted bool
 }
 
 // bodiesForResult offloads each body-bearing entity's verbatim source from the
@@ -80,14 +85,17 @@ type codeBody struct {
 // file. Any read/offload fault degrades that entity to no body rather than failing
 // ingest. Returns nil when no store is set.
 func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.ParseResult, root string) map[string]codeBody {
-	if c.bodyStore == nil || result == nil || result.Path == "" {
+	if result == nil || result.Path == "" {
 		return nil
+	}
+	if c.bodyStore == nil {
+		return c.storelessBodies(result)
 	}
 	absPath := filepath.Join(root, result.Path)
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		c.logger.Debug("read source for body offload failed", "path", absPath, "error", err)
-		return nil
+		return faultedBodies(result)
 	}
 	lines := strings.Split(string(content), "\n")
 
@@ -95,26 +103,10 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 	// bodies, slicing is 11ms and sha256 43ms. The cost is entirely in the Puts
 	// below, which is why they are deduped and issued concurrently rather than
 	// one blocking round trip per entity.
-	type pending struct {
-		entity string
-		key    string
-		body   string
-	}
-	work := make([]pending, 0, len(result.Entities))
-	for _, e := range result.Entities {
-		if e == nil || containerTypes[e.Type] {
-			continue
-		}
-		body := sliceLines(lines, e.StartLine, e.EndLine)
-		if body == "" {
-			continue
-		}
-		work = append(work, pending{entity: e.ID, key: bodyKeyPrefix + hashBody(body), body: body})
-	}
+	work, out := sliceBodies(result, lines)
 
 	var mu sync.Mutex
-	out := make(map[string]codeBody, len(work))
-	attach := func(w pending) {
+	attach := func(w bodyWork) {
 		// Counts fresh puts and dedupe hits alike: either way one more body is
 		// resolved to a blob, and this advancing while the publish count is
 		// flat is what separates a slow offload phase from a hang.
@@ -149,18 +141,44 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(w pending) {
+		go func(w bodyWork) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			if err := c.bodyStore.Put(ctx, w.key, []byte(w.body)); err != nil {
 				c.logger.Warn("offload code body failed", "entity", w.entity, "error", err)
-				return // degrade this entity to no body, as before
+				// Degrade this entity to no body, as before, and keep it
+				// off the reconcile.
+				mu.Lock()
+				out[w.entity] = codeBody{faulted: true}
+				mu.Unlock()
+				return
 			}
 			c.markBodyPut(w.key)
 			attach(w)
 		}(w)
 	}
 	wg.Wait()
+	return out
+}
+
+// storelessBodies is the result with no body store: nothing when none is
+// wired by design, every body-bearing entity faulted when attaching failed.
+func (c *Component) storelessBodies(result *semsourceast.ParseResult) map[string]codeBody {
+	if c.bodyStoreDown {
+		return faultedBodies(result)
+	}
+	return nil
+}
+
+// faultedBodies marks every body-bearing entity of result as faulted: the
+// offload could not run at all for this file.
+func faultedBodies(result *semsourceast.ParseResult) map[string]codeBody {
+	out := map[string]codeBody{}
+	for _, e := range result.Entities {
+		if e != nil && !containerTypes[e.Type] {
+			out[e.ID] = codeBody{faulted: true}
+		}
+	}
 	return out
 }
 
@@ -191,4 +209,34 @@ func sliceLines(lines []string, start, end int) string {
 func hashBody(body string) string {
 	sum := sha256.Sum256([]byte(body))
 	return hex.EncodeToString(sum[:])
+}
+
+// bodyWork is one body to offload for one entity.
+type bodyWork struct {
+	entity string
+	key    string
+	body   string
+}
+
+// sliceBodies cuts each body-bearing entity's source from lines. A symbol
+// the parse placed on lines the read no longer has (the file changed between
+// them) is returned faulted: no body this pass, and no reconcile that would
+// clear the handles a previous pass stored.
+func sliceBodies(result *semsourceast.ParseResult, lines []string) ([]bodyWork, map[string]codeBody) {
+	work := make([]bodyWork, 0, len(result.Entities))
+	out := make(map[string]codeBody, len(result.Entities))
+	for _, e := range result.Entities {
+		if e == nil || containerTypes[e.Type] {
+			continue
+		}
+		body := sliceLines(lines, e.StartLine, e.EndLine)
+		if body == "" {
+			if e.StartLine > 0 {
+				out[e.ID] = codeBody{faulted: true}
+			}
+			continue
+		}
+		work = append(work, bodyWork{entity: e.ID, key: bodyKeyPrefix + hashBody(body), body: body})
+	}
+	return work, out
 }

@@ -55,6 +55,14 @@ type EntityPayload struct {
 	UpdatedAt           time.Time                 `json:"updated_at"`
 	Storage             *message.StorageReference `json:"storage_ref,omitempty"`
 	IndexingProfileHint string                    `json:"indexing_profile,omitempty"`
+	// SkipReconcile keeps a reconcile-enabled publisher from reconciling this
+	// payload (#336). Set when the payload may not carry the entity's
+	// complete semsource statement set (a store write it depends on failed,
+	// or the path builds only part of the entity), so a reconcile could
+	// delete valid statements; and when the producer does not know the
+	// source content changed, so a reconcile would cost round trips for
+	// nothing (owner ruling, task 5.2). Never serialized.
+	SkipReconcile bool `json:"-"`
 }
 
 // EntityID implements graph.Graphable.

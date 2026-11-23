@@ -35,6 +35,13 @@ type pubMetrics struct {
 	failed    prometheus.Counter
 	dropped   prometheus.Counter
 	retries   prometheus.Counter
+	// reconcileFailed counts group reconciles that failed after a delivered
+	// stream publish; the dropped predicates stay until the next publish.
+	reconcileFailed prometheus.Counter
+	// reconciled and reconcileRetries size the reconcile's cost: one
+	// committed reconcile per republish, plus a re-read per lost race.
+	reconciled       prometheus.Counter
+	reconcileRetries prometheus.Counter
 	// backpressure is 1 while the publisher is in sustained backpressure, so an
 	// operator can alert on the CONDITION rather than differentiate a counter.
 	backpressure prometheus.Gauge
@@ -89,6 +96,12 @@ func newPubMetrics(registry *metric.MetricsRegistry, subsystem string) *pubMetri
 			"Entities rejected before enqueue (invalid encoding or bounded backpressure)"),
 		retries: counter("publish_retries_total",
 			"Publish attempts retried because the transport applied backpressure"),
+		reconcileFailed: counter("reconcile_failed_total",
+			"Group reconciles that failed after the stream publish was delivered"),
+		reconciled: counter("reconciled_total",
+			"Group reconciles committed after a stream publish (applied or unchanged)"),
+		reconcileRetries: counter("reconcile_retries_total",
+			"Group reconciles re-read and retried after a revision conflict"),
 		backpressure: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "semsource",
 			Subsystem: subsystem,
@@ -111,6 +124,15 @@ func newPubMetrics(registry *metric.MetricsRegistry, subsystem string) *pubMetri
 	if c, err := metric.RegisterOrGet(registry, subsystem, "publish_retries_total", m.retries); err == nil {
 		m.retries = c
 	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "reconcile_failed_total", m.reconcileFailed); err == nil {
+		m.reconcileFailed = c
+	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "reconciled_total", m.reconciled); err == nil {
+		m.reconciled = c
+	}
+	if c, err := metric.RegisterOrGet(registry, subsystem, "reconcile_retries_total", m.reconcileRetries); err == nil {
+		m.reconcileRetries = c
+	}
 	if g, err := metric.RegisterOrGet(registry, subsystem, "publish_backpressure", m.backpressure); err == nil {
 		m.backpressure = g
 	}
@@ -132,6 +154,24 @@ func (m *pubMetrics) incFailed() {
 func (m *pubMetrics) incDropped() {
 	if m != nil {
 		m.dropped.Inc()
+	}
+}
+
+func (m *pubMetrics) incReconcileFailed() {
+	if m != nil {
+		m.reconcileFailed.Inc()
+	}
+}
+
+func (m *pubMetrics) incReconciled() {
+	if m != nil {
+		m.reconciled.Inc()
+	}
+}
+
+func (m *pubMetrics) incReconcileRetries() {
+	if m != nil {
+		m.reconcileRetries.Inc()
 	}
 }
 

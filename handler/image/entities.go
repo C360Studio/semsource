@@ -32,29 +32,30 @@ type Entity struct {
 }
 
 // Triples converts the Entity to a slice of message.Triple for graph storage.
+// Triples carry no Timestamp: graph-ingest stamps the envelope time, which
+// is what lets a reconcile identify this write in the stored state (#336).
 func (e *Entity) Triples() []message.Triple {
-	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.MediaType, Object: "image", Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFilePath, Object: e.FilePath, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaMimeType, Object: e.MimeType, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFileHash, Object: e.FileHash, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFileSize, Object: e.FileSize, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFormat, Object: e.Format, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaWidth, Object: e.Width, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaHeight, Object: e.Height, Source: src, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaType, Object: "image", Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFilePath, Object: e.FilePath, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaMimeType, Object: e.MimeType, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFileHash, Object: e.FileHash, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFileSize, Object: e.FileSize, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFormat, Object: e.Format, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaWidth, Object: e.Width, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaHeight, Object: e.Height, Source: src, Confidence: 1.0},
 	}
 	if e.StorageRef != "" {
 		triples = append(triples, message.Triple{
 			Subject: e.ID, Predicate: source.MediaStorageRef, Object: e.StorageRef,
-			Source: src, Timestamp: now, Confidence: 1.0,
+			Source: src, Confidence: 1.0,
 		})
 	}
 	if e.ThumbRef != "" {
 		triples = append(triples, message.Triple{
 			Subject: e.ID, Predicate: source.MediaThumbnailRef, Object: e.ThumbRef,
-			Source: src, Timestamp: now, Confidence: 1.0,
+			Source: src, Confidence: 1.0,
 		})
 	}
 	return triples
