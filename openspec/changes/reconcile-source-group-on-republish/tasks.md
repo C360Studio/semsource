@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85). Re-approved after the D1 amendment, which adds the bounded re-read retry on revision conflict and drops the metadata timestamp (2026-11-23, sha256:c87d3b898461). Re-approved a second time after D4 was decided by the 5.2 ruling and the known gap was added to the spec (2026-11-23, sha256:493f7884e201). Re-approved a third time after D1 was amended by the specialist review (wait for the write to apply, worker off the drain loop) (2026-11-23, sha256:8226c457d77d). Re-approved a fourth time after round-2 review reworded the birth scenario and added the envelope-time rule to D1 (2026-11-23, sha256:47a0e29f1013; all four lines entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85). Re-approved after the D1 amendment, which adds the bounded re-read retry on revision conflict and drops the metadata timestamp (2026-11-23, sha256:c87d3b898461). Re-approved a second time after D4 was decided by the 5.2 ruling and the known gap was added to the spec (2026-11-23, sha256:493f7884e201). Re-approved a third time after D1 was amended by the specialist review (wait for the write to apply, worker off the drain loop) (2026-11-23, sha256:8226c457d77d). Re-approved a fourth time after round-2 review reworded the birth scenario and added the envelope-time rule to D1 (2026-11-23, sha256:47a0e29f1013). Re-approved a fifth time after 4.2 extended D2 and D4 to the other handlers and the spec gained the shared-or-faulted scenario (2026-11-23, sha256:58beba8c9716; all five lines entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
 
 ## 2. Repro and completeness audit (before code)
 
@@ -37,7 +37,7 @@
   - **image, audio, video:** the seed skips, a watch publish reconciles, and a store fault skips the whole event. Proved per package by `TestWatchPublishCarriesTheSeedGroupSet` and `TestReconcileOnlyWatchedChangesWithoutStoreFaults` (the video keyframe subtests need ffmpeg and skip without it).
   - **objectstore:** the seed and a polled create skip, a polled modify reconciles. Proved by `TestPollPublishCarriesTheSeedGroupSet`, `TestReconcileOnlyModifiedObjects`.
   - **ast:** roots sharing a system skip (#349). Proved by `TestRootsSharingASystemDoNotReconcile`.
-  - **git: not opted in.** Two git-source instances can share a system slug (path basename or URL), so each HEAD change would delete the other's statements.
+  - **git: not opted in.** Two git-source instances can share a system slug (path basename or URL), so each HEAD change would delete the other's statements. Split out to #354 (owner ruling 2026-11-23); the dropped `IngestEntityStates` error found alongside is #355.
 
 ## 5. Cost on OSH
 

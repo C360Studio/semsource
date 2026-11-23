@@ -1,6 +1,6 @@
 # Republish removes predicates a source stopped emitting
 
-Approved-by: Coby Leuschke (2026-11-23) sha256:47a0e29f1013
+Approved-by: Coby Leuschke (2026-11-23) sha256:58beba8c9716
 
 Track: design (a new graph-write path, one requirement in `entity-publish-integrity`, an ADR-0008 note).
 
