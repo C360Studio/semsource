@@ -171,9 +171,11 @@ services:
     # floating tag would let a server upgrade arrive implicitly under a
     # governed graph that has not been exercised on that version.
     image: nats:2.14.10-alpine@sha256:311da47e2f31c26e99c623cd78d486a1e8ab039c49b32652770bb91a4f70512e
-    command: ["-js", "-sd", "/data", "-m", "8222", "--name", "c360-nats"]
+    # configs/nats.conf raises max_pending for warm restarts over a large store (#351).
+    command: ["-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222", "--name", "c360-nats"]
     volumes:
       - nats-data:/data
+      - ./configs/nats.conf:/etc/nats/nats.conf:ro
     # Published to the host so a native `semsource run` (outside compose) can
     # reach JetStream — e.g. `docker compose up -d nats` then `semsource run`.
     # Override host ports if another local NATS stack is already running.

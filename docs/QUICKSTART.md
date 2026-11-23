@@ -28,6 +28,9 @@ networks.
     [semsource checkout](https://github.com/C360Studio/semsource) publishes
     NATS on `localhost:4222`. SemSource finds it there by default; point
     elsewhere with `NATS_URL` or `--nats-url`.
+    A NATS server you run yourself needs the settings in
+    [`configs/nats.conf`](../configs/nats.conf): with the 64 MB default
+    `max_pending`, a restart over a large existing graph fails to start.
 - A repository to index. The steps below use
   [`C360Studio/semdev-test`](https://github.com/C360Studio/semdev-test), a
   tiny public Go fixture — substitute your own repository anywhere it
