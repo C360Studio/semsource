@@ -749,6 +749,13 @@ func (p *Parser) extractCalls(body *sitter.Node, content []byte, cs callScope) [
 			add(p.callTargetID(n, content, cs))
 		case "object_creation_expression":
 			add(p.constructorTargetID(n, content, cs))
+		case "class_body", "interface_body", "enum_body":
+			// An anonymous or local type body (class, record, interface, enum)
+			// rebinds unqualified and `this.` calls to the nested type first,
+			// and its methods are not this caller's; resolving them against
+			// cs.self would be a wrong edge, so the whole body stays inert
+			// (#339). Lambdas are deliberately walked: they do not rebind.
+			return
 		}
 		for i := 0; i < int(n.NamedChildCount()); i++ {
 			walk(n.NamedChild(i))

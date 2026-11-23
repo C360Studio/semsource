@@ -670,3 +670,83 @@ func TestInheritedFieldTypedInAnotherModuleLinks(t *testing.T) {
 	})
 	assertCallsExactly(t, ents, "run", entityNamed(t, ents, "grant").ID)
 }
+
+// --- nested class bodies (#339) --------------------------------------------
+
+// An unqualified call inside an anonymous class body binds to the anonymous
+// type (and its supertype) first, never to the enclosing class. Resolving it
+// against the enclosing class is a wrong edge, so the body stays inert. The
+// `new Task(...)` creation itself is still a confirmed constructor call.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Unconfirmed Java calls never produce a wrong edge
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java constructor calls emit edges to the constructor entity
+func TestAnonymousClassBodyCallsAreInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Task.java": "package a;\npublic abstract class Task {\n" +
+			"  public Task(int n) {}\n" +
+			"  public void cancel() {}\n" +
+			"  public abstract void tick();\n}\n",
+		"a/Svc.java": "package a;\npublic class Svc {\n" +
+			"  public void schedule() {\n" +
+			"    Task t = new Task(helper()) { public void tick() { cancel(); this.cancel(); } };\n" +
+			"  }\n" +
+			"  public int helper() { return 1; }\n" +
+			"  public void cancel() {}\n}\n",
+	})
+	var taskCtor string
+	for _, e := range ents {
+		if e.Name == "Task" && e.Type == ast.TypeMethod {
+			taskCtor = e.ID
+		}
+	}
+	if taskCtor == "" {
+		t.Fatal("no Task constructor entity was extracted")
+	}
+	// The argument list is still walked: only the class body is skipped.
+	assertCallsExactly(t, ents, "schedule", taskCtor, entityNamed(t, ents, "helper").ID)
+}
+
+// A local class declared in a method body rebinds unqualified calls the same
+// way an anonymous class does.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Unconfirmed Java calls never produce a wrong edge
+func TestLocalClassBodyCallsAreInert(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Svc.java": "package a;\npublic class Svc {\n" +
+			"  public void schedule() {\n" +
+			"    class Local { void go() { cancel(); } void cancel() {} }\n" +
+			"  }\n" +
+			"  public void cancel() {}\n}\n",
+	})
+	assertNoCalls(t, ents, "schedule")
+}
+
+// Local interfaces and enums (Java 16+) are implicitly static: a call in their
+// bodies can never mean the enclosing instance's method, and it belongs to the
+// nested method, not to the enclosing caller.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Unconfirmed Java calls never produce a wrong edge
+func TestLocalInterfaceAndEnumBodyCallsAreInert(t *testing.T) {
+	for name, decl := range map[string]string{
+		"interface": "interface LI { default void d() { cancel(); } }",
+		"enum":      "enum LE { A; void y() { cancel(); } }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			ents := parseTree(t, map[string]string{
+				"a/Svc.java": "package a;\npublic class Svc {\n" +
+					"  public void schedule() {\n    " + decl + "\n  }\n" +
+					"  public void cancel() {}\n}\n",
+			})
+			assertNoCalls(t, ents, "schedule")
+		})
+	}
+}
+
+// A lambda does not rebind `this` or unqualified names, so its calls stay
+// edges of the enclosing caller. Guards against widening the stop list to it.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java intra-class and static calls resolve to the declaring type
+func TestLambdaBodyCallsResolveToEnclosingClass(t *testing.T) {
+	ents := parseTree(t, map[string]string{
+		"a/Svc.java": "package a;\npublic class Svc {\n" +
+			"  public void schedule() { Runnable r = () -> cancel(); }\n" +
+			"  public void cancel() {}\n}\n",
+	})
+	assertCallsExactly(t, ents, "schedule", entityNamed(t, ents, "cancel").ID)
+}
