@@ -1,6 +1,6 @@
 # Proposal: one entity ID per Python, C and C++ declaration (#338)
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-23) sha256:57967321fe4e
 
 ## Why
 

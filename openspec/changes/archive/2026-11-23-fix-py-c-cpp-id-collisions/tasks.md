@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [x] 1.1 Owner rulings 2026-11-23 on #338 (comment 7115830103): C/C++ fold (definition beats prototype, else first in source); Python `-setter`/`-deleter`, `@overload` stubs dropped when implemented, last binding wins.
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:57967321fe4e; line entered by claude at the owner's instruction). Owner rulings 2026-11-23 on #338 (comment 7115830103): C/C++ fold (definition beats prototype, else first in source); Python `-setter`/`-deleter`, `@overload` stubs dropped when implemented, last binding wins.
 
 ## 2. Implementation
 
