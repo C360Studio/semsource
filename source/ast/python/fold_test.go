@@ -171,4 +171,18 @@ class T:
 	if want := []string{shared[0].ID, newM[0].ID}; strings.Join(classes[0].Contains, ",") != strings.Join(want, ",") {
 		t.Errorf("T contains %v, want exactly %v", classes[0].Contains, want)
 	}
+	if want := []string{classes[0].ID, shared[0].ID, newM[0].ID}; strings.Join(res.FileEntity.Contains, ",") != strings.Join(want, ",") {
+		t.Errorf("file contains %v, want exactly %v", res.FileEntity.Contains, want)
+	}
+	ids := map[string]bool{}
+	for _, e := range res.Entities {
+		ids[e.ID] = true
+	}
+	for _, e := range res.Entities {
+		for _, child := range e.Contains {
+			if !ids[child] {
+				t.Errorf("%s contains %s, which no entity carries", e.ID, child)
+			}
+		}
+	}
 }

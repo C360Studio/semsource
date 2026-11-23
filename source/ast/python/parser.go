@@ -592,10 +592,23 @@ func (p *Parser) dropShadowedMembers(entities []*ast.CodeEntity) []*ast.CodeEnti
 		return entities
 	}
 	out := make([]*ast.CodeEntity, 0, len(entities))
+	kept := map[string]bool{}
 	for _, e := range entities {
 		if !shadowed[e] {
 			out = append(out, e)
+			kept[e.ID] = true
 		}
+	}
+	// The file entity lists every method ID too; a dropped method's ID must
+	// leave it unless a surviving entity still carries that ID.
+	for _, e := range out {
+		ids := e.Contains[:0:0]
+		for _, id := range e.Contains {
+			if kept[id] {
+				ids = append(ids, id)
+			}
+		}
+		e.Contains = ids
 	}
 	return out
 }

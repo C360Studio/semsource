@@ -128,7 +128,8 @@ Every registered parser SHALL give distinct declarations distinct entity IDs or 
 #### Scenario: A C or C++ prototype and its definition fold onto the definition
 - **WHEN** a C or C++ file declares `static int f(int x);` and later defines `static int f(int x) { return g(x); }`
 - **THEN** the parse result carries one entity for `f`
-- **AND** that entity carries the definition's lines and its call to `g`
+- **AND** that entity carries the definition's lines
+- **AND** in C, which extracts calls, it carries the definition's call to `g`
 
 #### Scenario: Alternative preprocessor branches fold onto the first
 - **WHEN** a C or C++ file defines `move_cursor` under `#ifdef _WIN32` and again under `#else`
