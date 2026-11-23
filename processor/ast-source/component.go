@@ -220,7 +220,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if deps.NATSClient != nil {
 		// Every ast-source publish carries the entity's complete semsource
 		// set (TestWatchPublishCarriesTheSeedGroupSet); folders, the repo and
-		// body-offload faults are marked Partial and skipped (#336).
+		// body-offload faults are marked SkipReconcile (#336).
 		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
 		if err != nil {
 			return nil, fmt.Errorf("create source reconciler: %w", err)
@@ -480,7 +480,7 @@ func (c *Component) seedPath(ctx context.Context, pw *pathWatcher) (int, error) 
 	c.publishHierarchy(ctx, results, pw.scopedSystem)
 
 	for _, result := range results {
-		if err := c.publishParseResult(ctx, result, pw); err != nil {
+		if err := c.publishParseResult(ctx, result, pw, false); err != nil {
 			c.logger.Warn("Failed to publish parse result",
 				"path", result.Path,
 				"error", err)
@@ -584,7 +584,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 				fe.ContainedBy = semsourceast.FileParentID(event.Result.Path, c.authority, pw.scopedSystem)
 			}
 
-			if err := c.publishParseResult(ctx, event.Result, pw); err != nil {
+			if err := c.publishParseResult(ctx, event.Result, pw, true); err != nil {
 				c.logger.Warn("Failed to publish parse result",
 					"path", event.Path,
 					"error", err)
@@ -710,11 +710,15 @@ func (c *Component) reindexPath(ctx context.Context, pw *pathWatcher) (scanned, 
 		if unchanged[result] && !released[result.Path] {
 			continue
 		}
+		// Changed means this process recorded a different hash: a new or
+		// released file has nothing stale this process can know about.
+		oldHash, known := c.getFileHash(result.Path)
+		changed := known && result.Hash != "" && oldHash != result.Hash
 		if result.Hash != "" {
 			c.setFileHash(result.Path, result.Hash)
 		}
 
-		if err := c.publishParseResult(ctx, result, pw); err != nil {
+		if err := c.publishParseResult(ctx, result, pw, changed); err != nil {
 			c.logger.Warn("Failed to publish parse result during reindex",
 				"path", result.Path,
 				"error", err)
@@ -874,7 +878,14 @@ func (c *Component) parseFileWithWatcher(ctx context.Context, pw *pathWatcher, f
 }
 
 // publishParseResult converts a ParseResult's entities to EntityPayload messages and publishes them.
-func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, pw *pathWatcher) error {
+// reconcile is true only when this process knows the file's content changed
+// (a watch edit, or a reindex whose hash differs from the one it recorded):
+// only then can a republish have dropped predicates worth a reconcile's round
+// trips (#336 owner ruling, task 5.2). The first pass after a start passes
+// false, so a file edited while semsource was down keeps its dropped
+// predicates until its next edit; the upstream complete-set intent
+// (semengine#730) closes that.
+func (c *Component) publishParseResult(ctx context.Context, result *semsourceast.ParseResult, pw *pathWatcher, reconcile bool) error {
 	// Watch and reindex arrive here one file at a time; the initial index has
 	// already deduplicated across the watch path, so this is a no-op for it.
 	c.dropDuplicateIDs([]*semsourceast.ParseResult{result}, nil)
@@ -895,7 +906,7 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
 		}
-		payload.Partial = body.faulted
+		payload.SkipReconcile = !reconcile || body.faulted
 		if err := c.publishEntity(ctx, payload); err != nil {
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)
 		}
@@ -920,7 +931,7 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 		}
 		// shortcut: folder/repo excluded from reconcile, remove with the #347 fix
 		// (the watch path republishes them with a partial code.contains set).
-		payload.Partial = true
+		payload.SkipReconcile = true
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish hierarchy entity",
 				"id", entity.ID, "error", err)
@@ -946,7 +957,7 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, project st
 		}
 		// shortcut: folder/repo excluded from reconcile, remove with the #347 fix
 		// (this chain carries only part of each folder's code.contains set).
-		payload.Partial = true
+		payload.SkipReconcile = true
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish folder entity",
 				"id", entity.ID, "error", err)

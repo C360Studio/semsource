@@ -94,7 +94,7 @@ const reconcileAttempts = 3
 // the statements; only the removal of dropped ones rides on this, so a
 // failure is counted and logged but never fails the entity.
 func (p *Publisher) reconcile(ctx context.Context, payload *graph.EntityPayload, at time.Time) {
-	if p.reconciler == nil || payload.Partial {
+	if p.reconciler == nil || payload.SkipReconcile {
 		return
 	}
 	request := projection.ReconcileMutation{

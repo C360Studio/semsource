@@ -84,7 +84,7 @@ func TestPublishParseResult_DuplicateIDPublishesFirstDeclarationOnce(t *testing.
 	}
 	pw := &pathWatcher{root: root, owner: "ast-source"}
 
-	if err := c.publishParseResult(ctx, result, pw); err != nil {
+	if err := c.publishParseResult(ctx, result, pw, false); err != nil {
 		t.Fatalf("publishParseResult: %v", err)
 	}
 	if err := pub.WaitSettled(ctx); err != nil {

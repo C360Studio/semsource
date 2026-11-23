@@ -130,16 +130,16 @@ func TestReconcileSendsTheGroupSetStampedLikeTheStream(t *testing.T) {
 }
 
 // spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
-func TestPartialPayloadIsNeverReconciled(t *testing.T) {
+func TestSkipReconcilePayloadIsNeverReconciled(t *testing.T) {
 	rec := &fakeReconciler{}
 	payload := reconcilePayload()
-	payload.Partial = true
+	payload.SkipReconcile = true
 	pub := publishSettled(t, payload, WithReconcile(rec))
 	if n := len(rec.requests()); n != 0 {
-		t.Errorf("partial payload reconciled %d times", n)
+		t.Errorf("skip-reconcile payload reconciled %d times", n)
 	}
 	if pub.Published() != 1 {
-		t.Errorf("partial payload not stream-published")
+		t.Errorf("skip-reconcile payload not stream-published")
 	}
 }
 

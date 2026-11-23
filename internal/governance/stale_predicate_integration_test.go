@@ -31,8 +31,9 @@ import (
 
 // TestIntegration_ReingestDropsRemovedPredicates is the #336 repro. The REAL
 // ast-source indexes a Go function that calls X and carries a doc comment;
-// the file is then edited to drop both, and a fresh ast-source pass
-// re-ingests it. The stored entity must no longer carry the calls edge or
+// the file is then edited to drop both, and the watching ast-source
+// re-ingests it. (A restart over an edit made while semsource was down is the
+// known gap of the bounded form, owner ruling task 5.2: semengine#730.) The stored entity must no longer carry the calls edge or
 // the doc comment: a predicate the producer stops emitting must not survive.
 func TestIntegration_ReingestDropsRemovedPredicates(t *testing.T) {
 	ctx := context.Background()
@@ -59,24 +60,16 @@ func TestIntegration_ReingestDropsRemovedPredicates(t *testing.T) {
 	}
 	write("package svc\n\nfunc X() {}\n\n// Run does the work.\nfunc Run() { X() }\n")
 
-	runPass(t, ctx, tc.Client, root)
+	runPass(t, ctx, tc.Client, root, true)
 	runID, rev1, before := waitForFunction(t, ctx, tc.Client, "Run", 0)
 	if !hasPredicate(before, ast.CodeCalls) || !hasPredicate(before, ast.CodeDocComment) {
 		t.Fatalf("first pass: Run lacks calls or doc comment; triples = %+v", before.Triples)
 	}
 
-	write("package svc\n\nfunc X() {}\n\nfunc Run() {}\n")
-	runPass(t, ctx, tc.Client, root)
-	// The stream write and the reconcile that follows it land as separate
-	// revisions, so read revisions until the state converges or time runs out.
-	var after *semgraph.EntityState
-	for rev, deadline := rev1, time.Now().Add(20*time.Second); ; {
-		_, rev, after = waitForFunction(t, ctx, tc.Client, "Run", rev)
-		converged := !hasPredicate(after, ast.CodeCalls) && !hasPredicate(after, ast.CodeDocComment)
-		if converged || time.Now().After(deadline) {
-			break
-		}
-	}
+	after := editUntil(t, ctx, tc.Client, rev1, func() { write("package svc\n\nfunc X() {}\n\nfunc Run() {}\n") },
+		func(st *semgraph.EntityState) bool {
+			return !hasPredicate(st, ast.CodeCalls) && !hasPredicate(st, ast.CodeDocComment)
+		})
 	// Prove the stored state is the second pass's: Run moved from line 6 to
 	// line 5, and a re-emitted predicate replaces its set.
 	if got := tripleObject(after.Triples, ast.CodeStartLine); fmt.Sprint(got) != "5" {
@@ -90,15 +83,66 @@ func TestIntegration_ReingestDropsRemovedPredicates(t *testing.T) {
 	}
 }
 
-// runPass starts a non-watching ast-source over root, which publishes one
-// full index pass, and stops it once that pass has been published.
-func runPass(t *testing.T, ctx context.Context, client *natsclient.Client, root string) {
+// editUntil applies edit and reads Run's newer revisions until done holds or
+// 30s pass, returning the last state read. The edit is re-applied on every
+// read: the watcher starts after the seed publishes, so an edit landing
+// before it is watching produces no event, and a repeated identical edit is
+// harmless (the watch path republishes the same content).
+func editUntil(
+	t *testing.T, ctx context.Context, client *natsclient.Client, after uint64,
+	edit func(), done func(*semgraph.EntityState) bool,
+) *semgraph.EntityState {
+	t.Helper()
+	var st *semgraph.EntityState
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		edit()
+		if got, rev, ok := readFunction(ctx, client, "Run"); ok && rev > after {
+			st = got
+			if done(st) {
+				return st
+			}
+		}
+	}
+	if st == nil {
+		t.Fatalf("no revision of Run newer than %d reached ENTITY_STATES", after)
+	}
+	return st
+}
+
+// readFunction reads the stored Go function entity whose ID ends in
+// "-<name>", without waiting.
+func readFunction(ctx context.Context, client *natsclient.Client, name string) (*semgraph.EntityState, uint64, bool) {
+	bucket, err := client.GetKeyValueBucket(ctx, semgraph.BucketEntityStates)
+	if err != nil {
+		return nil, 0, false
+	}
+	keys, _ := bucket.Keys(ctx)
+	for _, k := range keys {
+		if !strings.Contains(k, ".function.") || !strings.HasSuffix(k, "-"+name) {
+			continue
+		}
+		entry, err := bucket.Get(ctx, k)
+		if err != nil {
+			return nil, 0, false
+		}
+		var st semgraph.EntityState
+		if json.Unmarshal(entry.Value(), &st) != nil {
+			return nil, 0, false
+		}
+		return &st, entry.Revision(), true
+	}
+	return nil, 0, false
+}
+
+// runPass starts an ast-source over root, which publishes one full index
+// pass and, with watch, then republishes edited files. It stops at cleanup.
+func runPass(t *testing.T, ctx context.Context, client *natsclient.Client, root string, watch bool) {
 	t.Helper()
 	cfg, err := json.Marshal(map[string]any{
 		"watch_paths": []map[string]any{
 			{"path": root, "org": "acme", "project": "svc", "languages": []string{"go"}},
 		},
-		"watch_enabled":  false,
+		"watch_enabled":  watch,
 		"index_interval": "",
 	})
 	if err != nil {
@@ -182,7 +226,7 @@ func TestIntegration_ReingestKeepsOtherSourcesStatements(t *testing.T) {
 		}
 	}
 	write("package svc\n\nfunc X() {}\n\nfunc Run() { X() }\n")
-	runPass(t, ctx, tc.Client, root)
+	runPass(t, ctx, tc.Client, root, true)
 	runID, rev, _ := waitForFunction(t, ctx, tc.Client, "Run", 0)
 
 	// Another source's lineage edge, through the stream lane as supersession
@@ -224,15 +268,10 @@ func TestIntegration_ReingestKeepsOtherSourcesStatements(t *testing.T) {
 		t.Fatalf("set stale marker: %v", markErr)
 	}
 
-	write("package svc\n\nfunc X() {}\n\nfunc Run() {}\n")
-	runPass(t, ctx, tc.Client, root)
-	var after *semgraph.EntityState
-	for deadline := time.Now().Add(20 * time.Second); ; {
-		_, rev, after = waitForFunction(t, ctx, tc.Client, "Run", rev)
-		if (!hasPredicate(after, ast.CodeCalls) && hasPredicate(after, ast.CodeSupersedes)) || time.Now().After(deadline) {
-			break
-		}
-	}
+	after := editUntil(t, ctx, tc.Client, rev, func() { write("package svc\n\nfunc X() {}\n\nfunc Run() {}\n") },
+		func(st *semgraph.EntityState) bool {
+			return !hasPredicate(st, ast.CodeCalls) && hasPredicate(st, ast.CodeSupersedes)
+		})
 	if hasPredicate(after, ast.CodeCalls) {
 		t.Fatalf("republish did not converge: %s still carries %s", runID, ast.CodeCalls)
 	}

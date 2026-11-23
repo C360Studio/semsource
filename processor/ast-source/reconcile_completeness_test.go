@@ -135,13 +135,36 @@ func TestReconcileSkipsContainersAndBodyFaults(t *testing.T) {
 		return false
 	}
 
-	t.Run("seed reconciles files and symbols, never folders or the repo", func(t *testing.T) {
+	// Owner ruling, task 5.2: reconcile only content this process knows
+	// changed. A start over a retained store is a first pass, as is the seed.
+	t.Run("a first pass and an unchanged reindex make no reconcile calls", func(t *testing.T) {
 		f := newFoldFixture(t)
 		rec := f.withReconcile()
 		f.seed()
+		f.reindex()
+		if ids := rec.reconciled(); len(ids) != 0 {
+			t.Errorf("reconciled %v without any content change", ids)
+		}
+	})
+
+	t.Run("a changed file reconciles on reindex and watch, never folders or the repo", func(t *testing.T) {
+		f := newFoldFixture(t)
+		rec := f.withReconcile()
+		f.seed()
+		f.write("a/b.ts", "export function changed() {}\n")
+		f.reindex()
+		f.write("a/b.ts", "export function again() {}\n")
+		f.watchModify("a/b.ts")
+		f.settle()
 		ids := rec.reconciled()
-		if !hasType(ids, "file") || !hasType(ids, "function") {
-			t.Fatalf("seed reconciled %v; want the file and its function", ids)
+		var functions int
+		for _, id := range ids {
+			if strings.Contains(id, ".function.") {
+				functions++
+			}
+		}
+		if !hasType(ids, "file") || functions != 2 {
+			t.Fatalf("reconciled %v; want the file and each pass's function (reindex, then watch)", ids)
 		}
 		if hasType(ids, "folder") || hasType(ids, "repo") {
 			t.Errorf("a folder or the repo was reconciled: %v", ids)
