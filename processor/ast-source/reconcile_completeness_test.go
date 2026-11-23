@@ -1,17 +1,22 @@
 package astsource
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	gtypes "github.com/c360studio/semengine/graph"
 	"github.com/c360studio/semengine/pkg/projection"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 	"github.com/c360studio/semsource/internal/entitypub"
 	semsourceast "github.com/c360studio/semsource/source/ast"
@@ -93,11 +98,18 @@ type recordingReconciler struct {
 	ids []string
 }
 
-func (r *recordingReconciler) Reconcile(_ context.Context, m projection.ReconcileMutation) (projection.MutationReceipt, error) {
+// ReadAuthoritative is the first call of every reconcile the publisher runs,
+// so recording it records which entities were reconciled. It then ends the
+// reconcile: no graph stands behind this fixture.
+func (r *recordingReconciler) ReadAuthoritative(_ context.Context, id string) (*gtypes.ExactEntity, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.ids = append(r.ids, m.EntityID)
-	return projection.MutationReceipt{}, nil
+	r.ids = append(r.ids, id)
+	return nil, errors.New("recording fixture: no graph")
+}
+
+func (r *recordingReconciler) Reconcile(context.Context, projection.ReconcileMutation) (projection.MutationReceipt, error) {
+	return projection.MutationReceipt{}, errors.New("recording fixture: no graph")
 }
 
 func (r *recordingReconciler) reconciled() []string {
@@ -190,6 +202,93 @@ func TestReconcileSkipsContainersAndBodyFaults(t *testing.T) {
 			}
 			if hasType(ids, "function") {
 				t.Errorf("a symbol whose body offload faulted was reconciled: %v", ids)
+			}
+		})
+	}
+}
+
+// newLangFixture is newFoldFixture for one language over the given files.
+func newLangFixture(t *testing.T, lang, ext string, files map[string]string) *foldFixture {
+	t.Helper()
+	root := t.TempDir()
+	f := &foldFixture{t: t, root: root, client: &recordingClient{}}
+	for rel, src := range files {
+		f.write(rel, src)
+	}
+	auth := entityid.Authority{Org: "acme", Platform: "test"}
+	parser, err := semsourceast.DefaultRegistry.CreateParser(lang, auth, "proj", root)
+	if err != nil {
+		t.Fatalf("create %s parser: %v", lang, err)
+	}
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	pub, err := entitypub.New(f.client, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	f.ctx = ctx
+	pub.Start(ctx)
+	t.Cleanup(func() { _ = pub.Stop(context.Background()) })
+	f.pw = &pathWatcher{
+		root: root, scopedSystem: "proj", owner: "ast-source",
+		config:   WatchPathConfig{Org: "acme", Project: "proj"},
+		parsers:  map[string]semsourceast.FileParser{lang: parser},
+		routes:   map[string]string{ext: lang},
+		excludes: map[string]bool{},
+	}
+	f.c = &Component{
+		authority: auth, logger: logger, bodyStore: newFakeStore(), publisher: pub,
+		distinct: entitypub.NewDistinctTracker(), fileHashes: make(map[string]string),
+		watchers: []*pathWatcher{f.pw},
+	}
+	return f
+}
+
+// TestWatchPublishCarriesTheSeedGroupSet_PerLanguage extends the
+// completeness check to Go, Java and Python: a watch republish of an
+// unchanged nested file carries, for the file and each symbol, the seed's
+// group-`source` statements.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+func TestWatchPublishCarriesTheSeedGroupSet_PerLanguage(t *testing.T) {
+	cases := []struct {
+		lang, ext, edited string
+		files             map[string]string
+	}{
+		{"go", ".go", "pkg/svc/run.go", map[string]string{
+			"go.mod":           "module example.com/proj\n\ngo 1.22\n",
+			"pkg/svc/run.go":   "package svc\n\n// Run does the work.\nfunc Run() { helper() }\n\nfunc helper() {}\n\ntype T struct{ N int }\n\nfunc (t T) M() int { return t.N }\n",
+			"pkg/svc/other.go": "package svc\n\nfunc Other() { Run() }\n",
+		}},
+		{"java", ".java", "src/main/java/acme/Svc.java", map[string]string{
+			"src/main/java/acme/Svc.java":  "package acme;\n\n/** Svc does work. */\npublic class Svc {\n  private int n;\n  public int run() { return helper(n); }\n  int helper(int x) { return x; }\n}\n",
+			"src/main/java/acme/Main.java": "package acme;\n\npublic class Main {\n  void go() { new Svc().run(); }\n}\n",
+		}},
+		{"python", ".py", "pkg/svc.py", map[string]string{
+			"pkg/__init__.py": "",
+			"pkg/svc.py":      "\"\"\"Svc module.\"\"\"\n\n\ndef helper(x):\n    return x\n\n\nclass Svc:\n    def run(self):\n        return helper(1)\n",
+			"pkg/main.py":     "from pkg.svc import Svc\n\n\ndef go():\n    return Svc().run()\n",
+		}},
+	}
+	notContainer := func(s string) bool {
+		return strings.Contains(s, ".folder.") || strings.Contains(s, ".repo.")
+	}
+	for _, tc := range cases {
+		t.Run(tc.lang, func(t *testing.T) {
+			f := newLangFixture(t, tc.lang, tc.ext, tc.files)
+			f.seed()
+			seeded := f.groupStatements(notContainer)
+			f.reset()
+			f.watchModify(tc.edited)
+			f.settle()
+			watched := f.groupStatements(notContainer)
+			if len(watched) < 2 {
+				t.Fatalf("watch published %d subjects; want the file and its symbols", len(watched))
+			}
+			for subject, got := range watched {
+				if want := seeded[subject]; strings.Join(got, "\n") != strings.Join(want, "\n") {
+					t.Errorf("%s: watch group set differs from seed\n got: %v\nwant: %v", subject, got, want)
+				}
 			}
 		})
 	}

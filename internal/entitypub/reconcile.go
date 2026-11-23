@@ -3,6 +3,7 @@ package entitypub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -21,19 +22,33 @@ const envelopeSource = "semsource"
 
 // Reconciler is the projection mutation-client surface the publisher needs.
 type Reconciler interface {
+	ReadAuthoritative(context.Context, string) (*gtypes.ExactEntity, error)
 	Reconcile(context.Context, projection.ReconcileMutation) (projection.MutationReceipt, error)
 }
 
-// WithReconcile makes every successful stream publish followed by one
-// reconcile of contract group `source`, so predicates the source stopped
-// emitting are removed (#336). A handler passes it only once a test proves
-// each of its publishes carries the entity's complete semsource statement set.
+// WithReconcile makes every successful stream publish not marked
+// SkipReconcile followed by one reconcile of contract group `source`, so
+// predicates the source stopped emitting are removed (#336). A handler passes
+// it only once a test proves each of its publishes carries the entity's
+// complete semsource statement set.
 func WithReconcile(r Reconciler) Option {
 	return func(c *publisherConfig) { c.reconciler = r }
 }
 
-// reconcileTimeout bounds one reconcile's read plus request/reply.
-const reconcileTimeout = 15 * time.Second
+const (
+	// requestTimeout bounds each request the mutation client sends; one
+	// reconcile is a few of them (reads, then the conditional replace).
+	requestTimeout = 5 * time.Second
+	// reconcileBudget bounds one entity's whole reconcile, waiting for its
+	// stream write to apply included. Reconciles run off the drain loop, so
+	// the budget never delays delivery.
+	reconcileBudget = 30 * time.Second
+	// reconcileQueueSize bounds queued reconciles; a full queue drops the
+	// reconcile (counted) rather than stall the drain.
+	reconcileQueueSize = 4096
+	appliedPollStart   = 20 * time.Millisecond
+	appliedPollMax     = 500 * time.Millisecond
+)
 
 // NewSourceReconciler returns the projection mutation client a handler passes
 // to WithReconcile, bound to the source-entity contract.
@@ -41,7 +56,7 @@ func NewSourceReconciler(nc *natsclient.Client) (Reconciler, error) {
 	return projection.NewMutationClient(projection.MutationClientConfig{
 		NATS:      nc,
 		Contracts: []projection.Contract{graph.SourceEntityContract()},
-		Timeout:   reconcileTimeout,
+		Timeout:   requestTimeout,
 	})
 }
 
@@ -50,13 +65,19 @@ var (
 	groupPreds map[string]bool
 )
 
-// groupPredicates is graph.OwnedPredicates as a set, computed on first use:
-// the vocabulary is registered at bootstrap, after package init.
+// groupPredicates is the predicate set of the contract group the reconcile is
+// sent against, computed on first use: the vocabulary is registered at
+// bootstrap, after package init.
 func groupPredicates() map[string]bool {
 	groupOnce.Do(func() {
 		groupPreds = map[string]bool{}
-		for _, p := range graph.OwnedPredicates() {
-			groupPreds[p] = true
+		for _, g := range graph.SourceEntityContract().Groups {
+			if g.Name != graph.GroupSource {
+				continue
+			}
+			for _, p := range g.Predicates {
+				groupPreds[p] = true
+			}
 		}
 	})
 	return groupPreds
@@ -82,60 +103,181 @@ func desiredGroup(triples []message.Triple, at time.Time) []message.Triple {
 	return out
 }
 
-// reconcileAttempts bounds re-reads after a revision conflict. The stream
-// write this reconcile follows is acknowledged when stored in the stream, not
-// when graph-ingest applies it, so the first attempt routinely reads the
-// state before that write and loses the compare-and-set to it. Every
-// attempt re-reads, so a retry never writes over state it has not seen.
-const reconcileAttempts = 3
+// reconcileJob is one delivered publish whose group the worker reconciles.
+type reconcileJob struct {
+	id      string
+	seq     uint64 // enqueue order; two publishes can share an envelope millisecond
+	desired []message.Triple
+}
 
-// reconcile sets the entity's semsource statements in group `source` to
-// exactly the ones this publish carried. The stream write already delivered
-// the statements; only the removal of dropped ones rides on this, so a
-// failure is counted and logged but never fails the entity.
-func (p *Publisher) reconcile(ctx context.Context, payload *graph.EntityPayload, at time.Time) {
-	if p.reconciler == nil || payload.SkipReconcile {
+// enqueueReconcile hands a delivered publish to the reconcile worker. It runs
+// on the drain loop before the delivery counters move, so the job is counted
+// in flight and WaitSettled covers it. It never blocks: a full queue drops
+// the reconcile, counted, and the next edit of the entity repairs it.
+func (p *Publisher) enqueueReconcile(payload *graph.EntityPayload, at time.Time) {
+	if p.reconciler == nil || payload.SkipReconcile || p.stopping() {
 		return
 	}
+	p.latestMu.Lock()
+	p.reconcileSeq++
+	job := reconcileJob{id: payload.ID, seq: p.reconcileSeq, desired: desiredGroup(payload.TripleData, at)}
+	p.latest[job.id] = job.seq
+	p.latestMu.Unlock()
+	p.reconcilePending.Add(1)
+	select {
+	case p.reconcileQ <- job:
+	default:
+		p.reconcilePending.Add(-1)
+		p.reconcileFailure(job.id, errors.New("reconcile queue full"))
+	}
+}
+
+// reconcileWorker runs queued reconciles one at a time until the queue is
+// closed. Once Stop has begun, queued jobs are discarded uncounted: a
+// shutdown is not a reconcile failure, and the next edit repairs it.
+func (p *Publisher) reconcileWorker(ctx context.Context) {
+	defer close(p.reconcileDone)
+	for job := range p.reconcileQ {
+		if !p.stopping() && !p.superseded(job) {
+			p.reconcile(ctx, job)
+		}
+		p.latestMu.Lock()
+		if p.latest[job.id] == job.seq {
+			delete(p.latest, job.id)
+		}
+		p.latestMu.Unlock()
+		p.reconcilePending.Add(-1)
+		p.noteOutcome()
+	}
+}
+
+// superseded reports whether a later publish of the same entity was queued:
+// its own reconcile covers this one, and this one's statements may never be
+// stored as such (the later write can apply first).
+func (p *Publisher) superseded(job reconcileJob) bool {
+	p.latestMu.Lock()
+	defer p.latestMu.Unlock()
+	return p.latest[job.id] != job.seq
+}
+
+// reconcile sets the entity's semsource statements in group `source` to
+// exactly the ones this publish carried, once graph-ingest has applied this
+// publish's stream write. A stream write is acknowledged when stored, not
+// when applied, and graph-ingest applies one entity's writes in arrival
+// order (keyed_ingest.go, SemStreams ADR-072). So waiting until the stored
+// state shows this write means every older write of the entity has applied
+// too, and none can land afterwards to restore a predicate this reconcile
+// removed. The replace is fenced at the revision that showed it.
+func (p *Publisher) reconcile(ctx context.Context, job reconcileJob) {
+	ctx, cancel := context.WithTimeout(ctx, reconcileBudget)
+	defer cancel()
 	request := projection.ReconcileMutation{
 		Contract: graph.SourceEntityContract().Name,
 		Group:    graph.GroupSource,
-		EntityID: payload.ID,
-		Desired:  desiredGroup(payload.TripleData, at),
+		EntityID: job.id,
+		Desired:  job.desired,
 		// No metadata timestamp: the client refuses one that differs from a
 		// statement's own, and statements such as the lifecycle owner fact
 		// carry their own. desiredGroup stamps every other statement.
 		Metadata: projection.MutationMetadata{Source: envelopeSource},
 	}
-	var err error
-	for attempt := 0; attempt < reconcileAttempts; attempt++ {
-		if _, err = p.reconciler.Reconcile(ctx, request); err == nil {
-			p.reconciled.Add(1)
-			p.metrics.incReconciled()
+	wait := appliedPollStart
+	for {
+		exact, err := p.reconciler.ReadAuthoritative(ctx, job.id)
+		switch {
+		case err != nil && !isNotFound(err):
+			p.reconcileFailure(job.id, err)
+			return
+		case err == nil && applied(exact.Entity, job.desired):
+			request.ExpectedRevision = exact.KVRevision
+			_, err = p.reconciler.Reconcile(ctx, request)
+			if err == nil {
+				p.reconciled.Add(1)
+				p.metrics.incReconciled()
+				return
+			}
+			if !isRevisionConflict(err) {
+				p.reconcileFailure(job.id, err)
+				return
+			}
+		}
+		// Not applied yet, absent (a birth whose write is still queued), or
+		// moved under the replace: read again after a short backoff, unless
+		// a later publish of the entity has been queued meanwhile.
+		if p.superseded(job) {
 			return
 		}
-		var me *projection.MutationError
-		if !errors.As(err, &me) || me.Kind != projection.MutationRevisionConflict {
-			break
+		p.metrics.incReconcileRetries()
+		select {
+		case <-ctx.Done():
+			p.reconcileFailure(job.id, fmt.Errorf("stream write not applied within %s: %w", reconcileBudget, ctx.Err()))
+			return
+		case <-p.stop:
+			return // shutdown: not a failure; the next edit repairs it
+		case <-time.After(wait):
 		}
-		if attempt < reconcileAttempts-1 {
-			p.metrics.incReconcileRetries()
+		wait = min(2*wait, appliedPollMax)
+	}
+}
+
+// applied reports whether stored holds every statement of desired, the
+// group statements this publish carried, stamped as the stream arrival is.
+func applied(stored *gtypes.EntityState, desired []message.Triple) bool {
+	if stored == nil {
+		return false
+	}
+	have := make(map[string]bool, len(stored.Triples))
+	for _, t := range stored.Triples {
+		have[statementKey(t)] = true
+	}
+	for _, t := range desired {
+		if !have[statementKey(t)] {
+			return false
 		}
 	}
+	return true
+}
+
+// statementKey identifies a statement by the fields a publish stamps. The
+// object goes through fmt so a JSON round trip's number types compare equal.
+func statementKey(t message.Triple) string {
+	return fmt.Sprintf("%s\x00%s\x00%v\x00%s\x00%d", t.Subject, t.Predicate, t.Object, t.Source, t.Timestamp.UnixMilli())
+}
+
+func isNotFound(err error) bool {
 	var ce *errs.ClassifiedError
-	if errors.As(err, &ce) && ce.Code == gtypes.ErrorCodeEntityNotFound {
-		// A birth whose stream write has not landed yet: nothing is stale.
+	return errors.As(err, &ce) && ce.Code == gtypes.ErrorCodeEntityNotFound
+}
+
+func isRevisionConflict(err error) bool {
+	var me *projection.MutationError
+	return errors.As(err, &me) && me.Kind == projection.MutationRevisionConflict
+}
+
+// reconcileFailure counts and logs one reconcile that will not complete. A
+// cancellation during shutdown is not a failure and is not counted.
+func (p *Publisher) reconcileFailure(id string, err error) {
+	if p.stopping() && errors.Is(err, context.Canceled) {
 		return
 	}
 	p.reconcileFailed.Add(1)
 	p.metrics.incReconcileFailed()
-	p.logger.Debug("entity reconcile failed; the next publish repairs it",
-		"id", payload.ID, "error", err)
+	p.logger.Debug("entity reconcile failed; the next edit repairs it", "id", id, "error", err)
+}
+
+// stopping reports whether Stop has begun.
+func (p *Publisher) stopping() bool {
+	select {
+	case <-p.stop:
+		return true
+	default:
+		return false
+	}
 }
 
 // Reconciled returns how many reconciles committed (applied or unchanged).
 func (p *Publisher) Reconciled() int64 { return p.reconciled.Load() }
 
-// ReconcileFailed returns how many reconciles failed for a reason other than
-// the entity not existing yet.
+// ReconcileFailed returns how many reconciles will not complete: an error, a
+// stream write not applied within the budget, or a full queue.
 func (p *Publisher) ReconcileFailed() int64 { return p.reconcileFailed.Load() }

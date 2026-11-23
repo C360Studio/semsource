@@ -97,6 +97,15 @@ type Publisher struct {
 	// counters above.
 	reconciled      atomic.Int64
 	reconcileFailed atomic.Int64
+	// reconcilePending counts queued reconciles; they are in flight for
+	// WaitSettled. latest maps an entity ID to the envelope time of its most
+	// recently queued reconcile, so an older queued job knows it is superseded.
+	reconcilePending atomic.Int64
+	reconcileQ       chan reconcileJob
+	reconcileDone    chan struct{}
+	latestMu         sync.Mutex
+	latest           map[string]uint64
+	reconcileSeq     uint64 // guarded by latestMu
 	metrics         *pubMetrics
 
 	// backpressure tracks whether the publisher is CURRENTLY in sustained
@@ -227,6 +236,9 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		metrics:         newPubMetrics(cfg.metricsRegistry, cfg.metricsPrefix),
 		done:            make(chan struct{}),
 		stop:            make(chan struct{}),
+		reconcileQ:      make(chan reconcileJob, reconcileQueueSize),
+		reconcileDone:   make(chan struct{}),
+		latest:          map[string]uint64{},
 	}, nil
 }
 
@@ -237,6 +249,7 @@ func (p *Publisher) Start(ctx context.Context) {
 	drainCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	p.cancel = cancel
 	p.started = true
+	go p.reconcileWorker(drainCtx)
 	go p.drainLoop(drainCtx)
 }
 
@@ -251,6 +264,9 @@ func (p *Publisher) Stop(ctx context.Context) error {
 	p.stopOnce.Do(func() { close(p.stop) })
 	select {
 	case <-p.done:
+		// The drain loop closed the reconcile queue on exit; the worker
+		// discards what is left once Stop has begun.
+		<-p.reconcileDone
 		if lost := p.Lost(); lost > 0 {
 			return fmt.Errorf("entitypub stopped with %d undelivered entities", lost)
 		}
@@ -328,7 +344,7 @@ func (p *Publisher) Retries() int64 { return p.retries.Load() }
 // the result too high (wait longer), never a false zero.
 func (p *Publisher) inFlight() int64 {
 	settled := p.published.Load() + p.failed.Load()
-	return p.accepted.Load() - settled
+	return p.accepted.Load() - settled + p.reconcilePending.Load()
 }
 
 // noteOutcome wakes WaitSettled callers when the last in-flight entity
@@ -410,6 +426,8 @@ func (p *Publisher) clearBackpressure() {
 // On circuit breaker errors it backs off before retrying.
 func (p *Publisher) drainLoop(ctx context.Context) {
 	defer close(p.done)
+	// Only this loop enqueues reconciles, so it closes their queue.
+	defer close(p.reconcileQ)
 
 	ticker := time.NewTicker(defaultDrainInterval)
 	defer ticker.Stop()
@@ -481,9 +499,9 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
 		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
-			// Reconcile before the delivery counters move, so WaitSettled
-			// also covers it.
-			p.reconcile(ctx, payload, at)
+			// Queue the reconcile before the delivery counters move, so
+			// WaitSettled also covers it. It runs off this loop.
+			p.enqueueReconcile(payload, at)
 			// Recovery state settles before the delivery counter moves: a
 			// WaitSettled caller can return the moment published advances, and
 			// its report must not pair full delivery with stale backpressure.
