@@ -677,6 +677,8 @@ func TestInheritedFieldTypedInAnotherModuleLinks(t *testing.T) {
 // type (and its supertype) first, never to the enclosing class. Resolving it
 // against the enclosing class is a wrong edge, so the body stays inert. The
 // `new Task(...)` creation itself is still a confirmed constructor call.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Unconfirmed Java calls never produce a wrong edge
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java constructor calls emit edges to the constructor entity
 func TestAnonymousClassBodyCallsAreInert(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"a/Task.java": "package a;\npublic abstract class Task {\n" +
@@ -705,6 +707,7 @@ func TestAnonymousClassBodyCallsAreInert(t *testing.T) {
 
 // A local class declared in a method body rebinds unqualified calls the same
 // way an anonymous class does.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Unconfirmed Java calls never produce a wrong edge
 func TestLocalClassBodyCallsAreInert(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"a/Svc.java": "package a;\npublic class Svc {\n" +
@@ -719,6 +722,7 @@ func TestLocalClassBodyCallsAreInert(t *testing.T) {
 // Local interfaces and enums (Java 16+) are implicitly static: a call in their
 // bodies can never mean the enclosing instance's method, and it belongs to the
 // nested method, not to the enclosing caller.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Unconfirmed Java calls never produce a wrong edge
 func TestLocalInterfaceAndEnumBodyCallsAreInert(t *testing.T) {
 	for name, decl := range map[string]string{
 		"interface": "interface LI { default void d() { cancel(); } }",
@@ -737,6 +741,7 @@ func TestLocalInterfaceAndEnumBodyCallsAreInert(t *testing.T) {
 
 // A lambda does not rebind `this` or unqualified names, so its calls stay
 // edges of the enclosing caller. Guards against widening the stop list to it.
+// spec: openspec/specs/code-call-graph/spec.md#Requirement: Java intra-class and static calls resolve to the declaring type
 func TestLambdaBodyCallsResolveToEnclosingClass(t *testing.T) {
 	ents := parseTree(t, map[string]string{
 		"a/Svc.java": "package a;\npublic class Svc {\n" +
