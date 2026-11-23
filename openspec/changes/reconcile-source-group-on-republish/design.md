@@ -17,8 +17,9 @@ it reports `unchanged` and writes nothing. The write is a compare-and-set on the
 
 **Writers and their sources.** Every handler stamps `semsource`. Supersession lineage edges are `supersession`
 (`processor/supersession/edges.go:9`), and the stale marker is `lifecycle` (`processor/supersession/lifecycle.go:29`).
-`entity.lifecycle.owner` and `entity.ontology.class` are stamped `semsource` but sit outside group `source`, because
-`OwnedPredicates()` takes `source.*`, `code.*` and a few `dc.*` extras (`graph/contract.go`).
+`entity.ontology.class` is stamped `semsource` but sits outside group `source`, because `OwnedPredicates()` takes
+`source.*`, `code.*` and a few `dc.*` extras (`graph/contract.go`). The lifecycle owner fact is
+`source.lifecycle.owner`, so it is inside the group, and every handler publish carries it.
 
 ## Goals / Non-Goals
 
@@ -35,22 +36,27 @@ The stream publish still carries what reconcile can't: the storage reference, th
 statements outside the group. After `PublishToStreamWithMsgID` succeeds, `publishOne` calls `Reconcile` with:
 
 - `Contract: SourceEntityContract().Name`, `Group: GroupSource`, `EntityID: payload.ID`;
-- `Desired`: the payload's triples whose predicate is in `OwnedPredicates()`, each stamped with source `semsource` and
-  the envelope's timestamp, matching what graph-ingest stores for the stream arrival;
-- `Metadata.Source: semsource` and the same timestamp.
+- `Desired`: the payload's triples whose predicate is in `OwnedPredicates()` and whose source is `semsource` or empty.
+  An empty source becomes `semsource` and a zero timestamp becomes the envelope's, which is fixed at millisecond
+  precision. That matches what graph-ingest stores for the stream arrival;
+- `Metadata.Source: semsource` and no metadata timestamp. The client refuses a metadata timestamp that differs from a
+  statement's own, and some statements (the lifecycle owner fact) carry their own.
 
 **Alternatives rejected by the ruling:** reading back and diffing, keeping producer-side memory of past emissions, and
 ownership or claim machinery.
 
-**Ordering.** The two writes converge in either arrival order. If the stream lands first, reconcile clears the dropped
-predicates; with identical stamping the common case is `unchanged`. If reconcile lands first, it replaces the group
-with the same statements, and the stream arrival then applies the same sets at an equal timestamp.
+**Ordering.** The stream publish is acknowledged once it is stored in the stream, not once graph-ingest applies it.
+So the reconcile usually reads the entity before its own stream write, and then loses the compare-and-set to that
+write. This was measured in the repro: without a retry, it never converged. If the stream write has landed, reconcile
+clears the dropped predicates. If reconcile lands first, it replaces the group with the same statements, and the stream
+arrival then applies the same sets at an equal timestamp.
 
 **Outcomes.**
 
 - `entity_not_found`: a birth whose stream write hasn't landed yet. Nothing is stale, so it is benign and skipped.
-- Revision mismatch: a concurrent write to the same ID. It is counted and logged at Debug and not retried; the next
-  pass repairs it.
+- Revision conflict: usually the entity's own stream write. It is re-read and retried up to 3 times (owner ruling
+  2026-11-23, amending the original "not retried"). Every attempt re-reads, so a write never lands over state it hasn't
+  seen. If the last attempt still conflicts, it is counted and logged at Debug.
 - Any other error is counted separately from stream delivery and never fails the entity. The statements did reach the
   graph; only the removal is outstanding.
 
