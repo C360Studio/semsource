@@ -1,13 +1,19 @@
 package astsource
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/c360studio/semengine/pkg/projection"
+
 	"github.com/c360studio/semsource/graph"
+	"github.com/c360studio/semsource/internal/entitypub"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
@@ -79,5 +85,89 @@ func TestWatchPublishCarriesTheSeedGroupSet(t *testing.T) {
 	}
 	if !sawBelongs {
 		t.Error("watch-published file entity carries no code.structure.belongs")
+	}
+}
+
+type recordingReconciler struct {
+	mu  sync.Mutex
+	ids []string
+}
+
+func (r *recordingReconciler) Reconcile(_ context.Context, m projection.ReconcileMutation) (projection.MutationReceipt, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ids = append(r.ids, m.EntityID)
+	return projection.MutationReceipt{}, nil
+}
+
+func (r *recordingReconciler) reconciled() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.ids...)
+}
+
+// withReconcile swaps the fixture's publisher for one that records reconciles.
+func (f *foldFixture) withReconcile() *recordingReconciler {
+	f.t.Helper()
+	rec := &recordingReconciler{}
+	pub, err := entitypub.New(f.client, f.c.logger, entitypub.WithReconcile(rec))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	pub.Start(f.ctx)
+	f.t.Cleanup(func() { _ = pub.Stop(context.Background()) })
+	f.c.publisher = pub
+	return rec
+}
+
+type failingPutStore struct{ *fakeStore }
+
+func (failingPutStore) Put(context.Context, string, []byte) error { return errors.New("store down") }
+
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+func TestReconcileSkipsContainersAndBodyFaults(t *testing.T) {
+	hasType := func(ids []string, typ string) bool {
+		for _, id := range ids {
+			if strings.Contains(id, "."+typ+".") {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("seed reconciles files and symbols, never folders or the repo", func(t *testing.T) {
+		f := newFoldFixture(t)
+		rec := f.withReconcile()
+		f.seed()
+		ids := rec.reconciled()
+		if !hasType(ids, "file") || !hasType(ids, "function") {
+			t.Fatalf("seed reconciled %v; want the file and its function", ids)
+		}
+		if hasType(ids, "folder") || hasType(ids, "repo") {
+			t.Errorf("a folder or the repo was reconciled: %v", ids)
+		}
+	})
+
+	faults := map[string]func(c *Component){
+		"body Put fails":            func(c *Component) { c.bodyStore = failingPutStore{newFakeStore()} },
+		"body store failed to load": func(c *Component) { c.bodyStore, c.bodyStoreDown = nil, true },
+	}
+	for name, induce := range faults {
+		t.Run(name, func(t *testing.T) {
+			f := newFoldFixture(t)
+			f.seed()
+			rec := f.withReconcile()
+			induce(f.c)
+			f.write("a/b.ts", "export function changed() {}\n")
+			f.watchModify("a/b.ts")
+			f.settle()
+			ids := rec.reconciled()
+			if !hasType(ids, "file") {
+				t.Fatalf("the body-less file entity was not reconciled: %v", ids)
+			}
+			if hasType(ids, "function") {
+				t.Errorf("a symbol whose body offload faulted was reconciled: %v", ids)
+			}
+		})
 	}
 }

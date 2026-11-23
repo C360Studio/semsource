@@ -18,18 +18,18 @@
 
 ## 3. Publisher reconcile (additive, off by default)
 
-- [ ] 3.1 `entitypub.WithReconcile(mutator)` option. Without it, behaviour is unchanged. Proved by: unit test asserting no reconcile call when the option is absent.
-- [ ] 3.2 After a successful stream publish, `publishOne` reconciles group `source` with `Desired` = the payload's `OwnedPredicates()` triples stamped with source `semsource` and the envelope timestamp. Proved by: unit test on a fake mutator asserting contract, group, entity ID, filtered desired set and stamping.
-- [ ] 3.3 Outcome handling: `entity_not_found` is benign. A revision mismatch or any other error moves a reconcile-failure counter, is not retried, and leaves `Published`/`Failed`/`Lost` untouched. Proved by: unit tests per outcome.
-- [ ] 3.4 Folder/repo exclusion with a `// shortcut: folder/repo excluded, remove with the #347 fix` marker. Proved by: unit test sending a `folder` and a `repo` payload with reconcile on and asserting no call.
-- [ ] 3.5 Fault guard: a handler marks a payload incomplete when a store write it depends on failed (AST body offload, image/thumbnail `Put`, video keyframe `Put`), and the publisher skips reconcile for that payload. Proved by: unit test asserting no reconcile for an incomplete payload, and one handler test per fault site.
-- [ ] 3.6 `Desired` takes only statements whose source is `semsource` or empty, never re-stamping a foreign source. Proved by: unit test with a `supersession`-sourced `code.lineage.*` triple in the payload.
+- [x] 3.1 `entitypub.WithReconcile(r)` option (`internal/entitypub/reconcile.go`); without it behaviour is unchanged. Proved by: `TestNoReconcileWithoutTheOption`.
+- [x] 3.2 After a successful stream publish, `publishOne` reconciles group `source` before the delivery counters move (so `WaitSettled` covers it). `Desired` is the payload's `OwnedPredicates()` statements, an empty source stamped `semsource` and a zero timestamp stamped with the envelope time, which is fixed at millisecond precision. **Deviation from D1:** the metadata carries no timestamp, because the client refuses a metadata timestamp that differs from a statement's own (the lifecycle owner fact carries its own). Proved by: `TestReconcileSendsTheGroupSetStampedLikeTheStream`.
+- [x] 3.3 Outcomes: `entity_not_found` is benign. Any other error moves `reconcile_failed_total` and leaves `Published`/`Failed`/`Lost` untouched. **Deviation from D1, needs owner sign-off:** a revision conflict is re-read and retried up to 3 times. Measured in the repro: the stream publish is acknowledged when stored, not when applied, so the first reconcile reads the pre-write state and loses the compare-and-set to its own stream write, every time. "The next pass repairs it" never converges. Each attempt re-reads, so no write lands over unseen state. Proved by: `TestReconcileOutcomes`, `TestReconcileReReadsAfterLosingToItsOwnStreamWrite`.
+- [x] 3.4 Folder/repo exclusion: ast-source marks hierarchy and folder-chain payloads `Partial`, with a `// shortcut:` marker to remove in the #347 fix. Done at the call sites rather than by type in the publisher, so `entitypub` stays handler-neutral. Proved by: `TestReconcileSkipsContainersAndBodyFaults` (seed subtest).
+- [x] 3.5 Fault guard: `EntityPayload.Partial` (never serialized, copied through the snapshot) and the publisher skips reconcile for it. The AST body-offload faults are marked: a failed `Put`, an unreadable file, or a body store that failed to attach. Image/video marking moves to 4.2 with their opt-in. Proved by: `TestPartialPayloadIsNeverReconciled`, plus the `TestReconcileSkipsContainersAndBodyFaults` fault subtests, which fail with the marking removed.
+- [x] 3.6 `Desired` takes only statements whose source is `semsource` or empty. Proved by: `TestReconcileSendsTheGroupSetStampedLikeTheStream` (a `supersession` lineage triple is left out).
 
 ## 4. Enable per handler
 
 - [x] 4.1a ast watch path sets the file entity's `ContainedBy` (today only `BuildHierarchy` does, `source/ast/hierarchy.go:189-204`), so a watch publish no longer drops `code.structure.belongs`. Proved by: `TestWatchPublishCarriesTheSeedGroupSet` (fails without the fix: the file has no `code.structure.belongs`).
-- [ ] 4.1b ast body-offload faults go through 3.5.
-- [ ] 4.1 ast-source opts in, with its completeness test (D3) green. Proved by: `TestIntegration_ReingestDropsRemovedPredicates` passing, plus a new integration case asserting a `supersession` lineage edge, the `lifecycle` stale marker and `entity.ontology.class` survive a republish.
+- [x] 4.1b ast body-offload faults go through 3.5.
+- [x] 4.1 ast-source opts in when a NATS client is present (`NewSourceReconciler`). Proved by: `TestIntegration_ReingestDropsRemovedPredicates` green, which now waits for the reconcile revision, 5/5 runs; and `TestIntegration_ReingestKeepsOtherSourcesStatements`, where the `supersession` lineage edge, the `lifecycle` stale marker and `entity.ontology.class` survive a republish.
 - [ ] 4.2 Each remaining handler that the audit (2.2) clears opts in, with its own completeness test. Handlers not cleared are listed on #336 with the blocking issue.
 
 ## 5. Cost on OSH

@@ -59,6 +59,7 @@ func (c *Component) initBodyStore(ctx context.Context) {
 	})
 	if err != nil {
 		c.logger.Warn("verbatim body store unavailable; code bodies will not be offloaded", "error", err)
+		c.bodyStoreDown = true
 		return
 	}
 	c.bodyStore = store
@@ -71,6 +72,10 @@ func (c *Component) initBodyStore(ctx context.Context) {
 type codeBody struct {
 	triples []message.Triple
 	ref     *message.StorageReference
+	// faulted marks an entity whose body offload failed, so its publish is
+	// missing the body handles it should carry and must not be reconciled
+	// (#336): a reconcile would delete the still-valid stored handles.
+	faulted bool
 }
 
 // bodiesForResult offloads each body-bearing entity's verbatim source from the
@@ -80,14 +85,17 @@ type codeBody struct {
 // file. Any read/offload fault degrades that entity to no body rather than failing
 // ingest. Returns nil when no store is set.
 func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.ParseResult, root string) map[string]codeBody {
-	if c.bodyStore == nil || result == nil || result.Path == "" {
+	if result == nil || result.Path == "" {
 		return nil
+	}
+	if c.bodyStore == nil {
+		return c.storelessBodies(result)
 	}
 	absPath := filepath.Join(root, result.Path)
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		c.logger.Debug("read source for body offload failed", "path", absPath, "error", err)
-		return nil
+		return faultedBodies(result)
 	}
 	lines := strings.Split(string(content), "\n")
 
@@ -154,13 +162,39 @@ func (c *Component) bodiesForResult(ctx context.Context, result *semsourceast.Pa
 			defer func() { <-sem }()
 			if err := c.bodyStore.Put(ctx, w.key, []byte(w.body)); err != nil {
 				c.logger.Warn("offload code body failed", "entity", w.entity, "error", err)
-				return // degrade this entity to no body, as before
+				// Degrade this entity to no body, as before, and keep it
+				// off the reconcile.
+				mu.Lock()
+				out[w.entity] = codeBody{faulted: true}
+				mu.Unlock()
+				return
 			}
 			c.markBodyPut(w.key)
 			attach(w)
 		}(w)
 	}
 	wg.Wait()
+	return out
+}
+
+// storelessBodies is the result with no body store: nothing when none is
+// wired by design, every body-bearing entity faulted when attaching failed.
+func (c *Component) storelessBodies(result *semsourceast.ParseResult) map[string]codeBody {
+	if c.bodyStoreDown {
+		return faultedBodies(result)
+	}
+	return nil
+}
+
+// faultedBodies marks every body-bearing entity of result as faulted: the
+// offload could not run at all for this file.
+func faultedBodies(result *semsourceast.ParseResult) map[string]codeBody {
+	out := map[string]codeBody{}
+	for _, e := range result.Entities {
+		if e != nil && !containerTypes[e.Type] {
+			out[e.ID] = codeBody{faulted: true}
+		}
+	}
 	return out
 }
 

@@ -98,6 +98,9 @@ type Component struct {
 	// code lens can hydrate them by handle, location-independently (ADR-062 /
 	// ADR-0006 §5). nil when unavailable — bodies are then simply not offloaded.
 	bodyStore storage.Store
+	// bodyStoreDown is set when the body store failed to attach, so every
+	// body-bearing publish is missing its handles and is not reconciled.
+	bodyStoreDown bool
 
 	// Per-path watchers
 	watchers []*pathWatcher
@@ -209,10 +212,22 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		}
 	}
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+	pubOpts := []entitypub.Option{
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
+	}
+	if deps.NATSClient != nil {
+		// Every ast-source publish carries the entity's complete semsource
+		// set (TestWatchPublishCarriesTheSeedGroupSet); folders, the repo and
+		// body-offload faults are marked Partial and skipped (#336).
+		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
+		if err != nil {
+			return nil, fmt.Errorf("create source reconciler: %w", err)
+		}
+		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
+	}
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
@@ -880,6 +895,7 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
 		}
+		payload.Partial = body.faulted
 		if err := c.publishEntity(ctx, payload); err != nil {
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)
 		}
@@ -902,6 +918,9 @@ func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceas
 				"error", err)
 			continue
 		}
+		// shortcut: folder/repo excluded from reconcile, remove with the #347 fix
+		// (the watch path republishes them with a partial code.contains set).
+		payload.Partial = true
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish hierarchy entity",
 				"id", entity.ID, "error", err)
@@ -925,6 +944,9 @@ func (c *Component) publishFolderChain(ctx context.Context, filePath, project st
 				"error", err)
 			continue
 		}
+		// shortcut: folder/repo excluded from reconcile, remove with the #347 fix
+		// (this chain carries only part of each folder's code.contains set).
+		payload.Partial = true
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish folder entity",
 				"id", entity.ID, "error", err)
