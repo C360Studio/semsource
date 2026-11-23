@@ -81,14 +81,25 @@ twice, with the second publish built from a source that emits less, and asserts 
 group predicate the handler still produces for that entity. A handler with a partial-publish path (like #347) stays off
 until that path is fixed.
 
-### D4. Cost is measured before choosing the default
+### D4. Reconcile only content the producer knows changed (owner ruling, task 5.2)
 
-The unchanged-file skip is in memory (`processor/ast-source/component.go:178`, `:230`), so a restart republishes every
-entity. On OSH core (~32k entities) that is ~32k extra read + request/reply pairs. Task 4 measures restart wall clock
-and the applied versus `unchanged` counts with reconcile off and on. If the overhead is acceptable, reconcile runs on
-every republish. If it isn't, the bounded form is decided with the number in hand. One example would be skipping
-reconcile on the first publish after a restart when the content hash matches. That choice goes to the owner and is
-not pre-decided here.
+Measured on OSH core (5.1): reconciling every republish made a warm restart settle in 294–377 s instead of 46–49 s,
+with status `degraded` (seed timeout), and it removed nothing, because the corpus had not changed.
+
+The ruling ([#336 comment 7104692071](https://github.com/C360Studio/semsource/issues/336#issuecomment-7104692071)) is
+a bounded form. ast-source reconciles a file's entities only when this process knows the file's content changed:
+
+- a watch edit;
+- a reindex of a file whose in-memory hash differs from the one this process recorded.
+
+The seed, and a reindex of a new or unchanged file, publish with `SkipReconcile`, the fault guard's flag.
+
+**Known gap:** a file edited while semsource was down keeps its dropped predicates until its next edit. The upstream
+per-message complete-set intent (semengine#730) closes it. When that ships, the local reconcile and this bound come out.
+
+**Reconcile-before-publish is rejected.** Reconcile equality compares timestamps (semengine alpha.7
+`processor/graph-ingest/canonical_mutations.go:613-618`), and every republish stamps a new one, so it would never be
+`unchanged`. That means about two entity writes per republish (read from code, not measured).
 
 ### D5. ADR-0008 gets a note, not a new ADR
 
@@ -106,4 +117,4 @@ publish. This changes behaviour, not identity, so no storage break is needed.
 
 ## Open Questions
 
-- The bounded form (D4), only if the OSH number calls for it. Owner decision.
+None. D4 was decided by the owner's ruling on task 5.2.

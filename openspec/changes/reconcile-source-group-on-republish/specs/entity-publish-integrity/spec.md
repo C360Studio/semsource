@@ -3,13 +3,23 @@
 ## ADDED Requirements
 
 ### Requirement: A republish leaves exactly the statements the source last emitted
-When a reconcile-enabled publisher republishes an entity ID, the entity's `semsource` statements in contract group `source` SHALL converge to exactly the group statements that publish carried, so a predicate the source stopped emitting is removed. The publisher MUST follow each successful stream publish with one reconcile of group `source` for that entity, and MUST NOT touch statements outside the group or from any other source.
+When a reconcile-enabled publisher republishes an entity ID whose producer knows the source content changed, the entity's `semsource` statements in contract group `source` SHALL converge to exactly the group statements that publish carried, so a predicate the source stopped emitting is removed. The publisher MUST follow each successful stream publish of a payload not marked `SkipReconcile` with one reconcile of group `source` for that entity, and MUST NOT touch statements outside the group or from any other source. A producer SHALL mark `SkipReconcile` every publish whose content it does not know changed, including the first pass after a start.
 
 #### Scenario: A dropped call and doc comment are removed
 - **GIVEN** ast-source has published function `Run` with `code.relationship.calls` and `code.doc.comment`
 - **WHEN** the file is edited to drop both and `Run` is republished
 - **THEN** the stored entity in `ENTITY_STATES` carries neither predicate
 - **AND** it carries the republished `code.metric.start-line`
+
+#### Scenario: A restart over an unchanged corpus makes no reconcile calls
+- **GIVEN** ast-source starts over a retained store and an unchanged corpus
+- **WHEN** its first pass and any unchanged reindex republish every entity
+- **THEN** the publisher sends no reconcile request
+
+#### Scenario: An edit made while semsource was down is the known gap
+- **GIVEN** a file edited to drop a predicate while semsource was not running
+- **WHEN** semsource starts and its first pass republishes the file
+- **THEN** the dropped predicate stays until the file's next edit, which reconciles it
 
 #### Scenario: Other sources and non-group predicates survive
 - **GIVEN** an entity carrying a `supersession` lineage edge, a `lifecycle` stale marker and `entity.ontology.class`
