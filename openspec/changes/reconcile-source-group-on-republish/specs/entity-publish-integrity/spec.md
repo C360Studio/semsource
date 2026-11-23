@@ -33,9 +33,15 @@ When a reconcile-enabled publisher republishes an entity ID whose producer knows
 
 #### Scenario: A reconcile failure is visible but does not fail delivery
 - **GIVEN** a stream publish that succeeded
-- **WHEN** its reconcile fails or loses a revision race
+- **WHEN** its reconcile fails, or its stream write is not applied within the reconcile budget
 - **THEN** a reconcile-failure counter moves and the entity still counts as published
-- **AND** the reconcile is not blind-retried
+- **AND** every re-read is bounded by that budget, and no replace is sent over state the reconcile has not read
+
+#### Scenario: An older queued write cannot restore a dropped predicate
+- **GIVEN** two publishes of one entity acknowledged but not yet applied, the newer dropping predicate P
+- **WHEN** both apply and the newer publish's reconcile runs
+- **THEN** the reconcile waits until the stored state shows the newer write before replacing the group
+- **AND** the stored entity does not carry P
 
 ### Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 A publisher SHALL reconcile only when its handler opts in, and a handler MUST opt in only after a test proves that each of its publishes carries the entity's complete `semsource` statement set for group `source` (one writer per entity ID). The supersession publisher SHALL NOT reconcile. AST `folder` and `repo` entities SHALL NOT be reconciled while the watch path republishes them with a partial `code.contains` set (#347).

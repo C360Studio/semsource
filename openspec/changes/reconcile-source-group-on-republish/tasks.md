@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85). Re-approved after the D1 amendment, which adds the bounded re-read retry on revision conflict and drops the metadata timestamp (2026-11-23, sha256:c87d3b898461). Re-approved a second time after D4 was decided by the 5.2 ruling and the known gap was added to the spec (2026-11-23, sha256:493f7884e201; both lines entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85). Re-approved after the D1 amendment, which adds the bounded re-read retry on revision conflict and drops the metadata timestamp (2026-11-23, sha256:c87d3b898461). Re-approved a second time after D4 was decided by the 5.2 ruling and the known gap was added to the spec (2026-11-23, sha256:493f7884e201). Re-approved a third time after D1 was amended by the specialist review (wait for the write to apply, worker off the drain loop) (2026-11-23, sha256:8226c457d77d; all three lines entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
 
 ## 2. Repro and completeness audit (before code)
 
@@ -42,4 +42,9 @@
 - [x] 6.1 ADR-0008 note: a header line and §6 ("Retention applies to entities and versions; within one entity ID, a source's statements are a complete set"), with the single-writer assumption, source scoping, the known gap and semengine#730.
 - [ ] 6.2 `openspec validate --strict` and `task spec:check` green. Lint and unit, integration and race tests green.
 - [ ] 6.3 Independent review by `graph-event-reviewer` and `go-component-reviewer`, then `ateam review request 346`.
+  - [x] Specialist review 2026-11-23, both on head 8357bbb. Findings fixed, and D1 amended with owner approval:
+    - **Major (both reviewers): an older queued write restored a dropped predicate.** The reconcile now waits until its stream write applies (the stored state holds every desired statement), fences the replace at that revision, and skips a job once a later publish is queued. Proved by `TestOlderQueuedWriteCannotRestoreADroppedPredicate` and `TestReconcileWaitsForItsStreamWriteAndMatchesItsStamping`; both fail when the applied gate is removed.
+    - **Major (go-component): a slow reconcile stalled the drain.** Reconciles now run on a single worker behind a bounded queue (4,096), with a 30 s budget per job and 5 s per request; a full queue drops the reconcile, counted. Abandoned at Stop, uncounted: `TestStopAbandonsAWaitingReconcileUncounted`.
+    - **Minor:** the predicate set comes from the contract's `source` group; shutdown cancellation is not counted; the stamping test checks the envelope's `created_at`; the not-found fixture is a `*projection.MutationError`; `TestFileParentID_MatchesBuildHierarchy` covers a root file, nested files and a versioned system; `TestWatchPublishCarriesTheSeedGroupSet_PerLanguage` covers Go, Java and Python (Svelte and C not covered).
+    - **Nits:** the spec scenario now names the bounded re-read. The KV-polling integration loops are unchanged; they poll observed state under a deadline.
 - [x] 6.4 Upstream ask filed: C360Studio/semengine#730 (per-message complete-set intent). When it ships, the local reconcile and the D4 bound come out.

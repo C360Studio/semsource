@@ -30,38 +30,31 @@ last publish carried. The read surfaces don't change. No new component and no up
 
 ## Decisions
 
-### D1. The publisher reconciles after the stream publish, and the stream publish stays
+### D1. The publisher reconciles after the stream write applies, off the drain loop
 
 The stream publish still carries what reconcile can't: the storage reference, the message type, and the `entity.*`
-statements outside the group. After `PublishToStreamWithMsgID` succeeds, `publishOne` calls `Reconcile` with:
+statements outside the group. After `PublishToStreamWithMsgID` succeeds, `publishOne` queues a reconcile job, which a
+single worker runs off the drain loop so a slow mutation lane never delays delivery. The job's `Reconcile` carries:
 
-- `Contract: SourceEntityContract().Name`, `Group: GroupSource`, `EntityID: payload.ID`;
-- `Desired`: the payload's triples whose predicate is in `OwnedPredicates()` and whose source is `semsource` or empty.
-  An empty source becomes `semsource` and a zero timestamp becomes the envelope's, which is fixed at millisecond
-  precision. That matches what graph-ingest stores for the stream arrival;
-- `Metadata.Source: semsource` and no metadata timestamp. The client refuses a metadata timestamp that differs from a
-  statement's own, and some statements (the lifecycle owner fact) carry their own.
+- `Contract: SourceEntityContract().Name`, `Group: GroupSource`, `EntityID: payload.ID`, `ExpectedRevision` (below);
+- `Desired`: the payload's statements whose predicate is in that contract's `source` group and whose source is
+  `semsource` or empty, an empty source stamped `semsource` and a zero timestamp the envelope's (fixed at millisecond
+  precision), matching what graph-ingest stores for the stream arrival;
+- `Metadata.Source: semsource` and no metadata timestamp, which the client would refuse against a statement's own.
 
-**Alternatives rejected by the ruling:** reading back and diffing, keeping producer-side memory of past emissions, and
-ownership or claim machinery.
+**Alternatives rejected by the ruling:** reading back and diffing, producer memory of past emissions, ownership.
 
-**Ordering.** The stream publish is acknowledged once it is stored in the stream, not once graph-ingest applies it.
-So the reconcile usually reads the entity before its own stream write, and then loses the compare-and-set to that
-write. This was measured in the repro: without a retry, it never converged. If the stream write has landed, reconcile
-clears the dropped predicates. If reconcile lands first, it replaces the group with the same statements, and the stream
-arrival then applies the same sets at an equal timestamp.
+**Ordering (amended 2026-11-23 after review).** A stream write is acknowledged when stored, not when applied. A
+reconcile that commits before an older queued write of the same entity lets that write restore a predicate the
+reconcile removed (#346 review: two publishes in flight, e.g. an edit during a seed backlog). graph-ingest applies one
+entity's writes in arrival order (`keyed_ingest.go`, SemStreams ADR-072). So the job reads the entity until the stored
+state holds every desired statement (this write applied, hence every older one), then replaces the group fenced at
+that read's revision. A lost compare-and-set re-reads. A job is skipped once a later publish of the entity is queued.
 
-**Outcomes.**
-
-- `entity_not_found`: a birth whose stream write hasn't landed yet. Nothing is stale, so it is benign and skipped.
-- Revision conflict: usually the entity's own stream write. It is re-read and retried up to 3 times (owner ruling
-  2026-11-23, amending the original "not retried"). Every attempt re-reads, so a write never lands over state it hasn't
-  seen. If the last attempt still conflicts, it is counted and logged at Debug.
-- Any other error is counted separately from stream delivery and never fails the entity. The statements did reach the
-  graph; only the removal is outstanding.
-
-The reconcile result never changes `Published`, `Failed` or `Lost`. Source status reports delivery, and the stream
-write delivered.
+**Outcomes.** The job's budget is 30 s, with 5 s per request and a 20–500 ms backoff between reads. A full queue
+(4,096), a read or replace error, or a write not applied within the budget is counted on `reconcile_failed_total`; the
+next edit repairs it. A job abandoned at Stop is not counted. The reconcile never changes `Published`, `Failed` or
+`Lost`. Queued jobs count as in flight for `WaitSettled`.
 
 ### D2. Reconcile is opt-in per publisher, and folder and repo types are excluded
 
