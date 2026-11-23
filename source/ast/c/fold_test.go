@@ -54,6 +54,7 @@ static void move_cursor(int x) { (void)x; }
 
 // A prototype with no definition in the file stays: a header-only API is
 // declared this way and would otherwise index as empty.
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestLonePrototypeIsKept(t *testing.T) {
 	res, _ := parse(t, "api.h", "int api_open(const char *path);\n")
 	if got := entitiesNamed(res, "api_open"); len(got) != 1 {

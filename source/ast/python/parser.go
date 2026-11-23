@@ -51,6 +51,9 @@ type Parser struct {
 	// stubs marks the current file's @overload stubs, which give way to the
 	// implementation in the same-ID fold.
 	stubs map[*ast.CodeEntity]bool
+	// members maps each of the current file's class entities to its methods,
+	// so a shadowed class's members can be dropped with it.
+	members map[*ast.CodeEntity][]*ast.CodeEntity
 }
 
 // moduleRelPath is a memoized module→file resolution result.
@@ -137,6 +140,7 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 
 	// Extract entities from the AST
 	p.stubs = map[*ast.CodeEntity]bool{}
+	p.members = map[*ast.CodeEntity][]*ast.CodeEntity{}
 	childIDs := make([]string, 0)
 	for i := 0; i < int(rootNode.NamedChildCount()); i++ {
 		child := rootNode.NamedChild(i)
@@ -159,10 +163,10 @@ func (p *Parser) ParseFile(ctx context.Context, filePath string) (*ast.ParseResu
 	// binding, so a later definition replaces an earlier one. An @overload stub
 	// never replaces anything: the implementation carries the symbol, and a
 	// stub-only name keeps its first stub (#338).
-	result.Entities = ast.FoldDeclarations(result.Entities, func(candidate, _ *ast.CodeEntity) bool {
+	result.Entities = ast.FoldDeclarations(p.dropShadowedMembers(result.Entities), func(candidate, _ *ast.CodeEntity) bool {
 		return !p.stubs[candidate]
 	})
-	p.stubs = nil
+	p.stubs, p.members = nil, nil
 
 	return result, nil
 }
@@ -302,7 +306,7 @@ func (p *Parser) extractNode(node *sitter.Node, content []byte, _ /* parentID */
 			case "function_definition":
 				entity := p.extractFunction(definition, content, filePath, false, nil, nil)
 				if entity != nil {
-					p.markStub(entity, decorators)
+					p.markStub(entity, node, content)
 					if len(decorators) > 0 {
 						entity.DocComment = p.prependDecorators(entity.DocComment, decorators)
 					}
@@ -379,8 +383,8 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 						decorators := p.extractDecorators(child, content)
 						method := p.extractFunction(def, content, filePath, true, classScope, methodNames)
 						if method != nil {
-							p.markStub(method, decorators)
-							if suffix := accessorSuffix(decorators, method.Name); suffix != "" {
+							p.markStub(method, child, content)
+							if suffix := accessorSuffix(child, content, method.Name); suffix != "" {
 								method.ID = ast.NewScopedCodeEntity(p.authority, "python", p.project, ast.TypeMethod, classScope, method.Name+suffix, filePath).ID
 							}
 							method.ContainedBy = entity.ID
@@ -396,6 +400,9 @@ func (p *Parser) extractClass(node *sitter.Node, content []byte, filePath string
 			}
 		}
 		entity.Contains = methodIDs
+	}
+	if p.members != nil {
+		p.members[entity] = allEntities[1:]
 	}
 
 	return allEntities
@@ -561,14 +568,46 @@ func (p *Parser) extractImports(node *sitter.Node, content []byte) []string {
 	return imports
 }
 
-// markStub records an @overload (or @typing.overload) stub.
-func (p *Parser) markStub(entity *ast.CodeEntity, decorators []string) {
-	for _, dec := range decorators {
-		name := strings.TrimPrefix(decoratorExpr(dec), "@")
-		if i := strings.IndexByte(name, '('); i >= 0 {
-			name = name[:i]
+// dropShadowedMembers removes the methods of a class that a later same-named
+// class rebinds. Python's final class has only the later body's members, so
+// an earlier body's methods must not survive the fold as members of it.
+func (p *Parser) dropShadowedMembers(entities []*ast.CodeEntity) []*ast.CodeEntity {
+	survivor := map[string]*ast.CodeEntity{}
+	for _, e := range entities {
+		if _, seen := survivor[e.ID]; !seen || !p.stubs[e] {
+			survivor[e.ID] = e
 		}
-		if name == "overload" || strings.HasSuffix(name, ".overload") {
+	}
+	shadowed := map[*ast.CodeEntity]bool{}
+	for class, methods := range p.members {
+		if survivor[class.ID] == class {
+			continue
+		}
+		class.Contains = nil
+		for _, m := range methods {
+			shadowed[m] = true
+		}
+	}
+	if len(shadowed) == 0 {
+		return entities
+	}
+	out := make([]*ast.CodeEntity, 0, len(entities))
+	for _, e := range entities {
+		if !shadowed[e] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// markStub records an @overload stub, spelled bare or module-qualified
+// (@typing.overload). decorated is the decorated_definition node.
+func (p *Parser) markStub(entity *ast.CodeEntity, decorated *sitter.Node, content []byte) {
+	for _, expr := range decoratorExprs(decorated) {
+		if expr.Type() == "call" {
+			expr = unwrapParens(expr.ChildByFieldName("function"))
+		}
+		if lastName(expr, content) == "overload" {
 			if p.stubs != nil {
 				p.stubs[entity] = true
 			}
@@ -581,26 +620,65 @@ func (p *Parser) markStub(entity *ast.CodeEntity, decorators []string) {
 // deleter, which Python requires to share the getter's name. The getter is the
 // property itself and keeps the plain name. Applied to every setter and
 // deleter, never only to colliding ones, so adding a setter never
-// re-identifies the getter (#338, the #331 precedent).
-func accessorSuffix(decorators []string, name string) string {
-	for _, dec := range decorators {
-		switch decoratorExpr(dec) {
-		case "@" + name + ".setter":
+// re-identifies the getter (#338, the #331 precedent). The decorator is read
+// from its syntax tree, so spacing, parentheses and comments do not matter.
+func accessorSuffix(decorated *sitter.Node, content []byte, name string) string {
+	for _, expr := range decoratorExprs(decorated) {
+		if expr.Type() != "attribute" {
+			continue
+		}
+		obj := unwrapParens(expr.ChildByFieldName("object"))
+		if obj == nil || obj.Type() != "identifier" || obj.Content(content) != name {
+			continue
+		}
+		switch lastName(expr, content) {
+		case "setter":
 			return "-setter"
-		case "@" + name + ".deleter":
+		case "deleter":
 			return "-deleter"
 		}
 	}
 	return ""
 }
 
-// decoratorExpr strips a trailing comment, which tree-sitter keeps inside the
-// decorator node: "@x.setter  # noqa" must still read as "@x.setter".
-func decoratorExpr(dec string) string {
-	if i := strings.IndexByte(dec, '#'); i >= 0 {
-		dec = dec[:i]
+// decoratorExprs returns each decorator's expression, parentheses removed.
+func decoratorExprs(decorated *sitter.Node) []*sitter.Node {
+	var out []*sitter.Node
+	for i := 0; i < int(decorated.NamedChildCount()); i++ {
+		dec := decorated.NamedChild(i)
+		if dec.Type() != "decorator" {
+			continue
+		}
+		for j := 0; j < int(dec.NamedChildCount()); j++ {
+			if c := dec.NamedChild(j); c.Type() != "comment" {
+				out = append(out, unwrapParens(c))
+				break
+			}
+		}
 	}
-	return strings.TrimSpace(dec)
+	return out
+}
+
+func unwrapParens(n *sitter.Node) *sitter.Node {
+	for n != nil && n.Type() == "parenthesized_expression" && n.NamedChildCount() > 0 {
+		n = n.NamedChild(0)
+	}
+	return n
+}
+
+// lastName is an identifier's text, or an attribute's final name.
+func lastName(n *sitter.Node, content []byte) string {
+	switch {
+	case n == nil:
+		return ""
+	case n.Type() == "identifier":
+		return n.Content(content)
+	case n.Type() == "attribute":
+		if a := n.ChildByFieldName("attribute"); a != nil {
+			return a.Content(content)
+		}
+	}
+	return ""
 }
 
 // extractDecorators extracts decorator names from a decorated definition.

@@ -1,5 +1,7 @@
 # Proposal: one entity ID per Python, C and C++ declaration (#338)
 
+Approved-by:
+
 ## Why
 
 The `fix-ast-id-collisions` break (#329) made Go, Java, TypeScript, JavaScript and Svelte emit one entity ID per declaration and left Python, C and C++ to the AST source's runtime guard. The guard keeps the first declaration in parse order and counts the rest on `id_collisions`, so no hybrid entity is written, but the declaration it keeps is often the wrong one: a C prototype instead of its definition, a Python `@overload` stub instead of the implementation, and a Python property setter disappears.

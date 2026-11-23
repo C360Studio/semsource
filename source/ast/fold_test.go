@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestFoldDeclarations(t *testing.T) {
 	file := &CodeEntity{ID: "file", Contains: []string{"f", "g", "f"}}
 	proto := &CodeEntity{ID: "f", StartLine: 1, Contains: []string{"a"}}
@@ -27,6 +28,7 @@ func TestFoldDeclarations(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: One entity ID per declaration within a parse pass
 func TestFoldDeclarationsKeepsFirstWhenPolicyDeclines(t *testing.T) {
 	first := &CodeEntity{ID: "m", StartLine: 1}
 	second := &CodeEntity{ID: "m", StartLine: 5, Contains: []string{"c"}}

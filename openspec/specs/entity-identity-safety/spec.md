@@ -145,6 +145,7 @@ Every registered parser SHALL give distinct declarations distinct entity IDs or 
 #### Scenario: A redefined Python name keeps its last binding
 - **WHEN** a Python class defines `predict` twice
 - **THEN** the parse result carries one entity for `predict`, with the second definition's lines
+- **AND** a class bound twice carries only the later body's methods
 
 #### Scenario: A duplicate ID that reaches the AST source is kept once and surfaced
 - **WHEN** a parse result from any parser still carries two entities with one ID
