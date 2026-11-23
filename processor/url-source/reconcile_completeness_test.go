@@ -185,7 +185,7 @@ func predicates(statements []string) []string {
 // completeness check for the #336 reconcile: when a page changes to content
 // the handler describes with less (no ETag), the change publish still
 // carries every other group-`source` predicate the seed carried.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestChangedPagePublishCarriesTheCompleteGroupSet(t *testing.T) {
 	f := newURLFixture(t)
 	f.seed()
@@ -218,7 +218,7 @@ func TestChangedPagePublishCarriesTheCompleteGroupSet(t *testing.T) {
 // 5.2) for url-source: the first pass and the watcher's first fetch of
 // unchanged content reconcile nothing; a later fetch whose content differs
 // reconciles the page.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestReconcileOnlyPagesThisProcessSawChange(t *testing.T) {
 	rec := &entitypubtest.RecordingReconciler{}
 	f := newURLFixture(t, entitypub.WithReconcile(rec))

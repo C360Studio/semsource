@@ -253,7 +253,7 @@ func (f *reconcileFixture) settle() {
 // check for the #336 reconcile: a watch republish carries the same
 // group-`source` statements the seed published, the storage reference
 // included.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestWatchPublishCarriesTheSeedGroupSet(t *testing.T) {
 	for name, real := range map[string]bool{"video only": false, "video and keyframes": true} {
 		t.Run(name, func(t *testing.T) {
@@ -299,7 +299,7 @@ func hasStorageRef(statements []string) bool {
 	return false
 }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestReconcileOnlyWatchedChangesWithoutStoreFaults(t *testing.T) {
 	t.Run("the seed makes no reconcile calls; a watch change reconciles", func(t *testing.T) {
 		f := newReconcileFixture(t)

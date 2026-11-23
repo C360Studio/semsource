@@ -59,7 +59,7 @@ func (f *foldFixture) groupStatements(skip func(subject string) bool) map[string
 // path carries, for the file and every symbol in it, the same group-`source`
 // statements the seed published. Folder and repo entities are excluded from
 // reconcile (#347) and are skipped here.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestWatchPublishCarriesTheSeedGroupSet(t *testing.T) {
 	f := newFoldFixture(t)
 	f.seed()
@@ -136,7 +136,7 @@ type failingPutStore struct{ *fakeStore }
 
 func (failingPutStore) Put(context.Context, string, []byte) error { return errors.New("store down") }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestReconcileSkipsContainersAndBodyFaults(t *testing.T) {
 	hasType := func(ids []string, typ string) bool {
 		for _, id := range ids {
@@ -249,7 +249,7 @@ func newLangFixture(t *testing.T, lang, ext string, files map[string]string) *fo
 // completeness check to Go, Java and Python: a watch republish of an
 // unchanged nested file carries, for the file and each symbol, the seed's
 // group-`source` statements.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestWatchPublishCarriesTheSeedGroupSet_PerLanguage(t *testing.T) {
 	cases := []struct {
 		lang, ext, edited string
@@ -297,7 +297,7 @@ func TestWatchPublishCarriesTheSeedGroupSet_PerLanguage(t *testing.T) {
 // A file truncated between its parse and the body read leaves the parsed
 // symbols without a body; they are faulted, so no reconcile clears the body
 // handles a previous pass stored.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestBodyTruncatedBetweenParseAndOffloadIsFaulted(t *testing.T) {
 	f := newLangFixture(t, "go", ".go", map[string]string{"svc.go": "package svc\n\n\n\nfunc Run() {}\n"})
 	result, err := f.pw.parsers["go"].ParseFile(f.ctx, f.root+"/svc.go")
@@ -323,7 +323,7 @@ func TestBodyTruncatedBetweenParseAndOffloadIsFaulted(t *testing.T) {
 
 // Two roots that mint IDs in one org and system would each reconcile away
 // what the other wrote to a shared entity, so neither reconciles (#349).
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestRootsSharingASystemDoNotReconcile(t *testing.T) {
 	f := newFoldFixture(t)
 	rec := f.withReconcile()

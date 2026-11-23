@@ -223,7 +223,7 @@ func has(triples []message.Triple, predicate string) bool {
 	return false
 }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestNoReconcileWithoutTheOption(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g)
@@ -237,7 +237,7 @@ func TestNoReconcileWithoutTheOption(t *testing.T) {
 // The reconcile waits until its own stream write has applied, then replaces
 // the group at that revision with statements stamped exactly as the stream
 // arrival was.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestReconcileWaitsForItsStreamWriteAndMatchesItsStamping(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
@@ -293,7 +293,7 @@ func TestReconcileWaitsForItsStreamWriteAndMatchesItsStamping(t *testing.T) {
 
 // Two writes of one entity queued unapplied: the older one cannot land after
 // the reconcile and restore a predicate the newer publish dropped.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestOlderQueuedWriteCannotRestoreADroppedPredicate(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
@@ -323,7 +323,7 @@ func (g *fakeGraph) queue2() [][]byte {
 	return g.queue
 }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestSkipReconcilePayloadIsNeverReconciled(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
@@ -339,7 +339,7 @@ func TestSkipReconcilePayloadIsNeverReconciled(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestReconcileOutcomes(t *testing.T) {
 	conflict := &projection.MutationError{Kind: projection.MutationRevisionConflict}
 	cases := []struct {
@@ -376,7 +376,7 @@ func TestReconcileOutcomes(t *testing.T) {
 
 // Stop while a reconcile waits on an unapplied write returns promptly and
 // does not count the abandoned reconcile as a failure.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestStopAbandonsAWaitingReconcileUncounted(t *testing.T) {
 	g := newFakeGraph()
 	g.hold = true
@@ -413,7 +413,7 @@ func waitUntil(ctx context.Context, t *testing.T, cond func() bool) {
 
 // Stored A, then queued B (adds the call) and A again (drops it), published
 // back to back: the fence must not mistake the stored A for the final one.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestReconcileFenceTellsARepeatedWriteFromTheStoredOne(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
@@ -444,7 +444,7 @@ func TestReconcileFenceTellsARepeatedWriteFromTheStoredOne(t *testing.T) {
 }
 
 // Stop returns within its deadline while a reconcile is blocked in a request.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestStopIsNotHeldByAnInFlightReconcileRequest(t *testing.T) {
 	g := newFakeGraph()
 	g.blockRead = make(chan struct{}) // never released
@@ -476,7 +476,7 @@ func TestStopIsNotHeldByAnInFlightReconcileRequest(t *testing.T) {
 }
 
 // A dropped job (full queue) leaves no tracking entry behind.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestQueueOverflowLeavesNoTrackingEntry(t *testing.T) {
 	g := newFakeGraph()
 	g.blockRead = make(chan struct{})
@@ -521,7 +521,7 @@ func TestQueueOverflowLeavesNoTrackingEntry(t *testing.T) {
 // A burst of distinct entities inside one millisecond shares that millisecond
 // rather than running ahead of the clock, so a restarted publisher's write is
 // not older than the stored one under the stream lane's merge rule.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestEnvelopeTimeBurstDoesNotOutrunTheClock(t *testing.T) {
 	frozen := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
 	before := &Publisher{now: func() time.Time { return frozen }}
@@ -549,7 +549,7 @@ func TestEnvelopeTimeBurstDoesNotOutrunTheClock(t *testing.T) {
 // republish that skips its own: both writes apply before the first read. The
 // waiting reconcile accepts the later identical write as its own applied and
 // still removes the dropped call (#346 review round 4).
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestSkippedIdenticalFollowUpDoesNotStrandTheReconcile(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
@@ -596,7 +596,7 @@ func (g *readEnteredGraph) ReadAuthoritative(ctx context.Context, id string) (*g
 // B drops the call and its reconcile is reading; C restores the call and
 // applies before B's read returns. B must not remove C's call (#346 review
 // round 5).
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestOlderReconcileDoesNotRemoveANewerPublishesFact(t *testing.T) {
 	g := newFakeGraph()
 	rg := &readEnteredGraph{fakeGraph: g, entered: make(chan struct{}, 1)}
@@ -629,7 +629,7 @@ func TestOlderReconcileDoesNotRemoveANewerPublishesFact(t *testing.T) {
 // B is complete and drops the call; C restores the call but its body write
 // failed, so it skips its reconcile. C withdraws B's intent: B must not
 // remove C's call (#346 review round 5).
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestFaultedFollowUpWithdrawsTheOlderReconcile(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))
@@ -660,7 +660,7 @@ func TestFaultedFollowUpWithdrawsTheOlderReconcile(t *testing.T) {
 
 // A numeric object of 1e6 or more prints differently as the publish's
 // json.Number and the stored float64; the fence must still see it applied.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestLargeNumberObjectsPassTheFence(t *testing.T) {
 	g := newFakeGraph()
 	pub, ctx := startPublisher(t, g, WithReconcile(g))

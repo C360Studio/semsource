@@ -27,7 +27,7 @@ func statementSet(triples []message.Triple) string {
 // the page IngestEntityStates builds for the same response, and its
 // statements carry no timestamp, so graph-ingest stamps the envelope time a
 // reconcile fences on.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestWatchStateMatchesIngestState(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ETag", `"v1"`)

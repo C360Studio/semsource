@@ -227,7 +227,7 @@ func (f *reconcileFixture) settle() {
 // completeness check for the #336 reconcile: an object re-uploaded with the
 // same bytes is republished by the poll with the same group-`source`
 // statements the seed published, for the document and every passage.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestPollPublishCarriesTheSeedGroupSet(t *testing.T) {
 	f := newReconcileFixture(t)
 	f.bucket.put("reports/q3.md", twoSections)
@@ -249,7 +249,7 @@ func TestPollPublishCarriesTheSeedGroupSet(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestReconcileOnlyModifiedObjects(t *testing.T) {
 	f := newReconcileFixture(t)
 	f.bucket.put("reports/q3.md", twoSections)

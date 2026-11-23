@@ -482,7 +482,7 @@ func TestSanitizePathSegment(t *testing.T) {
 // TestFileParentID_MatchesBuildHierarchy pins the watch path's parent edge to
 // the full index's for a root file, nested files, and a version-scoped
 // system (#336 task 4.1a).
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestFileParentID_MatchesBuildHierarchy(t *testing.T) {
 	auth := testAuthority("acme")
 	for _, project := range []string{"my-project", entityid.ScopedSystemSlug("my-project", "v1.9.0")} {

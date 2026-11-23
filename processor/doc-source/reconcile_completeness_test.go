@@ -233,7 +233,7 @@ const twoSections = "# Guide\n\n## Install\n\nRun the installer.\n\n## Usage\n\n
 // A watch republish of a document that now emits less carries, for the
 // document and each passage, the complete group set a fresh seed of the new
 // content produces, so the reconcile that follows removes only what is gone.
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestDocWatchRepublishCarriesTheCompleteGroupSet(t *testing.T) {
 	root := t.TempDir()
 	f := newDocFixture(t, "", root)
@@ -267,7 +267,7 @@ func TestDocWatchRepublishCarriesTheCompleteGroupSet(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
 func TestDocReconcileOnlyKnownChanges(t *testing.T) {
 	t.Run("a first pass, an unchanged republish and a new file make no reconcile calls", func(t *testing.T) {
 		root := t.TempDir()

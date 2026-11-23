@@ -47,8 +47,8 @@
 ## 6. Records and review
 
 - [x] 6.1 ADR-0008 note: a header line and §6 ("Retention applies to entities and versions; within one entity ID, a source's statements are a complete set"), with the single-writer assumption, source scoping, the known gap and semengine#730.
-- [ ] 6.2 `openspec validate --strict` and `task spec:check` green. Lint and unit, integration and race tests green.
-- [ ] 6.3 Independent review by `graph-event-reviewer` and `go-component-reviewer`, then `ateam review request 346`.
+- [x] 6.2 `openspec validate --strict` and `task spec:check` green. Lint and unit, integration and race tests green.
+- [x] 6.3 Independent review by `graph-event-reviewer` and `go-component-reviewer`, then `ateam review request 346`.
   - [x] Specialist review 2026-11-23, both on head 8357bbb. Findings fixed, and D1 amended with owner approval:
     - **Major (both reviewers): an older queued write restored a dropped predicate.** The reconcile now waits until its stream write applies (the stored state holds every desired statement), fences the replace at that revision, and skips a job once a later publish is queued. Proved by `TestOlderQueuedWriteCannotRestoreADroppedPredicate` and `TestReconcileWaitsForItsStreamWriteAndMatchesItsStamping`; both fail when the applied gate is removed.
     - **Major (go-component): a slow reconcile stalled the drain.** Reconciles now run on a single worker behind a bounded queue (4,096), with a 30 s budget per job and 5 s per request; a full queue drops the reconcile, counted. Abandoned at Stop, uncounted: `TestStopAbandonsAWaitingReconcileUncounted`.
@@ -59,16 +59,17 @@
     - **P2: Stop could exceed its deadline on an in-flight request.** The worker's context is cancelled at Stop, and joining the worker honours the caller's deadline. Proved by `TestStopIsNotHeldByAnInFlightReconcileRequest`, which fails 3/3 without the cancel.
     - **P2: a dropped job leaked its tracking entry.** It is now forgotten on drop. Proved by `TestQueueOverflowLeavesNoTrackingEntry`, which fails 3/3 without the cleanup.
     - **P2: gofmt.** Fixed, and `task lint` is clean.
-  - [ ] Independent review round 2 at ff10704: REQUEST CHANGES. Fixed:
+  - [x] Independent review round 2 at ff10704: REQUEST CHANGES. Fixed:
     - **P1: the monotonic envelope time ran ahead of the clock.** Each publish moved it 1 ms, so a fast burst stored future timestamps and a restarted publisher's writes were rejected as older by `ReplaceBySource`. The envelope time is now the wall-clock millisecond, never earlier than the previous one; only a repeat of the same entity within one millisecond moves it on, by 1 ms, so the fence stays unique per entity. Proved by `TestEnvelopeTimeBurstDoesNotOutrunTheClock` (a 1,000-entity burst, then a restart checked against the real `ReplaceBySource`), which fails without the fix; `TestReconcileFenceTellsARepeatedWriteFromTheStoredOne` still passes.
     - **P2: a file truncated between parse and body read skipped the fault guard.** A symbol whose parsed lines the read no longer has is now faulted. Proved by `TestBodyTruncatedBetweenParseAndOffloadIsFaulted`, which fails without the fix.
     - **Notes:** the birth scenario, the proposal and 3.3 now describe the budgeted re-read; stale test names in 3.2, 3.5 and 3.6 are corrected; the three uncited reconcile tests carry spec citations.
-  - [ ] Independent review round 3 at bc90e28: REQUEST CHANGES (scope and attribution only, no code defect). Fixed: 4.2 done in this PR with git split out to #354 (owner ruling); spec citations on the repro and parent-edge tests, with `ateam test-spec` green.
-  - [ ] Independent review round 4 at 20818f2: REQUEST CHANGES. Fixed:
+  - [x] Independent review round 3 at bc90e28: REQUEST CHANGES (scope and attribution only, no code defect). Fixed: 4.2 done in this PR with git split out to #354 (owner ruling); spec citations on the repro and parent-edge tests, with `ateam test-spec` green.
+  - [x] Independent review round 4 at 20818f2: REQUEST CHANGES. Fixed:
     - **P2: an identical follow-up stranded a waiting reconcile.** A changed publish, then an identical one that skipped its reconcile, both applied before the first read; the first job's fence never matched. The fence now accepts each desired statement stored at its own timestamp or later, and the replace sends the stored copies. Proved by `TestSkippedIdenticalFollowUpDoesNotStrandTheReconcile`, which fails with the exact-timestamp fence.
     - **P2: cfgfile module and package IDs can be shared within one root.** cfgfile no longer opts in (4.2).
     - **P2: attribution.** `TestPublishDocument_EmptyStatesIsAContractFailure` cites the object-store spec.
-  - [ ] Independent review round 5 at c7a045a: REQUEST CHANGES. Fixed:
+  - [x] Independent review round 5 at c7a045a: REQUEST CHANGES. Fixed:
     - **P1: the widened fence let an older reconcile remove a newer publish's facts.** A later stored timestamp proved a newer write applied, not that it carried the same set. Each publish is now noted before its send: a later publish to reconcile replaces the older job, a skipped one with the same group statements leaves it standing, and any other withdraws it. The job checks after each read, before its replace. Proved by `TestOlderReconcileDoesNotRemoveANewerPublishesFact` (B dropping a call, C restoring it while B reads) and `TestFaultedFollowUpWithdrawsTheOlderReconcile` (C restoring it with a failed body write); both fail with the check or the withdrawal removed. `TestSkippedIdenticalFollowUpDoesNotStrandTheReconcile` still passes.
     - **Pre-review (graph-event-reviewer, 7396bf4), no safety violation found.** Fixed: a numeric object of 1e6 or more (media file sizes, bitrates) never passed the fence, because the publish holds `json.Number` and the stored side `float64`; numbers are now keyed by value. Proved by `TestLargeNumberObjectsPassTheFence`. Accepted: a later publish whose send fails withdraws the earlier job (D1), so its dropped predicates wait for the next edit.
+  - [x] Independent review round 6 at 3aa56c0: APPROVE, codex (gpt-6-astra, high). No blocking findings.
 - [x] 6.4 Upstream ask filed: C360Studio/semengine#730 (per-message complete-set intent). When it ships, the local reconcile and the D4 bound come out.
