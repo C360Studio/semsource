@@ -1,0 +1,613 @@
+{
+  "label": "audit222-tier0-statistical-shipped-astonly-B",
+  "arm": "B",
+  "questions_version": 5,
+  "score": 14,
+  "total": 33,
+  "total_entities": 6703,
+  "host": {
+    "arch": "arm64",
+    "os": "Darwin"
+  },
+  "arm_uses_llm": false,
+  "schema_overhead": {
+    "bytes": 7579,
+    "tools": 9
+  },
+  "results": [
+    {
+      "id": "D01",
+      "band": "doc-early",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "missing required: ast",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        17
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D02",
+      "band": "doc-early",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        16
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D03",
+      "band": "doc-early",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        18
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D04",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "missing required: 8081",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 15,
+      "latency_samples": [
+        15,
+        18,
+        15
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D05",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "missing required: 7890",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        17
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D06",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 16,
+      "latency_samples": [
+        16,
+        18,
+        17
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D07",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        16
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D08",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        17
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D09",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        18,
+        15
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "D10",
+      "band": "doc-late",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        18,
+        17
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "C01",
+      "band": "code",
+      "tool": "code_context",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 674,
+      "top_body_bytes": 674,
+      "context_bytes": 2283,
+      "latency_ms": 53,
+      "latency_samples": [
+        53,
+        32,
+        30
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"SanitizeInstance\",\"kind\":\"function\",\"path\":\"entityid/entityid.go\",\"lines\":[318,347],\"body\":\"func SanitizeInstance(s string) string {\\n\\tvar b strings.Builder\\n\\tb.Grow(len(s))\\n\\tfor _, r := range s {\\n\\t\\tif isAllowedInstanceRune(r) {\\n\\t\\t\\tb.WriteRune(r)\\n\\t\\t} else {\\n\\t\\t\\tb.WriteRune('-')\\n\\t\\t}\\n\\t}\\n\\tout := b.String()\\n\\tfor strings.Contains(out, \\\"--\\\") {\\n\\t\\tout = strings.ReplaceAll(out, \\\"--\\\", \\\"-\\\")\\n\\t}\\n\\tout = strings.TrimFunc(out, func(r rune) bool { return !isASCIIAlnum(r) })\\n\\n\\tif out == \\\"\\\" {\\n\\t\\treturn shortHash(s)\\n\\t}\\n\\tif len(out) > maxInstanceLen {\\n\\t\\tsuffix := shortHash(s)\\n\\t\\tprefix := strings.TrimRightFunc(out[:maxInstanceLen-len(suffix)-1],\\n\\t\\t\\tfunc(r rune) bool { return !isASCIIAlnum(r) })\\n\\t\\tif prefix == \\\"\\\" {\\n\\t\\t\\treturn suffix\\n\\t\\t}\\n\\t\\treturn prefix + \\\"-\\\" + suffix\\n\\t}\\n\\treturn out\\n}\",\"relations\":{\"callee\":[{\"name\":\"isASCIIAlnum\",\"path\":\"entityid/entityid.go\",\"line\":387},{\"name\":\"isAllowedInstanceRune\",\"path\":\"entityid/entityid.go\",\"line\":383},{\"name\":\"shortHash\",\"path\":\"entityid/entityid.go\",\"line\":391}],\"caller\":[{\"name\":\"TestSanitizeInstance\",\"path\":\"entityid/entityid_test.go\",\"line\":255},{\"name\":\"TestSanitizeInstance_DeterministicForSameInput\",\"path\":\"entityid/entityid_test.go\",\"line\":304},{\"name\":\"TestSanitizeInstance_FallbackHash\",\"path\":\"entityid/entityid_test.go\",\"line\":292},{\"name\":\"TestSanitizeInstance_LengthCapPreservesUniqueness\",\"path\":\"entityid/entityid_test.go\",\"line\":313},{\"name\":\"DocumentEntityID\",\"path\":\"handler/doc/entities.go\",\"line\":85},{\"name\":\"chunkInstance\",\"path\":\"handler/doc/entities.go\",\"line\":139},{\"name\":\"BuildAuthorEntity\",\"path\":\"handler/git/entities.go\",\"line\":37},{\"name\":\"BuildBranchEntity\",\"path\":\"handler/git/entities.go\",\"line\":57},{\"name\":\"newAuthorEntity\",\"path\":\"handler/git/entities.go\",\"line\":171},{\"name\":\"newBranchEntity\",\"path\":\"handler/git/entities.go\",\"line\":213},{\"name\":\"Triples\",\"path\":\"handler/git/entities.go\",\"line\":113}],\"container\":[{\"name\":\"entityid.go\",\"path\":\"entityid/entityid.go\",\"line\":1}]},\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.entityid-entityid-go-SanitizeInstance\"}],\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "C02",
+      "band": "code",
+      "tool": "code_context",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 117,
+      "top_body_bytes": 117,
+      "context_bytes": 1865,
+      "latency_ms": 39,
+      "latency_samples": [
+        39,
+        35,
+        37
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"splitPassages\",\"kind\":\"function\",\"path\":\"handler/doc/splitter.go\",\"lines\":[89,91],\"body\":\"func splitPassages(content []byte, f docFormat) []passage {\\n\\treturn splitPassagesBounded(content, defaultBounds, f)\\n}\",\"relations\":{\"callee\":[{\"name\":\"splitPassagesBounded\",\"path\":\"handler/doc/splitter.go\",\"line\":95}],\"caller\":[{\"name\":\"TestAsciiDocAncestryIsOutermostFirst\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":64},{\"name\":\"TestAsciiDocHeadingInFencedBlockIsNotAHeading\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":105},{\"name\":\"TestAsciiDocPassagesCarryHeadings\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":25},{\"name\":\"TestEquivalentDocumentsAgreeAcrossFormats\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":45},{\"name\":\"TestPlainTextStillProducesAnonymousPassages\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":135},{\"name\":\"TestSetextMarkdownIsNotReadAsAsciiDoc\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":83},{\"name\":\"TestDividedBlocksStillTileTheDocument\",\"path\":\"handler/doc/homogeneous_test.go\",\"line\":161},{\"name\":\"TestKeyGroupsSurviveTheFloorMerge\",\"path\":\"handler/doc/homogeneous_test.go\",\"line\":96},{\"name\":\"TestREADMEConfigurationSeparatesTheNATSDefault\",\"path\":\"handler/doc/homogeneous_test.go\",\"line\":128},{\"name\":\"TestIsolateFencedBlocks\",\"path\":\"handler/doc/isolation_test.go\",\"line\":18},{\"name\":\"TestIsolateFencedBlocks_NeverDividesABlock\",\"path\":\"handler/doc/isolation_test.go\",\"line\":72},{\"name\":\"TestIsolateFencedBlocks_TilesExactly\",\"path\":\"handler/doc/isolation_test.go\",\"line\":114}],\"container\":[{\"name\":\"splitter.go\",\"path\":\"handler/doc/splitter.go\",\"line\":1}]},\"relations_truncated\":true,\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.handler-doc-splitter-go-splitPassages\"}],\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "C03",
+      "band": "code",
+      "tool": "code_context",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 2478,
+      "top_body_bytes": 2478,
+      "context_bytes": 5553,
+      "latency_ms": 43,
+      "latency_samples": [
+        43,
+        45,
+        42
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"decideLifecycleActions\",\"kind\":\"function\",\"path\":\"processor/supersession/lifecycle.go\",\"lines\":[182,251],\"body\":\"func decideLifecycleActions(inScope []gtypes.EntityState, reason string, stat func(path string) bool) (toMark []message.Triple, toClear []string, pathCount int) {\\n\\tif stat == nil {\\n\\t\\t// Nothing to check liveness against — the source itself is gone, so\\n\\t\\t// every in-scope entity is unconditionally stale.\\n\\t\\tfor i := range inScope {\\n\\t\\t\\tif isMarkedStale(inScope[i].Triples) {\\n\\t\\t\\t\\tcontinue\\n\\t\\t\\t}\\n\\t\\t\\ttoMark = append(toMark, staleTriple(inScope[i].ID, reason))\\n\\t\\t}\\n\\t\\treturn toMark, toClear, 0\\n\\t}\\n\\n\\tparentCounts := make(map[string]int)\\n\\tfor _, entity := range inScope {\\n\\t\\tif n, ok := tripleInt(entity.Triples, source.DocChunkCount); ok && n >= 0 {\\n\\t\\t\\tparentCounts[entity.ID] = n\\n\\t\\t}\\n\\t}\\n\\tbyPath := make(map[string][]gtypes.EntityState)\\n\\tfor i := range inScope {\\n\\t\\tp, ok := pathOf(inScope[i].Triples)\\n\\t\\tif !ok {\\n\\t\\t\\tcontinue // no path predicate — can't determine liveness\\n\\t\\t}\\n\\t\\tbyPath[p] = append(byPath[p], inScope[i])\\n\\t}\\n\\tpathCount = len(byPath)\\n\\n\\tfor path, group := range byPath {\\n\\t\\tpresent := stat(path)\\n\\t\\tif !present {\\n\\t\\t\\tfor i := range group {\\n\\t\\t\\t\\tif !isMarkedStale(group[i].Triples) {\\n\\t\\t\\t\\t\\ttoMark = append(toMark, staleTriple(group[i].ID, reason))\\n\\t\\t\\t\\t}\\n\\t\\t\\t}\\n\\t\\t\\tcontinue\\n\\t\\t}\\n\\t\\t// The file is present, but a document that SHRANK leaves passages\\n\\t\\t// behind that no filesystem check can see: every passage of a\\n\\t\\t// ten-passage document that is now seven passages long still carries\\n\\t\\t// the path of a file that is very much still there. The parent's\\n\\t\\t// DocChunkCount is the only evidence, so liveness for a passage is\\n\\t\\t// index < count rather than stat().\\n\\t\\tfor i := range group {\\n\\t\\t\\tif isSourceRemoved(group[i].Triples) {\\n\\t\\t\\t\\tcontinue\\n\\t\\t\\t}\\n\\t\\t\\tliveCount, haveCount := passageParentCount(group[i], parentCounts)\\n\\t\\t\\tmarked := isMarkedStale(group[i].Triples)\\n\\t\\t\\tvanished := haveCount && isVanishedPassage(group[i].Triples, liveCount)\\n\\t\\t\\tswitch {\\n\\t\\t\\tcase vanished && !marked:\\n\\t\\t\\t\\ttoMark = append(toMark, staleTriple(group[i].ID, graph.LifecycleReasonPassageRemoved))\\n\\t\\t\\tcase !vanished && marked:\\n\\t\\t\\t\\t// Without the parent's count there is no evidence either way, so\\n\\t\\t\\t\\t// clearing a passage's marker here would resurrect a genuinely\\n\\t\\t\\t\\t// vanished passage whenever enumeration truncated before its\\n\\t\\t\\t\\t// parent — and re-mark it on the next full pass. Absence of\\n\\t\\t\\t\\t// evidence must not read as evidence of liveness.\\n\\t\\t\\t\\tif !haveCount && isPassage(group[i].Triples) {\\n\\t\\t\\t\\t\\tcontinue\\n\\t\\t\\t\\t}\\n\\t\\t\\t\\ttoClear = append(toClear, group[i].ID)\\n\\t\\t\\t}\\n\\t\\t}\\n\\t}\\n\\treturn toMark, toClear, pathCount\\n}\",\"relations\":{\"callee\":[{\"name\":\"isMarkedStale\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":335},{\"name\":\"isPassage\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":285},{\"name\":\"isSourceRemoved\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":274},{\"name\":\"isVanishedPassage\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":294},{\"name\":\"passageParentCount\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":255},{\"name\":\"pathOf\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":346},{\"name\":\"staleTriple\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":357},{\"name\":\"tripleInt\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":303}],\"caller\":[{\"name\":\"TestAbsentSet_LeavesPresentObjectsAlone\",\"path\":\"processor/supersession/lifecycle_absent_test.go\",\"line\":119},{\"name\":\"TestAbsentSet_MarksParentAndPassagesTogether\",\"path\":\"processor/supersession/lifecycle_absent_test.go\",\"line\":86},{\"name\":\"TestAbsentSet_ReappearedArtifactIsCleared\",\"path\":\"processor/supersession/lifecycle_absent_test.go\",\"line\":160},{\"name\":\"TestDecideLifecycleActions_AllPassagesLive_NoAction\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":272},{\"name\":\"TestDecideLifecycleActions_CodeEntitiesUnaffectedByPassageRules\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":394},{\"name\":\"TestDecideLifecycleActions_DeletedFile_MarksParentAndEveryPassage\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":310},{\"name\":\"TestDecideLifecycleActions_NumericTriplesSurviveJSONRoundTrip\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":430},{\"name\":\"TestDecideLifecycleActions_PassagesWithoutParent_NeverMarked\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":333},{\"name\":\"TestDecideLifecycleActions_PreChunkingDocument_BehavesAsBefore\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":358},{\"name\":\"TestDecideLifecycleActions_RegrownDocument_ClearsRevivedPassages\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":284},{\"name\":\"TestDecideLifecycleActions_ShrunkDocumentAlreadyMarked_IsIdempotent\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":298},{\"name\":\"TestDecideLifecycleActions_ShrunkDocument_MarksOnlyTheVanishedTail\",\"path\":\"processor/supersession/lifecycle_passage_test.go\",\"line\":242}],\"container\":[{\"name\":\"lifecycle.go\",\"path\":\"processor/supersession/lifecycle.go\",\"line\":1}]},\"relations_truncated\":true,\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.processor-supersession-lifecycle-go-decideLifecycleActions\"}],\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "C04",
+      "band": "code",
+      "tool": "code_search",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 20,
+      "body_bytes": 2845,
+      "top_body_bytes": 0,
+      "context_bytes": 8669,
+      "latency_ms": 49,
+      "latency_samples": [
+        49,
+        38,
+        37
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"sanitize_segment_test.go\",\"kind\":\"file\",\"path\":\"entityid/sanitize_segment_test.go\",\"lines\":[1,122],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.entityid-sanitize_segment_test-go\"},{\"name\":\"stoputil_test.go\",\"kind\":\"file\",\"path\":\"internal/governance/stoputil_test.go\",\"lines\":[1,17],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.internal-governance-stoputil_test-go\"},{\"name\":\"populateRepoFiles\",\"kind\":\"function\",\"path\":\"source/ast/hierarchy.go\",\"lines\":[217,221],\"body\":\"func populateRepoFiles(repo *CodeEntity, filesByDir map[string][]string) {\\n\\tif rootFiles, ok := filesByDir[\\\"\\\"]; ok {\\n\\t\\trepo.Contains = append(repo.Contains, rootFiles...)\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-hierarchy-go-populateRepoFiles\"},{\"name\":\"stoputil_test.go\",\"kind\":\"file\",\"path\":\"processor/ast-source/stoputil_test.go\",\"lines\":[1,17],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.processor-ast-source-stoputil_test-go\"},{\"name\":\"error\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/WorkbenchShell.svelte\",\"lines\":[20,20],\"body\":\"    loading,\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-lib-components-WorkbenchShell-svelte-error\"},{\"name\":\"stoputil_test.go\",\"kind\":\"file\",\"path\":\"processor/source-manifest/stoputil_test.go\",\"lines\":[1,17],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.processor-source-manifest-stoputil_test-go\"},{\"name\":\"Endpoint\",\"kind\":\"function\",\"path\":\"internal/miniotest/miniotest.go\",\"lines\":[60,68],\"body\":\"func Endpoint(t *testing.T) string {\\n\\tt.Helper()\\n\\n\\tonce.Do(func() { endpoint, terminate, startErr = start() })\\n\\tif startErr != nil {\\n\\t\\tt.Fatalf(\\\"start MinIO: %v\\\", startErr)\\n\\t}\\n\\treturn endpoint\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.internal-miniotest-miniotest-go-Endpoint\"},{\"name\":\"PublishToStreamWithMsgID\",\"kind\":\"method\",\"path\":\"internal/entitypub/publisher_loss_test.go\",\"lines\":[27,29],\"body\":\"func (g *gatedPublisher) PublishToStreamWithMsgID(ctx context.Context, subject string, data []byte, _ string) error {\\n\\treturn g.PublishToStream(ctx, subject, data)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.internal-entitypub-publisher_loss_test-go-gatedPublisher-PublishToStreamWithMsgID\"},{\"name\":\"Endpoint\",\"kind\":\"function\",\"path\":\"internal/garagetest/garagetest.go\",\"lines\":[104,112],\"body\":\"func Endpoint(t *testing.T) string {\\n\\tt.Helper()\\n\\n\\tonce.Do(func() { endpoint, terminate, startErr = start() })\\n\\tif startErr != nil {\\n\\t\\tt.Fatalf(\\\"start Garage: %v\\\", startErr)\\n\\t}\\n\\treturn endpoint\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.internal-garagetest-garagetest-go-Endpoint\"},{\"name\":\"TestIntegration_Put_Overwrite\",\"kind\":\"function\",\"path\":\"storage/s3store/store_integration_test.go\",\"lines\":[81,95],\"body\":\"func TestIntegration_Put_Overwrite(t *testing.T) {\\n\\tstore := newContainerStore(t)\\n\\tconst key = \\\"reports/q3.md\\\"\\n\\n\\tput(t, store, key, []byte(\\\"first\\\"))\\n\\tput(t, store, key, []byte(\\\"second\\\"))\\n\\n\\tgot, err := store.Get(t.Context(), key)\\n\\tif err != nil {\\n\\t\\tt.Fatalf(\\\"Get: %v\\\", err)\\n\\t}\\n\\tif string(got) != \\\"second\\\" {\\n\\t\\tt.Errorf(\\\"Get = %q, want %q\\\", got, \\\"second\\\")\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.storage-s3store-store_integration_test-go-TestIntegration_Put_Overwrite\"},{\"name\":\"entityid.go\",\"kind\":\"file\",\"path\":\"entityid/entityid.go\",\"lines\":[1,448],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.entityid-entityid-go\"},{\"name\":\"newGatedPublisher\",\"kind\":\"function\",\"path\":\"internal/entitypub/publisher_loss_test.go\",\"lines\":[23,25],\"body\":\"func newGatedPublisher() *gatedPublisher {\\n\\treturn &gatedPublisher{gate: make(chan struct{}), sendSeen: make(chan struct{}, 1024)}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.internal-entitypub-publisher_loss_test-go-newGatedPublisher\"},{\"name\":\"DocContent\",\"kind\":\"const\",\"path\":\"source/vocabulary/predicates.go\",\"lines\":[22,22],\"body\":\"\\tDocContent = \\\"source.doc.content\\\"\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.source-vocabulary-predicates-go-DocContent\"},{\"name\":\"startErr\",\"kind\":\"var\",\"path\":\"internal/garagetest/garagetest.go\",\"lines\":[96,96],\"body\":\"\\tstartErr  error\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.var.internal-garagetest-garagetest-go-startErr\"},{\"name\":\"TestPut_Overwrite\",\"kind\":\"function\",\"path\":\"storage/filestore/store_test.go\",\"lines\":[138,157],\"body\":\"func TestPut_Overwrite(t *testing.T) {\\n\\ts := newStore(t)\\n\\tctx := context.Background()\\n\\n\\tkey := \\\"file.txt\\\"\\n\\tif err := s.Put(ctx, key, []byte(\\\"first\\\")); err != nil {\\n\\t\\tt.Fatalf(\\\"Put first: %v\\\", err)\\n\\t}\\n\\tif err := s.Put(ctx, key, []byte(\\\"second\\\")); err != nil {\\n\\t\\tt.Fatalf(\\\"Put second: %v\\\", err)\\n\\t}\\n\\n\\tgot, err := s.Get(ctx, key)\\n\\tif err != nil {\\n\\t\\tt.Fatalf(\\\"Get: %v\\\", err)\\n\\t}\\n\\tif string(got) != \\\"second\\\" {\\n\\t\\tt.Errorf(\\\"got %q, want %q\\\", got, \\\"second\\\")\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.storage-filestore-store_test-go-TestPut_Overwrite"
+    },
+    {
+      "id": "C05",
+      "band": "code",
+      "tool": "code_search",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 20,
+      "body_bytes": 2737,
+      "top_body_bytes": 0,
+      "context_bytes": 8676,
+      "latency_ms": 44,
+      "latency_samples": [
+        44,
+        42,
+        39
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"source_projection.go\",\"kind\":\"file\",\"path\":\"processor/supersession/source_projection.go\",\"lines\":[1,30],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.processor-supersession-source_projection-go\"},{\"name\":\"readRepoFile\",\"kind\":\"function\",\"path\":\"processor/mcp-gateway/component_test.go\",\"lines\":[128,135],\"body\":\"func readRepoFile(t *testing.T, path string) string {\\n\\tt.Helper()\\n\\tdata, err := os.ReadFile(\\\"../../\\\" + path)\\n\\tif err != nil {\\n\\t\\tt.Fatalf(\\\"read %s: %v\\\", path, err)\\n\\t}\\n\\treturn string(data)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.processor-mcp-gateway-component_test-go-readRepoFile\"},{\"name\":\"renderer.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/graph/renderer.ts\",\"lines\":[1,165],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-graph-renderer-ts\"},{\"name\":\"TestPromptOutputContainsLabel\",\"kind\":\"function\",\"path\":\"cli/term_test.go\",\"lines\":[119,125],\"body\":\"func TestPromptOutputContainsLabel(t *testing.T) {\\n\\tterm, out := newTestTerm(\\\"x\\\\n\\\")\\n\\tterm.Prompt(\\\"My Label\\\", \\\"\\\")\\n\\tif !strings.Contains(out.String(), \\\"My Label\\\") {\\n\\t\\tt.Fatalf(\\\"expected label in output, got: %q\\\", out.String())\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.cli-term_test-go-TestPromptOutputContainsLabel\"},{\"name\":\"coherent\",\"kind\":\"const\",\"path\":\"ui/src/lib/contracts/graph.ts\",\"lines\":[207,210],\"body\":\"  const coherent =\\n    typeof item.coherent === \\\"boolean\\\"\\n      ? item.coherent\\n      : item.start === item.end;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.const.ui-src-lib-contracts-graph-ts-coherent\"},{\"name\":\"DefaultMaxEntities\",\"kind\":\"const\",\"path\":\"processor/supersession/config.go\",\"lines\":[26,26],\"body\":\"\\tDefaultMaxEntities = 200000\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.processor-supersession-config-go-DefaultMaxEntities\"},{\"name\":\"TestSameFileImplementsResolvesToDefinition\",\"kind\":\"function\",\"path\":\"source/ast/java/reference_resolution_test.go\",\"lines\":[59,77],\"body\":\"func TestSameFileImplementsResolvesToDefinition(t *testing.T) {\\n\\tents, _ := parseAll(t, map[string]string{\\n\\t\\t\\\"a/M.java\\\": \\\"package a;\\\\ninterface Pet {}\\\\ninterface Runnable {}\\\\nclass Dog implements Pet, Runnable {}\\\\n\\\",\\n\\t})\\n\\tdog, pet, runnable := ents[\\\"Dog\\\"], ents[\\\"Pet\\\"], ents[\\\"Runnable\\\"]\\n\\tif dog == nil || pet == nil || runnable == nil {\\n\\t\\tt.Fatalf(\\\"missing entities: %v\\\", ents)\\n\\t}\\n\\tif len(dog.Implements) != 2 {\\n\\t\\tt.Fatalf(\\\"Dog.Implements = %v, want 2 (Pet, Runnable)\\\", dog.Implements)\\n\\t}\\n\\tgot := map[string]bool{dog.Implements[0]: true, dog.Implements[1]: true}\\n\\tif !got[pet.ID] {\\n\\t\\tt.Errorf(\\\"implements missing Pet definition %q; got %v\\\", pet.ID, dog.Implements)\\n\\t}\\n\\tif !got[runnable.ID] {\\n\\t\\tt.Errorf(\\\"implements missing Runnable definition %q; got %v\\\", runnable.ID, dog.Implements)\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-java-reference_resolution_test-go-TestSameFileImplementsResolvesToDefinition\"},{\"name\":\"payload_ownership.go\",\"kind\":\"file\",\"path\":\"internal/entitypub/payload_ownership.go\",\"lines\":[1,31],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.internal-entitypub-payload_ownership-go\"},{\"name\":\"LayoutPoint\",\"kind\":\"interface\",\"path\":\"ui/src/lib/graph/layout.ts\",\"lines\":[1,5],\"body\":\"export interface LayoutPoint {\\n  handle: string;\\n  x: number;\\n  y: number;\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.interface.ui-src-lib-graph-layout-ts-LayoutPoint\"},{\"name\":\"payload_ownership_test.go\",\"kind\":\"file\",\"path\":\"internal/entitypub/payload_ownership_test.go\",\"lines\":[1,90],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.internal-entitypub-payload_ownership_test-go\"},{\"name\":\"DeleteComponentFromKV\",\"kind\":\"method\",\"path\":\"processor/source-manifest/ingest_test.go\",\"lines\":[37,37],\"body\":\"func (stubStore) DeleteComponentFromKV(_ context.Context, _ string) error { return nil }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-source-manifest-ingest_test-go-stubStore-DeleteComponentFromKV\"},{\"name\":\"RoleContent\",\"kind\":\"const\",\"path\":\"processor/source-manifest/status.go\",\"lines\":[49,49],\"body\":\"\\tRoleContent      = \\\"content\\\"\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.processor-source-manifest-status-go-RoleContent\"},{\"name\":\"maxEntities\",\"kind\":\"method\",\"path\":\"processor/supersession/config.go\",\"lines\":[77,82],\"body\":\"func (c *Config) maxEntities() int {\\n\\tif c.MaxEntities <= 0 {\\n\\t\\treturn DefaultMaxEntities\\n\\t}\\n\\treturn c.MaxEntities\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-supersession-config-go-Config-maxEntities\"},{\"name\":\"subject_ownership_test.go\",\"kind\":\"file\",\"path\":\"cmd/semsource/subject_ownership_test.go\",\"lines\":[1,101],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.cmd-semsource-subject_ownership_test-go\"},{\"name\":\"groups\",\"kind\":\"const\",\"path\":\"ui/src/lib/graph/drilldown.test.ts\",\"lines\":[86,86],\"body\":\"    const groups = groupEntities(nodes, \\\"len\\\");\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.const.u"
+    },
+    {
+      "id": "C06",
+      "band": "code",
+      "tool": "code_search",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 20,
+      "body_bytes": 3218,
+      "top_body_bytes": 251,
+      "context_bytes": 9191,
+      "latency_ms": 44,
+      "latency_samples": [
+        44,
+        40,
+        41
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"TestExternalDefaultImportCallEmitsExternalMarker\",\"kind\":\"function\",\"path\":\"source/ast/ts/calls_test.go\",\"lines\":[416,421],\"body\":\"func TestExternalDefaultImportCallEmitsExternalMarker(t *testing.T) {\\n\\tents := parseTree(t, map[string]string{\\n\\t\\t\\\"m.ts\\\": \\\"import Def from 'some-package';\\\\nfunction run() { Def(); }\\\\n\\\",\\n\\t})\\n\\tassertCallsExactly(t, ents, \\\"run\\\", \\\"external:some-package\\\")\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-ts-calls_test-go-TestExternalDefaultImportCallEmitsExternalMarker\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/ast-source/component.go\",\"lines\":[868,870],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-ast-source-component-go-Component-publishEntity\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/image-source/component.go\",\"lines\":[360,362],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-image-source-component-go-Component-publishEntity\"},{\"name\":\"mustMarshal\",\"kind\":\"function\",\"path\":\"processor/source-manifest/component_test.go\",\"lines\":[512,519],\"body\":\"func mustMarshal(t *testing.T, v any) []byte {\\n\\tt.Helper()\\n\\tdata, err := json.Marshal(v)\\n\\tif err != nil {\\n\\t\\tt.Fatal(err)\\n\\t}\\n\\treturn data\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.processor-source-manifest-component_test-go-mustMarshal\"},{\"name\":\"errorGraph\",\"kind\":\"struct\",\"path\":\"processor/code-context/http_error_test.go\",\"lines\":[26,29],\"body\":\"type errorGraph struct {\\n\\t*fusiontest.MemGraph\\n\\tresolveErr error\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.struct.processor-code-context-http_error_test-go-errorGraph\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/url-source/component.go\",\"lines\":[364,366],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-url-source-component-go-Component-publishEntity\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/video-source/component.go\",\"lines\":[368,370],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-video-source-component-go-Component-publishEntity\"},{\"name\":\"storage_file.go\",\"kind\":\"file\",\"path\":\"handler/storage_file.go\",\"lines\":[1,45],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.handler-storage_file-go\"},{\"name\":\"isHeading\",\"kind\":\"function\",\"path\":\"test/e2e/quickstart_doc.go\",\"lines\":[191,197],\"body\":\"func isHeading(trimmed string) bool {\\n\\tif !strings.HasPrefix(trimmed, \\\"#\\\") {\\n\\t\\treturn false\\n\\t}\\n\\trest := strings.TrimLeft(trimmed, \\\"#\\\")\\n\\treturn strings.HasPrefix(rest, \\\" \\\") && strings.TrimSpace(rest) != \\\"\\\"\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.test-e2e-quickstart_doc-go-isHeading\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/objectstore-source/component.go\",\"lines\":[461,463],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-objectstore-source-component-go-Component-publishEntity\"},{\"name\":\"seeded\",\"kind\":\"function\",\"path\":\"processor/source-manifest/status_loss_readiness_test.go\",\"lines\":[5,14],\"body\":\"func seeded(name string, seedLost, errCount int64) *SourceStatusReport {\\n\\treturn &SourceStatusReport{\\n\\t\\tInstanceName: name,\\n\\t\\tSourceType:   \\\"ast\\\",\\n\\t\\tPhase:        SourcePhaseWatching,\\n\\t\\tEntityCount:  100,\\n\\t\\tSeedLost:     seedLost,\\n\\t\\tErrorCount:   errCount,\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.processor-source-manifest-status_loss_readiness_test-go-seeded\"},{\"name\":\"storage_file_test.go\",\"kind\":\"file\",\"path\":\"handler/storage_file_test.go\",\"lines\":[1,118],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.handler-storage_file_test-go\"},{\"name\":\"Terminate\",\"kind\":\"method\",\"path\":\"internal/garagetest/lifecycle_test.go\",\"lines\":[20,22],\"body\":\"func (c *fixtureContainer) Terminate(ctx context.Context, _ ...testcontainers.TerminateOption) error {\\n\\treturn c.stop(ctx)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.internal-garagetest-lifecycle_test-go-fixtureContainer-Terminate\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/doc-source/component.go\",\"lines\":[431,433],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-doc-source-component-go-Component-publishEntity\"},{\"name\":\"Terminate\",\"kind\":\"method\",\"path\":\"internal/miniotest/start_test."
+    },
+    {
+      "id": "I01",
+      "band": "impact",
+      "tool": "code_impact",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 674,
+      "top_body_bytes": 674,
+      "context_bytes": 2333,
+      "latency_ms": 106,
+      "latency_samples": [
+        106,
+        98,
+        110
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"SanitizeInstance\",\"kind\":\"function\",\"path\":\"entityid/entityid.go\",\"lines\":[318,347],\"body\":\"func SanitizeInstance(s string) string {\\n\\tvar b strings.Builder\\n\\tb.Grow(len(s))\\n\\tfor _, r := range s {\\n\\t\\tif isAllowedInstanceRune(r) {\\n\\t\\t\\tb.WriteRune(r)\\n\\t\\t} else {\\n\\t\\t\\tb.WriteRune('-')\\n\\t\\t}\\n\\t}\\n\\tout := b.String()\\n\\tfor strings.Contains(out, \\\"--\\\") {\\n\\t\\tout = strings.ReplaceAll(out, \\\"--\\\", \\\"-\\\")\\n\\t}\\n\\tout = strings.TrimFunc(out, func(r rune) bool { return !isASCIIAlnum(r) })\\n\\n\\tif out == \\\"\\\" {\\n\\t\\treturn shortHash(s)\\n\\t}\\n\\tif len(out) > maxInstanceLen {\\n\\t\\tsuffix := shortHash(s)\\n\\t\\tprefix := strings.TrimRightFunc(out[:maxInstanceLen-len(suffix)-1],\\n\\t\\t\\tfunc(r rune) bool { return !isASCIIAlnum(r) })\\n\\t\\tif prefix == \\\"\\\" {\\n\\t\\t\\treturn suffix\\n\\t\\t}\\n\\t\\treturn prefix + \\\"-\\\" + suffix\\n\\t}\\n\\treturn out\\n}\",\"relations\":{\"callee\":[{\"name\":\"isASCIIAlnum\",\"path\":\"entityid/entityid.go\",\"line\":387},{\"name\":\"isAllowedInstanceRune\",\"path\":\"entityid/entityid.go\",\"line\":383},{\"name\":\"shortHash\",\"path\":\"entityid/entityid.go\",\"line\":391}],\"caller\":[{\"name\":\"TestSanitizeInstance\",\"path\":\"entityid/entityid_test.go\",\"line\":255},{\"name\":\"TestSanitizeInstance_DeterministicForSameInput\",\"path\":\"entityid/entityid_test.go\",\"line\":304},{\"name\":\"TestSanitizeInstance_FallbackHash\",\"path\":\"entityid/entityid_test.go\",\"line\":292},{\"name\":\"TestSanitizeInstance_LengthCapPreservesUniqueness\",\"path\":\"entityid/entityid_test.go\",\"line\":313},{\"name\":\"DocumentEntityID\",\"path\":\"handler/doc/entities.go\",\"line\":85},{\"name\":\"chunkInstance\",\"path\":\"handler/doc/entities.go\",\"line\":139},{\"name\":\"BuildAuthorEntity\",\"path\":\"handler/git/entities.go\",\"line\":37},{\"name\":\"BuildBranchEntity\",\"path\":\"handler/git/entities.go\",\"line\":57},{\"name\":\"newAuthorEntity\",\"path\":\"handler/git/entities.go\",\"line\":171},{\"name\":\"newBranchEntity\",\"path\":\"handler/git/entities.go\",\"line\":213},{\"name\":\"Triples\",\"path\":\"handler/git/entities.go\",\"line\":113}],\"container\":[{\"name\":\"entityid.go\",\"path\":\"entityid/entityid.go\",\"line\":1}]},\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.entityid-entityid-go-SanitizeInstance\"}],\"impact\":{\"nodes\":20,\"files\":7,\"truncated\":false},\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "I02",
+      "band": "impact",
+      "tool": "code_impact",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 117,
+      "top_body_bytes": 117,
+      "context_bytes": 1915,
+      "latency_ms": 134,
+      "latency_samples": [
+        134,
+        139,
+        141
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"splitPassages\",\"kind\":\"function\",\"path\":\"handler/doc/splitter.go\",\"lines\":[89,91],\"body\":\"func splitPassages(content []byte, f docFormat) []passage {\\n\\treturn splitPassagesBounded(content, defaultBounds, f)\\n}\",\"relations\":{\"callee\":[{\"name\":\"splitPassagesBounded\",\"path\":\"handler/doc/splitter.go\",\"line\":95}],\"caller\":[{\"name\":\"TestAsciiDocAncestryIsOutermostFirst\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":64},{\"name\":\"TestAsciiDocHeadingInFencedBlockIsNotAHeading\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":105},{\"name\":\"TestAsciiDocPassagesCarryHeadings\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":25},{\"name\":\"TestEquivalentDocumentsAgreeAcrossFormats\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":45},{\"name\":\"TestPlainTextStillProducesAnonymousPassages\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":135},{\"name\":\"TestSetextMarkdownIsNotReadAsAsciiDoc\",\"path\":\"handler/doc/asciidoc_test.go\",\"line\":83},{\"name\":\"TestDividedBlocksStillTileTheDocument\",\"path\":\"handler/doc/homogeneous_test.go\",\"line\":161},{\"name\":\"TestKeyGroupsSurviveTheFloorMerge\",\"path\":\"handler/doc/homogeneous_test.go\",\"line\":96},{\"name\":\"TestREADMEConfigurationSeparatesTheNATSDefault\",\"path\":\"handler/doc/homogeneous_test.go\",\"line\":128},{\"name\":\"TestIsolateFencedBlocks\",\"path\":\"handler/doc/isolation_test.go\",\"line\":18},{\"name\":\"TestIsolateFencedBlocks_NeverDividesABlock\",\"path\":\"handler/doc/isolation_test.go\",\"line\":72},{\"name\":\"TestIsolateFencedBlocks_TilesExactly\",\"path\":\"handler/doc/isolation_test.go\",\"line\":114}],\"container\":[{\"name\":\"splitter.go\",\"path\":\"handler/doc/splitter.go\",\"line\":1}]},\"relations_truncated\":true,\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.handler-doc-splitter-go-splitPassages\"}],\"impact\":{\"nodes\":31,\"files\":5,\"truncated\":false},\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "N01",
+      "band": "negative",
+      "tool": "code_context",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 128,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        18,
+        18
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"misses\":[{\"query\":\"ZzQuuxFrobnicatorThatDoesNotExist\"}],\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "N02",
+      "band": "negative",
+      "tool": "doc_context",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        17,
+        18
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "X01",
+      "band": "discrimination",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "top node missing: nats_monitor_host_port=8222",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 18,
+      "latency_samples": [
+        18,
+        16,
+        15
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "X02",
+      "band": "discrimination",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "top node missing: -p 8083:8083",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 17,
+      "latency_samples": [
+        17,
+        20,
+        18
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "P01",
+      "band": "composition",
+      "tool": "code_impact",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 674,
+      "top_body_bytes": 674,
+      "context_bytes": 2333,
+      "latency_ms": 132,
+      "latency_samples": [
+        132,
+        108,
+        108
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"SanitizeInstance\",\"kind\":\"function\",\"path\":\"entityid/entityid.go\",\"lines\":[318,347],\"body\":\"func SanitizeInstance(s string) string {\\n\\tvar b strings.Builder\\n\\tb.Grow(len(s))\\n\\tfor _, r := range s {\\n\\t\\tif isAllowedInstanceRune(r) {\\n\\t\\t\\tb.WriteRune(r)\\n\\t\\t} else {\\n\\t\\t\\tb.WriteRune('-')\\n\\t\\t}\\n\\t}\\n\\tout := b.String()\\n\\tfor strings.Contains(out, \\\"--\\\") {\\n\\t\\tout = strings.ReplaceAll(out, \\\"--\\\", \\\"-\\\")\\n\\t}\\n\\tout = strings.TrimFunc(out, func(r rune) bool { return !isASCIIAlnum(r) })\\n\\n\\tif out == \\\"\\\" {\\n\\t\\treturn shortHash(s)\\n\\t}\\n\\tif len(out) > maxInstanceLen {\\n\\t\\tsuffix := shortHash(s)\\n\\t\\tprefix := strings.TrimRightFunc(out[:maxInstanceLen-len(suffix)-1],\\n\\t\\t\\tfunc(r rune) bool { return !isASCIIAlnum(r) })\\n\\t\\tif prefix == \\\"\\\" {\\n\\t\\t\\treturn suffix\\n\\t\\t}\\n\\t\\treturn prefix + \\\"-\\\" + suffix\\n\\t}\\n\\treturn out\\n}\",\"relations\":{\"callee\":[{\"name\":\"isASCIIAlnum\",\"path\":\"entityid/entityid.go\",\"line\":387},{\"name\":\"isAllowedInstanceRune\",\"path\":\"entityid/entityid.go\",\"line\":383},{\"name\":\"shortHash\",\"path\":\"entityid/entityid.go\",\"line\":391}],\"caller\":[{\"name\":\"TestSanitizeInstance\",\"path\":\"entityid/entityid_test.go\",\"line\":255},{\"name\":\"TestSanitizeInstance_DeterministicForSameInput\",\"path\":\"entityid/entityid_test.go\",\"line\":304},{\"name\":\"TestSanitizeInstance_FallbackHash\",\"path\":\"entityid/entityid_test.go\",\"line\":292},{\"name\":\"TestSanitizeInstance_LengthCapPreservesUniqueness\",\"path\":\"entityid/entityid_test.go\",\"line\":313},{\"name\":\"DocumentEntityID\",\"path\":\"handler/doc/entities.go\",\"line\":85},{\"name\":\"chunkInstance\",\"path\":\"handler/doc/entities.go\",\"line\":139},{\"name\":\"BuildAuthorEntity\",\"path\":\"handler/git/entities.go\",\"line\":37},{\"name\":\"BuildBranchEntity\",\"path\":\"handler/git/entities.go\",\"line\":57},{\"name\":\"newAuthorEntity\",\"path\":\"handler/git/entities.go\",\"line\":171},{\"name\":\"newBranchEntity\",\"path\":\"handler/git/entities.go\",\"line\":213},{\"name\":\"Triples\",\"path\":\"handler/git/entities.go\",\"line\":113}],\"container\":[{\"name\":\"entityid.go\",\"path\":\"entityid/entityid.go\",\"line\":1}]},\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.entityid-entityid-go-SanitizeInstance\"}],\"impact\":{\"nodes\":20,\"files\":7,\"truncated\":false},\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "P02",
+      "band": "composition",
+      "tool": "code_impact",
+      "verdict": "miss",
+      "reason": "missing required: triggerremovallifecyclerun",
+      "nodes": 1,
+      "body_bytes": 662,
+      "top_body_bytes": 662,
+      "context_bytes": 1672,
+      "latency_ms": 48,
+      "latency_samples": [
+        48,
+        54,
+        50
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"PublishLifecycleTrigger\",\"kind\":\"function\",\"path\":\"graph/lifecycle.go\",\"lines\":[92,109],\"body\":\"func PublishLifecycleTrigger(ctx context.Context, client *natsclient.Client, req LifecycleRunRequest) (*LifecycleRunResponse, error) {\\n\\tif client == nil {\\n\\t\\treturn nil, fmt.Errorf(\\\"publish lifecycle trigger: nil NATS client\\\")\\n\\t}\\n\\tdata, err := json.Marshal(req)\\n\\tif err != nil {\\n\\t\\treturn nil, fmt.Errorf(\\\"marshal lifecycle trigger: %w\\\", err)\\n\\t}\\n\\treply, err := client.RequestClassified(ctx, LifecycleTriggerSubject, data, lifecycleTriggerTimeout)\\n\\tif err != nil {\\n\\t\\treturn nil, err\\n\\t}\\n\\tvar resp LifecycleRunResponse\\n\\tif err := json.Unmarshal(reply, &resp); err != nil {\\n\\t\\treturn nil, fmt.Errorf(\\\"decode lifecycle trigger response: %w\\\", err)\\n\\t}\\n\\treturn &resp, nil\\n}\",\"relations\":{\"caller\":[{\"name\":\"TestPublishLifecycleTrigger_NilClient\",\"path\":\"graph/lifecycle_test.go\",\"line\":53},{\"name\":\"TestIntegration_StalenessLifecycle\",\"path\":\"internal/governance/staleness_lifecycle_integration_test.go\",\"line\":50},{\"name\":\"triggerLifecycleRun\",\"path\":\"processor/ast-source/component.go\",\"line\":660},{\"name\":\"triggerLifecycleRun\",\"path\":\"processor/doc-source/component.go\",\"line\":525},{\"name\":\"retract\",\"path\":\"processor/objectstore-source/component.go\",\"line\":364}],\"container\":[{\"name\":\"lifecycle.go\",\"path\":\"graph/lifecycle.go\",\"line\":1}]},\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.graph-lifecycle-go-PublishLifecycleTrigger\"}],\"impact\":{\"nodes\":5,\"files\":5,\"truncated\":false},\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "P03",
+      "band": "composition",
+      "tool": "code_impact",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 125,
+      "top_body_bytes": 125,
+      "context_bytes": 1881,
+      "latency_ms": 130,
+      "latency_samples": [
+        130,
+        142,
+        138
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"ScopedSystemSlug\",\"kind\":\"function\",\"path\":\"entityid/entityid.go\",\"lines\":[251,253],\"body\":\"func ScopedSystemSlug(project, version string) string {\\n\\treturn VersionScopedSlug(SystemSlug(project), SystemSlug(version))\\n}\",\"relations\":{\"callee\":[{\"name\":\"SystemSlug\",\"path\":\"entityid/entityid.go\",\"line\":132},{\"name\":\"VersionScopedSlug\",\"path\":\"entityid/entityid.go\",\"line\":223}],\"caller\":[{\"name\":\"sourceScopeSystems\",\"path\":\"cmd/semsource/source_scopes.go\",\"line\":34},{\"name\":\"TestScopedSystemSlug_FinalSlug\",\"path\":\"entityid/entityid_test.go\",\"line\":572},{\"name\":\"TestScopedSystemSlug_ShortValues\",\"path\":\"entityid/entityid_test.go\",\"line\":619},{\"name\":\"TestIntegration_StalenessLifecycle\",\"path\":\"internal/governance/staleness_lifecycle_integration_test.go\",\"line\":50},{\"name\":\"publishVersioned\",\"path\":\"internal/governance/supersession_integration_test.go\",\"line\":136},{\"name\":\"publishVersionedBody\",\"path\":\"internal/governance/version_diff_integration_test.go\",\"line\":158},{\"name\":\"TestIntegration_SubmoduleExpansionSeedsScopedEntities\",\"path\":\"processor/ast-source/submodule_expansion_integration_test.go\",\"line\":64},{\"name\":\"systemsForComponentConfig\",\"path\":\"processor/source-manifest/lifecycle_scope.go\",\"line\":34},{\"name\":\"TestParse_SubmoduleIdentityIsCheckoutLocationIndependent\",\"path\":\"source/ast/golang/identity_dedup_test.go\",\"line\":22},{\"name\":\"System\",\"path\":\"handler/objectstore/handler.go\",\"line\":349},{\"name\":\"initializeWatchers\",\"path\":\"processor/ast-source/component.go\",\"line\":214}],\"container\":[{\"name\":\"entityid.go\",\"path\":\"entityid/entityid.go\",\"line\":1}]},\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.entityid-entityid-go-ScopedSystemSlug\"}],\"impact\":{\"nodes\":33,\"files\":15,\"truncated\":false},\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "P04",
+      "band": "composition",
+      "tool": "code_impact",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 1,
+      "body_bytes": 680,
+      "top_body_bytes": 680,
+      "context_bytes": 1964,
+      "latency_ms": 286,
+      "latency_samples": [
+        286,
+        294,
+        280
+      ],
+      "answer": "{\"provenance\":\"deterministic\",\"nodes\":[{\"name\":\"URLToSlug\",\"kind\":\"function\",\"path\":\"workspace/workspace.go\",\"lines\":[162,182],\"body\":\"func URLToSlug(rawURL string) string {\\n\\t// Handle SSH shorthand: git@github.com:owner/repo.git → github.com/owner/repo.git\\n\\tif strings.HasPrefix(rawURL, \\\"git@\\\") {\\n\\t\\trawURL = strings.TrimPrefix(rawURL, \\\"git@\\\")\\n\\t\\trawURL = strings.Replace(rawURL, \\\":\\\", \\\"/\\\", 1)\\n\\t}\\n\\n\\t// Strip .git suffix before any further processing so it is removed\\n\\t// regardless of which parse path we take below.\\n\\trawURL = strings.TrimSuffix(rawURL, \\\".git\\\")\\n\\n\\t// Parse as URL to extract host + path.\\n\\tparsed, err := url.Parse(rawURL)\\n\\tif err != nil || parsed.Host == \\\"\\\" {\\n\\t\\t// Fallback: just slugify the whole string.\\n\\t\\treturn slugify(rawURL)\\n\\t}\\n\\n\\tcombined := parsed.Host + parsed.Path\\n\\treturn slugify(combined)\\n}\",\"relations\":{\"callee\":[{\"name\":\"slugify\",\"path\":\"workspace/workspace.go\",\"line\":468}],\"caller\":[{\"name\":\"startSubmoduleWatchers\",\"path\":\"cmd/semsource/run.go\",\"line\":1099},{\"name\":\"expandMultiBranch\",\"path\":\"config/expand.go\",\"line\":154},{\"name\":\"expandSingleBranch\",\"path\":\"config/expand.go\",\"line\":92},{\"name\":\"TestTick_ExpandsDualPinWithCanonicalIdentityAndScopedInstances\",\"path\":\"internal/subwatch/subwatch_test.go\",\"line\":116},{\"name\":\"EnsureRepo\",\"path\":\"workspace/workspace.go\",\"line\":36},{\"name\":\"TestURLToSlug\",\"path\":\"workspace/workspace_test.go\",\"line\":12},{\"name\":\"systemSlug\",\"path\":\"handler/git/handler.go\",\"line\":398},{\"name\":\"Tick\",\"path\":\"internal/subwatch/subwatch.go\",\"line\":123},{\"name\":\"spawn\",\"path\":\"internal/subwatch/subwatch.go\",\"line\":202}],\"container\":[{\"name\":\"workspace.go\",\"path\":\"workspace/workspace.go\",\"line\":1}]},\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.workspace-workspace-go-URLToSlug\"}],\"impact\":{\"nodes\":77,\"files\":26,\"truncated\":false},\"truncated\":false,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "L01",
+      "band": "loose",
+      "tool": "code_search",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 20,
+      "body_bytes": 4275,
+      "top_body_bytes": 0,
+      "context_bytes": 10207,
+      "latency_ms": 46,
+      "latency_samples": [
+        46,
+        43,
+        39
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"provider_test.go\",\"kind\":\"file\",\"path\":\"test/setup03a/provider_test.go\",\"lines\":[1,148],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.test-setup03a-provider_test-go\"},{\"name\":\"ProjectSummaryState\",\"kind\":\"type\",\"path\":\"ui/src/lib/api/workbench.ts\",\"lines\":[29,29],\"body\":\"export type ProjectSummaryState = ResourceState<ProjectSummary>;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.type.ui-src-lib-api-workbench-ts-ProjectSummaryState\"},{\"name\":\"reducers\",\"kind\":\"const\",\"path\":\"ui/src/lib/graph/renderer.ts\",\"lines\":[136,136],\"body\":\"    const reducers = createSelectionReducers(graph, selected, focused);\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.const.ui-src-lib-graph-renderer-ts-reducers\"},{\"name\":\"CodeBodyKey\",\"kind\":\"const\",\"path\":\"source/ast/predicates.go\",\"lines\":[78,78],\"body\":\"\\tCodeBodyKey   = \\\"code.body.key\\\"   // storage key: the entity's body blob (content hash)\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.source-ast-predicates-go-CodeBodyKey\"},{\"name\":\"reducers\",\"kind\":\"const\",\"path\":\"ui/src/lib/graph/selection.test.ts\",\"lines\":[24,24],\"body\":\"    const reducers = createSelectionReducers(graph, null, new Set([\\\"a\\\", \\\"b\\\"]));\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.const.ui-src-lib-graph-selection-test-ts-reducers\"},{\"name\":\"runQuickstartTrack\",\"kind\":\"function\",\"path\":\"test/e2e/quickstart_runner.go\",\"lines\":[111,155],\"body\":\"func runQuickstartTrack(t *testing.T, track string, natsURL string, steps []quickstartStep) {\\n\\tt.Helper()\\n\\n\\tdocPath := filepath.Join(repoRoot(t), \\\"docs\\\", \\\"QUICKSTART.md\\\")\\n\\traw, err := os.ReadFile(docPath)\\n\\tif err != nil {\\n\\t\\tt.Fatalf(\\\"read quickstart document: %v\\\", err)\\n\\t}\\n\\tblocks, err := ExtractQuickstartBlocks(string(raw), track)\\n\\tif err != nil {\\n\\t\\tt.Fatalf(\\\"extract %s track blocks: %v\\\", track, err)\\n\\t}\\n\\tif len(blocks) != len(steps) {\\n\\t\\tvar got []string\\n\\t\\tfor i, b := range blocks {\\n\\t\\t\\tgot = append(got, fmt.Sprintf(\\\"  block %d: %s (line %d)\\\", i+1, b.Heading, b.Line))\\n\\t\\t}\\n\\t\\tt.Fatalf(\\\"docs/QUICKSTART.md %s track has %d marked blocks but the test defines %d steps.\\\\n\\\"+\\n\\t\\t\\t\\\"A documented step changed — decide what must be true after it and update the step table.\\\\n%s\\\",\\n\\t\\t\\ttrack, len(blocks), len(steps), strings.Join(got, \\\"\\\\n\\\"))\\n\\t}\\n\\n\\tbinPath := buildBinary(t)\\n\\tenv := newQuickstartEnv(t, natsURL, binPath)\\n\\tdefer env.teardown(t)\\n\\n\\tfor i, block := range blocks {\\n\\t\\tstep := steps[i]\\n\\t\\tlabel := fmt.Sprintf(\\\"quickstart[%s] step %d/%d %q (doc: %q, line %d)\\\",\\n\\t\\t\\ttrack, i+1, len(steps), step.name, block.Heading, block.Line)\\n\\t\\tt.Logf(\\\"%s:\\\\n%s\\\", label, block.Script)\\n\\n\\t\\tif step.background {\\n\\t\\t\\tenv.startBackground(t, label, block.Script)\\n\\t\\t} else {\\n\\t\\t\\tenv.runBlock(t, label, block.Script, step.retryFor, step.retryUntil)\\n\\t\\t}\\n\\t\\tif step.assert != nil {\\n\\t\\t\\tstep.assert(t, env)\\n\\t\\t\\tif t.Failed() {\\n\\t\\t\\t\\tt.Fatalf(\\\"%s: assertion failed (see errors above)\\\", label)\\n\\t\\t\\t}\\n\\t\\t}\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.test-e2e-quickstart_runner-go-runQuickstartTrack\"},{\"name\":\"extendsOf\",\"kind\":\"function\",\"path\":\"source/ast/cpp/parser_test.go\",\"lines\":[334,343],\"body\":\"func extendsOf(results []*ast.ParseResult, class string) []string {\\n\\tfor _, res := range results {\\n\\t\\tfor _, e := range res.Entities {\\n\\t\\t\\tif e.Name == class && e.Type == ast.TypeClass {\\n\\t\\t\\t\\treturn e.Extends\\n\\t\\t\\t}\\n\\t\\t}\\n\\t}\\n\\treturn nil\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-cpp-parser_test-go-extendsOf\"},{\"name\":\"loading\",\"kind\":\"var\",\"path\":\"ui/src/routes/+page.svelte\",\"lines\":[20,20],\"body\":\"  let projectSummary = $state<ProjectSummaryState | null>(null);\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-routes--page-svelte-6dec60d2-loading\"},{\"name\":\"capability\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/CapabilityCard.svelte\",\"lines\":[3,3],\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-lib-components-CapabilityCard-svelte-capability\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/ast-source/component.go\",\"lines\":[868,870],\"body\":\"func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {\\n\\treturn c.publisher.Send(payload)\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-ast-source-component-go-Component-publishEntity\"},{\"name\":\"capabilities\",\"kind\":\"var\",\"path\":\"ui/src/routes/+page.svelte\",\"lines\":[17,17],\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-routes--page-svelte-6dec60d2-capabilities\"},{\"name\":\"TestExternalDefaultImportCallEmitsExternalMarker\",\"kind\":\"function\",\"path\":\"source/ast/ts/calls_test.go\",\"lines\":[416,421],\"body\":\"func TestExternalDefaultImportCallEmitsExternalMarker(t *testing.T) {\\n\\tents := parseTree(t, map[string]string{\\n\\t\\t\\\"m.ts\\\": \\\"import Def from 'some-package';\\\\nfunction run() { Def(); }\\\\n\\\",\\n\\t})\\n\\tassertCallsExactly(t, ents, \\\"run\\\", \\\"external:some-package\\\")\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-ts-calls_test-go-TestExternalDefaultImportCallEmitsExternalMarker\"},{\"name\":\"publishEntity\",\"kind\":\"method\",\"path\":\"processor/image-source/component.go\",\"li"
+    },
+    {
+      "id": "L02",
+      "band": "loose",
+      "tool": "code_search",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 20,
+      "body_bytes": 1931,
+      "top_body_bytes": 0,
+      "context_bytes": 7337,
+      "latency_ms": 54,
+      "latency_samples": [
+        54,
+        38,
+        37
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"gomod.go\",\"kind\":\"file\",\"path\":\"source/ast/golang/gomod.go\",\"lines\":[1,109],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-golang-gomod-go\"},{\"name\":\"bootstrap_test.go\",\"kind\":\"file\",\"path\":\"internal/governance/bootstrap_test.go\",\"lines\":[1,84],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.internal-governance-bootstrap_test-go\"},{\"name\":\"urlWizard\",\"kind\":\"struct\",\"path\":\"cli/wizard_url.go\",\"lines\":[9,9],\"body\":\"type urlWizard struct{}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.struct.cli-wizard_url-go-urlWizard\"},{\"name\":\"fusion.test.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/contracts/fusion.test.ts\",\"lines\":[1,119],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-contracts-fusion-test-ts\"},{\"name\":\"optionalInteger\",\"kind\":\"function\",\"path\":\"ui/src/lib/contracts/fusion.ts\",\"lines\":[75,88],\"body\":\"function optionalInteger(\\n  item: Record<string, unknown>,\\n  field: string,\\n  context: string,\\n): number | undefined {\\n  const value = item[field];\\n  if (\\n    value !== undefined &&\\n    (typeof value !== \\\"number\\\" || !Number.isSafeInteger(value) || value < 0)\\n  ) {\\n    throw new Error(`Invalid fusion response: malformed ${context} ${field}`);\\n  }\\n  return value as number | undefined;\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.function.ui-src-lib-contracts-fusion-ts-optionalInteger\"},{\"name\":\"fusion.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/contracts/fusion.ts\",\"lines\":[1,298],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-contracts-fusion-ts\"},{\"name\":\"TestLoadConfigFromReader_InvalidIndexInterval\",\"kind\":\"function\",\"path\":\"config/loader_test.go\",\"lines\":[325,336],\"body\":\"func TestLoadConfigFromReader_InvalidIndexInterval(t *testing.T) {\\n\\tinput := `{\\n  \\\"namespace\\\": \\\"myorg\\\",\\n  \\\"sources\\\": [\\n    {\\\"type\\\": \\\"ast\\\", \\\"path\\\": \\\"./src\\\", \\\"index_interval\\\": \\\"not-a-duration\\\"}\\n  ]\\n}`\\n\\t_, err := config.LoadConfigFromReader(strings.NewReader(input))\\n\\tif err == nil {\\n\\t\\tt.Fatal(\\\"expected validation error for malformed index_interval, got nil\\\")\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.config-loader_test-go-TestLoadConfigFromReader_InvalidIndexInterval\"},{\"name\":\"Name\",\"kind\":\"method\",\"path\":\"cli/wizard_url.go\",\"lines\":[11,11],\"body\":\"func (w *urlWizard) Name() string              { return \\\"URLs\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.cli-wizard_url-go-urlWizard-Name\"},{\"name\":\"bootstrap.test.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/state/bootstrap.test.ts\",\"lines\":[1,77],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-state-bootstrap-test-ts\"},{\"name\":\"bootstrap.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/state/bootstrap.ts\",\"lines\":[1,55],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-state-bootstrap-ts\"},{\"name\":\"NavigationalDocument\",\"kind\":\"const\",\"path\":\"source/vocabulary/navigational.go\",\"lines\":[33,33],\"body\":\"\\tNavigationalDocument = \\\"document\\\"\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.source-vocabulary-navigational-go-NavigationalDocument\"},{\"name\":\"ConfigContains\",\"kind\":\"const\",\"path\":\"source/vocabulary/config.go\",\"lines\":[111,111],\"body\":\"\\tConfigContains = \\\"source.config.contains\\\"\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.source-vocabulary-config-go-ConfigContains\"},{\"name\":\"fusion_gateway_integration_test.go\",\"kind\":\"file\",\"path\":\"internal/governance/fusion_gateway_integration_test.go\",\"lines\":[1,342],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.internal-governance-fusion_gateway_integration_test-go\"},{\"name\":\"TypeKey\",\"kind\":\"method\",\"path\":\"cli/wizard_url.go\",\"lines\":[12,12],\"body\":\"func (w *urlWizard) TypeKey() string           { return \\\"url\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.cli-wizard_url-go-urlWizard-TypeKey\"},{\"name\":\"extractTagName\",\"kind\":\"method\",\"path\":\"source/ast/svelte/parser.go\",\"lines\":[672,680],\"body\":\"func (p *Parser) extractTagName(tagNode *sitter.Node, source []byte) string {\\n\\tfor i := 0; i < int(tagNode.ChildCount()); i++ {\\n\\t\\tchild := tagNode.Child(i)\\n\\t\\tif child.Type() == \\\"tag_name\\\" {\\n\\t\\t\\treturn child.Content(source)\\n\\t\\t}\\n\\t}\\n\\treturn \\\"\\\"\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.source-ast-svelte-parser-go-Parser-extractTagName\"},{\"name\":\"newLogCapture\",\"kind\":\"function\",\"path\":\"processor/ast-source/assetguard_test.go\",\"lines\":[264,268],\"body\":\"func newLogCapture(level slog.Level) *logCapture {\\n\\tc := &logCapture{}\\n\\tc.Handler = slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: level})\\n\\treturn c\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.processor-ast-source-assetguard_test-go-newLogCapture\"},{\"name\":\"Available\",\"kind\":\"method\",\"path\":\"cli/wizard_url.go\",\"lines\":[14,14],\"body\":\"func (w *urlWizard) Available() (bool, string) { return true, \\\"\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.cli-wizard_url-go"
+    },
+    {
+      "id": "L03",
+      "band": "loose",
+      "tool": "code_search",
+      "verdict": "correct",
+      "reason": "",
+      "nodes": 20,
+      "body_bytes": 2691,
+      "top_body_bytes": 0,
+      "context_bytes": 8422,
+      "latency_ms": 45,
+      "latency_samples": [
+        45,
+        38,
+        39
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"asciidoc_test.go\",\"kind\":\"file\",\"path\":\"handler/doc/asciidoc_test.go\",\"lines\":[1,185],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.handler-doc-asciidoc_test-go\"},{\"name\":\"FusionDeferReason\",\"kind\":\"type\",\"path\":\"ui/src/lib/contracts/fusion.ts\",\"lines\":[3,3],\"body\":\"export type FusionDeferReason = \\\"index_not_ready\\\" | \\\"all_seeds_unhydrated\\\";\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.type.ui-src-lib-contracts-fusion-ts-FusionDeferReason\"},{\"name\":\"indexNotReadyErr\",\"kind\":\"function\",\"path\":\"processor/code-context/http_error_test.go\",\"lines\":[38,41],\"body\":\"func indexNotReadyErr() error {\\n\\treturn errs.ClassifiedCode(errs.ErrorTransient, semgraph.ErrorCodeIndexNotReady,\\n\\t\\terrors.New(\\\"index not ready\\\"))\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.processor-code-context-http_error_test-go-indexNotReadyErr\"},{\"name\":\"release\",\"kind\":\"var\",\"path\":\"ui/e2e/workbench.spec.ts\",\"lines\":[654,654],\"body\":\"  let release!: () => void;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.var.ui-e2e-workbench-spec-ts-release\"},{\"name\":\"FusionPath\",\"kind\":\"interface\",\"path\":\"ui/src/lib/contracts/fusion.ts\",\"lines\":[30,33],\"body\":\"export interface FusionPath {\\n  names: string[];\\n  truncated?: boolean;\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.interface.ui-src-lib-contracts-fusion-ts-FusionPath\"},{\"name\":\"parseTree\",\"kind\":\"function\",\"path\":\"source/ast/svelte/calls_test.go\",\"lines\":[36,57],\"body\":\"func parseTree(t *testing.T, files map[string]string) []*ast.CodeEntity {\\n\\tt.Helper()\\n\\troot := writeTree(t, files)\\n\\tvar rels []string\\n\\tfor rel := range files {\\n\\t\\tif strings.HasSuffix(rel, \\\".svelte\\\") {\\n\\t\\t\\trels = append(rels, rel)\\n\\t\\t}\\n\\t}\\n\\tsort.Strings(rels)\\n\\n\\tvar all []*ast.CodeEntity\\n\\tp := NewParser(testAuthority(\\\"acme\\\"), \\\"test\\\", root)\\n\\tfor _, rel := range rels {\\n\\t\\tres, err := p.ParseFile(context.Background(), filepath.Join(root, rel))\\n\\t\\tif err != nil {\\n\\t\\t\\tt.Fatalf(\\\"parse %s: %v\\\", rel, err)\\n\\t\\t}\\n\\t\\tall = append(all, res.Entities...)\\n\\t}\\n\\treturn all\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-svelte-calls_test-go-parseTree\"},{\"name\":\"ontology_test.go\",\"kind\":\"file\",\"path\":\"source/ontology/ontology_test.go\",\"lines\":[1,106],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ontology-ontology_test-go\"},{\"name\":\"workbench.spec.ts\",\"kind\":\"file\",\"path\":\"ui/e2e/workbench.spec.ts\",\"lines\":[1,704],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-e2e-workbench-spec-ts\"},{\"name\":\"Unwrap\",\"kind\":\"method\",\"path\":\"internal/sourcespawn/sourcespawn.go\",\"lines\":[59,59],\"body\":\"func (e *Error) Unwrap() error { return e.Cause }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.internal-sourcespawn-sourcespawn-go-Error-Unwrap\"},{\"name\":\"ensure_submodules_test.go\",\"kind\":\"file\",\"path\":\"workspace/ensure_submodules_test.go\",\"lines\":[1,122],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.workspace-ensure_submodules_test-go\"},{\"name\":\"TestGoPackageQualifiedStaysExternal\",\"kind\":\"function\",\"path\":\"source/ast/golang/reference_resolution_test.go\",\"lines\":[89,106],\"body\":\"func TestGoPackageQualifiedStaysExternal(t *testing.T) {\\n\\tents := parseAllGo(t, \\\"proj\\\", map[string]string{\\n\\t\\t\\\"a.go\\\": \\\"package p\\\\nimport \\\\\\\"context\\\\\\\"\\\\ntype Server struct{ ctx context.Context }\\\\n\\\",\\n\\t})\\n\\tserver := ents[\\\"Server\\\"]\\n\\tif server == nil {\\n\\t\\tt.Fatalf(\\\"missing Server: %v\\\", ents)\\n\\t}\\n\\tfound := false\\n\\tfor _, ref := range server.References {\\n\\t\\tif ref == \\\"external:context.Context\\\" {\\n\\t\\t\\tfound = true\\n\\t\\t}\\n\\t}\\n\\tif !found {\\n\\t\\tt.Errorf(\\\"References = %v, want to contain external:context.Context\\\", server.References)\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.source-ast-golang-reference_resolution_test-go-TestGoPackageQualifiedStaysExternal\"},{\"name\":\"fused\",\"kind\":\"struct\",\"path\":\"test/setup03a/qualification_test.go\",\"lines\":[81,86],\"body\":\"type fused struct {\\n\\tNodes      []node `json:\\\"nodes\\\"`\\n\\tDeferred   bool   `json:\\\"deferred\\\"`\\n\\tUnhydrated []any  `json:\\\"unhydrated\\\"`\\n\\tMisses     []any  `json:\\\"misses\\\"`\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.struct.test-setup03a-qualification_test-go-fused\"},{\"name\":\"addNamedImport\",\"kind\":\"function\",\"path\":\"source/ast/ts/imports.go\",\"lines\":[85,113],\"body\":\"func addNamedImport(spec2 *sitter.Node, source []byte, spec string, bindings map[string]tsBinding) {\\n\\tname := spec2.ChildByFieldName(\\\"name\\\")\\n\\talias := spec2.ChildByFieldName(\\\"alias\\\")\\n\\tif name == nil {\\n\\t\\t// Grammar exposes name/alias as positional identifiers on some versions.\\n\\t\\tvar ids []*sitter.Node\\n\\t\\tfor k := 0; k < int(spec2.NamedChildCount()); k++ {\\n\\t\\t\\tif spec2.NamedChild(k).Type() == \\\"identifier\\\" {\\n\\t\\t\\t\\tids = append(ids, spec2.NamedChild(k))\\n\\t\\t\\t}\\n\\t\\t}\\n\\t\\tif len(ids) == 0 {\\n\\t\\t\\treturn\\n\\t\\t}\\n\\t\\torigin := nodeText(ids[0], source)\\n\\t\\tlocal := origin\\n\\t\\tif len(ids) > 1 {\\n\\t\\t\\tlocal = nodeText(ids[1], source)\\n\\t\\t}\\n\\t\\tbindings[local] = tsBinding{spec: spec, origin: origin}\\n\\t\\treturn\\n\\t}\\n\\torigin := nodeText(name, source)\\n\\tlocal := origin\\n\\tif alias != nil {\\n\\t\\tlocal = nodeText(alias, source)\\n\\t}\\n\\tbindings[local"
+    },
+    {
+      "id": "L04",
+      "band": "loose",
+      "tool": "code_search",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 20,
+      "body_bytes": 1377,
+      "top_body_bytes": 14,
+      "context_bytes": 6766,
+      "latency_ms": 37,
+      "latency_samples": [
+        37,
+        40,
+        40
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"accessPrivate\",\"kind\":\"const\",\"path\":\"source/ast/java/calls.go\",\"lines\":[65,65],\"body\":\"\\taccessPrivate\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.source-ast-java-calls-go-accessPrivate\"},{\"name\":\"localCfg\",\"kind\":\"struct\",\"path\":\"handler/git/handler.go\",\"lines\":[333,333],\"body\":\"type localCfg struct{ path string }\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.struct.handler-git-handler-go-localCfg\"},{\"name\":\"capabilityReady\",\"kind\":\"const\",\"path\":\"processor/source-manifest/workbench_capabilities.go\",\"lines\":[17,17],\"body\":\"\\tcapabilityReady       = \\\"ready\\\"\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.const.processor-source-manifest-workbench_capabilities-go-capabilityReady\"},{\"name\":\"failStore\",\"kind\":\"struct\",\"path\":\"handler/doc/handler_test.go\",\"lines\":[1056,1056],\"body\":\"type failStore struct{}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.struct.handler-doc-handler_test-go-failStore\"},{\"name\":\"List\",\"kind\":\"method\",\"path\":\"handler/doc/handler_test.go\",\"lines\":[1064,1064],\"body\":\"func (s *failStore) List(context.Context, string) ([]string, error) { return nil, nil }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-doc-handler_test-go-failStore-List\"},{\"name\":\"Get\",\"kind\":\"method\",\"path\":\"handler/doc/handler_test.go\",\"lines\":[1061,1063],\"body\":\"func (s *failStore) Get(context.Context, string) ([]byte, error) {\\n\\treturn nil, fmt.Errorf(\\\"not implemented\\\")\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-doc-handler_test-go-failStore-Get\"},{\"name\":\"GetPath\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[336,336],\"body\":\"func (c *localCfg) GetPath() string             { return c.path }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-GetPath\"},{\"name\":\"graph_matches.go\",\"kind\":\"file\",\"path\":\"processor/mcp-gateway/graph_matches.go\",\"lines\":[1,256],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.processor-mcp-gateway-graph_matches-go\"},{\"name\":\"GetPaths\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[337,337],\"body\":\"func (c *localCfg) GetPaths() []string          { return nil }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-GetPaths\"},{\"name\":\"GetURL\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[338,338],\"body\":\"func (c *localCfg) GetURL() string              { return \\\"\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-GetURL\"},{\"name\":\"GetBranch\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[339,339],\"body\":\"func (c *localCfg) GetBranch() string           { return \\\"\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-GetBranch\"},{\"name\":\"graph_matches_test.go\",\"kind\":\"file\",\"path\":\"processor/mcp-gateway/graph_matches_test.go\",\"lines\":[1,204],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.processor-mcp-gateway-graph_matches_test-go\"},{\"name\":\"GetKeyframeMode\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[341,341],\"body\":\"func (c *localCfg) GetKeyframeMode() string     { return \\\"\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-GetKeyframeMode\"},{\"name\":\"Delete\",\"kind\":\"method\",\"path\":\"handler/doc/handler_test.go\",\"lines\":[1065,1065],\"body\":\"func (s *failStore) Delete(context.Context, string) error           { return nil }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-doc-handler_test-go-failStore-Delete\"},{\"name\":\"GetKeyframeInterval\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[342,342],\"body\":\"func (c *localCfg) GetKeyframeInterval() string { return \\\"\\\" }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-GetKeyframeInterval\"},{\"name\":\"TestAddNonInteractiveGitMissingURL\",\"kind\":\"function\",\"path\":\"cli/wizard_test.go\",\"lines\":[242,252],\"body\":\"func TestAddNonInteractiveGitMissingURL(t *testing.T) {\\n\\tdir := t.TempDir()\\n\\tcfgPath := filepath.Join(dir, \\\"semsource.json\\\")\\n\\twriteMinimalConfig(t, cfgPath, \\\"myorg\\\")\\n\\n\\tterm, _ := newTestTerm(\\\"\\\")\\n\\terr := Add(term, cfgPath, []string{\\\"git\\\"})\\n\\tif err == nil {\\n\\t\\tt.Fatal(\\\"expected error for missing --url\\\")\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.cli-wizard_test-go-TestAddNonInteractiveGitMissingURL\"},{\"name\":\"IsWatchEnabled\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[340,340],\"body\":\"func (c *localCfg) IsWatchEnabled() bool        { return false }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-go-localCfg-IsWatchEnabled\"},{\"name\":\"GetType\",\"kind\":\"method\",\"path\":\"handler/git/handler.go\",\"lines\":[335,335],\"body\":\"func (c *localCfg) GetType() string             { return handler.SourceTypeGit }\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.handler-git-handler-g"
+    },
+    {
+      "id": "L05",
+      "band": "loose",
+      "tool": "doc_context",
+      "verdict": "miss",
+      "reason": "missing required: ast",
+      "nodes": 0,
+      "body_bytes": 0,
+      "top_body_bytes": 0,
+      "context_bytes": 2,
+      "latency_ms": 16,
+      "latency_samples": [
+        16,
+        16,
+        16
+      ],
+      "answer": "{}"
+    },
+    {
+      "id": "L06",
+      "band": "loose",
+      "tool": "code_search",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 20,
+      "body_bytes": 613,
+      "top_body_bytes": 0,
+      "context_bytes": 5639,
+      "latency_ms": 52,
+      "latency_samples": [
+        52,
+        39,
+        40
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"homogeneous_test.go\",\"kind\":\"file\",\"path\":\"handler/doc/homogeneous_test.go\",\"lines\":[1,174],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.handler-doc-homogeneous_test-go\"},{\"name\":\"calls_test.go\",\"kind\":\"file\",\"path\":\"source/ast/c/calls_test.go\",\"lines\":[1,228],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-c-calls_test-go\"},{\"name\":\"calls_test.go\",\"kind\":\"file\",\"path\":\"source/ast/java/calls_test.go\",\"lines\":[1,642],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-java-calls_test-go\"},{\"name\":\"calls_test.go\",\"kind\":\"file\",\"path\":\"source/ast/python/calls_test.go\",\"lines\":[1,324],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-python-calls_test-go\"},{\"name\":\"calls_test.go\",\"kind\":\"file\",\"path\":\"source/ast/svelte/calls_test.go\",\"lines\":[1,226],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-svelte-calls_test-go\"},{\"name\":\"calls.go\",\"kind\":\"file\",\"path\":\"source/ast/c/calls.go\",\"lines\":[1,354],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-c-calls-go\"},{\"name\":\"calls_test.go\",\"kind\":\"file\",\"path\":\"source/ast/ts/calls_test.go\",\"lines\":[1,613],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-ts-calls_test-go\"},{\"name\":\"calls.go\",\"kind\":\"file\",\"path\":\"source/ast/java/calls.go\",\"lines\":[1,781],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-java-calls-go\"},{\"name\":\"calls.go\",\"kind\":\"file\",\"path\":\"source/ast/python/calls.go\",\"lines\":[1,364],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-python-calls-go\"},{\"name\":\"calls.go\",\"kind\":\"file\",\"path\":\"source/ast/ts/calls.go\",\"lines\":[1,728],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-ts-calls-go\"},{\"name\":\"search.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/api/search.ts\",\"lines\":[1,181],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-api-search-ts\"},{\"name\":\"SourceURL\",\"kind\":\"function\",\"path\":\"handler/objectstore/handler.go\",\"lines\":[372,374],\"body\":\"func SourceURL(bucket, prefix string) string {\\n\\treturn SourceType + \\\"://\\\" + bucket + \\\"/\\\" + strings.TrimPrefix(prefix, \\\"/\\\")\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.handler-objectstore-handler-go-SourceURL\"},{\"name\":\"search.test.ts\",\"kind\":\"file\",\"path\":\"ui/src/lib/api/search.test.ts\",\"lines\":[1,133],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.file.ui-src-lib-api-search-test-ts\"},{\"name\":\"search\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/SearchPanel.svelte\",\"lines\":[16,16],\"body\":\"    errorContract,\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-lib-components-SearchPanel-svelte-search\"},{\"name\":\"call\",\"kind\":\"var\",\"path\":\"ui/src/lib/state/bootstrap.test.ts\",\"lines\":[38,38],\"body\":\"    let call = 0;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.var.ui-src-lib-state-bootstrap-test-ts-call\"},{\"name\":\"error\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/GraphPanel.svelte\",\"lines\":[32,36],\"body\":\"  let loading = $state(false);\\n  let error = $state<{\\n    message: string;\\n    code?: string;\\n    retryable: boolean;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-lib-components-GraphPanel-svelte-error\"},{\"name\":\"error\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/SearchPanel.svelte\",\"lines\":[28,32],\"body\":\"  let loading = $state(false);\\n  let error = $state<{\\n    message: string;\\n    code?: string;\\n    retryable: boolean;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-lib-components-SearchPanel-svelte-error\"},{\"name\":\"graphQuery\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/WorkbenchShell.svelte\",\"lines\":[23,23],\"body\":\"    search,\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.svelte.var.ui-src-lib-components-WorkbenchShell-svelte-graphQuery\"},{\"name\":\"Analyze\",\"kind\":\"method\",\"path\":\"processor/vision/processor_test.go\",\"lines\":[28,33],\"body\":\"func (m *mockProvider) Analyze(_ context.Context, _ []byte, _ string) (*vision.Result, error) {\\n\\tm.mu.Lock()\\n\\tm.calls++\\n\\tm.mu.Unlock()\\n\\treturn m.result, m.err\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.method.processor-vision-processor_test-go-mockProvider-Analyze\"},{\"name\":\"search\",\"kind\":\"const\",\"path\":\"test/ui/ui-profile.spec.cjs\",\"lines\":[459,459],\"body\":\"  const search = page.getByLabel(/search code/i);\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.javascript.const.test-ui-ui-profile-spec-cjs-search\"}],\"truncated\":true,\"contract_version\":\"2\"}"
+    },
+    {
+      "id": "L07",
+      "band": "loose",
+      "tool": "code_search",
+      "verdict": "miss",
+      "reason": "none of expect_any present",
+      "nodes": 20,
+      "body_bytes": 4745,
+      "top_body_bytes": 0,
+      "context_bytes": 11019,
+      "latency_ms": 45,
+      "latency_samples": [
+        45,
+        41,
+        40
+      ],
+      "answer": "{\"provenance\":\"embedding\",\"nodes\":[{\"name\":\"authority_budget_test.go\",\"kind\":\"file\",\"path\":\"handler/url/authority_budget_test.go\",\"lines\":[1,32],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.handler-url-authority_budget_test-go\"},{\"name\":\"schema_budget_test.go\",\"kind\":\"file\",\"path\":\"processor/mcp-gateway/schema_budget_test.go\",\"lines\":[1,60],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.processor-mcp-gateway-schema_budget_test-go\"},{\"name\":\"pendingSignal\",\"kind\":\"var\",\"path\":\"ui/src/lib/components/GraphPanel.test.ts\",\"lines\":[252,252],\"body\":\"      let pendingSignal: AbortSignal | undefined;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.var.ui-src-lib-components-GraphPanel-test-ts-pendingSignal\"},{\"name\":\"ValidateSelfSubjectStates\",\"kind\":\"function\",\"path\":\"handler/entity_state.go\",\"lines\":[32,39],\"body\":\"func ValidateSelfSubjectStates(states []*EntityState) error {\\n\\tfor i, state := range states {\\n\\t\\tif err := ValidateSelfSubjectState(state); err != nil {\\n\\t\\t\\treturn fmt.Errorf(\\\"state %d: %w\\\", i, err)\\n\\t\\t}\\n\\t}\\n\\treturn nil\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.handler-entity_state-go-ValidateSelfSubjectStates\"},{\"name\":\"rawReason\",\"kind\":\"const\",\"path\":\"ui/src/lib/contracts/fusion.ts\",\"lines\":[107,107],\"body\":\"  const rawReason = item.defer_reason;\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.const.ui-src-lib-contracts-fusion-ts-rawReason\"},{\"name\":\"mutation_no_stub_integration_test.go\",\"kind\":\"file\",\"path\":\"internal/governance/mutation_no_stub_integration_test.go\",\"lines\":[1,92],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.internal-governance-mutation_no_stub_integration_test-go\"},{\"name\":\"readySemantic\",\"kind\":\"const\",\"path\":\"ui/e2e/workbench.spec.ts\",\"lines\":[389,389],\"body\":\"  const readySemantic = structuredClone(capabilities);\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.const.ui-e2e-workbench-spec-ts-readySemantic\"},{\"name\":\"NodeAttributes\",\"kind\":\"interface\",\"path\":\"ui/src/lib/graph/renderer.ts\",\"lines\":[21,28],\"body\":\"interface NodeAttributes {\\n  x: number;\\n  y: number;\\n  size: number;\\n  label: string;\\n  color: string;\\n  resolved: boolean;\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000965\",\"handle\":\"acme.semsource-a92ca8.workspace.typescript.interface.ui-src-lib-graph-renderer-ts-NodeAttributes\"},{\"name\":\"TestStopWaitsForTheSeed\",\"kind\":\"function\",\"path\":\"internal/seedsup/supervisor_test.go\",\"lines\":[83,109],\"body\":\"func TestStopWaitsForTheSeed(t *testing.T) {\\n\\tvar s Supervisor\\n\\tvar mu sync.Mutex\\n\\tfinished := false\\n\\n\\tstarted := make(chan struct{})\\n\\ts.Start(context.Background(), nil, func(ctx context.Context) error {\\n\\t\\tclose(started)\\n\\t\\t<-ctx.Done()\\n\\t\\ttime.Sleep(50 * time.Millisecond) // unwinding after cancellation\\n\\t\\tmu.Lock()\\n\\t\\tfinished = true\\n\\t\\tmu.Unlock()\\n\\t\\treturn ctx.Err()\\n\\t})\\n\\t<-started\\n\\n\\tstopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)\\n\\tdefer cancel()\\n\\ts.Stop(stopCtx, nil)\\n\\n\\tmu.Lock()\\n\\tdefer mu.Unlock()\\n\\tif !finished {\\n\\t\\tt.Error(\\\"Stop() returned before the seed finished unwinding\\\")\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.internal-seedsup-supervisor_test-go-TestStopWaitsForTheSeed\"},{\"name\":\"TestWorstCaseSegmentsLeaveInstanceBudget\",\"kind\":\"function\",\"path\":\"entityid/entityid_test.go\",\"lines\":[481,496],\"body\":\"func TestWorstCaseSegmentsLeaveInstanceBudget(t *testing.T) {\\n\\torg := strings.Repeat(\\\"o\\\", entityid.MaxOrgLen)\\n\\tsystem := entityid.SystemSlug(strings.Repeat(\\\"s\\\", 200)) // saturates the 80-char cap\\n\\tconst longestDomain = \\\"javascript\\\"                      // 10\\n\\tconst longestType = \\\"dependency\\\"                        // 10\\n\\n\\tid := entityid.Build(org, entityid.PlatformSemsource, system, longestDomain, longestType, \\\"i\\\")\\n\\tprefixLen := len(id) - 1 // everything but the 1-byte instance\\n\\n\\tbudget := semtypes.MaxEntityIDBytes - prefixLen\\n\\tif budget < 60 {\\n\\t\\tt.Errorf(\\\"worst-case segments leave only %d bytes for the instance, want >= 60 \\\"+\\n\\t\\t\\t\\\"(org=%d system=%d); the caps have drifted out of budget\\\",\\n\\t\\t\\tbudget, len(org), len(system))\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.entityid-entityid_test-go-TestWorstCaseSegmentsLeaveInstanceBudget\"},{\"name\":\"imports_test.go\",\"kind\":\"file\",\"path\":\"source/ast/python/imports_test.go\",\"lines\":[1,259],\"class\":\"https://www.commoncoreontologies.org/ont00000798\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.file.source-ast-python-imports_test-go\"},{\"name\":\"TestIntegration_Objects_ScopedToPrefix\",\"kind\":\"function\",\"path\":\"storage/s3store/store_integration_test.go\",\"lines\":[400,418],\"body\":\"func TestIntegration_Objects_ScopedToPrefix(t *testing.T) {\\n\\tstore := newContainerStore(t)\\n\\tfor _, key := range []string{\\\"reports/a.md\\\", \\\"reports/b.md\\\", \\\"assets/c.png\\\"} {\\n\\t\\tput(t, store, key, []byte(key))\\n\\t}\\n\\n\\tinfos, err := store.Objects(t.Context(), \\\"reports/\\\")\\n\\tif err != nil {\\n\\t\\tt.Fatalf(\\\"Objects: %v\\\", err)\\n\\t}\\n\\tif len(infos) != 2 {\\n\\t\\tt.Fatalf(\\\"Objects returned %d entries, want 2\\\", len(infos))\\n\\t}\\n\\tfor _, info := range infos {\\n\\t\\tif !strings.HasPrefix(info.Key, \\\"reports/\\\") {\\n\\t\\t\\tt.Errorf(\\\"key %q is outside the requested prefix\\\", info.Key)\\n\\t\\t}\\n\\t}\\n}\",\"class\":\"https://www.commoncoreontologies.org/ont00000653\",\"handle\":\"acme.semsource-a92ca8.workspace.golang.function.storage-s3store-store_integration_test-go-Tes"
+    }
+  ]
+}
