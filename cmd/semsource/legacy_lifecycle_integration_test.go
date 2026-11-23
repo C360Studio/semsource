@@ -38,14 +38,31 @@ func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
 		if err := tc.Client.DeleteKeyValueBucket(ctx, legacyLifecycleBucket); err != nil {
 			t.Fatal(err)
 		}
+		// #343: a recreate that still reaches the deleted stream reuses it,
+		// values and all — CreateKeyValueBucket is create-or-get, and even a
+		// raw same-config CreateKeyValue is idempotent on the server, so no
+		// create call can refuse it. Synchronize on the delete being observed
+		// instead; the empty-count assertion below catches anything left.
+		for {
+			_, err := tc.Client.GetKeyValueBucket(ctx, legacyLifecycleBucket)
+			if errors.Is(err, jetstream.ErrBucketNotFound) {
+				break
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("bucket delete never observed: %v", err)
+			}
+		}
 		var err error
 		bucket, err = tc.Client.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{Bucket: legacyLifecycleBucket, History: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
 		status, err := bucket.Status(ctx)
-		if err != nil || status.Values() != 0 {
-			t.Fatalf("fixture not empty: %v", err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := status.Values(); n != 0 {
+			t.Fatalf("fresh fixture bucket holds %d values", n)
 		}
 		if err := checkLegacyLifecycle(ctx, tc.Client); err != nil {
 			t.Fatal(err)
