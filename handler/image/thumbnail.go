@@ -3,6 +3,7 @@ package image
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -11,6 +12,10 @@ import (
 
 	"golang.org/x/image/draw"
 )
+
+// errThumbnailStore wraps a failed thumbnail write, the one thumbnail failure
+// that does not repeat for the same bytes.
+var errThumbnailStore = errors.New("store thumbnail")
 
 const (
 	// defaultThumbnailMaxDim is the maximum pixel dimension (width or height)
@@ -67,7 +72,7 @@ func (h *Handler) generateAndStoreThumbnail(ctx context.Context, content []byte,
 
 	thumbKey := fmt.Sprintf("images/%s/%s/thumbnail", slugify(root), instance)
 	if err := h.store.Put(ctx, thumbKey, buf.Bytes()); err != nil {
-		return "", fmt.Errorf("store thumbnail: %w", err)
+		return "", fmt.Errorf("%w: %w", errThumbnailStore, err)
 	}
 
 	return thumbKey, nil

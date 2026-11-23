@@ -30,7 +30,14 @@
 - [x] 4.1a ast watch path sets the file entity's `ContainedBy` (today only `BuildHierarchy` does, `source/ast/hierarchy.go:189-204`), so a watch publish no longer drops `code.structure.belongs`. Proved by: `TestWatchPublishCarriesTheSeedGroupSet` (fails without the fix: the file has no `code.structure.belongs`).
 - [x] 4.1b ast body-offload faults go through 3.5.
 - [x] 4.1 ast-source opts in when a NATS client is present (`NewSourceReconciler`). Proved by: `TestIntegration_ReingestDropsRemovedPredicates` green, which now waits for the reconcile revision, 5/5 runs; and `TestIntegration_ReingestKeepsOtherSourcesStatements`, where the `supersession` lineage edge, the `lifecycle` stale marker and `entity.ontology.class` survive a republish.
-- [ ] 4.2 Each remaining handler that the audit (2.2) clears opts in, with its own completeness test. Handlers not cleared are listed on #336 with the blocking issue.
+- [x] 4.2 Remaining cleared handlers opt in, each with a completeness test and a gating test (spec citations on each). Their group statements no longer carry their own timestamps, so the fence applies; stored timestamps move from the handler's index time to the envelope time.
+  - **url:** reconciles a page whose statements differ from those this process last sent; seed and unchanged polls skip. Proved by `TestChangedPagePublishCarriesTheCompleteGroupSet`, `TestReconcileOnlyPagesThisProcessSawChange`, `TestWatchStateMatchesIngestState`.
+  - **doc:** same rule per entity; roots sharing a system skip (#349). Proved by `TestDocWatchRepublishCarriesTheCompleteGroupSet`, `TestDocReconcileOnlyKnownChanges`.
+  - **cfgfile:** same rule; `config.dependency`, `config.image` and `config.project` always skip (#348), as do roots sharing a system. Proved by `TestCfgfileWatchRepublishCarriesTheCompleteGroupSet`, `TestCfgfileReconcileOnlyKnownChangesOfSingleWriterTypes`.
+  - **image, audio, video:** the seed skips, a watch publish reconciles, and a store fault skips the whole event. Proved per package by `TestWatchPublishCarriesTheSeedGroupSet` and `TestReconcileOnlyWatchedChangesWithoutStoreFaults` (the video keyframe subtests need ffmpeg and skip without it).
+  - **objectstore:** the seed and a polled create skip, a polled modify reconciles. Proved by `TestPollPublishCarriesTheSeedGroupSet`, `TestReconcileOnlyModifiedObjects`.
+  - **ast:** roots sharing a system skip (#349). Proved by `TestRootsSharingASystemDoNotReconcile`.
+  - **git: not opted in.** Two git-source instances can share a system slug (path basename or URL), so each HEAD change would delete the other's statements.
 
 ## 5. Cost on OSH
 

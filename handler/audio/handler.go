@@ -36,6 +36,23 @@ var defaultExtensions = map[string]bool{
 	".wma":  true,
 }
 
+// propStoreFault marks a RawEntity whose binary store write failed, so its
+// state lacks the storage reference it normally carries. It is not a fact: no
+// entity builder reads it into a triple.
+const propStoreFault = "store_fault"
+
+// StoreFaulted reports whether a store write failed for any of entities. A
+// state built from such an entity is missing its storage reference, so its
+// publish must not be reconciled (#336).
+func StoreFaulted(entities []handler.RawEntity) bool {
+	for _, e := range entities {
+		if faulted, _ := e.Properties[propStoreFault].(bool); faulted {
+			return true
+		}
+	}
+	return false
+}
+
 // Handler handles audio file sources.
 // It implements handler.SourceHandler.
 type Handler struct {
@@ -215,6 +232,7 @@ func (h *Handler) ingestFile(ctx context.Context, path, root string) (handler.Ra
 		if err := handler.StoreFile(ctx, h.store, storageKey, path); err != nil {
 			h.logger.Warn("audio handler: failed to store audio binary",
 				"path", path, "error", err)
+			audioEntity.Properties[propStoreFault] = true
 		} else {
 			audioEntity.Properties["storage_ref"] = storageKey
 		}

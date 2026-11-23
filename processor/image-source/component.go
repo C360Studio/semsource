@@ -141,10 +141,22 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		coalesceMs:   config.CoalesceMs,
 	}
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+	pubOpts := []entitypub.Option{
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
+	}
+	if deps.NATSClient != nil {
+		// Every image-source publish carries the entity's complete semsource set
+		// (TestWatchPublishCarriesTheSeedGroupSet); the seed and store-write
+		// faults are marked SkipReconcile (#336).
+		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
+		if err != nil {
+			return nil, fmt.Errorf("create source reconciler: %w", err)
+		}
+		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
+	}
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
@@ -265,6 +277,9 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			c.ingestErrors.Add(1)
 			continue
 		}
+		// The seed is a first pass: this process has not seen the content
+		// change, so it does not reconcile (#336, D4).
+		payload.SkipReconcile = true
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish image entity",
 				"id", state.ID,
@@ -330,6 +345,10 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		"operation", event.Operation,
 		"entity_states", len(event.EntityStates))
 
+	// A watch event is content this process saw change, so it reconciles,
+	// unless a store write failed and a reference it normally carries is
+	// missing (#336). Conservative: one fault skips the whole event.
+	faulted := imghandler.StoreFaulted(event.Entities)
 	for _, state := range event.EntityStates {
 		payload, err := entityStateToPayload(state)
 		if err != nil {
@@ -339,6 +358,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			c.ingestErrors.Add(1)
 			continue
 		}
+		payload.SkipReconcile = faulted
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish image entity on change",
 				"id", state.ID,

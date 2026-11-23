@@ -232,7 +232,7 @@ func TestHandleChangeEvent_NilStateRecordsErrorWithoutPublishing(t *testing.T) {
 func TestPublishDocument_EmptyStatesIsAContractFailure(t *testing.T) {
 	c := &Component{logger: discardLogger()}
 
-	c.publishDocument(context.Background(), "reports/q3.md", nil)
+	c.publishDocument(context.Background(), "reports/q3.md", nil, false)
 
 	if got := c.ingestErrors.Load(); got != 1 {
 		t.Fatalf("ingestErrors = %d, want 1", got)

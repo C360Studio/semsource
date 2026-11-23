@@ -58,15 +58,21 @@ that read's revision. A lost compare-and-set re-reads. A job is skipped once a l
 next edit repairs it. A job abandoned at Stop is not counted. The reconcile never changes `Published`, `Failed` or
 `Lost`. Queued jobs count as in flight for `WaitSettled`.
 
-### D2. Reconcile is opt-in per publisher, and folder and repo types are excluded
+### D2. Reconcile is opt-in per publisher, and shared or partial writes are excluded
 
 `entitypub.WithReconcile(mutator)` turns reconcile on. A handler passes it only once its completeness test (D3) is
 green. The supersession publisher never passes it, because its payloads are partial by design (lineage edges only).
-Inside the publisher, payloads of AST type `folder` or `repo` (`source/ast/predicates.go:103-104`) skip reconcile
-until #347 is fixed.
+The fence needs an envelope-stamped statement, so an opted-in handler leaves its group statements' timestamps zero.
 
-The exclusion carries a `// shortcut: folder/repo excluded, remove with the #347 fix` marker in code. The #347 fix
-deletes it.
+Each exclusion is marked `SkipReconcile` at the call site with a `// shortcut:` marker naming the issue whose fix
+removes it:
+
+- AST `folder` and `repo` payloads (#347).
+- Roots of one component that mint IDs in the same system: ast, doc and cfgfile (#349).
+- cfgfile `config.dependency`, `config.image` and `config.project`, which several manifests can write to one ID (#348).
+- Store faults: AST bodies, image originals and thumbnails, video binaries and keyframes, audio binaries.
+
+git-source does not opt in: two instances can share a system slug, so each would delete the other's statements.
 
 ### D3. The single-writer requirement is held by tests, not runtime checks
 
@@ -86,6 +92,10 @@ a bounded form. ast-source reconciles a file's entities only when this process k
 
 - a watch edit;
 - a reindex of a file whose in-memory hash differs from the one this process recorded.
+
+The other handlers apply the same rule. url, doc and cfgfile reconcile an entity whose statements differ from those
+this process last sent for it. image, audio and video reconcile watch publishes. objectstore reconciles a polled
+modify, not a create.
 
 The seed, and a reindex of a new or unchanged file, publish with `SkipReconcile`, the fault guard's flag.
 

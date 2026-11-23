@@ -35,23 +35,24 @@ type Entity struct {
 }
 
 // Triples converts the Entity to a slice of message.Triple for graph storage.
+// Triples carry no Timestamp: graph-ingest stamps the envelope time, which
+// is what lets a reconcile identify this write in the stored state (#336).
 func (e *Entity) Triples() []message.Triple {
-	now := e.IndexedAt
 	src := entityid.PlatformSemsource
 	return []message.Triple{
-		{Subject: e.ID, Predicate: source.MediaType, Object: "audio", Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFilePath, Object: e.FilePath, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaMimeType, Object: e.MimeType, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFileHash, Object: e.FileHash, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFileSize, Object: e.FileSize, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaFormat, Object: e.Format, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaDuration, Object: e.Duration, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaCodec, Object: e.Codec, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaBitrate, Object: e.Bitrate, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaSampleRate, Object: e.SampleRate, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaChannels, Object: e.Channels, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaBitDepth, Object: e.BitDepth, Source: src, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.MediaStorageRef, Object: e.StorageRef, Source: src, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaType, Object: "audio", Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFilePath, Object: e.FilePath, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaMimeType, Object: e.MimeType, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFileHash, Object: e.FileHash, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFileSize, Object: e.FileSize, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaFormat, Object: e.Format, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaDuration, Object: e.Duration, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaCodec, Object: e.Codec, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaBitrate, Object: e.Bitrate, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaSampleRate, Object: e.SampleRate, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaChannels, Object: e.Channels, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaBitDepth, Object: e.BitDepth, Source: src, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.MediaStorageRef, Object: e.StorageRef, Source: src, Confidence: 1.0},
 	}
 }
 

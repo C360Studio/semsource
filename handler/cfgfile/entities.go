@@ -12,6 +12,9 @@ import (
 	source "github.com/c360studio/semsource/source/vocabulary"
 )
 
+// controlState wraps an entity's triples. The builders below leave each
+// triple's Timestamp zero: graph-ingest stamps them with the envelope time,
+// which is what the #336 reconcile fences its write on.
 func controlState(id string, triples []message.Triple, indexedAt time.Time) *handler.EntityState {
 	return &handler.EntityState{
 		ID:              id,
@@ -56,13 +59,12 @@ func newGoModuleEntity(authority entityid.Authority, modulePath, goVersion, file
 }
 
 func (e *goModuleEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
 		// Title makes the entity NAME_INDEX-visible (search-ranking-and-reach D4).
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.ModulePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigModulePath, Object: e.ModulePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigModuleGoVer, Object: e.GoVersion, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.ModulePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigModulePath, Object: e.ModulePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigModuleGoVer, Object: e.GoVersion, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	for _, depID := range e.DepIDs {
 		triples = append(triples, message.Triple{
@@ -70,7 +72,6 @@ func (e *goModuleEntity) triples() []message.Triple {
 			Predicate:  source.ConfigRequires,
 			Object:     depID,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -108,17 +109,16 @@ func newGoDependencyEntity(authority entityid.Authority, depPath, version string
 }
 
 func (e *goDependencyEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	indirect := "false"
 	if e.Indirect {
 		indirect = "true"
 	}
 	return []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepIndirect, Object: indirect, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "go", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepIndirect, Object: indirect, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "go", Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 }
 
@@ -159,12 +159,11 @@ func newNPMPackageEntity(authority entityid.Authority, name, version, filePath, 
 }
 
 func (e *npmPackageEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigPkgName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigPkgVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigPkgName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigPkgVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	for _, depID := range e.DepIDs {
 		triples = append(triples, message.Triple{
@@ -172,7 +171,6 @@ func (e *npmPackageEntity) triples() []message.Triple {
 			Predicate:  source.ConfigDepends,
 			Object:     depID,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -214,12 +212,11 @@ func newNPMDependencyEntity(authority entityid.Authority, name, version string, 
 }
 
 func (e *npmDependencyEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	return []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: e.Kind, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: e.Kind, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 }
 
@@ -254,11 +251,10 @@ func newDockerImageEntity(authority entityid.Authority, image string, exposedPor
 }
 
 func (e *dockerImageEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Image, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigImageName, Object: e.Image, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Image, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigImageName, Object: e.Image, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	for _, port := range e.ExposedPorts {
 		triples = append(triples, message.Triple{
@@ -266,7 +262,6 @@ func (e *dockerImageEntity) triples() []message.Triple {
 			Predicate:  source.ConfigImagePorts,
 			Object:     port,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -315,14 +310,13 @@ func newMavenProjectEntity(authority entityid.Authority, groupID, artifactID, ve
 }
 
 func (e *mavenProjectEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.GroupID + ":" + e.ArtifactID, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigProjectGroup, Object: e.GroupID, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigProjectArtifact, Object: e.ArtifactID, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigProjectVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigProjectPackaging, Object: e.Packaging, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.GroupID + ":" + e.ArtifactID, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigProjectGroup, Object: e.GroupID, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigProjectArtifact, Object: e.ArtifactID, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigProjectVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigProjectPackaging, Object: e.Packaging, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	for _, depID := range e.DepIDs {
 		triples = append(triples, message.Triple{
@@ -330,7 +324,6 @@ func (e *mavenProjectEntity) triples() []message.Triple {
 			Predicate:  source.ConfigRequires,
 			Object:     depID,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -340,7 +333,6 @@ func (e *mavenProjectEntity) triples() []message.Triple {
 			Predicate:  source.ConfigContains,
 			Object:     modID,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -378,12 +370,11 @@ func newMavenDependencyEntity(authority entityid.Authority, groupID, artifactID,
 }
 
 func (e *mavenDependencyEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "maven", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "maven", Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	if e.Scope != "" {
 		triples = append(triples, message.Triple{
@@ -391,7 +382,6 @@ func (e *mavenDependencyEntity) triples() []message.Triple {
 			Predicate:  source.ConfigDepScope,
 			Object:     e.Scope,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -432,12 +422,11 @@ func newPOMModuleEntity(authority entityid.Authority, name, filePath, system str
 }
 
 func (e *pomModuleEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	return []message.Triple{
 		// Title makes the entity NAME_INDEX-visible and gives graph_search a label (#142).
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigModulePath, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigModulePath, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 }
 
@@ -476,12 +465,11 @@ func newGradleProjectEntity(authority entityid.Authority, name, filePath, system
 }
 
 func (e *gradleProjectEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigProjectArtifact, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigProjectBuild, Object: "gradle", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigProjectArtifact, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigProjectBuild, Object: "gradle", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	for _, depID := range e.DepIDs {
 		triples = append(triples, message.Triple{
@@ -489,7 +477,6 @@ func (e *gradleProjectEntity) triples() []message.Triple {
 			Predicate:  source.ConfigRequires,
 			Object:     depID,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}
@@ -527,13 +514,12 @@ func newGradleDependencyEntity(authority entityid.Authority, group, name, versio
 }
 
 func (e *gradleDependencyEntity) triples() []message.Triple {
-	now := e.IndexedAt
 	triples := []message.Triple{
 		// Title makes the entity NAME_INDEX-visible and gives graph_search a label (#142).
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "gradle", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "gradle", Source: entityid.PlatformSemsource, Confidence: 1.0},
 	}
 	if e.Configuration != "" {
 		triples = append(triples, message.Triple{
@@ -541,7 +527,6 @@ func (e *gradleDependencyEntity) triples() []message.Triple {
 			Predicate:  source.ConfigDepConfiguration,
 			Object:     e.Configuration,
 			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
 			Confidence: 1.0,
 		})
 	}

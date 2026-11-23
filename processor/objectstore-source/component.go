@@ -146,10 +146,22 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("create object store: %w", err)
 	}
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+	pubOpts := []entitypub.Option{
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
+	}
+	if deps.NATSClient != nil {
+		// Every object's publish carries each entity's complete semsource set
+		// (a passage body-store failure aborts the whole object, never a
+		// partial publish); only a modified object reconciles (#336).
+		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
+		if err != nil {
+			return nil, fmt.Errorf("create source reconciler: %w", err)
+		}
+		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
+	}
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
@@ -288,7 +300,8 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 	c.recordSkips(result)
 
 	for _, ingested := range result.Ingested {
-		c.publishDocument(ctx, ingested.Key, ingested.States)
+		// A first pass: this process has not seen the content change (#336, D4).
+		c.publishDocument(ctx, ingested.Key, ingested.States, false)
 	}
 	c.retract(ctx, result.Removed)
 	return nil
@@ -299,7 +312,10 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 // A document with no valid states publishes nothing and is counted as an
 // error: this source emits canonical typed state, so state that will not
 // convert is a contract failure, not a reason to fall back to something else.
-func (c *Component) publishDocument(ctx context.Context, key string, states []*handler.EntityState) {
+//
+// reconcile is true only when this process saw the object's content change,
+// so a republish can have dropped statements worth a reconcile (#336, D4).
+func (c *Component) publishDocument(ctx context.Context, key string, states []*handler.EntityState, reconcile bool) {
 	if len(states) == 0 {
 		c.ingestErrors.Add(1)
 		c.logger.Warn("Objectstore-source produced no entity states for an object",
@@ -323,6 +339,7 @@ func (c *Component) publishDocument(ctx context.Context, key string, states []*h
 			c.ingestErrors.Add(1)
 			continue
 		}
+		payload.SkipReconcile = !reconcile
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish object-store entity",
 				"key", key, "id", state.ID, "error", err)
@@ -472,7 +489,9 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			"key", event.Path, "operation", event.Operation)
 		return
 	}
-	c.publishDocument(ctx, event.Path, event.EntityStates)
+	// A modify is a token this process recorded and then saw move; a create
+	// is a key it never saw, whose earlier content it cannot know.
+	c.publishDocument(ctx, event.Path, event.EntityStates, event.Operation == handler.OperationModify)
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing.

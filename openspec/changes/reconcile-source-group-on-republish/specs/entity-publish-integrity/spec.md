@@ -45,7 +45,7 @@ When a reconcile-enabled publisher republishes an entity ID whose producer knows
 - **AND** the stored entity does not carry P
 
 ### Requirement: Reconcile is enabled only for handlers proven to publish complete sets
-A publisher SHALL reconcile only when its handler opts in, and a handler MUST opt in only after a test proves that each of its publishes carries the entity's complete `semsource` statement set for group `source` (one writer per entity ID). The supersession publisher SHALL NOT reconcile. AST `folder` and `repo` entities SHALL NOT be reconciled while the watch path republishes them with a partial `code.contains` set (#347).
+A publisher SHALL reconcile only when its handler opts in, and a handler MUST opt in only after a test proves that each of its publishes carries the entity's complete `semsource` statement set for group `source` (one writer per entity ID). The supersession publisher SHALL NOT reconcile. AST `folder` and `repo` entities SHALL NOT be reconciled while the watch path republishes them with a partial `code.contains` set (#347). A publish that may share its entity ID with another writer (#348, #349) or that omits a statement after a store fault SHALL be marked `SkipReconcile`.
 
 #### Scenario: A handler without the completeness test does not reconcile
 - **GIVEN** a handler whose publisher was built without the reconcile option
@@ -56,3 +56,8 @@ A publisher SHALL reconcile only when its handler opts in, and a handler MUST op
 - **GIVEN** a reconcile-enabled ast-source
 - **WHEN** a file edit republishes its ancestor `folder` entities
 - **THEN** no reconcile request is sent for any `folder` or `repo` entity
+
+#### Scenario: A shared or faulted publish is not reconciled
+- **GIVEN** a reconcile-enabled handler
+- **WHEN** it publishes an entity whose ID another root or manifest can also write, or whose store write failed
+- **THEN** no reconcile request is sent for that entity

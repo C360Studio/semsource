@@ -120,6 +120,13 @@ type Component struct {
 	passageCountMu sync.Mutex
 	passageCounts  map[string]int
 
+	// changes is what this process last published per entity, so only a
+	// known content change reconciles (#336, D4).
+	changes changeTracker
+	// sharedRootIDs marks every publish SkipReconcile: two roots mint one
+	// entity ID (#349).
+	sharedRootIDs bool
+
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
 	workers     workerjoin.Group
@@ -139,12 +146,32 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, err
 	}
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+	pubOpts := []entitypub.Option{
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
+	}
+	if deps.NATSClient != nil {
+		// Every doc publish carries the entity's complete semsource set
+		// (TestDocWatchRepublishCarriesTheCompleteGroupSet); markReconcile
+		// limits the reconcile to known content changes (#336, D4).
+		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
+		if err != nil {
+			return nil, fmt.Errorf("create source reconciler: %w", err)
+		}
+		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
+	}
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
+	}
+	// shortcut: shared-project roots excluded from reconcile, remove with the #349 fix
+	// Roots under one system slug write one entity ID each, and a reconcile
+	// from one root would delete the other's statements.
+	sharedRootIDs := rootsShareIDs(config)
+	if sharedRootIDs {
+		deps.GetLogger().Info("doc-source roots share one entity-ID system; reconcile disabled (#349)",
+			"paths", config.Paths, "project", config.Project)
 	}
 
 	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
@@ -170,6 +197,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		handler:       h,
 		sourceCfg:     sc,
 		passageCounts: make(map[string]int),
+		sharedRootIDs: sharedRootIDs,
 	}
 
 	return c, nil
@@ -318,6 +346,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			continue
 		}
 
+		fp := c.markReconcile(payload)
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish doc entity",
 				"id", state.ID,
@@ -325,6 +354,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			c.ingestErrors.Add(1)
 			continue
 		}
+		c.changes.record(payload.ID, fp)
 
 		c.entitiesPublished.Add(1)
 		c.distinct.Observe(state.ID)
@@ -412,6 +442,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 				c.ingestErrors.Add(1)
 				continue
 			}
+			fp := c.markReconcile(payload)
 			if err := c.publishEntity(ctx, payload); err != nil {
 				c.logger.Warn("Failed to publish doc entity on change",
 					"id", state.ID,
@@ -419,6 +450,7 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 				c.ingestErrors.Add(1)
 				continue
 			}
+			c.changes.record(payload.ID, fp)
 			c.entitiesPublished.Add(1)
 			c.distinct.Observe(state.ID)
 			c.updateLastActivity()
