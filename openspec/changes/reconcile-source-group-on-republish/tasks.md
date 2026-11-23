@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85). Re-approved after the D1 amendment, which adds the bounded re-read retry on revision conflict and drops the metadata timestamp (2026-11-23, sha256:c87d3b898461). Re-approved a second time after D4 was decided by the 5.2 ruling and the known gap was added to the spec (2026-11-23, sha256:493f7884e201). Re-approved a third time after D1 was amended by the specialist review (wait for the write to apply, worker off the drain loop) (2026-11-23, sha256:8226c457d77d; all three lines entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:c48c5a20ab85). Re-approved after the D1 amendment, which adds the bounded re-read retry on revision conflict and drops the metadata timestamp (2026-11-23, sha256:c87d3b898461). Re-approved a second time after D4 was decided by the 5.2 ruling and the known gap was added to the spec (2026-11-23, sha256:493f7884e201). Re-approved a third time after D1 was amended by the specialist review (wait for the write to apply, worker off the drain loop) (2026-11-23, sha256:8226c457d77d). Re-approved a fourth time after round-2 review reworded the birth scenario and added the envelope-time rule to D1 (2026-11-23, sha256:47a0e29f1013; all four lines entered by claude at the owner's instruction). Ruling: #336 comments 7100421719 and 7100564191.
 
 ## 2. Repro and completeness audit (before code)
 
