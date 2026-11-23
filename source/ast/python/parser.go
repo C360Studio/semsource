@@ -564,7 +564,7 @@ func (p *Parser) extractImports(node *sitter.Node, content []byte) []string {
 // markStub records an @overload (or @typing.overload) stub.
 func (p *Parser) markStub(entity *ast.CodeEntity, decorators []string) {
 	for _, dec := range decorators {
-		name := strings.TrimPrefix(dec, "@")
+		name := strings.TrimPrefix(decoratorExpr(dec), "@")
 		if i := strings.IndexByte(name, '('); i >= 0 {
 			name = name[:i]
 		}
@@ -584,7 +584,7 @@ func (p *Parser) markStub(entity *ast.CodeEntity, decorators []string) {
 // re-identifies the getter (#338, the #331 precedent).
 func accessorSuffix(decorators []string, name string) string {
 	for _, dec := range decorators {
-		switch strings.TrimSpace(dec) {
+		switch decoratorExpr(dec) {
 		case "@" + name + ".setter":
 			return "-setter"
 		case "@" + name + ".deleter":
@@ -592,6 +592,15 @@ func accessorSuffix(decorators []string, name string) string {
 		}
 	}
 	return ""
+}
+
+// decoratorExpr strips a trailing comment, which tree-sitter keeps inside the
+// decorator node: "@x.setter  # noqa" must still read as "@x.setter".
+func decoratorExpr(dec string) string {
+	if i := strings.IndexByte(dec, '#'); i >= 0 {
+		dec = dec[:i]
+	}
+	return strings.TrimSpace(dec)
 }
 
 // extractDecorators extracts decorator names from a decorated definition.

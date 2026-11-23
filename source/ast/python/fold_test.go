@@ -41,7 +41,7 @@ func TestPropertyAccessorsGetDistinctIDs(t *testing.T) {
     def x(self):
         return 1
 
-    @x.setter
+    @x.setter  # noqa: E501
     def x(self, v):
         pass
 
@@ -71,7 +71,7 @@ import typing
 
 @overload
 def f(x: int) -> int: ...
-@overload
+@overload  # type: ignore[misc]
 def f(x: str) -> str: ...
 def f(x):
     return x
