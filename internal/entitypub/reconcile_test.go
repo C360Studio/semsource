@@ -544,3 +544,37 @@ func TestEnvelopeTimeBurstDoesNotOutrunTheClock(t *testing.T) {
 		t.Fatalf("restarted publisher's write rejected as older: %+v", res.Stale)
 	}
 }
+
+// A changed publish whose reconcile is still waiting, then an identical
+// republish that skips its own: both writes apply before the first read. The
+// waiting reconcile accepts the later identical write as its own applied and
+// still removes the dropped call (#346 review round 4).
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+func TestSkippedIdenticalFollowUpDoesNotStrandTheReconcile(t *testing.T) {
+	g := newFakeGraph()
+	pub, ctx := startPublisher(t, g, WithReconcile(g))
+	seed := runPayload(5, true)
+	seed.SkipReconcile = true
+	send(t, pub, seed)
+	settle(ctx, t, pub)
+
+	g.mu.Lock()
+	g.blockRead = make(chan struct{})
+	blocked := g.blockRead
+	g.mu.Unlock()
+	send(t, pub, runPayload(5, false))
+	waitUntil(ctx, t, func() bool { return pub.Published() == 2 })
+	again := runPayload(5, false)
+	again.SkipReconcile = true
+	send(t, pub, again)
+	waitUntil(ctx, t, func() bool { return pub.Published() == 3 })
+	close(blocked)
+	settle(ctx, t, pub)
+
+	if has(g.snapshot(reconcileID), semast.CodeCalls) {
+		t.Errorf("the dropped call survived; reconciled=%d failed=%d", pub.Reconciled(), pub.ReconcileFailed())
+	}
+	if pub.Reconciled() != 1 || pub.ReconcileFailed() != 0 {
+		t.Errorf("reconciled=%d failed=%d; want 1 and 0", pub.Reconciled(), pub.ReconcileFailed())
+	}
+}

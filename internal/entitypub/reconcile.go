@@ -209,6 +209,7 @@ func (p *Publisher) reconcile(ctx context.Context, job reconcileJob) {
 			return
 		case err == nil && applied(exact.Entity, job.desired):
 			request.ExpectedRevision = exact.KVRevision
+			request.Desired = appliedCopies(exact.Entity, job.desired)
 			_, err = p.reconciler.Reconcile(ctx, request)
 			if err == nil {
 				p.reconciled.Add(1)
@@ -239,29 +240,39 @@ func (p *Publisher) reconcile(ctx context.Context, job reconcileJob) {
 	}
 }
 
-// applied reports whether stored holds every statement of desired, the
-// group statements this publish carried, stamped as the stream arrival is.
+// applied reports whether this publish's stream write, or a later one with
+// the same statements, has applied: stored holds every desired statement at
+// its own timestamp or a later one. A later write counts because graph-ingest
+// applies an entity's writes in arrival order, so this one applied before it;
+// it may be a follow-up republish that skipped its own reconcile.
 func applied(stored *gtypes.EntityState, desired []message.Triple) bool {
-	if stored == nil {
-		return false
-	}
-	have := make(map[string]bool, len(stored.Triples))
-	for _, t := range stored.Triples {
-		have[statementKey(t)] = true
-	}
-	for _, t := range desired {
-		if !have[statementKey(t)] {
-			return false
-		}
-	}
-	return true
+	return stored != nil && len(appliedCopies(stored, desired)) == len(desired)
 }
 
-// statementKey identifies a statement by the fields a publish stamps, its
-// timestamp to the nanosecond (the stored form keeps it). The object goes
-// through fmt so a JSON round trip's number types compare equal.
-func statementKey(t message.Triple) string {
-	return fmt.Sprintf("%s\x00%s\x00%v\x00%s\x00%d", t.Subject, t.Predicate, t.Object, t.Source, t.Timestamp.UnixNano())
+// appliedCopies returns, for each desired statement stored at its own
+// timestamp or a later one, the latest stored copy. Reconciling to the stored
+// copies leaves the statements kept as they are and removes only the rest.
+func appliedCopies(stored *gtypes.EntityState, desired []message.Triple) []message.Triple {
+	latest := make(map[string]message.Triple, len(stored.Triples))
+	for _, t := range stored.Triples {
+		k := contentKey(t)
+		if cur, ok := latest[k]; !ok || t.Timestamp.After(cur.Timestamp) {
+			latest[k] = t
+		}
+	}
+	out := make([]message.Triple, 0, len(desired))
+	for _, t := range desired {
+		if s, ok := latest[contentKey(t)]; ok && !s.Timestamp.Before(t.Timestamp) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// contentKey identifies a statement by everything but its timestamp. The
+// object goes through fmt so a JSON round trip's number types compare equal.
+func contentKey(t message.Triple) string {
+	return fmt.Sprintf("%s\x00%s\x00%v\x00%s", t.Subject, t.Predicate, t.Object, t.Source)
 }
 
 func isNotFound(err error) bool {

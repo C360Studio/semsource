@@ -50,8 +50,8 @@ single worker runs off the drain loop so a slow mutation lane never delays deliv
 reconcile that commits before an older queued write of the same entity lets that write restore a predicate the
 reconcile removed (#346 review: two publishes in flight, e.g. an edit during a seed backlog). graph-ingest applies one
 entity's writes in arrival order (`keyed_ingest.go`, SemStreams ADR-072). So the job reads the entity until the stored
-state holds every desired statement (this write applied, hence every older one), then replaces the group fenced at
-that read's revision. A lost compare-and-set re-reads. A job is skipped once a later publish of the entity is queued.
+state holds every desired statement at its own timestamp or later (this write, or a later identical one, applied,
+hence every older one), then replaces the group with those stored copies, fenced at that read's revision. A lost compare-and-set re-reads. A job is skipped once a later publish of the entity is queued.
 
 **Outcomes.** The job's budget is 30 s, with 5 s per request and a 20–500 ms backoff between reads. A full queue
 (4,096), a read or replace error, or a write not applied within the budget is counted on `reconcile_failed_total`; the
@@ -68,11 +68,11 @@ Each exclusion is marked `SkipReconcile` at the call site with a `// shortcut:` 
 removes it:
 
 - AST `folder` and `repo` payloads (#347).
-- Roots of one component that mint IDs in the same system: ast, doc and cfgfile (#349).
-- cfgfile `config.dependency`, `config.image` and `config.project`, which several manifests can write to one ID (#348).
+- Roots of one component that mint IDs in the same system: ast and doc (#349).
 - Store faults: AST bodies, image originals and thumbnails, video binaries and keyframes, audio binaries.
 
-git-source does not opt in: two instances can share a system slug, so each would delete the other's statements.
+git-source does not opt in: two instances can share a system slug (#354). Nor does cfgfile: every config type can
+share an ID across manifests, even within one root (#348).
 
 ### D3. The single-writer requirement is held by tests, not runtime checks
 
@@ -93,7 +93,7 @@ a bounded form. ast-source reconciles a file's entities only when this process k
 - a watch edit;
 - a reindex of a file whose in-memory hash differs from the one this process recorded.
 
-The other handlers apply the same rule. url, doc and cfgfile reconcile an entity whose statements differ from those
+The other handlers apply the same rule. url and doc reconcile an entity whose statements differ from those
 this process last sent for it. image, audio and video reconcile watch publishes. objectstore reconciles a polled
 modify, not a create.
 

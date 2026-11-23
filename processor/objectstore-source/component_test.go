@@ -229,6 +229,7 @@ func TestHandleChangeEvent_NilStateRecordsErrorWithoutPublishing(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/object-store-source/spec.md#Requirement: Objects the document pipeline cannot parse are skipped loudly
 func TestPublishDocument_EmptyStatesIsAContractFailure(t *testing.T) {
 	c := &Component{logger: discardLogger()}
 

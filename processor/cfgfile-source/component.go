@@ -101,13 +101,6 @@ type Component struct {
 	// (publish counters inflate under periodic reindex — audit 2026-07-19).
 	distinct *entitypub.DistinctTracker
 
-	// changes is what this process last published per entity, so only a
-	// known content change reconciles (#336, D4).
-	changes changeTracker
-	// sharedRootIDs marks every publish SkipReconcile: two roots can mint
-	// one entity ID (#349).
-	sharedRootIDs bool
-
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
 	workers     workerjoin.Group
@@ -135,47 +128,25 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		coalesceMs:   config.CoalesceMs,
 	}
 
-	pubOpts := []entitypub.Option{
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
-	}
-	if deps.NATSClient != nil {
-		// Every cfgfile publish carries the entity's complete semsource set
-		// (TestCfgfileWatchRepublishCarriesTheCompleteGroupSet); markReconcile
-		// limits the reconcile to known content changes of single-writer
-		// types (#336, D4).
-		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
-		if err != nil {
-			return nil, fmt.Errorf("create source reconciler: %w", err)
-		}
-		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
-	}
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
-	// shortcut: shared-project roots excluded from reconcile, remove with the #349 fix
-	// Roots under one system slug can write one entity ID each, and a
-	// reconcile from one root would delete the other's statements.
-	sharedRootIDs := rootsShareIDs(config)
-	if sharedRootIDs {
-		deps.GetLogger().Info("cfgfile-source roots share one entity-ID system; reconcile disabled (#349)",
-			"paths", config.Paths, "project", config.Project)
-	}
 
 	c := &Component{
-		authority:     authority,
-		name:          "cfgfile-source",
-		config:        config,
-		publisher:     pub,
-		distinct:      entitypub.NewDistinctTracker(),
-		natsClient:    deps.NATSClient,
-		logger:        deps.GetLogger(),
-		platform:      deps.Platform,
-		handler:       h,
-		sourceCfg:     sc,
-		sharedRootIDs: sharedRootIDs,
+		authority:  authority,
+		name:       "cfgfile-source",
+		config:     config,
+		publisher:  pub,
+		distinct:   entitypub.NewDistinctTracker(),
+		natsClient: deps.NATSClient,
+		logger:     deps.GetLogger(),
+		platform:   deps.Platform,
+		handler:    h,
+		sourceCfg:  sc,
 	}
 
 	return c, nil
@@ -297,7 +268,6 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			c.ingestErrors.Add(1)
 			continue
 		}
-		fp := c.markReconcile(payload)
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish cfgfile entity",
 				"id", state.ID,
@@ -305,7 +275,6 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 			c.ingestErrors.Add(1)
 			continue
 		}
-		c.changes.record(payload.ID, fp)
 		c.entitiesPublished.Add(1)
 		c.distinct.Observe(state.ID)
 		c.updateLastActivity()
@@ -375,7 +344,6 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			c.ingestErrors.Add(1)
 			continue
 		}
-		fp := c.markReconcile(payload)
 		if err := c.publishEntity(ctx, payload); err != nil {
 			c.logger.Warn("Failed to publish cfgfile entity on change",
 				"id", state.ID,
@@ -383,7 +351,6 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 			c.ingestErrors.Add(1)
 			continue
 		}
-		c.changes.record(payload.ID, fp)
 		c.entitiesPublished.Add(1)
 		c.distinct.Observe(state.ID)
 		c.updateLastActivity()
