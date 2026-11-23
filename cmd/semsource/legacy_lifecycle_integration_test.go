@@ -38,14 +38,33 @@ func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
 		if err := tc.Client.DeleteKeyValueBucket(ctx, legacyLifecycleBucket); err != nil {
 			t.Fatal(err)
 		}
-		var err error
-		bucket, err = tc.Client.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{Bucket: legacyLifecycleBucket, History: 1})
+		// #343: Client.CreateKeyValueBucket is create-or-get, so a recreate
+		// that still finds the deleted stream silently reuses it, values and
+		// all. Wait until the delete is observed, then create strictly so a
+		// surviving stream fails loudly instead of leaking into the subtest.
+		for {
+			_, err := tc.Client.GetKeyValueBucket(ctx, legacyLifecycleBucket)
+			if errors.Is(err, jetstream.ErrBucketNotFound) {
+				break
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("bucket delete never observed: %v", err)
+			}
+		}
+		js, err := tc.Client.JetStream()
+		if err != nil {
+			t.Fatal(err)
+		}
+		bucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: legacyLifecycleBucket, History: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
 		status, err := bucket.Status(ctx)
-		if err != nil || status.Values() != 0 {
-			t.Fatalf("fixture not empty: %v", err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := status.Values(); n != 0 {
+			t.Fatalf("fresh fixture bucket holds %d values", n)
 		}
 		if err := checkLegacyLifecycle(ctx, tc.Client); err != nil {
 			t.Fatal(err)
