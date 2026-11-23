@@ -23,7 +23,7 @@ import (
 
 // guardLanguages are the parsers whose declarations must never share an entity
 // ID (entity-identity-safety, "One entity ID per declaration within a parse
-// pass). C precedes C++ so ".h" is read as C, the routing that folds C++
+// pass"). C precedes C++ so ".h" is read as C, the routing that folds C++
 // overloads in a C-routed header (#338).
 var guardLanguages = []string{"go", "java", "typescript", "javascript", "svelte", "python", "c", "cpp"}
 

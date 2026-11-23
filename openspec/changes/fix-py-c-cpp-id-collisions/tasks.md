@@ -6,14 +6,14 @@
 
 ## 2. Implementation
 
-- [ ] 2.1 `ast.FoldDeclarations` with a unit test for replacement, position and `Contains` union.
-- [ ] 2.2 C parser folds with the definition policy.
-- [ ] 2.3 C++ parser folds with the definition policy.
-- [ ] 2.4 Python parser: accessor discriminator, stub marking, fold with the last-binding policy.
-- [ ] 2.5 Guard test covers python, c and cpp with fixtures for every class in #338's step 0 comment.
+- [x] 2.1 `ast.FoldDeclarations` with a unit test for replacement, position and `Contains` union.
+- [x] 2.2 C parser folds with the definition policy.
+- [x] 2.3 C++ parser folds with the definition policy.
+- [x] 2.4 Python parser: accessor discriminator, stub marking, fold with the last-binding policy.
+- [x] 2.5 Guard test covers python, c and cpp with fixtures for every class in #338's step 0 comment.
 
 ## 3. Verify
 
-- [ ] 3.1 The collision probe reports zero on llama.cpp (both `.h` routings) and the site-packages tree.
-- [ ] 3.2 `task lint`, `go test ./...` and `go test -race ./source/ast/...` pass.
+- [x] 3.1 The collision probe reports zero on llama.cpp (both `.h` routings; 2,673 and 2,659 before), the carnot site-packages tree (1,996 before) and semselect (5 before), 2026-11-23.
+- [x] 3.2 `task lint`, `go test ./...` and `go test -race ./source/ast/...` pass.
 - [ ] 3.3 Independent review (`graph-event-reviewer`).

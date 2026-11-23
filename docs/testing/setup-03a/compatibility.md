@@ -352,6 +352,8 @@ re-ingest is not equivalent, because re-ingest never removes predicates
 | TS/JS/Svelte locals dropped (function and module-level block scopes); accessors, statics and namespace members distinct | Accessor, static and namespace member IDs change; other module-level IDs unchanged | Locals (test files and module-level blocks included) and IIFE/AMD/UMD bodies |
 | Go blank and `init` skipped | Those IDs disappear | Callers seen only from `init` |
 | Vendored twin of `X.min.js` is file-only | Its symbol IDs disappear | Opt back in with `index_vendored_js` |
+| C/C++ same-name declarations in one file fold (#338) | None: the shared ID keeps the definition's facts, else the first's | Other `#if` branches' calls; C++ overloads beyond the first in a C-routed `.h` |
+| Python accessors distinct, `@overload` stubs and earlier bindings folded (#338) | Setter and deleter IDs gain `-setter` / `-deleter` | Stubs that have an implementation; earlier bindings of a redefined name |
 | AST-source runtime guard | Duplicates published once, counted as `id_collisions` | None |
 
 Evidence, all at `08227da` unless noted:

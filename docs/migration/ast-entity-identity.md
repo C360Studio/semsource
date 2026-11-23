@@ -37,11 +37,20 @@ hybrids.
   are scoped by their namespace chain: `namespace A.B { export function g() {} }` gives `...-A-B-g`, and
   `declare module "m" {}` scopes by `m`. Members of `declare global {}` stay unscoped. Other module-level IDs are
   unchanged.
+- **Python property setters and deleters** get `-setter` and `-deleter` instances (`...-Tokenizer-model-setter`);
+  the getter keeps the plain name ([#338](https://github.com/C360Studio/semsource/issues/338)).
 - Every other code ID is unchanged in shape. Docs, config, git and URL entities are not affected.
 
 ## What you will no longer see
 
-These are deliberate, and each was ruled on #329.
+These are deliberate, and each was ruled on #329 or #338.
+
+- **A C/C++ name declared more than once in one file is one entity.** A prototype and its definition, the branches
+  of an `#if`, and a redefined `#define` fold together: the definition supplies the facts, otherwise the first in
+  source order. Another `#if` branch's calls are not recorded. C++ overloads in a `.h` read by the C parser keep only
+  the first overload; declare `cpp` on the watch path to index them.
+- **Python `@overload` stubs are not entities when the implementation exists**, and a name bound twice in one scope
+  keeps its last binding, the one Python runs.
 
 - **Locals are not entities.** Function-scoped TS/JS/Svelte declarations, local functions included, no longer
   appear, and test-file locals go too. Non-exported members of a namespace declared more than once in the same file go too. Each body's private declarations are separately scoped in TypeScript but would share one ID, and calls to them emit no edge. So do block-scoped declarations at module level: anything declared inside a
