@@ -57,7 +57,8 @@ compare-and-set re-reads.
 **Later publishes.** Each publish is noted before its send, so a read never shows a write the publisher has not
 noted. A later publish to reconcile replaces the job. A later skipped publish with the same group statements leaves
 it standing, and one with different statements (a fault, or a change it does not know) withdraws it. The job checks
-this after every read and before its replace; a withdrawn job writes nothing.
+this after every read and before its replace; a withdrawn job writes nothing. A later publish whose send fails also withdraws it, since a
+timed-out send may have been stored; the next edit reconciles.
 
 **Outcomes.** The job's budget is 30 s, with 5 s per request and a 20–500 ms backoff between reads. A full queue
 (4,096), a read or replace error, or a write not applied within the budget is counted on `reconcile_failed_total`; the

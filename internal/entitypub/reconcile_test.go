@@ -657,3 +657,21 @@ func TestFaultedFollowUpWithdrawsTheOlderReconcile(t *testing.T) {
 		t.Errorf("the faulted follow-up's call was removed; reconciled=%d failed=%d", pub.Reconciled(), pub.ReconcileFailed())
 	}
 }
+
+// A numeric object of 1e6 or more prints differently as the publish's
+// json.Number and the stored float64; the fence must still see it applied.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+func TestLargeNumberObjectsPassTheFence(t *testing.T) {
+	g := newFakeGraph()
+	pub, ctx := startPublisher(t, g, WithReconcile(g))
+	send(t, pub, runPayload(1_000_000, true))
+	settle(ctx, t, pub)
+	send(t, pub, runPayload(1_000_001, false))
+	settle(ctx, t, pub)
+	if has(g.snapshot(reconcileID), semast.CodeCalls) {
+		t.Errorf("dropped call survived; reconciled=%d failed=%d", pub.Reconciled(), pub.ReconcileFailed())
+	}
+	if pub.ReconcileFailed() != 0 {
+		t.Errorf("reconcile failed %d times", pub.ReconcileFailed())
+	}
+}

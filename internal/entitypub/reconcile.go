@@ -2,9 +2,11 @@ package entitypub
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -318,10 +320,38 @@ func appliedCopies(stored *gtypes.EntityState, desired []message.Triple) []messa
 	return out
 }
 
-// contentKey identifies a statement by everything but its timestamp. The
-// object goes through fmt so a JSON round trip's number types compare equal.
+// contentKey identifies a statement by everything but its timestamp. A
+// number is keyed by its float64 value: the publish side holds json.Number
+// and the stored side float64, which print differently from 1e6 up.
 func contentKey(t message.Triple) string {
-	return fmt.Sprintf("%s\x00%s\x00%v\x00%s", t.Subject, t.Predicate, t.Object, t.Source)
+	return fmt.Sprintf("%s\x00%s\x00%s\x00%s", t.Subject, t.Predicate, objectKey(t.Object), t.Source)
+}
+
+func objectKey(o any) string {
+	var f float64
+	switch v := o.(type) {
+	case json.Number:
+		parsed, err := v.Float64()
+		if err != nil {
+			return v.String()
+		}
+		f = parsed
+	case float64:
+		f = v
+	case float32:
+		f = float64(v)
+	case int:
+		f = float64(v)
+	case int64:
+		f = float64(v)
+	case int32:
+		f = float64(v)
+	case uint64:
+		f = float64(v)
+	default:
+		return fmt.Sprintf("%T:%v", o, o)
+	}
+	return "n:" + strconv.FormatFloat(f, 'g', -1, 64)
 }
 
 func isNotFound(err error) bool {
