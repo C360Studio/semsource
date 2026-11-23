@@ -35,6 +35,7 @@ import (
 // re-ingests it. (A restart over an edit made while semsource was down is the
 // known gap of the bounded form, owner ruling task 5.2: semengine#730.) The stored entity must no longer carry the calls edge or
 // the doc comment: a predicate the producer stops emitting must not survive.
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
 func TestIntegration_ReingestDropsRemovedPredicates(t *testing.T) {
 	ctx := context.Background()
 	tc := natstest.New(t,
