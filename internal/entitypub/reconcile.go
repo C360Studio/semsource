@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,28 +115,68 @@ type reconcileJob struct {
 	desired []message.Triple
 }
 
-// enqueueReconcile hands a delivered publish to the reconcile worker. It runs
-// on the drain loop before the delivery counters move, so the job is counted
-// in flight and WaitSettled covers it. It never blocks: a full queue drops
-// the reconcile, counted, and the next edit of the entity repairs it.
-func (p *Publisher) enqueueReconcile(payload *graph.EntityPayload, at time.Time) {
-	if p.reconciler == nil || payload.SkipReconcile || p.stopping() {
-		return
+// intent is the reconcile a delivered publish leaves standing for an entity:
+// the job's sequence number and its group statements without timestamps.
+type intent struct {
+	seq     uint64
+	content string
+}
+
+// noteDelivery records a publish about to be sent and reports the reconcile
+// job to queue for it, if any. It runs on the drain loop before the send, so
+// every later write of the entity is known before it can apply. A publish to
+// reconcile replaces any standing intent. A skipped publish whose group
+// statements equal the standing intent's leaves it standing: the fence
+// accepts this write as the same set applied. Any other skipped publish
+// withdraws it, so an older reconcile never removes what a later, different
+// or incomplete, write carries; the next edit reconciles instead.
+func (p *Publisher) noteDelivery(payload *graph.EntityPayload, at time.Time) (reconcileJob, bool) {
+	if p.reconciler == nil {
+		return reconcileJob{}, false
+	}
+	toReconcile := !payload.SkipReconcile && !p.stopping()
+	p.latestMu.Lock()
+	defer p.latestMu.Unlock()
+	standing, pending := p.latest[payload.ID]
+	if !toReconcile && !pending {
+		return reconcileJob{}, false
 	}
 	desired, fenced := desiredGroup(payload.TripleData, at)
-	if !fenced {
+	content := groupContent(desired)
+	switch {
+	case toReconcile && fenced:
+		p.reconcileSeq++
+		job := reconcileJob{id: payload.ID, seq: p.reconcileSeq, desired: desired}
+		p.latest[job.id] = intent{seq: job.seq, content: content}
+		return job, true
+	case toReconcile:
 		// Every group statement carries its own timestamp, so the stored
-		// state cannot show which write applied: an older identical write
-		// would pass for this one. Not reconciled; no enabled handler
-		// publishes such a payload today.
+		// state cannot show which write applied. Not reconciled; no enabled
+		// handler publishes such a payload today.
 		p.logger.Debug("entity reconcile skipped: no envelope-stamped statement to fence on", "id", payload.ID)
-		return
+	case content == standing.content:
+		return reconcileJob{}, false
 	}
-	p.latestMu.Lock()
-	p.reconcileSeq++
-	job := reconcileJob{id: payload.ID, seq: p.reconcileSeq, desired: desired}
-	p.latest[job.id] = job.seq
-	p.latestMu.Unlock()
+	delete(p.latest, payload.ID)
+	return reconcileJob{}, false
+}
+
+// groupContent is a publish's group statements without their timestamps, in
+// a fixed order, so two publishes of the same set compare equal.
+func groupContent(desired []message.Triple) string {
+	keys := make([]string, len(desired))
+	for i, t := range desired {
+		keys[i] = contentKey(t)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, "\x01")
+}
+
+// enqueueReconcile hands a delivered publish's job to the reconcile worker.
+// It runs on the drain loop before the delivery counters move, so the job is
+// counted in flight and WaitSettled covers it. It never blocks: a full queue
+// drops the reconcile, counted, and the next edit of the entity repairs it.
+func (p *Publisher) enqueueReconcile(job reconcileJob) {
 	p.reconcilePending.Add(1)
 	select {
 	case p.reconcileQ <- job:
@@ -164,19 +206,20 @@ func (p *Publisher) reconcileWorker(ctx context.Context) {
 // so latest holds only entities with a queued or running reconcile.
 func (p *Publisher) forget(job reconcileJob) {
 	p.latestMu.Lock()
-	if p.latest[job.id] == job.seq {
+	if p.latest[job.id].seq == job.seq {
 		delete(p.latest, job.id)
 	}
 	p.latestMu.Unlock()
 }
 
-// superseded reports whether a later publish of the same entity was queued:
-// its own reconcile covers this one, and this one's statements may never be
-// stored as such (the later write can apply first).
+// superseded reports whether a later publish of the same entity replaced or
+// withdrew this job's intent (noteDelivery). Its statements may never be
+// stored as such, and a later write's must not be removed.
 func (p *Publisher) superseded(job reconcileJob) bool {
 	p.latestMu.Lock()
 	defer p.latestMu.Unlock()
-	return p.latest[job.id] != job.seq
+	cur, ok := p.latest[job.id]
+	return !ok || cur.seq != job.seq
 }
 
 // reconcile sets the entity's semsource statements in group `source` to
@@ -208,6 +251,12 @@ func (p *Publisher) reconcile(ctx context.Context, job reconcileJob) {
 			p.reconcileFailure(job.id, err)
 			return
 		case err == nil && applied(exact.Entity, job.desired):
+			// Checked after the read: any later write this read can show was
+			// noted before its send. One noted after it changes the revision
+			// if it applies first, failing the replace below.
+			if p.superseded(job) {
+				return
+			}
 			request.ExpectedRevision = exact.KVRevision
 			request.Desired = appliedCopies(exact.Entity, job.desired)
 			_, err = p.reconciler.Reconcile(ctx, request)

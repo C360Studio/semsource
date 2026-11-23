@@ -98,13 +98,13 @@ type Publisher struct {
 	reconciled      atomic.Int64
 	reconcileFailed atomic.Int64
 	// reconcilePending counts queued reconciles; they are in flight for
-	// WaitSettled. latest maps an entity ID to the envelope time of its most
-	// recently queued reconcile, so an older queued job knows it is superseded.
+	// WaitSettled. latest maps an entity ID to the reconcile intent its
+	// delivered publishes leave standing (see noteDelivery).
 	reconcilePending atomic.Int64
 	reconcileQ       chan reconcileJob
 	reconcileDone    chan struct{}
 	latestMu         sync.Mutex
-	latest           map[string]uint64
+	latest           map[string]intent
 	reconcileSeq     uint64 // guarded by latestMu
 	metrics          *pubMetrics
 
@@ -247,7 +247,7 @@ func New(client NATSPublisher, logger *slog.Logger, opts ...Option) (*Publisher,
 		reconcileQ:      make(chan reconcileJob, reconcileQueueSize),
 		now:             time.Now,
 		reconcileDone:   make(chan struct{}),
-		latest:          map[string]uint64{},
+		latest:          map[string]intent{},
 	}, nil
 }
 
@@ -516,13 +516,26 @@ func (p *Publisher) publishOne(ctx context.Context, payload *graph.EntityPayload
 	maxBackoff := p.maxRetryBackoff
 	deadline := time.Now().Add(deliveryBudget)
 
+	// The reconcile intent is registered before the send, so no reconcile
+	// can see this write applied without knowing about it.
+	job, reconcile := p.noteDelivery(payload, at)
+	delivered := false
+	defer func() {
+		if reconcile && !delivered {
+			p.forget(job)
+		}
+	}()
+
 	var attempts int
 	for attempts = 1; attempts <= maxPublishAttempts; attempts++ {
 		err = p.client.PublishToStreamWithMsgID(ctx, graphIngestSubject, data, msgID)
 		if err == nil {
+			delivered = true
 			// Queue the reconcile before the delivery counters move, so
 			// WaitSettled also covers it. It runs off this loop.
-			p.enqueueReconcile(payload, at)
+			if reconcile {
+				p.enqueueReconcile(job)
+			}
 			// Recovery state settles before the delivery counter moves: a
 			// WaitSettled caller can return the moment published advances, and
 			// its report must not pair full delivery with stale backpressure.

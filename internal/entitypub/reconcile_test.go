@@ -578,3 +578,82 @@ func TestSkippedIdenticalFollowUpDoesNotStrandTheReconcile(t *testing.T) {
 		t.Errorf("reconciled=%d failed=%d; want 1 and 0", pub.Reconciled(), pub.ReconcileFailed())
 	}
 }
+
+// readEnteredGraph signals each authoritative read as it starts.
+type readEnteredGraph struct {
+	*fakeGraph
+	entered chan struct{}
+}
+
+func (g *readEnteredGraph) ReadAuthoritative(ctx context.Context, id string) (*gtypes.ExactEntity, error) {
+	select {
+	case g.entered <- struct{}{}:
+	default:
+	}
+	return g.fakeGraph.ReadAuthoritative(ctx, id)
+}
+
+// B drops the call and its reconcile is reading; C restores the call and
+// applies before B's read returns. B must not remove C's call (#346 review
+// round 5).
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+func TestOlderReconcileDoesNotRemoveANewerPublishesFact(t *testing.T) {
+	g := newFakeGraph()
+	rg := &readEnteredGraph{fakeGraph: g, entered: make(chan struct{}, 1)}
+	pub, ctx := startPublisher(t, g, WithReconcile(rg))
+	seed := runPayload(5, true)
+	seed.SkipReconcile = true
+	send(t, pub, seed)
+	settle(ctx, t, pub)
+
+	g.mu.Lock()
+	g.blockRead = make(chan struct{})
+	blocked := g.blockRead
+	g.mu.Unlock()
+	send(t, pub, runPayload(5, false))
+	select {
+	case <-rg.entered:
+	case <-ctx.Done():
+		t.Fatal("B's read never started")
+	}
+	send(t, pub, runPayload(5, true))
+	waitUntil(ctx, t, func() bool { return pub.Published() == 3 })
+	close(blocked)
+	settle(ctx, t, pub)
+
+	if !has(g.snapshot(reconcileID), semast.CodeCalls) {
+		t.Error("the older reconcile removed the newer publish's call")
+	}
+}
+
+// B is complete and drops the call; C restores the call but its body write
+// failed, so it skips its reconcile. C withdraws B's intent: B must not
+// remove C's call (#346 review round 5).
+// spec: openspec/changes/reconcile-source-group-on-republish/specs/entity-publish-integrity/spec.md#Requirement: A republish leaves exactly the statements the source last emitted
+func TestFaultedFollowUpWithdrawsTheOlderReconcile(t *testing.T) {
+	g := newFakeGraph()
+	pub, ctx := startPublisher(t, g, WithReconcile(g))
+	seed := runPayload(5, true)
+	seed.SkipReconcile = true
+	send(t, pub, seed)
+	settle(ctx, t, pub)
+
+	g.mu.Lock()
+	g.blockRead = make(chan struct{})
+	blocked := g.blockRead
+	g.mu.Unlock()
+	complete := runPayload(5, false)
+	complete.TripleData = append(complete.TripleData, message.Triple{Subject: reconcileID, Predicate: semast.CodeBodyKey, Object: "body-B"})
+	send(t, pub, complete)
+	waitUntil(ctx, t, func() bool { return pub.Published() == 2 })
+	faulted := runPayload(5, true)
+	faulted.SkipReconcile = true
+	send(t, pub, faulted)
+	waitUntil(ctx, t, func() bool { return pub.Published() == 3 })
+	close(blocked)
+	settle(ctx, t, pub)
+
+	if !has(g.snapshot(reconcileID), semast.CodeCalls) {
+		t.Errorf("the faulted follow-up's call was removed; reconciled=%d failed=%d", pub.Reconciled(), pub.ReconcileFailed())
+	}
+}

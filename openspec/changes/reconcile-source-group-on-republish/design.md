@@ -51,7 +51,13 @@ reconcile that commits before an older queued write of the same entity lets that
 reconcile removed (#346 review: two publishes in flight, e.g. an edit during a seed backlog). graph-ingest applies one
 entity's writes in arrival order (`keyed_ingest.go`, SemStreams ADR-072). So the job reads the entity until the stored
 state holds every desired statement at its own timestamp or later (this write, or a later identical one, applied,
-hence every older one), then replaces the group with those stored copies, fenced at that read's revision. A lost compare-and-set re-reads. A job is skipped once a later publish of the entity is queued.
+hence every older one), then replaces the group with those stored copies, fenced at that read's revision. A lost
+compare-and-set re-reads.
+
+**Later publishes.** Each publish is noted before its send, so a read never shows a write the publisher has not
+noted. A later publish to reconcile replaces the job. A later skipped publish with the same group statements leaves
+it standing, and one with different statements (a fault, or a change it does not know) withdraws it. The job checks
+this after every read and before its replace; a withdrawn job writes nothing.
 
 **Outcomes.** The job's budget is 30 s, with 5 s per request and a 20–500 ms backoff between reads. A full queue
 (4,096), a read or replace error, or a write not applied within the budget is counted on `reconcile_failed_total`; the
