@@ -34,11 +34,16 @@ type PlannedComponent struct {
 // IDs, so they share one), the org and the system segment.
 type systemKey struct{ kind, org, system string }
 
-// idSpace is the ID space each component kind in the rule mints into.
+// idSpace is the ID space each component kind in the rule mints into. Each
+// media kind is its own space: they mint distinct entity types (image, audio,
+// video and keyframe), so roots of different media kinds never collide (#366).
 var idSpace = map[string]string{
 	"ast-source":         "ast",
 	"doc-source":         "doc",
 	"objectstore-source": "doc",
+	"image-source":       "image",
+	"audio-source":       "audio",
+	"video-source":       "video",
 }
 
 type systemRoot struct {
@@ -97,8 +102,9 @@ type collisionConfig struct {
 // version) per watch path (processor/ast-source initializeWatchers), doc-source
 // SystemSlug(project) when set, else SystemSlug(root) (handler/doc system),
 // objectstore-source ScopedSystemSlug(project or bucket, version) for its one
-// bucket (handler/objectstore System). Other kinds are outside the rule and
-// yield none.
+// bucket (handler/objectstore System), and image-, audio- and video-source
+// SystemSlug(root) per path, as they have no project (handler/image, audio and
+// video). Other kinds are outside the rule and yield none.
 func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 	space, ok := idSpace[c.Config.Name]
 	if !ok {
@@ -257,7 +263,15 @@ func groupCollisions(ctx context.Context, roots []systemRoot) []collision {
 	}
 	var out []collision
 	for _, key := range order {
-		members := groups[key]
+		// One writer listed twice (two file entries of one instance over a
+		// shared root) is one root: the same-instance check words it, and the
+		// system message would name the root twice (#366).
+		var members []systemRoot
+		for _, r := range groups[key] {
+			if !slices.ContainsFunc(members, func(m systemRoot) bool { return m.identity() == r.identity() }) {
+				members = append(members, r)
+			}
+		}
 		if len(members) < 2 {
 			continue
 		}
@@ -353,7 +367,19 @@ func checkoutHead(ctx context.Context, root string) (head, prefix string, err er
 	return strings.TrimSpace(lines[1]), strings.TrimSpace(lines[0]), nil
 }
 
-func collisionError(found []collision) error {
+// projectRemedy is the way through two roots that share a system.
+const projectRemedy = "give each source a distinct project (or version)"
+
+// movesRegistered reports whether c is an add rebuilding a registered
+// instance on other roots of its system: every root is one instance and one
+// is registered, so the add is a re-add that changes the source's roots, or
+// another source landing on its name (#366).
+func (c collision) movesRegistered() bool {
+	return !slices.ContainsFunc(c.roots, func(r systemRoot) bool { return r.instance != c.roots[0].instance }) &&
+		slices.ContainsFunc(c.roots, func(r systemRoot) bool { return !r.pending })
+}
+
+func collisionError(found []collision, remedy string) error {
 	if len(found) == 0 {
 		return nil
 	}
@@ -364,7 +390,7 @@ func collisionError(found []collision) error {
 	return &Error{
 		Code: CodeValidationFailed,
 		Message: strings.Join(msgs, "; ") +
-			"; each would replace the other's entities, so give each source a distinct project (or version) (#349)",
+			"; each would replace the other's entities, so " + remedy + " (#349)",
 	}
 }
 
@@ -381,7 +407,7 @@ func CheckSystemCollisions(ctx context.Context, components []PlannedComponent) e
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
-	return collisionError(found)
+	return collisionError(found, projectRemedy)
 }
 
 // Planned returns the components a component snapshot would spawn, marking
@@ -419,7 +445,7 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 			entries = expanded.Sources
 		}
 		for _, entry := range entries {
-			if entry.Type != "ast" && entry.Type != "docs" && entry.Type != "s3" {
+			if !slices.Contains([]string{"ast", "docs", "s3", "image", "audio", "video"}, entry.Type) {
 				continue
 			}
 			specs, err := buildSpecs(ctx, entry, opts)
@@ -457,16 +483,23 @@ func sameInstanceError(planned []PlannedComponent) error {
 	held := map[string]PlannedComponent{}
 	for _, pc := range planned {
 		if prev, dup := held[pc.Instance]; dup {
+			// Either order: a later entry that adds a root still has the
+			// earlier listing build the instance from other roots (#366).
 			found, err := instanceTakeovers([]PlannedComponent{pc}, []PlannedComponent{prev})
 			if err != nil {
 				return err
+			}
+			if len(found) == 0 {
+				if found, err = instanceTakeovers([]PlannedComponent{prev}, []PlannedComponent{pc}); err != nil {
+					return err
+				}
 			}
 			msgs = append(msgs, found...)
 			continue
 		}
 		held[pc.Instance] = pc
 	}
-	return takeoverError(msgs)
+	return takeoverError(msgs, distinctRemedy)
 }
 
 // instanceTakeovers names each enabled incoming component that would build
@@ -504,14 +537,20 @@ func instanceTakeovers(incoming, held []PlannedComponent) ([]string, error) {
 	return out, nil
 }
 
-func takeoverError(msgs []string) error {
+// distinctRemedy is the way through two sources that build one instance.
+const distinctRemedy = "give each source a distinct project (or bucket, prefix or version)"
+
+// addRemedy adds, for a runtime add, the way through a re-add that narrows a
+// registered source's roots: the add cannot shrink an instance in place.
+const addRemedy = "to change a registered source's paths, remove it, then add it; otherwise " + distinctRemedy
+
+func takeoverError(msgs []string, remedy string) error {
 	if len(msgs) == 0 {
 		return nil
 	}
 	return &Error{
-		Code: CodeValidationFailed,
-		Message: strings.Join(msgs, "; ") +
-			"; one component would replace the other, so give each source a distinct project (or bucket, prefix or version) (#349)",
+		Code:    CodeValidationFailed,
+		Message: strings.Join(msgs, "; ") + "; one component would replace the other, so " + remedy + " (#349)",
 	}
 }
 
@@ -546,14 +585,19 @@ func checkAddCollisions(ctx context.Context, existing semconfig.ComponentConfigs
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
 	found := groupCollisions(ctx, oneWriterEach(pendingRoots, registeredRoots))
-	if err := collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() })); err != nil {
+	found = slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() })
+	remedy := projectRemedy
+	if slices.ContainsFunc(found, collision.movesRegistered) {
+		remedy = addRemedy
+	}
+	if err := collisionError(found, remedy); err != nil {
 		return err
 	}
 	takeovers, err := instanceTakeovers(pending, registered)
 	if err != nil {
 		return err
 	}
-	if err := takeoverError(takeovers); err != nil {
+	if err := takeoverError(takeovers, addRemedy); err != nil {
 		return err
 	}
 	return discoveredTakeover(existing, pending)
@@ -584,7 +628,7 @@ func discoveredTakeover(existing semconfig.ComponentConfigs, pending []PlannedCo
 		}
 		have, kept := existing[pc.Instance]
 		if !kept {
-			msgs = append(msgs, fmt.Sprintf("%s (root %s) is a name boot discovery owns, and no discovered root is kept to show it is the same source",
+			msgs = append(msgs, fmt.Sprintf("%s (root %s) is a name boot discovery owns, and no discovered root is kept to show it is the same source; a restart reconciles the discovery record, then retry the add",
 				pc.Instance, strings.Join(want, ", ")))
 			continue
 		}
@@ -676,14 +720,14 @@ func CheckDiscoveredCollisions(ctx context.Context, retained, discovered []Plann
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
-	if err := collisionError(groupCollisions(ctx, oneWriterEach(discoveredRoots, retainedRoots))); err != nil {
+	if err := collisionError(groupCollisions(ctx, oneWriterEach(discoveredRoots, retainedRoots)), projectRemedy); err != nil {
 		return err
 	}
 	takeovers, err := instanceTakeovers(discovered, retained)
 	if err != nil {
 		return err
 	}
-	return takeoverError(takeovers)
+	return takeoverError(takeovers, distinctRemedy)
 }
 
 // distinctSources drops a repeat of one instance over the same roots with
