@@ -154,7 +154,7 @@ Every registered parser SHALL give distinct declarations distinct entity IDs or 
 - **AND** the source status `id_collisions` count increases by one, and one aggregated warning names the file
 
 ### Requirement: Sources that would share an entity-ID system are refused
-SemSource SHALL refuse a source set in which two ast-source roots, two document roots (doc-source paths and objectstore-source buckets, which mint one `web` document ID space), or two media roots of one kind (image-, audio- or video-source paths; each kind mints its own entity types, so roots of different media kinds never collide), or two git-source repositories (each rooted at its `repo_path`, else its `repo_url`, under the branch-scoped repo slug its handler mints), would mint entity IDs under the same org and system, unless the collision includes a submodule pin and every root in it has the same parse scope (languages, excludes and vendored-JS indexing), and every non-pin root in it declares the pin's project and version and is the top level of a checkout whose HEAD is the pinned SHA. Two sources that build one component instance from different roots SHALL be refused whatever their systems, and a runtime add SHALL NOT re-enable a name that boot discovery owns from a different root. The refusal MUST happen before any colliding component publishes or any colliding configuration is written: at `semsource validate` and `semsource run` over the file's sources, at boot over the retained and discovered sets before discovery writes them, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
+SemSource SHALL refuse a source set in which two ast-source roots, two document roots (doc-source paths and objectstore-source buckets, which mint one `web` document ID space), or two media roots of one kind (image-, audio- or video-source paths; each kind mints its own entity types, so roots of different media kinds never collide), or two git-source repositories (each rooted at its `repo_path`, else its `repo_url`, under the branch-scoped repo slug its handler mints), or two config-file roots (cfgfile-source paths, whose IDs are keyed by the manifest path relative to the root), would mint entity IDs under the same org and system, unless the collision includes a submodule pin and every root in it has the same parse scope (languages, excludes and vendored-JS indexing), and every non-pin root in it declares the pin's project and version and is the top level of a checkout whose HEAD is the pinned SHA. Two sources that build one component instance from different roots SHALL be refused whatever their systems, and a runtime add SHALL NOT re-enable a name that boot discovery owns from a different root. The refusal MUST happen before any colliding component publishes or any colliding configuration is written: at `semsource validate` and `semsource run` over the file's sources, at boot over the retained and discovered sets before discovery writes them, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
 
 #### Scenario: Two ast sources under one project are refused
 - **GIVEN** a config with ast sources at `./a` and `./b`, both with `project: svc` and no version
@@ -267,4 +267,32 @@ SemSource SHALL refuse a source set in which two ast-source roots, two document 
 - **GIVEN** git sources at `/r/core` with branch slugs `main` and `feature`
 - **WHEN** the config is validated
 - **THEN** no collision is reported
+
+### Requirement: Config-file entities are keyed by their declaring file
+The config-file source SHALL include the declaring manifest's path, relative to the source root, in the instance of every entity it mints, and MUST NOT let two manifests under one source root write one entity ID. No instance SHALL depend on the checkout's location or folder name. Two roots that share a system are refused by the shared-system rule; same-coordinate declarations within one manifest are tracked by https://github.com/C360Studio/semsource/issues/375.
+
+#### Scenario: One coordinate declared by two manifests gets two IDs
+- **WHEN** `a/pom.xml` declares `org.slf4j:slf4j-api:2.0.9` with scope `test` and `b/build.gradle` declares it under `implementation`
+- **THEN** the source publishes two `config.dependency` entities with distinct IDs
+- **AND** one carries `dependency-scope` `test` and the other `dependency-configuration` `implementation`, and neither carries both
+
+#### Scenario: Same-named Gradle directories do not collide
+- **WHEN** a source root contains `a/core/build.gradle` and `b/core/build.gradle`
+- **THEN** the source publishes two Gradle project entities with distinct IDs
+
+#### Scenario: Two Dockerfiles sharing a base image keep their own ports
+- **WHEN** two Dockerfiles both use `FROM golang:1.23` and expose different ports
+- **THEN** the source publishes two `config.image` entities, each with its own file's ports and path
+
+#### Scenario: IDs do not depend on the checkout location
+- **WHEN** one tree is ingested from two different absolute checkout paths
+- **THEN** every config-file entity ID is the same in both
+
+#### Scenario: Two config roots under one project are refused
+- **WHEN** one config source lists the paths `/r/a` and `/r/b` with project `shared`, each holding a root-level `package.json` with no name
+- **THEN** `semsource validate` refuses the source set, naming both roots and the system `shared`
+
+#### Scenario: A project override hides the checkout folder name
+- **WHEN** a source with project `osh-core` is ingested from folders named `osh-core` and `osh-core-2`, each with a root-level `build.gradle`
+- **THEN** every config-file entity ID is the same in both
 

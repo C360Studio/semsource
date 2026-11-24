@@ -114,6 +114,31 @@ func TestCheckSystemCollisions(t *testing.T) {
 			want: []string{"doc-source-handbook (root /r/a)", "doc-source-handbook (root /r/b)", `system "handbook"`},
 		},
 		{
+			// #348: cfgfile IDs are keyed by the manifest path relative to its
+			// root, so two roots under one system would write one ID per
+			// shared relative path.
+			name: "a config source with several roots under one project collides",
+			entries: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/r/a", "/r/b"}, Project: "shared"},
+			},
+			want: []string{"cfgfile-source-shared (root /r/a)", "cfgfile-source-shared (root /r/b)", `system "shared"`},
+		},
+		{
+			name: "two config sources whose roots share a basename collide",
+			entries: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a/core"}},
+				{Type: "config", Paths: []string{"/b/core"}},
+			},
+			want: []string{"(root /a/core)", "(root /b/core)", `system "core"`},
+		},
+		{
+			name: "config and doc under one project are different kinds",
+			entries: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/r/svc"}, Project: "svc"},
+				{Type: "docs", Paths: []string{"/r/svc"}, Project: "svc"},
+			},
+		},
+		{
 			name: "ast and doc under one project are different kinds",
 			entries: []config.SourceEntry{
 				{Type: "ast", Path: "/r/svc", Project: "svc"},
@@ -355,6 +380,47 @@ func TestCheckSourceCollisions(t *testing.T) {
 			sources: []config.SourceEntry{
 				{Type: "ast", Path: "./a", Project: "svc"},
 				{Type: "ast", Path: "./a", Project: "svc"},
+			},
+		},
+		{
+			name: "two config sources under one project",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"./a"}, Project: "svc"},
+				{Type: "config", Paths: []string{"./b"}, Project: "svc"},
+			},
+			refused: true,
+			want:    []string{"cfgfile-source-svc", `system "svc"`},
+		},
+		{
+			// ConfigHandler folds case, so these mint one system (#374 review).
+			name: "one config source over case-different basenames",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a/core", "/b/Core"}},
+			},
+			refused: true,
+			want:    []string{"(root /a/core)", "(root /b/Core)"},
+		},
+		{
+			name: "two config sources over case-different basenames",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a/Core"}},
+				{Type: "config", Paths: []string{"/b/core"}},
+			},
+			refused: true,
+		},
+		{
+			name: "two config sources under case-different projects",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a"}, Project: "Shared"},
+				{Type: "config", Paths: []string{"/b"}, Project: "shared"},
+			},
+			refused: true,
+		},
+		{
+			name: "two docs sources under case-different projects keep distinct systems",
+			sources: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/a"}, Project: "Shared"},
+				{Type: "docs", Paths: []string{"/b"}, Project: "shared"},
 			},
 		},
 		{
