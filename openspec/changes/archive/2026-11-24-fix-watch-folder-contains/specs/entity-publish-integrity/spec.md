@@ -10,6 +10,11 @@ A publisher SHALL reconcile only when its handler opts in, and a handler MUST op
 - **WHEN** it republishes an entity with fewer predicates
 - **THEN** no reconcile request is sent for that entity
 
+#### Scenario: Watch-path folder republish is not reconciled
+- **GIVEN** a reconcile-enabled ast-source whose root shares its system with another root (#349)
+- **WHEN** a file is created or deleted under that root
+- **THEN** no reconcile request is sent for any `folder` or `repo` entity
+
 #### Scenario: A shared or faulted publish is not reconciled
 - **GIVEN** a reconcile-enabled handler
 - **WHEN** it publishes an entity whose ID another root or manifest can also write, or whose store write failed

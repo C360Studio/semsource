@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:269d2a1bbb6a; line entered by claude at the owner's instruction). Ruling: #347 comment (option B, deletes in scope).
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-23, sha256:269d2a1bbb6a). Re-approved after the graph-event review amended D2 and D4 (2026-11-24, sha256:033d15cb4a03). Both lines entered by claude at the owner's instruction. Ruling: #347 comment (option B, deletes in scope).
 
 ## 2. Repro (before code)
 
@@ -31,4 +31,4 @@
 ## 6. Land
 
 - [ ] 6.1 Review (`ateam review request`), plus `graph-event-reviewer` on the watch path.
-- [ ] 6.2 Archive this change before the PR is marked ready.
+- [x] 6.2 Archive this change before the PR is marked ready.

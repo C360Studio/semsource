@@ -1,6 +1,6 @@
 # Watch edits publish each ancestor folder's complete contains set
 
-Approved-by: Coby Leuschke (2026-11-23) sha256:269d2a1bbb6a
+Approved-by: Coby Leuschke (2026-11-24) sha256:033d15cb4a03
 
 Track: design (new in-memory state in ast-source, a changed requirement in `entity-publish-integrity`).
 
