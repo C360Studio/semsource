@@ -405,13 +405,19 @@ func (h *Handler) SubmoduleInventory() *workspace.SubmoduleInventory {
 // entity IDs remain stable across machines and clone locations.
 // Falls back to the local path when no URL is available.
 func (h *Handler) systemSlug(cfg handler.SourceConfig) string {
-	var slug string
-	if u := cfg.GetURL(); u != "" {
-		slug = workspace.URLToSlug(u)
-	} else {
-		slug = repoSlug(cfg.GetPath())
+	return SystemSlug(cfg.GetURL(), cfg.GetPath(), h.cfg.BranchSlug)
+}
+
+// SystemSlug is the system every git entity of a repository is minted under:
+// the URL's slug when a URL is set, else the repo directory's basename,
+// branch-scoped by branchSlug. The shared-system guard (#354) calls it so the
+// system it refuses on is the one ingest mints.
+func SystemSlug(repoURL, repoPath, branchSlug string) string {
+	slug := repoSlug(repoPath)
+	if repoURL != "" {
+		slug = workspace.URLToSlug(repoURL)
 	}
-	return entityid.BranchScopedSlug(slug, h.cfg.BranchSlug)
+	return entityid.BranchScopedSlug(slug, branchSlug)
 }
 
 // --------------------------------------------------------------------------

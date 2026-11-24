@@ -515,3 +515,37 @@ func systemOf(t *testing.T, id string) string {
 	}
 	return parts[2]
 }
+
+// TestSystemSlug_MatchesMintedSystem: the shared-system guard refuses on
+// SystemSlug (#354), so it must be the system every minted ID carries, for a
+// path, a URL and a branch-scoped source.
+//
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestSystemSlug_MatchesMintedSystem(t *testing.T) {
+	repoDir := initTempRepo(t)
+	cases := []struct {
+		name, url, branchSlug string
+	}{
+		{name: "path"},
+		{name: "url", url: "https://github.com/acme/widgets.git"},
+		{name: "branch-scoped path", branchSlug: "feature"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := githandler.DefaultConfig()
+			cfg.BranchSlug = tc.branchSlug
+			h := githandler.New(cfg)
+			states, err := h.IngestEntityStates(context.Background(),
+				&srcCfg{typ: "git", path: repoDir, url: tc.url}, testAuthority("acme"))
+			if err != nil || len(states) == 0 {
+				t.Fatalf("IngestEntityStates() = %d states, err %v", len(states), err)
+			}
+			want := githandler.SystemSlug(tc.url, repoDir, tc.branchSlug)
+			for _, s := range states {
+				if got := systemOf(t, s.ID); got != want {
+					t.Errorf("state %q has system %q, SystemSlug = %q", s.ID, got, want)
+				}
+			}
+		})
+	}
+}

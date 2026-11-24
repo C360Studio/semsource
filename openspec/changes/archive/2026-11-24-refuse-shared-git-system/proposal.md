@@ -1,6 +1,6 @@
 # Refuse git sources that would share an entity-ID system
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-24) sha256:e653387ba8e0
 
 Track: standard (extends one Requirement in `entity-identity-safety` to git-source; no identity change).
 

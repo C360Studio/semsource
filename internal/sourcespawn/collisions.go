@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
+	githandler "github.com/c360studio/semsource/handler/git"
 )
 
 // PlannedComponent is one component a deployment would spawn. Pin carries the
@@ -44,6 +45,7 @@ var idSpace = map[string]string{
 	"image-source":       "image",
 	"audio-source":       "audio",
 	"video-source":       "video",
+	"git-source":         "git",
 }
 
 type systemRoot struct {
@@ -95,6 +97,10 @@ type collisionConfig struct {
 	Bucket   string `json:"bucket"`
 	Prefix   string `json:"prefix"`
 	Endpoint string `json:"endpoint"`
+	// git-source
+	RepoPath   string `json:"repo_path"`
+	RepoURL    string `json:"repo_url"`
+	BranchSlug string `json:"branch_slug"`
 }
 
 // systemRoots returns the roots of c with the system each mints IDs under,
@@ -104,7 +110,9 @@ type collisionConfig struct {
 // objectstore-source ScopedSystemSlug(project or bucket, version) for its one
 // bucket (handler/objectstore System), and image-, audio- and video-source
 // SystemSlug(root) per path, as they have no project (handler/image, audio and
-// video). Other kinds are outside the rule and yield none.
+// video), and git-source handler/git SystemSlug(url, path, branch slug) for its
+// one repository, rooted at its path, else its URL. Other kinds are outside
+// the rule and yield none.
 func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 	space, ok := idSpace[c.Config.Name]
 	if !ok {
@@ -146,6 +154,13 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 			project = cfg.Project
 		}
 		add(cfg.Org, entityid.ScopedSystemSlug(project, cfg.Version), bucketRoot(cfg))
+		return roots, nil
+	case "git-source":
+		root := cfg.RepoPath
+		if root == "" {
+			root = cfg.RepoURL
+		}
+		add(cfg.Org, githandler.SystemSlug(cfg.RepoURL, cfg.RepoPath, cfg.BranchSlug), root)
 		return roots, nil
 	}
 	for _, path := range cfg.Paths {
@@ -384,15 +399,28 @@ func collisionError(found []collision, remedy string) error {
 		return nil
 	}
 	msgs := make([]string, 0, len(found))
+	var remedies []string
 	for _, c := range found {
 		msgs = append(msgs, c.String())
+		r := remedy
+		if c.key.kind == "git" {
+			r = gitRemedy
+		}
+		if !slices.Contains(remedies, r) {
+			remedies = append(remedies, r)
+		}
 	}
 	return &Error{
 		Code: CodeValidationFailed,
 		Message: strings.Join(msgs, "; ") +
-			"; each would replace the other's entities, so " + remedy + " (#349)",
+			"; each would replace the other's entities, so " + strings.Join(remedies, ", and ") + " (#349)",
 	}
 }
+
+// gitRemedy is the way through two git sources that share a system: git
+// sources have no project, so their system is the repo URL's slug, else the
+// repo directory's name (#354).
+const gitRemedy = "give each git source a distinct repo URL, or a repo directory with a distinct name"
 
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
 // or two document roots (doc-source paths, objectstore-source buckets), would
@@ -420,16 +448,17 @@ func Planned(components semconfig.ComponentConfigs, pins map[string]bool) []Plan
 	return out
 }
 
-// CheckSourceCollisions builds the ast, doc and object-store components of sources and runs
+// CheckSourceCollisions builds the ast, doc, object-store, media and git components of sources and runs
 // CheckSystemCollisions over them, for a file's sources before boot. Two
 // entries that build one instance over the same roots are one source; two that
 // build one instance over different roots collide (the second would replace
 // the first's component). Multi-branch repos are skipped: their branches are
 // listed from a checkout, which is boot's job, and boot checks them. Nothing
 // here clones or contacts a remote: single-branch repo expansion derives its
-// paths from the URL, and only the git leaf, which is outside the rule,
-// resolves a remote branch.
+// paths from the URL, and a git leaf is planned without resolving its remote
+// default branch, which is not an identity input (#354).
 func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, opts Options) error {
+	opts.skipRemoteResolution = true
 	var planned []PlannedComponent
 	seen := map[string][]string{}
 	for _, src := range sources {
@@ -445,7 +474,7 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 			entries = expanded.Sources
 		}
 		for _, entry := range entries {
-			if !slices.Contains([]string{"ast", "docs", "s3", "image", "audio", "video"}, entry.Type) {
+			if !slices.Contains([]string{"ast", "docs", "s3", "image", "audio", "video", "git"}, entry.Type) {
 				continue
 			}
 			specs, err := buildSpecs(ctx, entry, opts)
