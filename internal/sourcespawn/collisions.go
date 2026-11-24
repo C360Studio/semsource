@@ -3,7 +3,9 @@ package sourcespawn
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -44,16 +46,21 @@ type systemRoot struct {
 	instance     string
 	root         string
 	pin, pending bool
+	// languages is what an ast root indexes, sorted; sha is a pin's gitlink
+	// SHA as its identity records it (shortened).
+	languages []string
+	sha       string
 }
 
 // collisionConfig reads only the identity inputs of ast-source, doc-source and
 // objectstore-source configs, as cmd/semsource sourceScopeSystems does.
 type collisionConfig struct {
 	WatchPaths []struct {
-		Path    string `json:"path"`
-		Org     string `json:"org"`
-		Project string `json:"project"`
-		Version string `json:"version"`
+		Path      string   `json:"path"`
+		Org       string   `json:"org"`
+		Project   string   `json:"project"`
+		Version   string   `json:"version"`
+		Languages []string `json:"languages"`
 	} `json:"watch_paths"`
 	Org     string   `json:"org"`
 	Paths   []string `json:"paths"`
@@ -82,16 +89,21 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 		return nil, fmt.Errorf("read identity of %s (%s): %w", c.Instance, c.Config.Name, err)
 	}
 	var roots []systemRoot
-	add := func(org, system, root string) {
+	add := func(org, system, root string) *systemRoot {
 		roots = append(roots, systemRoot{
 			key:      systemKey{kind: space, org: org, system: system},
 			instance: c.Instance, root: root, pin: c.Pin, pending: c.pending,
 		})
+		return &roots[len(roots)-1]
 	}
 	switch c.Config.Name {
 	case "ast-source":
 		for _, wp := range cfg.WatchPaths {
-			add(wp.Org, entityid.ScopedSystemSlug(wp.Project, wp.Version), wp.Path)
+			r := add(wp.Org, entityid.ScopedSystemSlug(wp.Project, wp.Version), wp.Path)
+			r.languages = indexedLanguages(wp.Languages)
+			if c.Pin {
+				r.sha = wp.Version
+			}
 		}
 		return roots, nil
 	case "objectstore-source":
@@ -107,9 +119,27 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 		if cfg.Project != "" {
 			system = entityid.SystemSlug(cfg.Project)
 		}
-		add(cfg.Org, system, path)
+		r := add(cfg.Org, system, path)
+		if c.Pin {
+			// A docs pin carries its SHA as the project suffix
+			// (internal/subwatch pinEntries: project + "-" + sha12).
+			// shortcut: parsed back from the project, since docs pins have
+			// no version field; carry the SHA explicitly if pinEntries'
+			// project shape ever changes.
+			r.sha = cfg.Project[strings.LastIndex(cfg.Project, "-")+1:]
+		}
 	}
 	return roots, nil
+}
+
+// indexedLanguages is the language set an ast watch path indexes: none
+// configured means go, as the ast-source component and astComponentConfig
+// default it.
+func indexedLanguages(langs []string) []string {
+	if len(langs) == 0 {
+		return []string{"go"}
+	}
+	return slices.Sorted(slices.Values(langs))
 }
 
 // bucketRoot labels an object-store source's root: its endpoint, bucket and
@@ -128,6 +158,9 @@ func bucketRoot(cfg collisionConfig) string {
 type collision struct {
 	key   systemKey
 	roots []systemRoot
+	// differs says how the non-pin roots of a group with a pin differ from
+	// the pin; empty for a group without one.
+	differs []string
 }
 
 func (c collision) involvesPending() bool {
@@ -139,24 +172,30 @@ func (c collision) String() string {
 	for _, r := range c.roots {
 		members = append(members, fmt.Sprintf("%s (root %s)", r.instance, r.root))
 	}
-	return fmt.Sprintf("%s roots %s would share entity-ID system %q in org %q",
+	msg := fmt.Sprintf("%s roots %s would share entity-ID system %q in org %q",
 		c.key.kind, strings.Join(members, " and "), c.key.system, c.key.org)
+	if len(c.differs) > 0 {
+		msg += " but differ from the submodule pin (" + strings.Join(c.differs, ", ") + ")"
+	}
+	return msg
 }
 
 // collisions groups every enabled root by its system key and returns each
 // group with more than one root, except a group that includes a submodule pin
-// (D2). Discovery expands one submodule at one gitlink SHA into byte-identical
-// sources, and an equal system with a pin means every other root declared the
-// pin's pinned identity: for ast the same project and version (the gitlink
-// SHA), for docs a project that carries the SHA. That is a claim of the same
-// content, so the roots share IDs, as the multi-source quickstart and ADR-0012
-// document.
-func collisions(components []PlannedComponent) ([]collision, error) {
+// and whose other roots hold the pin's content (D2, narrowed by the #349
+// review ruling). Discovery expands one submodule at one gitlink SHA into
+// byte-identical sources, and an equal system with a pin means every other
+// root declared the pin's identity: for ast the same project and version (the
+// gitlink SHA), for docs a project that carries the SHA. The declaration is
+// checked against the checkout: each other root's HEAD must be the pinned SHA,
+// and an ast root must index the pin's languages, or the roots would write
+// different content under the pin's IDs.
+func collisions(ctx context.Context, components []PlannedComponent) ([]collision, error) {
 	roots, err := enabledRoots(components)
 	if err != nil {
 		return nil, err
 	}
-	return groupCollisions(roots), nil
+	return groupCollisions(ctx, roots), nil
 }
 
 // enabledRoots is every root of the enabled components, ordered by instance.
@@ -177,7 +216,7 @@ func enabledRoots(components []PlannedComponent) ([]systemRoot, error) {
 	return out, nil
 }
 
-func groupCollisions(roots []systemRoot) []collision {
+func groupCollisions(ctx context.Context, roots []systemRoot) []collision {
 	groups := map[systemKey][]systemRoot{}
 	var order []systemKey
 	for _, r := range roots {
@@ -189,12 +228,58 @@ func groupCollisions(roots []systemRoot) []collision {
 	var out []collision
 	for _, key := range order {
 		members := groups[key]
-		if len(members) < 2 || slices.ContainsFunc(members, func(r systemRoot) bool { return r.pin }) {
+		if len(members) < 2 {
 			continue
 		}
-		out = append(out, collision{key: key, roots: members})
+		pin := slices.IndexFunc(members, func(r systemRoot) bool { return r.pin })
+		if pin < 0 {
+			out = append(out, collision{key: key, roots: members})
+			continue
+		}
+		if differs := pinDifferences(ctx, members[pin], members); len(differs) > 0 {
+			out = append(out, collision{key: key, roots: members, differs: differs})
+		}
 	}
 	return out
+}
+
+// pinDifferences says how each non-pin member differs from pin: a checkout
+// HEAD that is not the pinned SHA (or cannot be read), or, for ast, another
+// language set. Pins of one system are one gitlink SHA by construction.
+func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) []string {
+	var out []string
+	for _, r := range members {
+		if r.pin {
+			continue
+		}
+		head, err := checkoutHead(ctx, r.root)
+		switch {
+		case err != nil:
+			out = append(out, fmt.Sprintf("%s HEAD unreadable, so it cannot be shown to hold pinned SHA %s: %v", r.root, pin.sha, err))
+		case pin.sha == "" || !strings.HasPrefix(head, strings.ToLower(pin.sha)):
+			out = append(out, fmt.Sprintf("%s HEAD is %s, not pinned SHA %q of %s", r.root, head, pin.sha, pin.root))
+		}
+		if !slices.Equal(r.languages, pin.languages) {
+			out = append(out, fmt.Sprintf("%s indexes %v, pin %s indexes %v", r.root, r.languages, pin.root, pin.languages))
+		}
+	}
+	return out
+}
+
+// checkoutHead is the full SHA of the commit checked out at root, as
+// handler/git headCommitSHA reads it.
+func checkoutHead(ctx context.Context, root string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
+			return "", fmt.Errorf("git rev-parse HEAD: %s", strings.TrimSpace(string(exit.Stderr)))
+		}
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func collisionError(found []collision) error {
@@ -213,11 +298,14 @@ func collisionError(found []collision) error {
 }
 
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
-// or two document roots (doc-source paths, objectstore-source buckets), would mint entity IDs under one org and system,
-// unless the collision includes a submodule pin (D2). The error names each
-// colliding instance and root and the shared system, with CodeValidationFailed.
-func CheckSystemCollisions(components []PlannedComponent) error {
-	found, err := collisions(components)
+// or two document roots (doc-source paths, objectstore-source buckets), would
+// mint entity IDs under one org and system, unless the collision includes a
+// submodule pin and every other root's checkout is at the pinned commit and
+// indexes the pin's languages (D2 as the #349 review narrowed it; reading a
+// HEAD runs git under ctx). The error names each colliding instance and root,
+// the shared system and any difference from the pin, with CodeValidationFailed.
+func CheckSystemCollisions(ctx context.Context, components []PlannedComponent) error {
+	found, err := collisions(ctx, components)
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
@@ -283,7 +371,7 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 			}
 		}
 	}
-	return CheckSystemCollisions(planned)
+	return CheckSystemCollisions(ctx, planned)
 }
 
 // checkAddCollisions refuses an add whose specs would share a system with a
@@ -293,7 +381,7 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 // stays: the add would move that instance onto another root of one system,
 // which is a second writer, not an update. Collisions among registered sources
 // alone predate the request and are boot's to refuse.
-func checkAddCollisions(existing semconfig.ComponentConfigs, specs []componentSpec) error {
+func checkAddCollisions(ctx context.Context, existing semconfig.ComponentConfigs, specs []componentSpec) error {
 	pending := make([]PlannedComponent, 0, len(specs))
 	for _, spec := range specs {
 		pc, err := plannedFromSpec(spec, false)
@@ -316,7 +404,7 @@ func checkAddCollisions(existing semconfig.ComponentConfigs, specs []componentSp
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
-	found := groupCollisions(oneWriterEach(pendingRoots, registeredRoots))
+	found := groupCollisions(ctx, oneWriterEach(pendingRoots, registeredRoots))
 	return collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() }))
 }
 
@@ -347,7 +435,7 @@ func oneWriterEach(incoming, held []systemRoot) []systemRoot {
 // instance and system from the same directory is the same writer, and the pin
 // exception applies (D2). The set is checked whole: retained collisions that
 // predate discovery are refused here too, as boot would refuse them anyway.
-func CheckDiscoveredCollisions(retained, discovered []PlannedComponent) error {
+func CheckDiscoveredCollisions(ctx context.Context, retained, discovered []PlannedComponent) error {
 	discoveredRoots, err := enabledRoots(discovered)
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
@@ -356,7 +444,7 @@ func CheckDiscoveredCollisions(retained, discovered []PlannedComponent) error {
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
-	return collisionError(groupCollisions(oneWriterEach(discoveredRoots, retainedRoots)))
+	return collisionError(groupCollisions(ctx, oneWriterEach(discoveredRoots, retainedRoots)))
 }
 
 // identity is what makes two roots one writer: one instance minting one

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	semconfig "github.com/c360studio/semengine/config"
@@ -17,12 +18,12 @@ import (
 // component configs do not carry the InstanceSuffix that marks a pin, and the
 // record is what discovery itself owns. Boot refuses rather than starting the
 // rest (design D4).
-func checkBootCollisions(components semconfig.ComponentConfigs) error {
+func checkBootCollisions(ctx context.Context, components semconfig.ComponentConfigs) error {
 	pins, err := sourcespawn.PinInstances(components)
 	if err != nil {
 		return err
 	}
-	return bootRefusal(sourcespawn.CheckSystemCollisions(sourcespawn.Planned(components, pins)))
+	return bootRefusal(sourcespawn.CheckSystemCollisions(ctx, sourcespawn.Planned(components, pins)))
 }
 
 func bootRefusal(err error) error {
@@ -41,7 +42,7 @@ func bootRefusal(err error) error {
 // component that would replace a retained one under its name from another
 // root is thereby compared with it rather than collapsed into one survivor.
 // Pins are the previous record's and this plan's submodule names.
-func checkDiscoveryCollisions(effective semconfig.ComponentConfigs, plan *discoveryPlan, file semconfig.ComponentConfigs, owned, protected map[string]bool) error {
+func checkDiscoveryCollisions(ctx context.Context, effective semconfig.ComponentConfigs, plan *discoveryPlan, file semconfig.ComponentConfigs, owned, protected map[string]bool) error {
 	pins, err := sourcespawn.PinInstances(effective)
 	if err != nil {
 		return err
@@ -67,6 +68,6 @@ func checkDiscoveryCollisions(effective semconfig.ComponentConfigs, plan *discov
 		}
 		discovered[name] = want
 	}
-	return bootRefusal(sourcespawn.CheckDiscoveredCollisions(
+	return bootRefusal(sourcespawn.CheckDiscoveredCollisions(ctx,
 		sourcespawn.Planned(retained, pins), sourcespawn.Planned(discovered, pins)))
 }

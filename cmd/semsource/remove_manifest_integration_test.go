@@ -62,7 +62,7 @@ func TestIntegrationRemoveManifestClearsAPersistedCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	refused := checkBootCollisions(bootConfigFile(ctx, t, broker.URL, path).effective.Components)
+	refused := checkBootCollisions(ctx, bootConfigFile(ctx, t, broker.URL, path).effective.Components)
 	if refused == nil || !strings.Contains(refused.Error(), instance) || !strings.Contains(refused.Error(), "doc-source-guide") {
 		t.Fatalf("boot over the persisted collision: err = %v, want a refusal naming %s and doc-source-guide", refused, instance)
 	}
@@ -72,7 +72,7 @@ func TestIntegrationRemoveManifestClearsAPersistedCollision(t *testing.T) {
 	}
 
 	after := bootConfigFile(ctx, t, broker.URL, path).effective.Components
-	if err := checkBootCollisions(after); err != nil {
+	if err := checkBootCollisions(ctx, after); err != nil {
 		t.Fatalf("boot after the offline removal still refused: %v", err)
 	}
 	if after[instance].Enabled {

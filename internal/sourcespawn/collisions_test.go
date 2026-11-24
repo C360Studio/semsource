@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -36,8 +37,20 @@ func planned(t *testing.T, entry config.SourceEntry) []PlannedComponent {
 // spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSystemCollisions(t *testing.T) {
 	t.Parallel()
+	// checkout is a standalone copy at the pinned commit; other is a checkout
+	// at another commit.
+	checkout, sha := gitCheckout(t, "pinned")
+	other, _ := gitCheckout(t, "other")
+	pinned := sha[:12]
 	pin := func(path, suffix string) config.SourceEntry {
-		return config.SourceEntry{Type: "ast", Path: path, Project: "github-com-acme-lib", Version: "abc123def456", InstanceSuffix: suffix}
+		return config.SourceEntry{Type: "ast", Path: path, Project: "github-com-acme-lib", Version: pinned, InstanceSuffix: suffix}
+	}
+	standalone := func(path string, langs ...string) config.SourceEntry {
+		return config.SourceEntry{Type: "ast", Path: path, Project: "github-com-acme-lib", Version: pinned, Languages: langs}
+	}
+	docsPin := config.SourceEntry{Type: "docs", Paths: []string{"/p1/lib"}, Project: "github-com-acme-lib-" + pinned, InstanceSuffix: "via-p1-lib"}
+	docsStandalone := func(path string) config.SourceEntry {
+		return config.SourceEntry{Type: "docs", Paths: []string{path}, Project: "github-com-acme-lib-" + pinned}
 	}
 	cases := []struct {
 		name    string
@@ -131,19 +144,37 @@ func TestCheckSystemCollisions(t *testing.T) {
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), pin("/p2/lib", "via-p2-lib")},
 		},
 		{
-			name: "a standalone source at a pin's project and version shares the pin's IDs",
-			entries: []config.SourceEntry{
-				pin("/p1/lib", "via-p1-lib"),
-				{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"},
-			},
+			name:    "a standalone checkout at the pinned commit and languages shares the pin's IDs",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(checkout)},
 		},
 		{
-			name: "two standalone sources at one pinned identity, no pin, collide",
-			entries: []config.SourceEntry{
-				{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"},
-				{Type: "ast", Path: "/s/lib", Project: "github-com-acme-lib", Version: "abc123def456"},
-			},
-			want: []string{"(root /r/lib)", "(root /s/lib)"},
+			name:    "a standalone checkout at another commit is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(other)},
+			want:    []string{"(root /p1/lib)", "(root " + other + ")", other + " HEAD is ", `not pinned SHA "` + pinned + `"`},
+		},
+		{
+			name:    "a standalone checkout indexing other languages is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(checkout, "go", "python")},
+			want:    []string{"(root " + checkout + ")", checkout + " indexes [go python], pin /p1/lib indexes [go]"},
+		},
+		{
+			name:    "a standalone root whose HEAD cannot be read is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone("/r/missing")},
+			want:    []string{"(root /r/missing)", "/r/missing HEAD unreadable"},
+		},
+		{
+			name:    "a docs checkout at the pinned commit shares the docs pin's IDs",
+			entries: []config.SourceEntry{docsPin, docsStandalone(checkout)},
+		},
+		{
+			name:    "a docs checkout at another commit is refused",
+			entries: []config.SourceEntry{docsPin, docsStandalone(other)},
+			want:    []string{"(root " + other + ")", `not pinned SHA "` + pinned + `"`},
+		},
+		{
+			name:    "two standalone sources at one pinned identity, no pin, collide",
+			entries: []config.SourceEntry{standalone(checkout), standalone("/s/lib")},
+			want:    []string{"(root " + checkout + ")", "(root /s/lib)"},
 		},
 		{
 			name: "a standalone source at another SHA of the pinned project does not meet the pin",
@@ -160,7 +191,7 @@ func TestCheckSystemCollisions(t *testing.T) {
 			for _, e := range tc.entries {
 				components = append(components, planned(t, e)...)
 			}
-			err := CheckSystemCollisions(components)
+			err := CheckSystemCollisions(context.Background(), components)
 			if tc.want == nil {
 				if err != nil {
 					t.Fatalf("admitted set refused: %v", err)
@@ -189,7 +220,7 @@ func TestCheckSystemCollisions_DisabledEnvelopeDoesNotSpawn(t *testing.T) {
 	// A removed second writer of a's system: same config, another instance.
 	b := PlannedComponent{Instance: "ast-source-svc-removed", Config: withRoot(t, a[0].Config, "/r/b")}
 	b.Config.Enabled = false
-	if err := CheckSystemCollisions(append(a, b)); err != nil {
+	if err := CheckSystemCollisions(context.Background(), append(a, b)); err != nil {
 		t.Fatalf("a disabled envelope was counted as a writer: %v", err)
 	}
 }
@@ -337,9 +368,10 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 
 	t.Run("a standalone add at a registered pin's identity shares the pin's IDs", func(t *testing.T) {
 		t.Parallel()
+		checkout, sha := gitCheckout(t, "pinned")
 		pinned := planned(t, config.SourceEntry{Type: "ast", Path: "/p1/lib", Project: "github-com-acme-lib",
-			Version: "abc123def456", InstanceSuffix: "via-p1-lib"})[0]
-		standalone := config.SourceEntry{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"}
+			Version: sha[:12], InstanceSuffix: "via-p1-lib"})[0]
+		standalone := config.SourceEntry{Type: "ast", Path: checkout, Project: "github-com-acme-lib", Version: sha[:12]}
 		for _, recorded := range []bool{true, false} {
 			store := newFakeStore()
 			cfg := store.cfg.Get()
@@ -398,4 +430,23 @@ func withRoot(t *testing.T, cc types.ComponentConfig, root string) types.Compone
 		t.Fatalf("fixture drift: %s", cc.Config)
 	}
 	return cc
+}
+
+// gitCheckout is a git repository in a temp dir with one commit whose message
+// is msg (distinct messages give distinct commits), and that commit's SHA.
+func gitCheckout(t *testing.T, msg string) (dir, sha string) {
+	t.Helper()
+	dir = t.TempDir()
+	git := func(args ...string) string {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@e.com", "-c", "commit.gpgsign=false"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", msg)
+	return dir, git("rev-parse", "HEAD")
 }

@@ -261,7 +261,7 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 	next, owned, protected := plan.record(prev)
 	// Refused before any write, over the retained and discovered sets apart:
 	// a put would replace a retained component of the same name (#349).
-	if err := checkDiscoveryCollisions(effective, plan, file, owned, protected); err != nil {
+	if err := checkDiscoveryCollisions(ctx, effective, plan, file, owned, protected); err != nil {
 		return err
 	}
 	// Record what this boot is about to put before putting it, so a boot that

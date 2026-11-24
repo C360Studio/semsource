@@ -172,7 +172,7 @@ func bootCheck(t *testing.T, sources ...config.SourceEntry) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sourcespawn.CheckSystemCollisions(sourcespawn.Planned(components, pins))
+	return sourcespawn.CheckSystemCollisions(context.Background(), sourcespawn.Planned(components, pins))
 }
 
 func writeFile(t *testing.T, root, rel, body string) {

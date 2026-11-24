@@ -177,7 +177,7 @@ func runCmd(args []string) (runErr error) {
 	}
 	// Over the full set the service manager is about to spawn, before any
 	// component starts (#349).
-	if err := checkBootCollisions(configMgr.GetConfig().Get().Components); err != nil {
+	if err := checkBootCollisions(ctx, configMgr.GetConfig().Get().Components); err != nil {
 		logger.Error("source set refused", "error", err)
 		return err
 	}

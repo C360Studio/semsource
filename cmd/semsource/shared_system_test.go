@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,11 +21,15 @@ import (
 
 // spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckBootCollisions(t *testing.T) {
+	checkout, sha := pinnedCheckout(t, "pinned")
+	elsewhere, _ := pinnedCheckout(t, "other")
 	pin := func(parent string) config.SourceEntry {
 		return config.SourceEntry{Type: "ast", Path: "/" + parent + "/lib", Project: "github-com-acme-lib",
-			Version: "abc123def456", InstanceSuffix: "via-" + parent + "-lib"}
+			Version: sha[:12], InstanceSuffix: "via-" + parent + "-lib"}
 	}
-	operator := config.SourceEntry{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"}
+	operator := config.SourceEntry{Type: "ast", Path: checkout, Project: "github-com-acme-lib", Version: sha[:12]}
+	moved := operator
+	moved.Path = elsewhere
 	cases := []struct {
 		name    string
 		entries []config.SourceEntry
@@ -33,6 +38,7 @@ func TestCheckBootCollisions(t *testing.T) {
 	}{
 		{"two pins of one SHA", []config.SourceEntry{pin("p1"), pin("p2")}, 2, false},
 		{"a pin and a standalone source at its identity", []config.SourceEntry{pin("p1"), operator}, 1, false},
+		{"a pin and a standalone checkout at another commit", []config.SourceEntry{pin("p1"), moved}, 1, true},
 		{"pins the record does not name are operator sources", []config.SourceEntry{pin("p1"), pin("p2")}, 0, true},
 		{"one doc source over two roots of one project", []config.SourceEntry{{Type: "docs", Paths: []string{"/r/a", "/r/b"}, Project: "svc"}}, 0, true},
 		{"a doc source and an object-store source under one project", []config.SourceEntry{
@@ -58,7 +64,7 @@ func TestCheckBootCollisions(t *testing.T) {
 			components["source-manifest"] = manifestWith(t, nil, []sourcemanifest.DiscoveredRecord{
 				{Parent: "/p", Kind: "submodule", Components: pinned},
 			})
-			err := checkBootCollisions(components)
+			err := checkBootCollisions(context.Background(), components)
 			if tc.refused != (err != nil) {
 				t.Fatalf("refused = %v, want %v (err %v)", err != nil, tc.refused, err)
 			}
@@ -141,6 +147,37 @@ func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) 
 		}
 	})
 
+	t.Run("a discovered pin and a retained standalone source", func(t *testing.T) {
+		checkout, sha := pinnedCheckout(t, "pinned")
+		elsewhere, _ := pinnedCheckout(t, "other")
+		pinEntry := config.SourceEntry{Type: "ast", Path: "/parent/lib", Project: "github-com-acme-lib",
+			Version: sha[:12], InstanceSuffix: "via-parent-lib"}
+		for _, tc := range []struct {
+			root    string
+			refused bool
+		}{{checkout, false}, {elsewhere, true}} {
+			standalone, err := sourcespawn.Build(config.SourceEntry{Type: "ast", Path: tc.root,
+				Project: "github-com-acme-lib", Version: sha[:12]}, reconcileOpts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+			if err := plan.add(plan.owner("/parent", "submodule", false), pinEntry, reconcileOpts); err != nil {
+				t.Fatal(err)
+			}
+			components := maps.Clone(standalone)
+			components["source-manifest"] = manifestWith(t, nil, nil)
+			store := &reconcileStore{components: components}
+			err = reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger)
+			if tc.refused != (err != nil) {
+				t.Fatalf("standalone at %s: refused = %v, want %v (err %v)", tc.root, err != nil, tc.refused, err)
+			}
+			if tc.refused && len(store.puts) != 0 {
+				t.Errorf("a refused discovery wrote %v", store.puts)
+			}
+		}
+	})
+
 	t.Run("a runtime source at the discovered root is the same writer", func(t *testing.T) {
 		plan := planOf(t, discoveredEntry)
 		components := maps.Clone(plan.desired)
@@ -150,4 +187,23 @@ func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) 
 			t.Fatalf("a discovered root already registered at the same root was refused: %v", err)
 		}
 	})
+}
+
+// pinnedCheckout is a git repository in a temp dir with one commit whose
+// message is msg (distinct messages give distinct commits), and its SHA.
+func pinnedCheckout(t *testing.T, msg string) (dir, sha string) {
+	t.Helper()
+	dir = t.TempDir()
+	git := func(args ...string) string {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@e.com", "-c", "commit.gpgsign=false"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", msg)
+	return dir, git("rev-parse", "HEAD")
 }
