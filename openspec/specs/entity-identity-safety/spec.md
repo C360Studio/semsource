@@ -154,7 +154,7 @@ Every registered parser SHALL give distinct declarations distinct entity IDs or 
 - **AND** the source status `id_collisions` count increases by one, and one aggregated warning names the file
 
 ### Requirement: Sources that would share an entity-ID system are refused
-SemSource SHALL refuse a source set in which two ast-source roots, or two document roots (doc-source paths and objectstore-source buckets, which mint one `web` document ID space), would mint entity IDs under the same org and system, unless the collision includes a submodule pin and every root in it has the same parse scope (languages, excludes and vendored-JS indexing), and every non-pin root in it declares the pin's project and version and is the top level of a checkout whose HEAD is the pinned SHA. Two sources that build one component instance from different roots SHALL be refused whatever their systems, and a runtime add SHALL NOT re-enable a name that boot discovery owns from a different root. The refusal MUST happen before any colliding component publishes or any colliding configuration is written: at `semsource validate` and `semsource run` over the file's sources, at boot over the retained and discovered sets before discovery writes them, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
+SemSource SHALL refuse a source set in which two ast-source roots, two document roots (doc-source paths and objectstore-source buckets, which mint one `web` document ID space), or two media roots of one kind (image-, audio- or video-source paths; each kind mints its own entity types, so roots of different media kinds never collide), would mint entity IDs under the same org and system, unless the collision includes a submodule pin and every root in it has the same parse scope (languages, excludes and vendored-JS indexing), and every non-pin root in it declares the pin's project and version and is the top level of a checkout whose HEAD is the pinned SHA. Two sources that build one component instance from different roots SHALL be refused whatever their systems, and a runtime add SHALL NOT re-enable a name that boot discovery owns from a different root. The refusal MUST happen before any colliding component publishes or any colliding configuration is written: at `semsource validate` and `semsource run` over the file's sources, at boot over the retained and discovered sets before discovery writes them, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
 
 #### Scenario: Two ast sources under one project are refused
 - **GIVEN** a config with ast sources at `./a` and `./b`, both with `project: svc` and no version
@@ -245,4 +245,14 @@ SemSource SHALL refuse a source set in which two ast-source roots, or two docume
 - **AND** the standalone sets `index_vendored_js: true` while the pin does not
 - **WHEN** boot plans both
 - **THEN** it fails with an error naming both sources and the differing option
+
+#### Scenario: Two image sources that reach one root are refused
+- **GIVEN** an image source with paths `/m/x` and `/m/b`, and another image source with path `/m/b`
+- **WHEN** the config is validated
+- **THEN** it fails with an error naming both sources and system `b`
+
+#### Scenario: An image and an audio source over one root are admitted
+- **GIVEN** an image source and an audio source, both with path `/m/b`
+- **WHEN** the config is validated
+- **THEN** no collision is reported
 
