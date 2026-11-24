@@ -3,8 +3,10 @@ package astsource
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
 
@@ -78,55 +80,99 @@ func (pw *pathWatcher) removeFiles(path string) []string {
 	return removed
 }
 
-// publishContainers publishes the repo and folder entities built from the
-// whole file set. With all, every container is published (a full pass);
-// otherwise only the repo and the ancestors of changed. Reconcile applies
-// only to the repo and the ancestors of changed, and never on a shared system
-// (#349). An ancestor left with no indexed file is published with no
-// contains, so its stale edges clear, whether or not its directory still
-// exists: the lifecycle pass never judges containers (they carry no owner
-// fact), so nothing else would clear them. The caller holds filesMu.
-func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile bool) {
-	targets := make(map[string]bool)
+// containerPublish is one planned repo or folder publish.
+type containerPublish struct {
+	entity        *semsourceast.CodeEntity
+	skipReconcile bool
+}
+
+// planContainers plans the repo and folder publishes built from the whole
+// file set. Targets are keyed by entity ID, not path: sanitizing folds
+// folders like a-b and a/b onto one ID. With all, every container is
+// published (a full pass); otherwise only the repo and the containers that
+// hold an ancestor of changed. Reconcile applies only to a target, never on a
+// shared system (#349), and never to an ID two live folders build (their
+// publishes alternate, so neither is the complete set). An ancestor left with
+// no indexed file is published with no contains so its stale edges clear,
+// whether or not its directory still exists (the lifecycle pass never judges
+// containers: they carry no owner fact), unless a live folder holds its ID.
+func planContainers(files map[string]string, changed []string, all, reconcile, shared bool,
+	authority entityid.Authority, system string,
+) []containerPublish {
+	built := semsourceast.BuildHierarchyFromFiles(files, authority, system)
+	targets := make(map[string]*semsourceast.CodeEntity) // ID → emptied form
 	if len(changed) > 0 {
-		targets[""] = true // the repo entity's Path
+		targets[built[0].ID] = nil // the repo
 	}
 	for _, p := range changed {
 		for d := filepath.Dir(p); d != "." && d != "" && d != "/"; d = filepath.Dir(d) {
-			targets[d] = true
+			if e := semsourceast.EmptyFolder(d, authority, system); targets[e.ID] == nil {
+				targets[e.ID] = e
+			}
 		}
 	}
-	for _, e := range semsourceast.BuildHierarchyFromFiles(pw.files, c.authority, pw.scopedSystem) {
-		target := targets[e.Path]
+	builders := make(map[string]int, len(built))
+	for _, e := range built {
+		builders[e.ID]++
+	}
+	var out []containerPublish
+	for _, e := range built {
+		_, target := targets[e.ID]
 		if !all && !target {
 			continue
 		}
-		delete(targets, e.Path)
-		c.publishContainer(ctx, e, pw.sharedSystem || !reconcile || !target)
+		out = append(out, containerPublish{e, shared || !reconcile || !target || builders[e.ID] > 1})
 	}
-	for dir := range targets {
-		if dir == "" {
-			continue
+	var emptied []*semsourceast.CodeEntity
+	for id, e := range targets {
+		if e != nil && builders[id] == 0 {
+			emptied = append(emptied, e)
 		}
-		c.publishContainer(ctx, semsourceast.EmptyFolder(dir, c.authority, pw.scopedSystem), pw.sharedSystem || !reconcile)
+	}
+	slices.SortFunc(emptied, func(x, y *semsourceast.CodeEntity) int { return strings.Compare(x.Path, y.Path) })
+	for _, e := range emptied {
+		out = append(out, containerPublish{e, shared || !reconcile})
+	}
+	return out
+}
+
+// publishContainers publishes planContainers' plan for the watch path. The
+// changed paths of a call whose publish was refused are kept and joined to
+// the next call, so a refused emptied-folder publish is retried even by an
+// unchanged full pass. The caller holds filesMu.
+func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile bool) {
+	changed = append(changed, pw.pendingContainers...)
+	pw.pendingContainers = nil
+	failed := false
+	for _, p := range planContainers(pw.files, changed, all, reconcile, pw.sharedSystem, c.authority, pw.scopedSystem) {
+		if !c.publishContainer(ctx, p.entity, p.skipReconcile) {
+			failed = true
+		}
+	}
+	if failed {
+		slices.Sort(changed)
+		pw.pendingContainers = slices.Compact(changed)
 	}
 }
 
-// publishContainer publishes one repo or folder entity.
-func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.CodeEntity, skipReconcile bool) {
+// publishContainer publishes one repo or folder entity and reports whether
+// the publisher admitted it.
+func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.CodeEntity, skipReconcile bool) bool {
 	state := entity.EntityState()
 	payload, err := payloadFromASTState(state, nil)
 	if err != nil {
 		c.logger.Warn("Invalid hierarchy entity state", "id", state.ID, "error", err)
-		return
+		return true // retrying cannot make it valid
 	}
 	payload.SkipReconcile = skipReconcile
 	if err := c.publishEntity(ctx, payload); err != nil {
-		c.logger.Warn("Failed to publish hierarchy entity", "id", entity.ID, "error", err)
-		return
+		c.logger.Warn("Failed to publish hierarchy entity; retried on the next container publish",
+			"id", entity.ID, "error", err)
+		return false
 	}
 	c.entitiesIndexed.Add(1)
 	c.distinct.Observe(state.ID)
+	return true
 }
 
 // watchContainers applies one watch event's change to the file set and, when

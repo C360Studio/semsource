@@ -88,6 +88,9 @@ type pathWatcher struct {
 	// container publishes built from different sets.
 	filesMu sync.Mutex
 	files   map[string]string // root-relative path → file entity ID
+	// pendingContainers holds the changed paths of a container publish the
+	// publisher refused, retried by the next one (fileset.go).
+	pendingContainers []string
 }
 
 // Component implements the ast-source processor.

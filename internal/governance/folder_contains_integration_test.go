@@ -52,59 +52,118 @@ func TestIntegration_WatchEditKeepsFolderContains(t *testing.T) {
 // spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
 func TestIntegration_WatchCreateAddsToFolder(t *testing.T) {
 	ctx, client, _, write := startFolderTree(t)
-	seeded, rev1 := waitForFolderContains(t, ctx, client, "a", 0, 3)
+	seeded, _ := waitForFolderContains(t, ctx, client, "a", 0, 3)
 
-	after := untilFolderRevision(t, ctx, client, "a", rev1, func(int) {
-		write("a/new.go", "package a\n\nfunc New() {}\n")
-	})
-	var added []string
-	for _, id := range after {
-		if !slices.Contains(seeded, id) {
-			added = append(added, id)
+	// The create is re-applied until it lands: the watcher starts after the
+	// seed publishes. The wait is on the complete outcome.
+	untilFolderChange(t, ctx, client, "a", func(got []string) bool {
+		var added []string
+		for _, id := range got {
+			if !slices.Contains(seeded, id) {
+				added = append(added, id)
+			}
 		}
-	}
-	if len(after) != 4 || len(added) != 1 || !strings.HasSuffix(added[0], ".file.a-new-go") {
-		t.Fatalf("folder a after creating a/new.go = %v, want %v plus a/new.go", after, seeded)
-	}
+		return len(got) == len(seeded)+1 && len(added) == 1 && strings.HasSuffix(added[0], ".file.a-new-go")
+	}, func() { write("a/new.go", "package a\n\nfunc New() {}\n") })
 }
 
 // spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
 func TestIntegration_WatchDeleteRemovesFromFolder(t *testing.T) {
-	ctx, client, root, _ := startFolderTree(t)
-	seeded, rev1 := waitForFolderContains(t, ctx, client, "a", 0, 3)
-	_, revC := waitForFolderContains(t, ctx, client, "a-c", 0, 1)
+	ctx, client, root, write := startFolderTree(t)
+	seeded, _ := waitForFolderContains(t, ctx, client, "a", 0, 3)
+	probe := awaitWatching(t, ctx, client, write)
 
-	after := untilFolderRevision(t, ctx, client, "a", rev1, func(int) {
-		_ = os.Remove(filepath.Join(root, "a/c/y.go"))
-	})
-	want := slices.DeleteFunc(slices.Clone(seeded), func(id string) bool { return strings.HasSuffix(id, ".folder.a-c") })
-	if !slices.Equal(after, want) {
-		t.Fatalf("folder a after deleting a/c/y.go = %v, want %v", after, want)
+	if err := os.Remove(filepath.Join(root, "a/c/y.go")); err != nil {
+		t.Fatal(err)
 	}
-	emptied := untilFolderRevision(t, ctx, client, "a-c", revC, func(int) {})
-	if len(emptied) != 0 {
-		t.Fatalf("folder a/c still contains %v after its only file was deleted", emptied)
-	}
+	want := slices.DeleteFunc(append(slices.Clone(seeded), probe), func(id string) bool { return strings.HasSuffix(id, ".folder.a-c") })
+	slices.Sort(want)
+	untilFolder(t, ctx, client, "a", func(got []string) bool { return slices.Equal(got, want) })
+	untilFolder(t, ctx, client, "a-c", func(got []string) bool { return len(got) == 0 })
 
 	// A whole-directory delete clears the gone folder's edges too: the
 	// lifecycle pass never judges containers, so nothing else would.
-	_, rev2, _ := readFolderContains(ctx, client, "a")
-	_, revB, _ := readFolderContains(ctx, client, "a-b")
-	after = untilFolderRevision(t, ctx, client, "a", rev2, func(int) {
-		_ = os.RemoveAll(filepath.Join(root, "a/b"))
-	})
-	want = slices.DeleteFunc(want, func(id string) bool { return strings.HasSuffix(id, ".folder.a-b") })
-	if !slices.Equal(after, want) {
-		t.Fatalf("folder a after deleting directory a/b = %v, want %v", after, want)
+	if err := os.RemoveAll(filepath.Join(root, "a/b")); err != nil {
+		t.Fatal(err)
 	}
-	if gone := untilFolderRevision(t, ctx, client, "a-b", revB, func(int) {}); len(gone) != 0 {
-		t.Fatalf("folder a/b still contains %v after its directory was deleted", gone)
+	want = slices.DeleteFunc(want, func(id string) bool { return strings.HasSuffix(id, ".folder.a-b") })
+	untilFolder(t, ctx, client, "a", func(got []string) bool { return slices.Equal(got, want) })
+	untilFolder(t, ctx, client, "a-b", func(got []string) bool { return len(got) == 0 })
+}
+
+// TestIntegration_WatchDeleteKeepsCollidingFolder: folders a-b and a/b share
+// one entity ID. Deleting a-b's only file must not empty the ID a/b still
+// holds (codex review P1).
+func TestIntegration_WatchDeleteKeepsCollidingFolder(t *testing.T) {
+	ctx, client, root, write := startFolderTree(t,
+		"a-b/one.go", "package ab\n\nfunc One() {}\n",
+		"a/b/two.go", "package b\n\nfunc Two() {}\n",
+		"c/z.go", "package c\n\nfunc Z() {}\n")
+	awaitWatching(t, ctx, client, write)
+
+	if err := os.Remove(filepath.Join(root, "a-b/one.go")); err != nil {
+		t.Fatal(err)
+	}
+	// Reconciles run one at a time in publish order, and only a reconcile
+	// empties a folder. Once c is empty, every reconcile the first delete
+	// queued has run.
+	if err := os.Remove(filepath.Join(root, "c/z.go")); err != nil {
+		t.Fatal(err)
+	}
+	untilFolder(t, ctx, client, "c", func(got []string) bool { return len(got) == 0 })
+
+	got, _, _ := readFolderContains(ctx, client, "a-b")
+	if !slices.ContainsFunc(got, func(id string) bool { return strings.HasSuffix(id, ".file.a-b-two-go") }) {
+		t.Fatalf("folder ID a-b = %v after deleting a-b/one.go; a/b still holds a/b/two.go", got)
 	}
 }
 
-// startFolderTree starts graph-ingest and a watching ast-source over a/one.go,
-// a/b/x.go and a/c/y.go, and returns its root and a writer for files under it.
-func startFolderTree(t *testing.T) (context.Context, *natsclient.Client, string, func(rel, body string)) {
+// awaitWatching creates a/probe.go until folder a lists it, proving the
+// watcher delivers events before a test acts once (a delete cannot be
+// re-applied). It returns the probe file's entity ID.
+func awaitWatching(t *testing.T, ctx context.Context, client *natsclient.Client, write func(rel, body string)) string {
+	t.Helper()
+	var probe string
+	untilFolderChange(t, ctx, client, "a", func(got []string) bool {
+		i := slices.IndexFunc(got, func(id string) bool { return strings.HasSuffix(id, ".file.a-probe-go") })
+		if i >= 0 {
+			probe = got[i]
+		}
+		return i >= 0
+	}, func() { write("a/probe.go", "package a\n\nfunc Probe() {}\n") })
+	return probe
+}
+
+// untilFolder waits until folder <rel>'s contains set satisfies done.
+func untilFolder(t *testing.T, ctx context.Context, client *natsclient.Client, rel string, done func([]string) bool) {
+	t.Helper()
+	untilFolderChange(t, ctx, client, rel, done, func() {})
+}
+
+// untilFolderChange applies change, then reads folder <rel> until its
+// contains set satisfies done or 30s pass. It waits on the outcome, not on a
+// newer revision, so a stream write seen before its reconcile lands is not
+// mistaken for the final state.
+func untilFolderChange(
+	t *testing.T, ctx context.Context, client *natsclient.Client, rel string, done func([]string) bool, change func(),
+) {
+	t.Helper()
+	var got []string
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		change()
+		if c, _, ok := readFolderContains(ctx, client, rel); ok {
+			got = c
+			if done(got) {
+				return
+			}
+		}
+	}
+	t.Fatalf("folder %q never reached the expected contains set; last read %v", rel, got)
+}
+
+// startFolderTree starts graph-ingest and a watching ast-source over files
+// (path, body pairs; default a/one.go, a/b/x.go and a/c/y.go), and returns its root and a writer for files under it.
+func startFolderTree(t *testing.T, files ...string) (context.Context, *natsclient.Client, string, func(rel, body string)) {
 	t.Helper()
 	ctx := context.Background()
 	tc := natstest.New(t,
@@ -131,30 +190,18 @@ func startFolderTree(t *testing.T) (context.Context, *natsclient.Client, string,
 			t.Fatal(err)
 		}
 	}
-	write("a/one.go", "package a\n\nfunc One() {}\n")
-	write("a/b/x.go", "package b\n\nfunc X() {}\n")
-	write("a/c/y.go", "package c\n\nfunc Y() {}\n")
+	if len(files) == 0 {
+		files = []string{
+			"a/one.go", "package a\n\nfunc One() {}\n",
+			"a/b/x.go", "package b\n\nfunc X() {}\n",
+			"a/c/y.go", "package c\n\nfunc Y() {}\n",
+		}
+	}
+	for i := 0; i+1 < len(files); i += 2 {
+		write(files[i], files[i+1])
+	}
 	runPass(t, ctx, tc.Client, root, true)
 	return ctx, tc.Client, root, write
-}
-
-// untilFolderRevision applies change until folder <rel> has a revision newer
-// than after, and returns that revision's contains set. The change is
-// re-applied on every read: the watcher starts after the seed publishes, so a
-// change landing before it watches produces no event.
-func untilFolderRevision(
-	t *testing.T, ctx context.Context, client *natsclient.Client, rel string, after uint64, change func(n int),
-) []string {
-	t.Helper()
-	for deadline, n := time.Now().Add(30*time.Second), 0; time.Now().Before(deadline); n++ {
-		change(n)
-		if got, rev, ok := readFolderContains(ctx, client, rel); ok && rev > after {
-			return got
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatalf("no revision of folder %q newer than %d reached ENTITY_STATES", rel, after)
-	return nil
 }
 
 // waitForFolderContains returns folder <rel>'s sorted contains objects once a

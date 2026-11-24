@@ -27,6 +27,10 @@
 - [x] 5.3 `task lint`, `go test -race ./...`, `go test -race -tags=integration ./processor/ast-source/ ./internal/governance/ ./source/ast/`.
 
 - [x] 5.4 graph-event-reviewer (approve with warnings, at 8e219d4). Fixed: W1 the emptied folder of a deleted directory is now cleared (no stat gate; containers carry no owner fact, so the lifecycle pass never judges them), with a directory-delete step in the delete test; W2 the D4 shortcut names both directions; W3 shared-system roots publish no container from watch events (spec carve-out); S1 a watch fold onto an indexed ID is not added; S2 an empty seed publishes no repo. S3 (filesMu held across a full container publish) is accepted per D4. D2/D4 amended, so re-approval is needed.
+- [x] 5.5 Codex review round 1 (REQUEST CHANGES at 14beaa2). Fixed:
+  - P1: container targets are keyed by entity ID, so a folder colliding with a live one (`a-b` vs `a/b`) is never emptied, and two live folders sharing an ID are `SkipReconcile` (the existing shared-writer rule). `TestIntegration_WatchDeleteKeepsCollidingFolder` fails on 14beaa2 and passes here, and `TestPlanContainers` covers the watch and reindex paths.
+  - P2: the changed paths of a refused container publish are kept and retried by the next one, including an unchanged full pass (`TestPublishContainers_RetriesRefusedPublish`).
+  - P3: the integration tests wait on the expected outcome, and the delete test proves the watcher is live with a probe before deleting once.
 
 ## 6. Land
 
