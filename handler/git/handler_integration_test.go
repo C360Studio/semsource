@@ -462,6 +462,8 @@ func TestGitHandler_Watch_ClosesOnContextCancel(t *testing.T) {
 // poll re-ingest after a HEAD change must mint under the same slug. Before
 // #350 the poll loop re-ingested through a path-only config and every commit,
 // author and branch ID moved to the path-derived slug — a parallel entity set.
+//
+// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: Git watch changes carry typed entity state
 func TestGitHandler_Watch_KeepsURLSystemSlug(t *testing.T) {
 	repoDir := initTempRepo(t)
 	cfg := githandler.DefaultConfig()
