@@ -33,28 +33,22 @@ func TestIntegrationLegacyLifecycleCompatibility(t *testing.T) {
 	if err := checkLegacyLifecycle(ctx, tc.Client); err != nil {
 		t.Fatal(err)
 	}
+	js, err := tc.Client.JetStream()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reset := func(t *testing.T) {
 		t.Helper()
-		if err := tc.Client.DeleteKeyValueBucket(ctx, legacyLifecycleBucket); err != nil {
+		// #343, #360: deleting and recreating the bucket is not a reset. A
+		// same-name recreate can still read the deleted stream's values, even
+		// after GetKeyValueBucket reports it gone, because that observes the
+		// stream leaving the account, not its storage being emptied. A purge
+		// replies only once the store is empty, so nothing is left in flight.
+		stream, err := js.Stream(ctx, "KV_"+legacyLifecycleBucket)
+		if err != nil {
 			t.Fatal(err)
 		}
-		// #343: a recreate that still reaches the deleted stream reuses it,
-		// values and all — CreateKeyValueBucket is create-or-get, and even a
-		// raw same-config CreateKeyValue is idempotent on the server, so no
-		// create call can refuse it. Synchronize on the delete being observed
-		// instead; the empty-count assertion below catches anything left.
-		for {
-			_, err := tc.Client.GetKeyValueBucket(ctx, legacyLifecycleBucket)
-			if errors.Is(err, jetstream.ErrBucketNotFound) {
-				break
-			}
-			if ctx.Err() != nil {
-				t.Fatalf("bucket delete never observed: %v", err)
-			}
-		}
-		var err error
-		bucket, err = tc.Client.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{Bucket: legacyLifecycleBucket, History: 1})
-		if err != nil {
+		if err := stream.Purge(ctx); err != nil {
 			t.Fatal(err)
 		}
 		status, err := bucket.Status(ctx)
