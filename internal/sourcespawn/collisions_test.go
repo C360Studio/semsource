@@ -34,7 +34,7 @@ func planned(t *testing.T, entry config.SourceEntry) []PlannedComponent {
 	return out
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSystemCollisions(t *testing.T) {
 	t.Parallel()
 	// checkout is a standalone copy at the pinned commit; other is a checkout
@@ -213,7 +213,7 @@ func TestCheckSystemCollisions(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSystemCollisions_DisabledEnvelopeDoesNotSpawn(t *testing.T) {
 	t.Parallel()
 	a := planned(t, config.SourceEntry{Type: "ast", Path: "/r/a", Project: "svc"})
@@ -225,7 +225,7 @@ func TestCheckSystemCollisions_DisabledEnvelopeDoesNotSpawn(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSourceCollisions(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -290,7 +290,7 @@ func TestCheckSourceCollisions(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 	t.Parallel()
 	register := func(t *testing.T, store *fakeStore, src config.SourceEntry) {
