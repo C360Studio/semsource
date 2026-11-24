@@ -1,6 +1,6 @@
 # Refuse media sources that would share an entity-ID system
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-24) sha256:338bb96242ad
 
 Track: standard (extends one Requirement in `entity-identity-safety` to three more component kinds; message wording
 otherwise).

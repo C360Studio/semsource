@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approved `proposal.md` (2026-11-24, sha256:338bb96242ad); line entered by claude at the owner's instruction. Ruling: #366 comment 7136610830 (per-kind media spaces).
 
 ## 2. Media kinds
 
