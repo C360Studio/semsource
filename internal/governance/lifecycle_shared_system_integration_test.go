@@ -231,79 +231,36 @@ func startDocSource(t *testing.T, ctx context.Context, deps component.Dependenci
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, docComp.Stop) })
 }
 
-// spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
-// TestIntegration_TwoDocsRootsOfOneProjectDoNotCrossMark is the case the
-// #293 review reproduced: one doc-source instance over two roots of one
-// project, holding a.md and b.md. The IDs differ, so nothing collides, but a
-// sweep scoped by system alone would stat b.md under root A and mark it.
-// Root A's sweep must leave b.md alone and still mark its own missing a.md.
-func TestIntegration_TwoDocsRootsOfOneProjectDoNotCrossMark(t *testing.T) {
-	ctx := context.Background()
-	tc, deps := startLifecycleStack(t, ctx)
-
-	const org, project = "acme", "svc"
+// TestIntegration_TwoDocsRootsOfOneProjectAreRefused replaces the #293
+// cross-mark probe: one doc-source instance over two roots of one project is
+// refused at config time now (#349), so no such sweep can run.
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestIntegration_TwoDocsRootsOfOneProjectAreRefused(t *testing.T) {
 	base := t.TempDir()
-	rootA, rootB := filepath.Join(base, "a"), filepath.Join(base, "b")
-	for root, name := range map[string]string{rootA: "a.md", rootB: "b.md"} {
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(root, name), []byte("# "+name+"\n\nStill here.\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	cfg, _ := json.Marshal(map[string]any{
+		"paths": []string{filepath.Join(base, "a"), filepath.Join(base, "b")}, "org": "acme", "project": "svc",
+		"watch_enabled": false, "instance_name": "doc-source-svc",
+	})
+	_, err := docsource.NewComponent(cfg, component.Dependencies{Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+	if err == nil || !strings.Contains(err.Error(), `would share entity-ID system "svc"`) {
+		t.Fatalf("doc-source NewComponent over two roots of one project: err = %v, want a refusal", err)
 	}
-	startDocSource(t, ctx, deps, org, project, rootA, rootB)
-
-	system := entityid.ScopedSystemSlug(project, "")
-	idA := dochandler.DocumentEntityID(fixtureAuthority(), system, "a.md")
-	idB := dochandler.DocumentEntityID(fixtureAuthority(), system, "b.md")
-	for _, id := range []string{idA, idB} {
-		if waitForEntityState(t, ctx, tc.Client, id, 30*time.Second) == nil {
-			t.Fatalf("document %s never reached ENTITY_STATES", id)
-		}
-	}
-
-	sweepA := func() *semsourcegraph.LifecycleRunResponse {
-		t.Helper()
-		resp, err := semsourcegraph.PublishLifecycleTrigger(ctx, tc.Client, semsourcegraph.LifecycleRunRequest{
-			Org: org, Systems: []string{system}, RootPath: rootA,
-			Reason: semsourcegraph.LifecycleReasonPathMissing, Owner: semsourcegraph.LifecycleOwner("doc-source-svc", rootA),
-		})
-		if err != nil {
-			t.Fatalf("root A sweep: %v", err)
-		}
-		return resp
-	}
-	if resp := sweepA(); resp.Marked != 0 {
-		t.Errorf("root A's sweep marked %d entities while every file exists", resp.Marked)
-	}
-	requireNotStale(t, ctx, tc, idB, filepath.Join(rootB, "b.md"))
-
-	// Root A's own missing artifact is still marked; b.md still is not.
-	if err := os.Remove(filepath.Join(rootA, "a.md")); err != nil {
-		t.Fatal(err)
-	}
-	if resp := sweepA(); resp.Marked == 0 {
-		t.Fatal("root A's sweep did not mark its own deleted a.md")
-	}
-	if e, ok := fetchEntity(ctx, tc.Client, idA); !ok || !hasStaleMarker(e.Triples) {
-		t.Errorf("document %s carries no stale marker after its file was deleted", idA)
-	}
-	requireNotStale(t, ctx, tc, idB, filepath.Join(rootB, "b.md"))
 }
 
 // TestIntegration_OverlappingDocsRootsRetractBothViews is the #293 review's
 // second case: one watched doc-source over [root, root/sub]. A file under
-// root/sub is ingested twice — sub-a-md owned by root and a-md owned by
+// root/sub is ingested twice — sub/a.md owned by root and a.md owned by
 // root/sub — so its deletion must sweep both roots, and both documents and
 // their passages must end up stale. Sweeping only the first containing root
-// would leave the inner root's view current indefinitely.
+// would leave the inner root's view current indefinitely. Since #349 the two
+// roots carry no project, so each mints under its own path-derived system;
+// under one project the component is refused.
 // spec: openspec/specs/entity-staleness/spec.md#Requirement: A staleness sweep judges only the entities its own root produced
 func TestIntegration_OverlappingDocsRootsRetractBothViews(t *testing.T) {
 	ctx := context.Background()
 	tc, deps := startLifecycleStack(t, ctx)
 
-	const org, project = "acme", "svc"
+	const org = "acme"
 	root := t.TempDir()
 	sub := filepath.Join(root, "sub")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
@@ -313,8 +270,15 @@ func TestIntegration_OverlappingDocsRootsRetractBothViews(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# A\n\nFirst.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	shared, _ := json.Marshal(map[string]any{
+		"paths": []string{root, sub}, "org": org, "project": "svc",
+		"watch_enabled": true, "instance_name": "doc-source-svc",
+	})
+	if _, err := docsource.NewComponent(shared, deps); err == nil {
+		t.Fatal("doc-source over overlapping roots of one project was admitted (#349)")
+	}
 	docCfg, _ := json.Marshal(map[string]any{
-		"paths": []string{root, sub}, "org": org, "project": project,
+		"paths": []string{root, sub}, "org": org,
 		"watch_enabled": true, "instance_name": "doc-source-svc",
 	})
 	dd, err := docsource.NewComponent(docCfg, deps)
@@ -330,9 +294,8 @@ func TestIntegration_OverlappingDocsRootsRetractBothViews(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, docComp.Stop) })
 
-	system := entityid.ScopedSystemSlug(project, "")
-	outer := dochandler.DocumentEntityID(fixtureAuthority(), system, "sub/a.md")
-	inner := dochandler.DocumentEntityID(fixtureAuthority(), system, "a.md")
+	outer := dochandler.DocumentEntityID(fixtureAuthority(), entityid.SystemSlug(root), "sub/a.md")
+	inner := dochandler.DocumentEntityID(fixtureAuthority(), entityid.SystemSlug(sub), "a.md")
 	if outer == inner {
 		t.Fatalf("fixture drift: the two views must have distinct IDs, both %s", outer)
 	}

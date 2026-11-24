@@ -78,11 +78,13 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 	write("golang/base.go", "package p\ntype Animal struct{}\n")
 	write("golang/derived.go", "package p\ntype Dog struct{ Animal }\n")
 
+	// One project per root: roots sharing a project share its repo and folder
+	// entities and are refused (#349).
 	astCfg, err := json.Marshal(map[string]any{
 		"watch_paths": []map[string]any{
-			{"path": filepath.Join(root, "java"), "org": "acme", "project": "ml", "languages": []string{"java"}},
-			{"path": filepath.Join(root, "ts"), "org": "acme", "project": "ml", "languages": []string{"typescript"}},
-			{"path": filepath.Join(root, "golang"), "org": "acme", "project": "ml", "languages": []string{"go"}},
+			{"path": filepath.Join(root, "java"), "org": "acme", "project": "ml-java", "languages": []string{"java"}},
+			{"path": filepath.Join(root, "ts"), "org": "acme", "project": "ml-ts", "languages": []string{"typescript"}},
+			{"path": filepath.Join(root, "golang"), "org": "acme", "project": "ml-golang", "languages": []string{"go"}},
 		},
 		"watch_enabled":  false,
 		"index_interval": "",
@@ -120,9 +122,9 @@ func TestIntegration_MultiLangCrossFileReferenceResolution(t *testing.T) {
 		derived string
 		role    string
 	}{
-		{"java", "acme.test-a1b2c3.ml.java", "Animal", "Dog", "extended_by"},
-		{"typescript", "acme.test-a1b2c3.ml.typescript", "Base", "Derived", "extended_by"},
-		{"golang", "acme.test-a1b2c3.ml.golang", "Animal", "Dog", "embedded_by"},
+		{"java", "acme.test-a1b2c3.ml-java.java", "Animal", "Dog", "extended_by"},
+		{"typescript", "acme.test-a1b2c3.ml-ts.typescript", "Base", "Derived", "extended_by"},
+		{"golang", "acme.test-a1b2c3.ml-golang.golang", "Animal", "Dog", "embedded_by"},
 	}
 
 	for _, tcCase := range cases {

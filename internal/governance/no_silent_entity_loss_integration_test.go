@@ -73,10 +73,12 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	write("gosrc/_examples/demo.go", "package demo\n\n// Demo exists in an underscore-prefixed dir.\nfunc Demo() string { return \"d\" }\n")
 	write("gosrc/main.go", "package demo\n\nfunc Normal() string { return \"n\" }\n")
 
+	// One project per root: roots sharing a project share its repo and folder
+	// entities and are refused (#349).
 	astCfg, err := json.Marshal(map[string]any{
 		"watch_paths": []map[string]any{
-			{"path": filepath.Join(root, "app"), "org": "acme", "project": "zl", "languages": []string{"typescript", "svelte"}},
-			{"path": filepath.Join(root, "gosrc"), "org": "acme", "project": "zl", "languages": []string{"go"}},
+			{"path": filepath.Join(root, "app"), "org": "acme", "project": "zl-app", "languages": []string{"typescript", "svelte"}},
+			{"path": filepath.Join(root, "gosrc"), "org": "acme", "project": "zl-go", "languages": []string{"go"}},
 		},
 		"watch_enabled":  false,
 		"index_interval": "",
@@ -102,13 +104,13 @@ func TestIntegration_NoSilentEntityLoss_AuditShapes(t *testing.T) {
 	// Expected IDs computed through the SAME production constructors the
 	// parsers use — exact-match assertions, no substring guessing.
 	expected := []string{
-		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "zl", semsourceast.TypeComponent, "+page", "src/routes/+page.svelte").ID,
-		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "zl", semsourceast.TypeFile, "", "src/routes/+page.svelte").ID,
-		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl", semsourceast.TypeFunction, "load", "src/routes/[slug]/+page.ts").ID,
-		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl", semsourceast.TypeConst, "clicks$", "src/app.ts").ID,
-		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl", semsourceast.TypeConst, "control", "src/app.ts").ID,
-		semsourceast.NewCodeEntity(fixtureAuthority(), "golang", "zl", semsourceast.TypeFunction, "Demo", "_examples/demo.go").ID,
-		semsourceast.NewCodeEntity(fixtureAuthority(), "golang", "zl", semsourceast.TypeFunction, "Normal", "main.go").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "zl-app", semsourceast.TypeComponent, "+page", "src/routes/+page.svelte").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "svelte", "zl-app", semsourceast.TypeFile, "", "src/routes/+page.svelte").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl-app", semsourceast.TypeFunction, "load", "src/routes/[slug]/+page.ts").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl-app", semsourceast.TypeConst, "clicks$", "src/app.ts").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "typescript", "zl-app", semsourceast.TypeConst, "control", "src/app.ts").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "golang", "zl-go", semsourceast.TypeFunction, "Demo", "_examples/demo.go").ID,
+		semsourceast.NewCodeEntity(fixtureAuthority(), "golang", "zl-go", semsourceast.TypeFunction, "Normal", "main.go").ID,
 	}
 
 	deadline := time.Now().Add(30 * time.Second)
