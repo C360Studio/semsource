@@ -28,9 +28,12 @@ Ruling: one ID space **per media kind**, not one shared space. The kinds mint di
   same-instance takeover check now covers their `paths[0]`-derived instances.
 - **`CheckSourceCollisions` plans `image`, `audio` and `video` entries** alongside `ast`, `docs` and `s3`.
 - **Refusal wording, no behaviour change:**
-  - an add that narrows a registered source's roots under its own instance says to remove the source, then add it;
-  - two file entries building one instance from different roots are worded by the same-instance message, which runs
-    before the system check, instead of naming one root twice;
+  - an add that rebuilds a registered instance from other roots (narrowing or moving it) says to remove the source,
+    then add it, or else to give each source a distinct project; a new source's own shared-system refusal keeps the
+    distinct-project remedy;
+  - a root that two file entries of one instance both list counts once in the system check, so the refusal no longer
+    names one root twice (a repeat with no other shared-system root is left to the same-instance message); the check
+    order is unchanged, as the scenarios name the shared system;
   - "no discovered root is kept" says a restart reconciles the discovery record.
 
 ## Out of scope

@@ -159,6 +159,29 @@ func TestCheckSystemCollisions(t *testing.T) {
 			},
 		},
 		{
+			name: "two image sources that reach one root collide",
+			entries: []config.SourceEntry{
+				{Type: "image", Paths: []string{"/m/x", "/m/b"}},
+				{Type: "image", Paths: []string{"/m/b"}},
+			},
+			want: []string{"image-source-b (root /m/b)", "image-source-x (root /m/b)", `system "b"`},
+		},
+		{
+			name: "two video roots with one basename collide",
+			entries: []config.SourceEntry{
+				{Type: "video", Paths: []string{"/a/clips"}},
+				{Type: "video", Paths: []string{"/b/clips"}},
+			},
+			want: []string{"video-source-clips (root /a/clips)", "video-source-clips (root /b/clips)", `system "clips"`},
+		},
+		{
+			name: "an image and an audio source over one root are different ID spaces",
+			entries: []config.SourceEntry{
+				{Type: "image", Paths: []string{"/m/b"}},
+				{Type: "audio", Paths: []string{"/m/b"}},
+			},
+		},
+		{
 			name:    "two pins of one submodule at one SHA are admitted",
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), pin("/p2/lib", "via-p2-lib")},
 		},
@@ -295,6 +318,7 @@ func TestCheckSourceCollisions(t *testing.T) {
 		sources []config.SourceEntry
 		refused bool
 		want    []string // substrings the refusal must carry
+		absent  []string // substrings it must not
 	}{
 		{
 			name: "two ast sources under one project",
@@ -337,6 +361,41 @@ func TestCheckSourceCollisions(t *testing.T) {
 			want:    []string{"instance objectstore-source-b-x", "root b-x", "root b/x"},
 		},
 		{
+			name: "two image sources that reach one root",
+			sources: []config.SourceEntry{
+				{Type: "image", Paths: []string{"/m/x", "/m/b"}},
+				{Type: "image", Paths: []string{"/m/b"}},
+			},
+			refused: true,
+			want:    []string{"image-source-x (root /m/b)", "image-source-b (root /m/b)"},
+		},
+		{
+			name: "an image and an audio source over one root",
+			sources: []config.SourceEntry{
+				{Type: "image", Paths: []string{"/m/b"}},
+				{Type: "audio", Paths: []string{"/m/b"}},
+			},
+		},
+		{
+			name: "two docs entries of one instance do not name one root twice",
+			sources: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/r/a", "/r/b"}},
+				{Type: "docs", Paths: []string{"/r/a"}},
+			},
+			refused: true,
+			want:    []string{"instance doc-source-a would be built from root /r/a, /r/b and from root /r/a"},
+			absent:  []string{"doc-source-a (root /r/a) and doc-source-a (root /r/a)"},
+		},
+		{
+			name: "a root two entries of one instance share is named once",
+			sources: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/r/a", "/r/c"}, Project: "h"},
+				{Type: "docs", Paths: []string{"/r/a"}, Project: "h"},
+			},
+			refused: true,
+			want:    []string{"doc-source-h (root /r/a) and doc-source-h (root /r/c) would share"},
+		},
+		{
 			name: "multi-branch repos are left to boot",
 			sources: []config.SourceEntry{
 				{Type: "repo", URL: "https://example.invalid/acme/svc.git", Branches: []string{"main"}, Project: "svc"},
@@ -361,6 +420,11 @@ func TestCheckSourceCollisions(t *testing.T) {
 			for _, w := range tc.want {
 				if !strings.Contains(err.Error(), w) {
 					t.Errorf("refusal %q does not name %q", err, w)
+				}
+			}
+			for _, w := range tc.absent {
+				if strings.Contains(err.Error(), w) {
+					t.Errorf("refusal %q carries %q", err, w)
 				}
 			}
 		})
@@ -409,6 +473,34 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			existing: []config.SourceEntry{{Type: "s3", Bucket: "b-x"}},
 			add:      config.SourceEntry{Type: "s3", Bucket: "b", Prefix: "x"},
 			refused:  "instance objectstore-source-b-x would be built from root b-x and from root b/x",
+		},
+		{
+			name:     "narrowing a registered docs source's paths",
+			existing: []config.SourceEntry{{Type: "docs", Paths: []string{"/r/a", "/r/b"}}},
+			add:      config.SourceEntry{Type: "docs", Paths: []string{"/r/a"}},
+			refused:  "to change a registered source's paths, remove it, then add it",
+		},
+		{
+			name:     "moving a registered ast source to another root of its project",
+			existing: []config.SourceEntry{{Type: "ast", Path: "/r/a", Project: "svc"}},
+			add:      config.SourceEntry{Type: "ast", Path: "/r/b", Project: "svc"},
+			refused:  "to change a registered source's paths, remove it, then add it",
+		},
+		{
+			name:    "a new docs source with several roots under one project is not told to remove itself",
+			add:     config.SourceEntry{Type: "docs", Paths: []string{"/r/a", "/r/b"}, Project: "handbook"},
+			refused: "so give each source a distinct project (or version)",
+		},
+		{
+			name:     "an image source reaching a registered image root",
+			existing: []config.SourceEntry{{Type: "image", Paths: []string{"/m/x", "/m/b"}}},
+			add:      config.SourceEntry{Type: "image", Paths: []string{"/m/b"}},
+			refused:  "image-source-x (root /m/b)",
+		},
+		{
+			name:     "an audio source over a registered image root",
+			existing: []config.SourceEntry{{Type: "image", Paths: []string{"/m/b"}}},
+			add:      config.SourceEntry{Type: "audio", Paths: []string{"/m/b"}},
 		},
 		{
 			name:     "re-adding the same instance",
@@ -530,6 +622,22 @@ func TestAddWithChecker_RefusesTakingOverADiscoveredName(t *testing.T) {
 		{"a re-add from the discovered root is admitted", true, config.SourceEntry{Type: "ast", Path: "/discovered/worktree", Project: "svc-feature"}, false},
 		{"a name no discovery record owns is the operator's", false, config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"}, false},
 	}
+	t.Run("a recorded name with no component kept names the restart", func(t *testing.T) {
+		t.Parallel()
+		store := seed(t, true)
+		cfg := store.cfg.Get()
+		delete(cfg.Components, discovered.Instance)
+		if err := store.cfg.Update(cfg); err != nil {
+			t.Fatal(err)
+		}
+		_, err := AddWithChecker(context.Background(), config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"}, store, nil, collisionOpts)
+		if CodeOf(err) != CodeValidationFailed {
+			t.Fatalf("err = %v, want %s", err, CodeValidationFailed)
+		}
+		if !strings.Contains(err.Error(), "a restart reconciles the discovery record") {
+			t.Errorf("refusal %q does not name the restart", err)
+		}
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
