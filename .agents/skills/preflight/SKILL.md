@@ -7,7 +7,7 @@ description: >-
 
 # Verify Changes (Preflight)
 
-From [the shared protocol](../../protocol.md), read § 2 step 4 (Verify), § 3 and *Test-to-spec attribution*. One `Taskfile.yml` entrypoint serves local verification, MCP (`ateam_task`), and CI.
+From [the shared protocol](../../protocol.md), read § 2 step 4 (Verify), § 3 and *Test-to-spec attribution*. If your protocol has no such numbered sections, read all of it. One `Taskfile.yml` entrypoint serves local verification, MCP (`ateam_task`), and CI.
 
 ## 1. Select Gates by Diff Scope
 

@@ -21,6 +21,8 @@ Write `openspec/changes/<id>/design.md` with the `spec-driven` sections (Context
 - **Decisions:** each names at least two options with cost, blast radius, and what each forecloses, plus the adopter seam: what a developer who never opened this file must know, and what happens if they do nothing.
 - **Open Questions:** mark each one that needs an owner ruling. A question that would change specs, approach, or tasks is resolved before tasks.
 
+For each Decision, add one bullet to `proposal.md` under `## Decisions you are making by approving` naming in plain words what triggers it and what changes for the user, with no identifiers or constants; `task spec:check` fails a change with a `design.md` and no such bullet.
+
 Stay under 120 lines; `task spec:check` warns past the limit.
 
 ## 3. Tie Tasks to Premises

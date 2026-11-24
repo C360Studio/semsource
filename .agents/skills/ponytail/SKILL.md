@@ -16,9 +16,11 @@ Read the task and the code it touches. List callers, tests, fixtures, config, an
 
 ## 2. The 6-Step Decision Ladder (Smallest Complete Change)
 
-1. **Does it need to exist?** Skip unrequested features and options; name them in one line.
+1. **Does it need to exist?** Skip unrequested features and options; name them in one line. Name the caller or spec scenario that needs it today; if there is none, do not build it.
 2. **Already in this codebase?** Reuse existing helpers, components, and patterns.
 3. **Standard library or platform feature?** Prefer the project language’s standard library or native browser capabilities.
 4. **An installed dependency?** Use what is already installed; never add a dependency for a few lines.
 5. **Can it be one clear line?** Write flat, readable code.
-6. **Otherwise:** Write the minimum complete change, test every non-trivial branch with an independent oracle proven via `task mutate:check` (or `cp` + SHA-256), use generated checks (`testing.F` / PBT) when touching interacting inputs/laws/histories, and mark deliberate limits with `// shortcut: <the limit>, <when to upgrade>`.
+6. **Otherwise:** Write the minimum complete change, test every non-trivial branch with an independent oracle proven via `task mutate:check` (or `cp` + SHA-256), use generated checks (fuzz or property tests) when touching interacting inputs/laws/histories, and mark deliberate limits with `// shortcut: <the limit>, <when to upgrade>`.
+
+Defensive code names the concrete failure it prevents and how that failure occurs. A defence that turns a transient fault into a safety action is itself a hazard and needs the same justification as a feature.

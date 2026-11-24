@@ -7,7 +7,7 @@ description: >-
 
 # Checkpoint and Hand Off Work
 
-From [the shared protocol](../../protocol.md), read § 1 and § 2 step 5 (Close). A handoff records current truth in shared homes (GitHub/Gitea PR/issue comments and the structured `.ateam/state.json` snapshot) without creating competing prose handoff files in the repo tree.
+From [the shared protocol](../../protocol.md), read § 1 and § 2 step 5 (Close). If your protocol has no such numbered sections, read all of it. A handoff records current truth in shared homes (GitHub/Gitea PR/issue comments and the structured `.ateam/state.json` snapshot) without creating competing prose handoff files in the repo tree.
 
 ## 1. Reconcile the Checkpoint
 
