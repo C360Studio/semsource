@@ -557,3 +557,41 @@ func isSourceComponent(name string) bool {
 		return false
 	}
 }
+
+// RemoveDesiredSource removes instance from the next-boot desired manifest
+// without a running service, for an operator whose boot refuses a persisted
+// entry (#349, design D4 option b). Like a remove_source request it disables
+// the component envelope and rewrites the manifest; only an instance a desired
+// manifest source builds is accepted, since a file source is removed from the
+// file. The caller must hold the only writer of store (the service stopped).
+func RemoveDesiredSource(ctx context.Context, store sourcespawn.ConfigStore, opts sourcespawn.Options, instance string) error {
+	envelope, ok := store.GetConfig().Get().Components["source-manifest"]
+	if !ok {
+		return errors.New("the desired source-manifest config is absent")
+	}
+	var desired Config
+	if err := json.Unmarshal(envelope.Config, &desired); err != nil {
+		return fmt.Errorf("decode desired source-manifest: %w", err)
+	}
+	owned := false
+	for _, src := range desired.Sources {
+		if built, err := sourcespawn.InstanceNames(manifestSourceToSourceEntry(src), opts); err == nil {
+			if _, ok := built[instance]; ok {
+				owned = true
+				break
+			}
+		}
+	}
+	if !owned {
+		return &sourcespawn.Error{
+			Code:    sourcespawn.CodeNotFound,
+			Message: fmt.Sprintf("no desired manifest source builds %q; a source in the config file is removed from the file", instance),
+		}
+	}
+	// An envelope already disabled is a removal that committed before its
+	// manifest write; finish the manifest rather than refusing.
+	if err := sourcespawn.Remove(ctx, instance, store); err != nil && sourcespawn.CodeOf(err) != sourcespawn.CodeNotFound {
+		return err
+	}
+	return RewriteDesiredManifest(ctx, store, opts, nil, []string{instance}, nil)
+}

@@ -16,6 +16,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -115,6 +116,7 @@ Examples:
   semsource add ast --path ./src --language go
   semsource add repo --url github.com/org/repo
   semsource remove                    Interactive source removal
+  semsource remove --manifest <name>  Remove a runtime-added source while the service is stopped
   semsource sources                   Show what's configured
   semsource run --log-level debug     Start with verbose logging
 
@@ -156,8 +158,13 @@ func removeCmd(args []string) error {
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	configPath := fs.String("config", "semsource.json", "path to semsource JSON config file")
 	index := fs.Int("index", -1, "source index to remove (1-based, from 'semsource sources')")
+	manifest := fs.String("manifest", "", "instance to remove from the persisted desired manifest (service stopped; needs NATS)")
+	natsURL := fs.String("nats-url", "", "NATS server URL for --manifest (overrides NATS_URL env and config)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *manifest != "" {
+		return removeManifestCmd(context.Background(), *configPath, *natsURL, *manifest)
 	}
 	term := cli.NewTerm(os.Stdin, os.Stdout)
 	// Convert from 1-based (user-facing) to 0-based (internal).
@@ -184,7 +191,7 @@ func validateCmd(args []string) error {
 		return err
 	}
 	term := cli.NewTerm(os.Stdin, os.Stdout)
-	return cli.Validate(term, *configPath)
+	return cli.Validate(context.Background(), term, *configPath)
 }
 
 // buildLogger constructs an slog.Logger at the given level writing JSON to stdout.

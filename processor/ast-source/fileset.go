@@ -90,13 +90,13 @@ type containerPublish struct {
 // file set. Targets are keyed by entity ID, not path: sanitizing folds
 // folders like a-b and a/b onto one ID. With all, every container is
 // published (a full pass); otherwise only the repo and the containers that
-// hold an ancestor of changed. Reconcile applies only to a target, never on a
-// shared system (#349), and never to an ID two live folders build (their
-// publishes alternate, so neither is the complete set). An ancestor left with
-// no indexed file is published with no contains so its stale edges clear,
-// whether or not its directory still exists (the lifecycle pass never judges
-// containers: they carry no owner fact), unless a live folder holds its ID.
-func planContainers(files map[string]string, changed []string, all, reconcile, shared bool,
+// hold an ancestor of changed. Reconcile applies only to a target, and never
+// to an ID two live folders build (their publishes alternate, so neither is
+// the complete set). An ancestor left with no indexed file is published with
+// no contains so its stale edges clear, whether or not its directory still
+// exists (the lifecycle pass never judges containers: they carry no owner
+// fact), unless a live folder holds its ID.
+func planContainers(files map[string]string, changed []string, all, reconcile bool,
 	authority entityid.Authority, system string,
 ) []containerPublish {
 	built := semsourceast.BuildHierarchyFromFiles(files, authority, system)
@@ -124,7 +124,7 @@ func planContainers(files map[string]string, changed []string, all, reconcile, s
 			// the other's. Full passes publish both, as before this fix.
 			continue
 		}
-		out = append(out, containerPublish{e, shared || !reconcile || !target || builders[e.ID] > 1})
+		out = append(out, containerPublish{e, !reconcile || !target || builders[e.ID] > 1})
 	}
 	var emptied []*semsourceast.CodeEntity
 	for id, e := range targets {
@@ -134,7 +134,7 @@ func planContainers(files map[string]string, changed []string, all, reconcile, s
 	}
 	slices.SortFunc(emptied, func(x, y *semsourceast.CodeEntity) int { return strings.Compare(x.Path, y.Path) })
 	for _, e := range emptied {
-		out = append(out, containerPublish{e, shared || !reconcile})
+		out = append(out, containerPublish{e, !reconcile})
 	}
 	return out
 }
@@ -152,7 +152,7 @@ func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, chan
 	changed = append(changed, pw.pendingContainers...)
 	pw.pendingContainers = nil
 	failed := false
-	for _, p := range planContainers(pw.files, changed, all, reconcile, pw.sharedSystem, c.authority, pw.scopedSystem) {
+	for _, p := range planContainers(pw.files, changed, all, reconcile, c.authority, pw.scopedSystem) {
 		if !c.publishContainer(ctx, p.entity, p.skipReconcile) {
 			failed = true
 		}
@@ -184,14 +184,11 @@ func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.C
 }
 
 // watchContainers applies one watch event's change to the file set and, when
-// it changed, republishes the repo and the changed path's ancestors. A root
-// sharing its system with another (#349) only updates the set: its
-// containers hold the other root's children too, which its set cannot see,
-// so a watch publish would drop them; its full passes still publish.
+// it changed, republishes the repo and the changed path's ancestors.
 func (c *Component) watchContainers(ctx context.Context, pw *pathWatcher, change func() []string) {
 	pw.filesMu.Lock()
 	defer pw.filesMu.Unlock()
-	if changed := change(); len(changed) > 0 && !pw.sharedSystem {
+	if changed := change(); len(changed) > 0 {
 		c.publishContainers(ctx, pw, changed, false, true)
 	}
 }

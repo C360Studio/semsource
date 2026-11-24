@@ -6,7 +6,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/graph"
 )
 
@@ -57,30 +56,12 @@ func fingerprint(p *graph.EntityPayload) [sha256.Size]byte {
 	return out
 }
 
-// rootsShareIDs reports whether two configured roots mint entity IDs under
-// one system slug, so one relative path in each yields one ID. It mirrors the
-// doc handler's system choice: the project override, else the root's slug.
-func rootsShareIDs(cfg Config) bool {
-	seen := map[string]bool{}
-	for _, root := range cfg.Paths {
-		system := entityid.SystemSlug(root)
-		if cfg.Project != "" {
-			system = entityid.SystemSlug(cfg.Project)
-		}
-		if seen[system] {
-			return true
-		}
-		seen[system] = true
-	}
-	return false
-}
-
 // markReconcile sets the payload's SkipReconcile and returns its fingerprint
 // for record. Only a republish whose statements differ from what this
 // process last published reconciles, so the seed — every entity's first
 // sighting — never does.
 func (c *Component) markReconcile(payload *graph.EntityPayload) [sha256.Size]byte {
 	fp := fingerprint(payload)
-	payload.SkipReconcile = c.sharedRootIDs || !c.changes.changed(payload.ID, fp)
+	payload.SkipReconcile = !c.changes.changed(payload.ID, fp)
 	return fp
 }

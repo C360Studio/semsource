@@ -105,12 +105,6 @@ Every source that sweeps for staleness SHALL write an owner fact on each entity 
 - **WHEN** the AST source's periodic sweep runs while `docs/a.md` exists
 - **THEN** the document and its passages carry no staleness marker
 
-#### Scenario: Two docs roots under one project do not cross-mark
-
-- **GIVEN** two docs roots configured with one project, one holding `a.md` and the other `b.md`
-- **WHEN** each root's sweep runs while both files exist
-- **THEN** neither document carries a staleness marker
-
 #### Scenario: A sweep still marks its own missing artifact
 
 - **GIVEN** an entity whose owner fact names a root

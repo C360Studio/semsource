@@ -16,6 +16,7 @@ import (
 	"time"
 
 	semconfig "github.com/c360studio/semengine/config"
+	"github.com/c360studio/semengine/types"
 
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
@@ -49,6 +50,10 @@ type discoveryPlan struct {
 	states  []config.DiscoveryState
 	// watches is what the runtime check compares, one per state.
 	watches []sourcemanifest.DiscoveryWatch
+	// found is every component discovery built, in build order, before
+	// desired keeps one per instance name: two parents can build one name
+	// from different roots, and the collision check must see both (#349).
+	found []sourcespawn.PlannedComponent
 }
 
 func (p *discoveryPlan) owner(parent, kind string, failed bool) *discoveryOwner {
@@ -63,6 +68,7 @@ func (p *discoveryPlan) add(o *discoveryOwner, entry config.SourceEntry, opts so
 		return err
 	}
 	for name, cc := range built {
+		p.found = append(p.found, sourcespawn.PlannedComponent{Instance: name, Config: cc})
 		p.desired[name] = cc
 		p.entries[name] = entry
 		o.names[name] = true
@@ -258,6 +264,11 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 		return err
 	}
 	next, owned, protected := plan.record(prev)
+	// Refused before any write, over the retained and discovered sets apart:
+	// a put would replace a retained component of the same name (#349).
+	if err := checkDiscoveryCollisions(ctx, effective, plan, file, owned, protected); err != nil {
+		return err
+	}
 	// Record what this boot is about to put before putting it, so a boot that
 	// fails partway leaves no component that no record names.
 	if pending := pendingRecord(prev, next); !reflect.DeepEqual(pending, prev) {
@@ -278,13 +289,7 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 	}
 	var removed []string
 	for name, have := range effective {
-		if !have.Enabled || !owned[name] || protected[name] {
-			continue
-		}
-		if _, ok := plan.desired[name]; ok {
-			continue
-		}
-		if _, ok := file[name]; ok {
+		if !plan.retires(name, have, file, owned, protected) {
 			continue
 		}
 		if err := store.DeleteComponentFromKV(ctx, name); err != nil {
@@ -297,6 +302,18 @@ func reconcileDiscovery(ctx context.Context, store sourcespawn.ConfigStore, plan
 	}
 	sources, gone := manifestDelta(store.GetConfig().Get().Components, plan, owned)
 	return sourcemanifest.RewriteDesiredManifest(ctx, store, opts, sources, gone, &next)
+}
+
+// retires reports whether reconcile deletes the component in effect under
+// name: an enabled component the previous record owns that nothing discovered
+// or the file generates, unless its parent's discovery failed.
+func (p *discoveryPlan) retires(name string, have types.ComponentConfig, file semconfig.ComponentConfigs, owned, protected map[string]bool) bool {
+	if !have.Enabled || !owned[name] || protected[name] {
+		return false
+	}
+	_, desired := p.desired[name]
+	_, generated := file[name]
+	return !desired && !generated
 }
 
 // manifestDelta is what the next-boot manifest must hold after reconcile,
