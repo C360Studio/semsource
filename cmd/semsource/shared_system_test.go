@@ -335,3 +335,93 @@ func pinnedCheckout(t *testing.T, msg string) (dir, sha string) {
 	git("commit", "-q", "--allow-empty", "-m", msg)
 	return dir, git("rev-parse", "HEAD")
 }
+
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestDiscoveryRefusesPinsOfOneInstanceFromDifferentParents(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	lib, _ := pinnedCheckout(t, "lib")
+	parent := func(t *testing.T) string {
+		t.Helper()
+		dir, _ := pinnedCheckout(t, "parent")
+		runGit(t, dir, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "lib")
+		runGit(t, dir, "commit", "-q", "-m", "link lib")
+		return dir
+	}
+	for _, tc := range []struct {
+		name               string
+		project1, project2 string
+		langs1, langs2     string
+		refused            bool
+		astPins            int // ast pin components persisted when admitted
+	}{
+		{"one project, go and python", "same-parent", "same-parent", `["go"]`, `["python"]`, true, 0},
+		// One instance from two parents at one SHA and parse scope: the D2
+		// dedup, one component.
+		{"one project, the same languages", "same-parent", "same-parent", `["go"]`, `["go"]`, false, 1},
+		{"two projects, the same languages", "parent-a", "parent-b", `["go"]`, `["go"]`, false, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := parent(t), parent(t)
+			path := filepath.Join(t.TempDir(), "semsource.json")
+			body := `{"namespace":"acme","sources":[` +
+				`{"type":"git","path":"` + a + `","project":"` + tc.project1 + `","languages":` + tc.langs1 + `},` +
+				`{"type":"git","path":"` + b + `","project":"` + tc.project2 + `","languages":` + tc.langs2 + `}]}`
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			// The file check skips git parents; discovery is where the pins meet.
+			cfg, expand, err := loadAndExpandConfig(ctx, path)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			opts := sourcespawn.Options{Org: cfg.Namespace, WorkspaceDir: cfg.WorkspaceDir}
+			plan, err := planDiscovery(ctx, cfg, expand, opts)
+			if err != nil {
+				t.Fatalf("plan: %v", err)
+			}
+			store := &reconcileStore{components: semconfig.ComponentConfigs{"source-manifest": manifestWith(t, nil, nil)}}
+			before := maps.Clone(store.components)
+			err = reconcileDiscovery(ctx, store, plan, nil, opts, logger)
+			if !tc.refused {
+				if err != nil {
+					t.Fatalf("pins of one SHA and parse scope refused: %v", err)
+				}
+				pins := 0
+				for name, cc := range store.components {
+					if cc.Name == "ast-source" && strings.Contains(name, "-via-") {
+						pins++
+					}
+				}
+				if pins != tc.astPins {
+					t.Errorf("ast pins persisted = %d, want %d", pins, tc.astPins)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("pins of one instance from two parents with different languages were admitted")
+			}
+			for _, want := range []string{"refusing to boot", "(root " + filepath.Join(a, "lib") + ")",
+				"(root " + filepath.Join(b, "lib") + ")", "indexes [go]", "indexes [python]"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("refusal %q does not name %q", err, want)
+				}
+			}
+			if len(store.puts)+len(store.dels) != 0 {
+				t.Errorf("a refused discovery wrote puts=%v deletes=%v", store.puts, store.dels)
+			}
+			if got := store.components["source-manifest"]; !got.Equal(before["source-manifest"]) {
+				t.Errorf("a refused discovery rewrote the manifest: %s", got.Config)
+			}
+		})
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@e.com", "-c", "commit.gpgsign=false"}, args...)...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}

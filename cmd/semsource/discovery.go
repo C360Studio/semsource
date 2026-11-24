@@ -50,6 +50,10 @@ type discoveryPlan struct {
 	states  []config.DiscoveryState
 	// watches is what the runtime check compares, one per state.
 	watches []sourcemanifest.DiscoveryWatch
+	// found is every component discovery built, in build order, before
+	// desired keeps one per instance name: two parents can build one name
+	// from different roots, and the collision check must see both (#349).
+	found []sourcespawn.PlannedComponent
 }
 
 func (p *discoveryPlan) owner(parent, kind string, failed bool) *discoveryOwner {
@@ -64,6 +68,7 @@ func (p *discoveryPlan) add(o *discoveryOwner, entry config.SourceEntry, opts so
 		return err
 	}
 	for name, cc := range built {
+		p.found = append(p.found, sourcespawn.PlannedComponent{Instance: name, Config: cc})
 		p.desired[name] = cc
 		p.entries[name] = entry
 		o.names[name] = true

@@ -607,7 +607,20 @@ func oneWriterEach(incoming, held []systemRoot) []systemRoot {
 // instance and system from the same directory is the same writer, and the pin
 // exception applies (D2). The set is checked whole: retained collisions that
 // predate discovery are refused here too, as boot would refuse them anyway.
+//
+// discovered may hold one instance more than once, as discovery built it
+// before keeping one per name: a repeat over the same roots is one source; a
+// repeat over other roots is refused unless both are pins, which share the
+// name's system and so meet the pin rule (one SHA, one parse scope).
 func CheckDiscoveredCollisions(ctx context.Context, retained, discovered []PlannedComponent) error {
+	discovered, err := distinctSources(discovered)
+	if err != nil {
+		return err
+	}
+	nonPins := slices.DeleteFunc(slices.Clone(discovered), func(c PlannedComponent) bool { return c.Pin })
+	if err := sameInstanceError(nonPins); err != nil {
+		return err
+	}
 	discoveredRoots, err := enabledRoots(discovered)
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
@@ -624,6 +637,25 @@ func CheckDiscoveredCollisions(ctx context.Context, retained, discovered []Plann
 		return err
 	}
 	return takeoverError(takeovers)
+}
+
+// distinctSources drops a repeat of one instance over the same roots: one
+// source listed twice.
+func distinctSources(components []PlannedComponent) ([]PlannedComponent, error) {
+	seen := map[string][][]string{}
+	out := make([]PlannedComponent, 0, len(components))
+	for _, c := range components {
+		roots, err := rootList(c)
+		if err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(seen[c.Instance], func(r []string) bool { return slices.Equal(r, roots) }) {
+			continue
+		}
+		seen[c.Instance] = append(seen[c.Instance], roots)
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // identity is what makes two roots one writer: one instance minting one

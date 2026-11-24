@@ -40,7 +40,8 @@ func bootRefusal(err error) error {
 // without what reconcile retires and without a discovered name the previous
 // record owns, which discovery is rewriting as its own writer. A discovered
 // component that would replace a retained one under its name from another
-// root is thereby compared with it rather than collapsed into one survivor.
+// root is thereby compared with it rather than collapsed into one survivor,
+// and so are two discovered components of one name.
 // Pins are the previous record's and this plan's submodule names.
 func checkDiscoveryCollisions(ctx context.Context, effective semconfig.ComponentConfigs, plan *discoveryPlan, file semconfig.ComponentConfigs, owned, protected map[string]bool) error {
 	pins, err := sourcespawn.PinInstances(effective)
@@ -54,7 +55,7 @@ func checkDiscoveryCollisions(ctx context.Context, effective semconfig.Component
 			}
 		}
 	}
-	retained, discovered := semconfig.ComponentConfigs{}, semconfig.ComponentConfigs{}
+	retained := semconfig.ComponentConfigs{}
 	for name, have := range effective {
 		_, rewritten := plan.desired[name]
 		if plan.retires(name, have, file, owned, protected) || (rewritten && owned[name]) {
@@ -62,12 +63,15 @@ func checkDiscoveryCollisions(ctx context.Context, effective semconfig.Component
 		}
 		retained[name] = have
 	}
-	for name, want := range plan.desired {
-		if have, ok := effective[name]; ok && !have.Enabled {
+	// Every component discovery built, not desired's one per name: two
+	// parents that build one name from different roots both reach the check.
+	var discovered []sourcespawn.PlannedComponent
+	for _, c := range plan.found {
+		if have, ok := effective[c.Instance]; ok && !have.Enabled {
 			continue // reconcile leaves a runtime removal in place
 		}
-		discovered[name] = want
+		c.Pin = pins[c.Instance]
+		discovered = append(discovered, c)
 	}
-	return bootRefusal(sourcespawn.CheckDiscoveredCollisions(ctx,
-		sourcespawn.Planned(retained, pins), sourcespawn.Planned(discovered, pins)))
+	return bootRefusal(sourcespawn.CheckDiscoveredCollisions(ctx, sourcespawn.Planned(retained, pins), discovered))
 }
