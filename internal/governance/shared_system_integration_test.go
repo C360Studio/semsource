@@ -41,7 +41,7 @@ import (
 // cmd/semsource (covered by cmd/semsource/shared_system_test.go); here boot is
 // its check, CheckSystemCollisions over Planned with the discovery pins.
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestIntegration_ASTRootsSharingOneProjectAreRefused(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	writeFile(t, a, "main.go", "package main\n\nfunc Alpha() {}\n")
@@ -66,7 +66,7 @@ func TestIntegration_ASTRootsSharingOneProjectAreRefused(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestIntegration_DocRootsSharingOneProjectAreRefused(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	writeFile(t, a, "README.md", "# Alpha\n\nRoot a.\n")

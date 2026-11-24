@@ -234,7 +234,7 @@ func startDocSource(t *testing.T, ctx context.Context, deps component.Dependenci
 // TestIntegration_TwoDocsRootsOfOneProjectAreRefused replaces the #293
 // cross-mark probe: one doc-source instance over two roots of one project is
 // refused at config time now (#349), so no such sweep can run.
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestIntegration_TwoDocsRootsOfOneProjectAreRefused(t *testing.T) {
 	base := t.TempDir()
 	cfg, _ := json.Marshal(map[string]any{

@@ -14,7 +14,7 @@ import (
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckBootCollisions(t *testing.T) {
 	pin := func(parent string) config.SourceEntry {
 		return config.SourceEntry{Type: "ast", Path: "/" + parent + "/lib", Project: "github-com-acme-lib",
@@ -62,7 +62,7 @@ func TestCheckBootCollisions(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestLoadAndExpandConfigRefusesSourcesSharingASystem(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "semsource.json")
 	body := `{"namespace":"acme","sources":[` +

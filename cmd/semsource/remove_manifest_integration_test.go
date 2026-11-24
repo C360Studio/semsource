@@ -20,7 +20,7 @@ import (
 // A source persisted before the refusal existed collides with a file source:
 // boot refuses and names it, the offline removal takes it out of the desired
 // manifest with no service running, and the next boot's set is admitted.
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestIntegrationRemoveManifestClearsAPersistedCollision(t *testing.T) {
 	broker := natstest.New(t, natstest.WithJetStream())
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

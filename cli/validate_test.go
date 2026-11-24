@@ -9,7 +9,7 @@ import (
 	"github.com/c360studio/semsource/config"
 )
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestValidateRefusesSourcesSharingASystem(t *testing.T) {
 	cases := []struct {
 		name    string
