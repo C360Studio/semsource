@@ -182,6 +182,28 @@ func TestCheckSystemCollisions(t *testing.T) {
 			},
 		},
 		{
+			name: "two git repos with one directory name collide",
+			entries: []config.SourceEntry{
+				{Type: "git", Path: "/a/core"},
+				{Type: "git", Path: "/b/core"},
+			},
+			want: []string{"(root /a/core)", "(root /b/core)", `git roots`, `system "core"`, "distinct repo URL"},
+		},
+		{
+			name: "one git repo on two branch slugs is two systems",
+			entries: []config.SourceEntry{
+				{Type: "git", Path: "/r/core", BranchSlug: "main"},
+				{Type: "git", Path: "/r/core", BranchSlug: "feature"},
+			},
+		},
+		{
+			name: "a git repo and an ast source under one name are different ID spaces",
+			entries: []config.SourceEntry{
+				{Type: "git", Path: "/r/svc"},
+				{Type: "ast", Path: "/r/svc", Project: "svc"},
+			},
+		},
+		{
 			name:    "two pins of one submodule at one SHA are admitted",
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), pin("/p2/lib", "via-p2-lib")},
 		},
@@ -412,10 +434,36 @@ func TestCheckSourceCollisions(t *testing.T) {
 			},
 		},
 		{
-			name: "git sources are outside the rule",
+			name: "one git path listed twice is one source",
 			sources: []config.SourceEntry{
 				{Type: "git", Path: "/r/a"},
 				{Type: "git", Path: "/r/a"},
+			},
+		},
+		{
+			name: "two git repos with one directory name",
+			sources: []config.SourceEntry{
+				{Type: "git", Path: "/a/core"},
+				{Type: "git", Path: "/b/core"},
+			},
+			refused: true,
+			want:    []string{"(root /a/core)", "(root /b/core)", `system "core"`, "give each git source a distinct repo URL, or a repo directory with a distinct name"},
+			absent:  []string{"distinct project"},
+		},
+		{
+			name: "a repo's git leaf and a git source with one directory name",
+			sources: []config.SourceEntry{
+				{Type: "repo", Path: "/a/core"},
+				{Type: "git", Path: "/b/core"},
+			},
+			refused: true,
+			want:    []string{"(root /a/core)", "(root /b/core)", `system "core"`},
+		},
+		{
+			name: "a git URL and a git path with the URL's basename are different systems",
+			sources: []config.SourceEntry{
+				{Type: "git", URL: "https://example.invalid/acme/core.git"},
+				{Type: "git", Path: "/b/core"},
 			},
 		},
 	}
@@ -510,6 +558,12 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			name:     "an audio source over a registered image root",
 			existing: []config.SourceEntry{{Type: "image", Paths: []string{"/m/b"}}},
 			add:      config.SourceEntry{Type: "audio", Paths: []string{"/m/b"}},
+		},
+		{
+			name:     "a git source with a registered git repo's directory name",
+			existing: []config.SourceEntry{{Type: "git", Path: "/a/core"}},
+			add:      config.SourceEntry{Type: "git", Path: "/b/core"},
+			refused:  "(root /a/core)",
 		},
 		{
 			name:     "re-adding the same instance",
