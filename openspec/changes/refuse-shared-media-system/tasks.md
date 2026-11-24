@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [x] 1.1 Owner approved `proposal.md` (2026-11-24, sha256:338bb96242ad); line entered by claude at the owner's instruction. Ruling: #366 comment 7136610830 (per-kind media spaces).
+- [x] 1.1 Owner approved `proposal.md` (2026-11-24, sha256:338bb96242ad); line entered by claude at the owner's instruction. Ruling: #366 comment 7136610830 (per-kind media spaces). Re-approved after the 3.2 amendment (2026-11-24, sha256:0e87047fe55a), entered by claude at the owner's instruction.
 
 ## 2. Media kinds
 
