@@ -19,7 +19,7 @@ import (
 	sourcemanifest "github.com/c360studio/semsource/processor/source-manifest"
 )
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckBootCollisions(t *testing.T) {
 	checkout, sha := pinnedCheckout(t, "pinned")
 	elsewhere, _ := pinnedCheckout(t, "other")
@@ -75,7 +75,7 @@ func TestCheckBootCollisions(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestLoadAndExpandConfigRefusesSourcesSharingASystem(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "semsource.json")
 	body := `{"namespace":"acme","sources":[` +
@@ -89,7 +89,7 @@ func TestLoadAndExpandConfigRefusesSourcesSharingASystem(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) {
 	retainedEntry := config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"}
 	discoveredEntry := config.SourceEntry{Type: "ast", Path: "/discovered/worktree", Project: "svc", BranchSlug: "feature"}
@@ -213,7 +213,7 @@ func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) 
 	})
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestReconcileDiscoveryRefusesSameSHAPinsIndexingOtherLanguages(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// Pins inherit each parent's languages (internal/subwatch pinEntries).
@@ -263,7 +263,7 @@ func TestReconcileDiscoveryRefusesSameSHAPinsIndexingOtherLanguages(t *testing.T
 	}
 }
 
-// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestRemovedDiscoveredNameCannotBeTakenOverAcrossBoots(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

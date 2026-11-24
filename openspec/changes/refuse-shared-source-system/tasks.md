@@ -43,5 +43,5 @@ The codex review at `2485f86` (REQUEST CHANGES, P2) and the graph-event-reviewer
 
 ## 5. Close
 
-- [x] 5.1 `task check`, `go test -race -tags=integration ./...`, `openspec validate --all --strict`. `task check` and the race integration run exit 0 on 69335c7 (after section 7); strict validation passes on the archived tree.
-- [x] 5.2 Archive the change before the PR is ready, and repoint the repro's `// spec:` citations from the change path to `openspec/specs/entity-identity-safety/spec.md`. Every test citing the change path is repointed. Archive deviation: `openspec archive` refuses a MODIFIED block that drops a current scenario and has no scenario-level removal (a requirement cannot be both REMOVED and ADDED). Two current scenarios described roots sharing a system, which this change refuses, so they were deleted from the current specs directly before archiving: `entity-publish-integrity` "Watch-path folder republish is not reconciled" (added by #347 after these deltas were written) and `entity-staleness` "Two docs roots under one project do not cross-mark". The deltas already omit both.
+- [ ] 5.1 `task check`, `go test -race -tags=integration ./...`, `openspec validate --all --strict`.
+- [ ] 5.2 Archive the change before the PR is ready, and repoint the repro's `// spec:` citations from the change path to `openspec/specs/entity-identity-safety/spec.md`.

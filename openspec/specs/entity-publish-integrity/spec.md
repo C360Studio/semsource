@@ -252,20 +252,25 @@ When a reconcile-enabled publisher republishes an entity ID whose producer knows
 - **AND** no statement the later publish carried is removed by it
 
 ### Requirement: Reconcile is enabled only for handlers proven to publish complete sets
-A publisher SHALL reconcile only when its handler opts in, and a handler MUST opt in only after a test proves that each of its publishes carries the entity's complete `semsource` statement set for group `source` (one writer per entity ID). The supersession publisher SHALL NOT reconcile. A publish that may share its entity ID with another writer (#348) or that omits a statement after a store fault SHALL be marked `SkipReconcile`.
+A publisher SHALL reconcile only when its handler opts in, and a handler MUST opt in only after a test proves that each of its publishes carries the entity's complete `semsource` statement set for group `source` (one writer per entity ID). The supersession publisher SHALL NOT reconcile. A publish that may share its entity ID with another writer (#348, #349) or that omits a statement after a store fault SHALL be marked `SkipReconcile`.
 
 #### Scenario: A handler without the completeness test does not reconcile
 - **GIVEN** a handler whose publisher was built without the reconcile option
 - **WHEN** it republishes an entity with fewer predicates
 - **THEN** no reconcile request is sent for that entity
 
+#### Scenario: Watch-path folder republish is not reconciled
+- **GIVEN** a reconcile-enabled ast-source whose root shares its system with another root (#349)
+- **WHEN** a file is created or deleted under that root
+- **THEN** no reconcile request is sent for any `folder` or `repo` entity
+
 #### Scenario: A shared or faulted publish is not reconciled
 - **GIVEN** a reconcile-enabled handler
-- **WHEN** it publishes an entity whose ID another manifest can also write, or whose store write failed
+- **WHEN** it publishes an entity whose ID another root or manifest can also write, or whose store write failed
 - **THEN** no reconcile request is sent for that entity
 
 ### Requirement: AST folder and repo publishes carry their complete contains set
-Every ast-source publish of a `folder` or `repo` entity SHALL carry that entity's complete `code.structure.contains` set, built from every file the watch path has indexed. Two live folders whose paths sanitize to one entity ID (an existing identity limit) are excluded likewise: a watch event SHALL NOT publish that ID, and a full pass publishes each path's set without reconcile. A watch event MUST NOT publish a folder from the event's file alone. A watch event that adds or removes an indexed path SHALL republish the repo and each ancestor folder of that path, and an ancestor left with no indexed file SHALL be published with no `contains`. A watch modify of an already indexed path SHALL NOT republish any folder.
+Every ast-source publish of a `folder` or `repo` entity from a root that does not share its system with another root SHALL carry that entity's complete `code.structure.contains` set, built from every file the watch path has indexed. A root that shares its system (#349) SHALL NOT publish a container from a watch event. Two live folders whose paths sanitize to one entity ID (an existing identity limit) are excluded likewise: a watch event SHALL NOT publish that ID, and a full pass publishes each path's set without reconcile. A watch event MUST NOT publish a folder from the event's file alone. A watch event that adds or removes an indexed path SHALL republish the repo and each ancestor folder of that path, and an ancestor left with no indexed file SHALL be published with no `contains`. A watch modify of an already indexed path SHALL NOT republish any folder.
 
 #### Scenario: A watch edit keeps the folder's other children
 - **GIVEN** ast-source has indexed `a/one.go`, `a/b/x.go` and `a/c/y.go`
