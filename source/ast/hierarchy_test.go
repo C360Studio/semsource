@@ -450,6 +450,7 @@ func TestBuildHierarchyFromFiles(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
 func TestBuildHierarchyFromFiles_Empty(t *testing.T) {
 	entities := ast.BuildHierarchyFromFiles(nil, testAuthority("acme"), "proj")
 	if len(entities) != 1 || entities[0].Type != ast.TypeRepo || len(entities[0].Contains) != 0 {

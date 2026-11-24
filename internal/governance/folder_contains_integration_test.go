@@ -26,6 +26,7 @@ import (
 // TestIntegration_WatchEditKeepsFolderContains is the #347 repro. The REAL
 // ast-source indexes a/one.go, a/b/x.go and a/c/y.go; a watch-path modify of
 // a/b/x.go must not shrink folder a's stored contains set.
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
 func TestIntegration_WatchEditKeepsFolderContains(t *testing.T) {
 	ctx, client, _, write := startFolderTree(t)
 	seeded, _ := waitForFolderContains(t, ctx, client, "a", 0, 3)
@@ -94,6 +95,7 @@ func TestIntegration_WatchDeleteRemovesFromFolder(t *testing.T) {
 // TestIntegration_WatchDeleteKeepsCollidingFolder: folders a-b and a/b share
 // one entity ID. Deleting a-b's only file must not empty the ID a/b still
 // holds (codex review P1).
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
 func TestIntegration_WatchDeleteKeepsCollidingFolder(t *testing.T) {
 	ctx, client, root, write := startFolderTree(t,
 		"a-b/one.go", "package ab\n\nfunc One() {}\n",
@@ -104,9 +106,16 @@ func TestIntegration_WatchDeleteKeepsCollidingFolder(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "a-b/one.go")); err != nil {
 		t.Fatal(err)
 	}
-	// Reconciles run one at a time in publish order, and only a reconcile
-	// empties a folder. Once c is empty, every reconcile the first delete
-	// queued has run.
+	// Barrier 1: the repo drops top-level folder a-b only once the first
+	// delete's event has been handled and its publishes (and reconciles)
+	// queued. Only then is the sentinel delete issued, so the two can never
+	// share a watcher batch.
+	untilContains(t, ctx, client, ".code.repo.", func(got []string) bool {
+		return len(got) > 0 && !slices.ContainsFunc(got, func(id string) bool { return strings.HasSuffix(id, ".folder.a-b") })
+	})
+	// Barrier 2: reconciles run one at a time in enqueue order, and only a
+	// reconcile empties a folder. Once c is empty, every reconcile the first
+	// delete queued has run.
 	if err := os.Remove(filepath.Join(root, "c/z.go")); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +141,22 @@ func awaitWatching(t *testing.T, ctx context.Context, client *natsclient.Client,
 		return i >= 0
 	}, func() { write("a/probe.go", "package a\n\nfunc Probe() {}\n") })
 	return probe
+}
+
+// untilContains waits until the first entity whose key contains infix has a
+// contains set that satisfies done.
+func untilContains(t *testing.T, ctx context.Context, client *natsclient.Client, infix string, done func([]string) bool) {
+	t.Helper()
+	var got []string
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if c, ok := readContains(ctx, client, func(k string) bool { return strings.Contains(k, infix) }); ok {
+			got = c
+			if done(got) {
+				return
+			}
+		}
+	}
+	t.Fatalf("entity %q never reached the expected contains set; last read %v", infix, got)
 }
 
 // untilFolder waits until folder <rel>'s contains set satisfies done.
@@ -222,22 +247,34 @@ func waitForFolderContains(
 // readFolderContains reads the stored folder entity whose ID ends in
 // ".folder.<rel>" and returns its sorted code.structure.contains objects.
 func readFolderContains(ctx context.Context, client *natsclient.Client, rel string) ([]string, uint64, bool) {
+	var rev uint64
+	got, ok := readContainsRev(ctx, client, func(k string) bool { return strings.HasSuffix(k, ".folder."+rel) }, &rev)
+	return got, rev, ok
+}
+
+// readContains reads the first stored entity whose key matches and returns
+// its sorted code.structure.contains objects.
+func readContains(ctx context.Context, client *natsclient.Client, match func(string) bool) ([]string, bool) {
+	return readContainsRev(ctx, client, match, nil)
+}
+
+func readContainsRev(ctx context.Context, client *natsclient.Client, match func(string) bool, rev *uint64) ([]string, bool) {
 	bucket, err := client.GetKeyValueBucket(ctx, semgraph.BucketEntityStates)
 	if err != nil {
-		return nil, 0, false
+		return nil, false
 	}
 	keys, _ := bucket.Keys(ctx)
 	for _, k := range keys {
-		if !strings.HasSuffix(k, ".folder."+rel) {
+		if !match(k) {
 			continue
 		}
 		entry, err := bucket.Get(ctx, k)
 		if err != nil {
-			return nil, 0, false
+			return nil, false
 		}
 		var st semgraph.EntityState
 		if json.Unmarshal(entry.Value(), &st) != nil {
-			return nil, 0, false
+			return nil, false
 		}
 		var out []string
 		for _, tr := range st.Triples {
@@ -246,7 +283,10 @@ func readFolderContains(ctx context.Context, client *natsclient.Client, rel stri
 			}
 		}
 		slices.Sort(out)
-		return out, entry.Revision(), true
+		if rev != nil {
+			*rev = entry.Revision()
+		}
+		return out, true
 	}
-	return nil, 0, false
+	return nil, false
 }

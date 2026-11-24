@@ -111,13 +111,16 @@ func TestPlanContainers(t *testing.T) {
 		})
 	}
 
-	t.Run("two live folders sharing an ID never reconcile", func(t *testing.T) {
-		got := planned(planContainers(files("a-b/one.go", "a/b/two.go"), []string{"a/b/two.go"}, false, true, false, auth, "proj"))
-		for _, p := range got {
-			if strings.HasPrefix(p, "a-b:") || strings.HasPrefix(p, "a/b:") {
-				if !strings.Contains(p, ":skip:") {
-					t.Errorf("colliding folder planned %s, want skip", p)
-				}
+	t.Run("two live folders sharing an ID: a watch event writes neither, a full pass never reconciles", func(t *testing.T) {
+		set := files("a-b/one.go", "a/b/two.go")
+		if got := planned(planContainers(set, []string{"a/b/two.go"}, false, true, false, auth, "proj")); slices.ContainsFunc(got, func(p string) bool {
+			return strings.HasPrefix(p, "a-b:") || strings.HasPrefix(p, "a/b:")
+		}) {
+			t.Errorf("watch plan %v writes a colliding folder", got)
+		}
+		for _, p := range planned(planContainers(set, []string{"a/b/two.go"}, true, true, false, auth, "proj")) {
+			if (strings.HasPrefix(p, "a-b:") || strings.HasPrefix(p, "a/b:")) && !strings.Contains(p, ":skip:") {
+				t.Errorf("full-pass plan reconciles colliding folder %s", p)
 			}
 		}
 	})
@@ -134,6 +137,7 @@ func TestPlanContainers(t *testing.T) {
 // TestPublishContainers_RetriesRefusedPublish: an emptied folder whose
 // publish the publisher refused is published by the next, unchanged, full
 // pass (codex review P2).
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
 func TestPublishContainers_RetriesRefusedPublish(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	// Never started, capacity 1: the first Send fills the buffer, every

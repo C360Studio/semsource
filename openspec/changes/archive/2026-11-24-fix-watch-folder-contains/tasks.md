@@ -31,6 +31,11 @@
   - P1: container targets are keyed by entity ID, so a folder colliding with a live one (`a-b` vs `a/b`) is never emptied, and two live folders sharing an ID are `SkipReconcile` (the existing shared-writer rule). `TestIntegration_WatchDeleteKeepsCollidingFolder` fails on 14beaa2 and passes here, and `TestPlanContainers` covers the watch and reindex paths.
   - P2: the changed paths of a refused container publish are kept and retried by the next one, including an unchanged full pass (`TestPublishContainers_RetriesRefusedPublish`).
   - P3: the integration tests wait on the expected outcome, and the delete test proves the watcher is live with a probe before deleting once.
+- [x] 5.6 Codex review round 2 (REQUEST CHANGES at ac5a86e). Fixed:
+  - The collision test now has a real ordering barrier. It waits for the repo to drop folder `a-b` before it issues the sentinel delete. Under a `-overlay` mutant restoring 14beaa2's `fileset.go`, the test fails 3/3.
+  - Spec citations were added to the four uncited tests. `scripts/ateam test-spec --base origin/main` passes.
+  - Following the reviewer's nonblocking notes, a watch event no longer writes an ID that two live folders build. The current spec states that limit.
+  - A watch modify does not retry a refused container publish. That limit is tagged as a shortcut.
 
 ## 6. Land
 

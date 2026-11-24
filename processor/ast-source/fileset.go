@@ -118,7 +118,10 @@ func planContainers(files map[string]string, changed []string, all, reconcile, s
 	var out []containerPublish
 	for _, e := range built {
 		_, target := targets[e.ID]
-		if !all && !target {
+		if !all && (!target || builders[e.ID] > 1) {
+			// A watch event never writes an ID two live folders build: each
+			// carries only its own path's children, so either would replace
+			// the other's. Full passes publish both, as before this fix.
 			continue
 		}
 		out = append(out, containerPublish{e, shared || !reconcile || !target || builders[e.ID] > 1})
@@ -138,8 +141,13 @@ func planContainers(files map[string]string, changed []string, all, reconcile, s
 
 // publishContainers publishes planContainers' plan for the watch path. The
 // changed paths of a call whose publish was refused are kept and joined to
-// the next call, so a refused emptied-folder publish is retried even by an
-// unchanged full pass. The caller holds filesMu.
+// the next call (a watch create or delete, or a full pass, even an
+// unchanged one), so a refused emptied-folder publish is retried.
+//
+// shortcut: a watch modify of an indexed path publishes no container, so it
+// does not retry; with index_interval off, a refused publish waits for the
+// next create or delete. Upgrade to a retry timer if refusals are seen.
+// The caller holds filesMu.
 func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile bool) {
 	changed = append(changed, pw.pendingContainers...)
 	pw.pendingContainers = nil
