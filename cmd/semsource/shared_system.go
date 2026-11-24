@@ -22,9 +22,51 @@ func checkBootCollisions(components semconfig.ComponentConfigs) error {
 	if err != nil {
 		return err
 	}
-	if err := sourcespawn.CheckSystemCollisions(sourcespawn.Planned(components, pins)); err != nil {
-		return fmt.Errorf("refusing to boot: %w; remove one of the named sources from the config file, "+
-			"or from the desired manifest with `semsource remove --manifest <instance>`", err)
+	return bootRefusal(sourcespawn.CheckSystemCollisions(sourcespawn.Planned(components, pins)))
+}
+
+func bootRefusal(err error) error {
+	if err == nil {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("refusing to boot: %w; remove one of the named sources from the config file, "+
+		"or from the desired manifest with `semsource remove --manifest <instance>`", err)
+}
+
+// checkDiscoveryCollisions refuses discovery's writes before reconcile makes
+// any (#349). The discovered set is what reconcile would put, without the
+// names a runtime removal disabled; the retained set is what stays in effect,
+// without what reconcile retires and without a discovered name the previous
+// record owns, which discovery is rewriting as its own writer. A discovered
+// component that would replace a retained one under its name from another
+// root is thereby compared with it rather than collapsed into one survivor.
+// Pins are the previous record's and this plan's submodule names.
+func checkDiscoveryCollisions(effective semconfig.ComponentConfigs, plan *discoveryPlan, file semconfig.ComponentConfigs, owned, protected map[string]bool) error {
+	pins, err := sourcespawn.PinInstances(effective)
+	if err != nil {
+		return err
+	}
+	for _, o := range plan.owners {
+		if o.kind == "submodule" {
+			for name := range o.names {
+				pins[name] = true
+			}
+		}
+	}
+	retained, discovered := semconfig.ComponentConfigs{}, semconfig.ComponentConfigs{}
+	for name, have := range effective {
+		_, rewritten := plan.desired[name]
+		if plan.retires(name, have, file, owned, protected) || (rewritten && owned[name]) {
+			continue
+		}
+		retained[name] = have
+	}
+	for name, want := range plan.desired {
+		if have, ok := effective[name]; ok && !have.Enabled {
+			continue // reconcile leaves a runtime removal in place
+		}
+		discovered[name] = want
+	}
+	return bootRefusal(sourcespawn.CheckDiscoveredCollisions(
+		sourcespawn.Planned(retained, pins), sourcespawn.Planned(discovered, pins)))
 }

@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -74,4 +78,73 @@ func TestLoadAndExpandConfigRefusesSourcesSharingASystem(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `system "svc"`) {
 		t.Fatalf("run accepted two ast sources under one project: err = %v", err)
 	}
+}
+
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) {
+	retainedEntry := config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"}
+	discoveredEntry := config.SourceEntry{Type: "ast", Path: "/discovered/worktree", Project: "svc", BranchSlug: "feature"}
+	retained, err := sourcespawn.Build(retainedEntry, reconcileOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	planOf := func(t *testing.T, entry config.SourceEntry) *discoveryPlan {
+		t.Helper()
+		plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+		if err := plan.add(plan.owner("/discovered", "branch", false), entry, reconcileOpts); err != nil {
+			t.Fatal(err)
+		}
+		return plan
+	}
+
+	t.Run("a discovered branch building a retained source's instance from another root", func(t *testing.T) {
+		plan := planOf(t, discoveredEntry)
+		if got, want := slices.Sorted(maps.Keys(plan.desired)), slices.Sorted(maps.Keys(retained)); !slices.Equal(got, want) {
+			t.Fatalf("fixture drift: discovered %v and retained %v build different instances", got, want)
+		}
+		components := maps.Clone(retained)
+		components["source-manifest"] = manifestWith(t, nil, nil)
+		before := maps.Clone(components)
+		store := &reconcileStore{components: components}
+		err := reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger)
+		if err == nil {
+			t.Fatal("a discovered branch replacing a retained source was admitted")
+		}
+		for _, want := range []string{"refusing to boot", "(root /retained/standalone)", "(root /discovered/worktree)"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("refusal %q does not name %q", err, want)
+			}
+		}
+		if len(store.puts)+len(store.dels) != 0 {
+			t.Errorf("a refused discovery wrote puts=%v deletes=%v", store.puts, store.dels)
+		}
+		for name, want := range before {
+			if got := store.components[name]; !got.Equal(want) {
+				t.Errorf("%s changed: %s, want %s", name, got.Config, want.Config)
+			}
+		}
+	})
+
+	t.Run("a refresh of the same discovered root is admitted", func(t *testing.T) {
+		plan := planOf(t, discoveredEntry)
+		components := maps.Clone(plan.desired)
+		components["source-manifest"] = manifestWith(t, nil, []sourcemanifest.DiscoveredRecord{
+			{Parent: "/discovered", Kind: "branch", Components: slices.Collect(maps.Keys(plan.desired))},
+		})
+		store := &reconcileStore{components: components}
+		if err := reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger); err != nil {
+			t.Fatalf("a refresh of a discovered root was refused: %v", err)
+		}
+	})
+
+	t.Run("a runtime source at the discovered root is the same writer", func(t *testing.T) {
+		plan := planOf(t, discoveredEntry)
+		components := maps.Clone(plan.desired)
+		components["source-manifest"] = manifestWith(t, nil, nil)
+		store := &reconcileStore{components: components}
+		if err := reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger); err != nil {
+			t.Fatalf("a discovered root already registered at the same root was refused: %v", err)
+		}
+	})
 }

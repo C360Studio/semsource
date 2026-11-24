@@ -280,18 +280,47 @@ func checkAddCollisions(existing semconfig.ComponentConfigs, specs []componentSp
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
+	found := groupCollisions(oneWriterEach(pendingRoots, registeredRoots))
+	return collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() }))
+}
+
+// oneWriterEach is incoming plus each held root that is not one of incoming's
+// writers: a held root that incoming rebuilds under the same instance and
+// system from the same directory is the same writer (a refresh), so it is
+// counted once; any other held root stays and can collide.
+func oneWriterEach(incoming, held []systemRoot) []systemRoot {
 	same := map[string]bool{}
-	for _, r := range pendingRoots {
+	for _, r := range incoming {
 		same[r.identity()] = true
 	}
-	roots := pendingRoots
-	for _, r := range registeredRoots {
+	roots := slices.Clone(incoming)
+	for _, r := range held {
 		if !same[r.identity()] {
 			roots = append(roots, r)
 		}
 	}
-	found := groupCollisions(roots)
-	return collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() }))
+	return roots
+}
+
+// CheckDiscoveredCollisions refuses boot discovery's writes when the
+// components it is about to write (discovered) and the components in effect
+// that stay (retained) would mint IDs under one system, before anything is
+// written: a discovered component that builds a retained component's instance
+// from another root would otherwise replace it, and a later check would see
+// only the survivor. A retained root discovery rebuilds under the same
+// instance and system from the same directory is the same writer, and the pin
+// exception applies (D2). The set is checked whole: retained collisions that
+// predate discovery are refused here too, as boot would refuse them anyway.
+func CheckDiscoveredCollisions(retained, discovered []PlannedComponent) error {
+	discoveredRoots, err := enabledRoots(discovered)
+	if err != nil {
+		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
+	}
+	retainedRoots, err := enabledRoots(retained)
+	if err != nil {
+		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
+	}
+	return collisionError(groupCollisions(oneWriterEach(discoveredRoots, retainedRoots)))
 }
 
 // identity is what makes two roots one writer: one instance minting one
