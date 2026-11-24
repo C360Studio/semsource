@@ -11,7 +11,7 @@ import (
 	"github.com/c360studio/semsource/entityid"
 )
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestConfigValidateRefusesRootsSharingASystem(t *testing.T) {
 	wp := func(path, org, project, version string) WatchPathConfig {
 		return WatchPathConfig{Path: path, Org: org, Project: project, Version: version, Languages: []string{"go"}}
@@ -48,7 +48,7 @@ func TestConfigValidateRefusesRootsSharingASystem(t *testing.T) {
 // A glob expands only when the watchers start, so Config.Validate cannot see
 // that one watch path matches two directories under one system; the
 // watchers refuse it after expansion, and the refusal is not retried.
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestInitializeWatchersRefusesAGlobSharingASystem(t *testing.T) {
 	cases := []struct {
 		name    string
