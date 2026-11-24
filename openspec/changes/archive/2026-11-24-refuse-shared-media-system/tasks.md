@@ -18,4 +18,4 @@
 ## 4. Gates
 
 - [x] 4.1 `task lint`, `go test ./...`, `go test -tags=integration ./internal/sourcespawn/...`, `task spec:check`.
-- [ ] 4.2 Review via `ateam review request`; archive before ready.
+- [ ] 4.2 Review via `ateam review request`; archive before ready. Round 1 (codex gpt-6-astra, 59d0017) REQUEST CHANGES: the 3.2 dedupe let `[/r/a]` then `[/r/a,/r/b]` through; `sameInstanceError` now compares both orders, with a regression row.

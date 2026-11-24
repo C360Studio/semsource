@@ -387,6 +387,15 @@ func TestCheckSourceCollisions(t *testing.T) {
 			absent:  []string{"doc-source-a (root /r/a) and doc-source-a (root /r/a)"},
 		},
 		{
+			name: "two docs entries of one instance are refused when the later adds a root",
+			sources: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/r/a"}},
+				{Type: "docs", Paths: []string{"/r/a", "/r/b"}},
+			},
+			refused: true,
+			want:    []string{"instance doc-source-a would be built from root /r/a, /r/b and from root /r/a"},
+		},
+		{
 			name: "a root two entries of one instance share is named once",
 			sources: []config.SourceEntry{
 				{Type: "docs", Paths: []string{"/r/a", "/r/c"}, Project: "h"},

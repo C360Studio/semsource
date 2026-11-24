@@ -483,9 +483,16 @@ func sameInstanceError(planned []PlannedComponent) error {
 	held := map[string]PlannedComponent{}
 	for _, pc := range planned {
 		if prev, dup := held[pc.Instance]; dup {
+			// Either order: a later entry that adds a root still has the
+			// earlier listing build the instance from other roots (#366).
 			found, err := instanceTakeovers([]PlannedComponent{pc}, []PlannedComponent{prev})
 			if err != nil {
 				return err
+			}
+			if len(found) == 0 {
+				if found, err = instanceTakeovers([]PlannedComponent{prev}, []PlannedComponent{pc}); err != nil {
+					return err
+				}
 			}
 			msgs = append(msgs, found...)
 			continue
