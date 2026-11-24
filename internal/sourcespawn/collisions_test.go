@@ -636,6 +636,15 @@ func TestCheckDiscoveredCollisions_RepeatedInstance(t *testing.T) {
 	if err := CheckDiscoveredCollisions(context.Background(), nil, []PlannedComponent{a, a}); err != nil {
 		t.Fatalf("one discovered source listed twice was refused: %v", err)
 	}
+	// Discovery keeps the last of two listings, so both orders must refuse
+	// a same-root repeat whose parse scope differs.
+	py := PlannedComponent{Instance: a.Instance, Config: withFields(t, a.Config, map[string]any{"watch_paths[0].languages": []string{"python"}})}
+	for _, order := range [][]PlannedComponent{{a, py}, {py, a}} {
+		err := CheckDiscoveredCollisions(context.Background(), nil, order)
+		if err == nil || !strings.Contains(err.Error(), "different parse scopes") {
+			t.Errorf("a same-root repeat with another parse scope was not refused: %v", err)
+		}
+	}
 	err := CheckDiscoveredCollisions(context.Background(), nil, []PlannedComponent{a, b})
 	if err == nil {
 		t.Fatal("one discovered instance from two roots was admitted")

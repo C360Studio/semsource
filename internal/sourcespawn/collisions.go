@@ -686,23 +686,55 @@ func CheckDiscoveredCollisions(ctx context.Context, retained, discovered []Plann
 	return takeoverError(takeovers)
 }
 
-// distinctSources drops a repeat of one instance over the same roots: one
-// source listed twice.
+// distinctSources drops a repeat of one instance over the same roots with
+// the same parse scope: one source listed twice. A repeat over the same roots
+// with another scope is refused, since discovery keeps only the last entry
+// and this check must validate what is written.
 func distinctSources(components []PlannedComponent) ([]PlannedComponent, error) {
-	seen := map[string][][]string{}
+	type source struct {
+		roots []string
+		scope []systemRoot
+	}
+	seen := map[string][]source{}
 	out := make([]PlannedComponent, 0, len(components))
 	for _, c := range components {
 		roots, err := rootList(c)
 		if err != nil {
 			return nil, err
 		}
-		if slices.ContainsFunc(seen[c.Instance], func(r []string) bool { return slices.Equal(r, roots) }) {
+		scope, err := systemRoots(c)
+		if err != nil {
+			return nil, &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
+		}
+		i := slices.IndexFunc(seen[c.Instance], func(s source) bool { return slices.Equal(s.roots, roots) })
+		if i < 0 {
+			seen[c.Instance] = append(seen[c.Instance], source{roots, scope})
+			out = append(out, c)
 			continue
 		}
-		seen[c.Instance] = append(seen[c.Instance], roots)
-		out = append(out, c)
+		if diffs := repeatDifferences(seen[c.Instance][i].scope, scope); len(diffs) > 0 {
+			return nil, &Error{
+				Code: CodeValidationFailed,
+				Message: fmt.Sprintf("%s is listed twice over root %s with different parse scopes (%s); list it once (#349)",
+					c.Instance, strings.Join(roots, ", "), strings.Join(diffs, "; ")),
+			}
+		}
 	}
 	return out, nil
+}
+
+// repeatDifferences compares two listings of one source root by root.
+func repeatDifferences(first, again []systemRoot) []string {
+	var out []string
+	for i := range first {
+		if i >= len(again) {
+			break
+		}
+		for _, d := range scopeDifferences(again[i].scope, first[i].scope) {
+			out = append(out, fmt.Sprintf("%s %s, earlier %s", again[i].root, d[0], d[1]))
+		}
+	}
+	return out
 }
 
 // identity is what makes two roots one writer: one instance minting one
