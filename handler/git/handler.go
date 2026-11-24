@@ -260,12 +260,12 @@ func (h *Handler) Watch(ctx context.Context, cfg handler.SourceConfig) (<-chan h
 	}
 
 	ch := make(chan handler.ChangeEvent, 4)
-	go h.pollLoop(ctx, repoPath, ch)
+	go h.pollLoop(ctx, repoPath, cfg.GetURL(), ch)
 	return ch, nil
 }
 
 // pollLoop polls the repo for HEAD changes and sends ChangeEvents.
-func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handler.ChangeEvent) {
+func (h *Handler) pollLoop(ctx context.Context, repoPath, repoURL string, ch chan<- handler.ChangeEvent) {
 	defer close(ch)
 
 	ticker := time.NewTicker(h.cfg.PollInterval)
@@ -302,7 +302,8 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 			// Re-ingest the repo to get updated entities.
 			// Populate both Entities (for backward compat) and EntityStates
 			// (for the normalizer-free processor path).
-			lc := &localCfg{path: repoPath}
+			// The URL rides along so systemSlug matches the seed (#350).
+			lc := &localCfg{path: repoPath, url: repoURL}
 			entities, err := h.Ingest(ctx, lc)
 			if err != nil {
 				h.watchErrors.Add(1)
@@ -338,12 +339,12 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 }
 
 // localCfg is a minimal SourceConfig used internally by pollLoop.
-type localCfg struct{ path string }
+type localCfg struct{ path, url string }
 
 func (c *localCfg) GetType() string             { return handler.SourceTypeGit }
 func (c *localCfg) GetPath() string             { return c.path }
 func (c *localCfg) GetPaths() []string          { return nil }
-func (c *localCfg) GetURL() string              { return "" }
+func (c *localCfg) GetURL() string              { return c.url }
 func (c *localCfg) GetBranch() string           { return "" }
 func (c *localCfg) IsWatchEnabled() bool        { return false }
 func (c *localCfg) GetKeyframeMode() string     { return "" }
