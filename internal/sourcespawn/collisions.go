@@ -396,7 +396,76 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 			}
 		}
 	}
-	return CheckSystemCollisions(ctx, planned)
+	if err := CheckSystemCollisions(ctx, planned); err != nil {
+		return err
+	}
+	return sameInstanceError(planned)
+}
+
+// sameInstanceError refuses two components of one instance whose roots
+// differ, whatever their systems (#349 W2): the snapshot the manager spawns is
+// keyed by instance, so the later would silently replace the earlier.
+func sameInstanceError(planned []PlannedComponent) error {
+	var msgs []string
+	held := map[string]PlannedComponent{}
+	for _, pc := range planned {
+		if prev, dup := held[pc.Instance]; dup {
+			found, err := instanceTakeovers([]PlannedComponent{pc}, []PlannedComponent{prev})
+			if err != nil {
+				return err
+			}
+			msgs = append(msgs, found...)
+			continue
+		}
+		held[pc.Instance] = pc
+	}
+	return takeoverError(msgs)
+}
+
+// instanceTakeovers names each enabled incoming component that would build
+// the instance of an enabled held component while dropping one of its roots:
+// two sources of one component instance from different roots, whatever their
+// systems, of which the later write replaces the other (#349 W2). An incoming
+// component that rebuilds every held root is the same source (a refresh, or
+// one that adds a root).
+func instanceTakeovers(incoming, held []PlannedComponent) ([]string, error) {
+	byName := map[string]PlannedComponent{}
+	for _, h := range held {
+		if h.Config.Enabled {
+			byName[h.Instance] = h
+		}
+	}
+	var out []string
+	for _, in := range incoming {
+		h, ok := byName[in.Instance]
+		if !ok || !in.Config.Enabled {
+			continue
+		}
+		have, err := rootPaths(h)
+		if err != nil {
+			return nil, err
+		}
+		want, err := rootPaths(in)
+		if err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(have, func(r string) bool { return !slices.ContainsFunc(want, sameRoot(r)) }) {
+			out = append(out, fmt.Sprintf("instance %s would be built from root %s and from root %s",
+				in.Instance, strings.Join(have, ", "), strings.Join(want, ", ")))
+		}
+	}
+	return out, nil
+}
+
+func takeoverError(msgs []string) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	return &Error{
+		Code: CodeValidationFailed,
+		Message: strings.Join(msgs, "; ") +
+			"; one component would replace the other, so give each source a distinct project (or bucket, prefix or version) (#349)",
+	}
 }
 
 // checkAddCollisions refuses an add whose specs would share a system with a
@@ -431,6 +500,13 @@ func checkAddCollisions(ctx context.Context, existing semconfig.ComponentConfigs
 	}
 	found := groupCollisions(ctx, oneWriterEach(pendingRoots, registeredRoots))
 	if err := collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() })); err != nil {
+		return err
+	}
+	takeovers, err := instanceTakeovers(pending, registered)
+	if err != nil {
+		return err
+	}
+	if err := takeoverError(takeovers); err != nil {
 		return err
 	}
 	return discoveredTakeover(existing, pending)
@@ -469,7 +545,7 @@ func discoveredTakeover(existing semconfig.ComponentConfigs, pending []PlannedCo
 		if err != nil {
 			return err
 		}
-		if !slices.Equal(held, want) {
+		if !slices.EqualFunc(held, want, func(a, b string) bool { return sameRoot(a)(b) }) {
 			msgs = append(msgs, fmt.Sprintf("%s (root %s) would take over a name boot discovery owns from discovered root %s",
 				pc.Instance, strings.Join(want, ", "), strings.Join(held, ", ")))
 		}
@@ -484,7 +560,8 @@ func discoveredTakeover(existing semconfig.ComponentConfigs, pending []PlannedCo
 	}
 }
 
-// rootPaths is a component's roots, cleaned and sorted.
+// rootPaths is a component's roots as configured, sorted by their cleaned
+// form so two listings of one root set compare equal under sameRoot.
 func rootPaths(c PlannedComponent) ([]string, error) {
 	roots, err := systemRoots(c)
 	if err != nil {
@@ -492,10 +569,15 @@ func rootPaths(c PlannedComponent) ([]string, error) {
 	}
 	out := make([]string, 0, len(roots))
 	for _, r := range roots {
-		out = append(out, filepath.Clean(r.root))
+		out = append(out, r.root)
 	}
-	slices.Sort(out)
+	slices.SortFunc(out, func(a, b string) int { return strings.Compare(filepath.Clean(a), filepath.Clean(b)) })
 	return out, nil
+}
+
+// sameRoot reports whether a root is a, after cleaning both.
+func sameRoot(a string) func(string) bool {
+	return func(b string) bool { return filepath.Clean(a) == filepath.Clean(b) }
 }
 
 // oneWriterEach is incoming plus each held root that is not one of incoming's
@@ -534,7 +616,14 @@ func CheckDiscoveredCollisions(ctx context.Context, retained, discovered []Plann
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
-	return collisionError(groupCollisions(ctx, oneWriterEach(discoveredRoots, retainedRoots)))
+	if err := collisionError(groupCollisions(ctx, oneWriterEach(discoveredRoots, retainedRoots))); err != nil {
+		return err
+	}
+	takeovers, err := instanceTakeovers(discovered, retained)
+	if err != nil {
+		return err
+	}
+	return takeoverError(takeovers)
 }
 
 // identity is what makes two roots one writer: one instance minting one

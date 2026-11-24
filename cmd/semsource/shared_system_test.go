@@ -135,6 +135,30 @@ func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) 
 		}
 	})
 
+	t.Run("a planned source building a retained instance under another system", func(t *testing.T) {
+		// Discovery plans no object-store source today; the pair is the one
+		// whose instance names meet across systems (bucket b-x versus
+		// bucket b, prefix x), driven through boot's discovery check.
+		retainedOther, err := sourcespawn.Build(config.SourceEntry{Type: "s3", Bucket: "b-x"}, reconcileOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan := planOf(t, config.SourceEntry{Type: "s3", Bucket: "b", Prefix: "x"})
+		if got, want := slices.Sorted(maps.Keys(plan.desired)), slices.Sorted(maps.Keys(retainedOther)); !slices.Equal(got, want) {
+			t.Fatalf("fixture drift: planned %v and retained %v build different instances", got, want)
+		}
+		components := maps.Clone(retainedOther)
+		components["source-manifest"] = manifestWith(t, nil, nil)
+		store := &reconcileStore{components: components}
+		err = reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger)
+		if err == nil || !strings.Contains(err.Error(), "instance objectstore-source-b-x would be built from root b-x and from root b/x") {
+			t.Fatalf("a planned source replacing a retained instance under another system: err = %v", err)
+		}
+		if len(store.puts)+len(store.dels) != 0 {
+			t.Errorf("a refused discovery wrote puts=%v deletes=%v", store.puts, store.dels)
+		}
+	})
+
 	t.Run("a refresh of the same discovered root is admitted", func(t *testing.T) {
 		plan := planOf(t, discoveredEntry)
 		components := maps.Clone(plan.desired)

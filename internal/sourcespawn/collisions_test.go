@@ -258,6 +258,7 @@ func TestCheckSourceCollisions(t *testing.T) {
 		name    string
 		sources []config.SourceEntry
 		refused bool
+		want    []string // substrings the refusal must carry
 	}{
 		{
 			name: "two ast sources under one project",
@@ -291,6 +292,15 @@ func TestCheckSourceCollisions(t *testing.T) {
 			refused: true,
 		},
 		{
+			name: "two object-store sources building one instance from different roots",
+			sources: []config.SourceEntry{
+				{Type: "s3", Bucket: "b-x"},
+				{Type: "s3", Bucket: "b", Prefix: "x"},
+			},
+			refused: true,
+			want:    []string{"instance objectstore-source-b-x", "root b-x", "root b/x"},
+		},
+		{
 			name: "multi-branch repos are left to boot",
 			sources: []config.SourceEntry{
 				{Type: "repo", URL: "https://example.invalid/acme/svc.git", Branches: []string{"main"}, Project: "svc"},
@@ -311,6 +321,11 @@ func TestCheckSourceCollisions(t *testing.T) {
 			err := CheckSourceCollisions(context.Background(), tc.sources, collisionOpts)
 			if tc.refused != (err != nil) {
 				t.Fatalf("refused = %v, want %v (err %v)", err != nil, tc.refused, err)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(err.Error(), w) {
+					t.Errorf("refusal %q does not name %q", err, w)
+				}
 			}
 		})
 	}
@@ -352,6 +367,12 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			name:     "re-adding the same object-store source",
 			existing: []config.SourceEntry{{Type: "s3", Bucket: "artifacts", Project: "handbook"}},
 			add:      config.SourceEntry{Type: "s3", Bucket: "artifacts", Project: "handbook", Watch: true},
+		},
+		{
+			name:     "an object-store source building a registered instance from another root",
+			existing: []config.SourceEntry{{Type: "s3", Bucket: "b-x"}},
+			add:      config.SourceEntry{Type: "s3", Bucket: "b", Prefix: "x"},
+			refused:  "instance objectstore-source-b-x would be built from root b-x and from root b/x",
 		},
 		{
 			name:     "re-adding the same instance",
