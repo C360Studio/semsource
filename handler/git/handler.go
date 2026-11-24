@@ -296,8 +296,9 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 			if currentSHA == lastSHA {
 				continue
 			}
-			lastSHA = currentSHA
 
+			// lastSHA advances only once the HEAD change is built, so a
+			// failed build is retried on the next tick (#355).
 			// Re-ingest the repo to get updated entities.
 			// Populate both Entities (for backward compat) and EntityStates
 			// (for the normalizer-free processor path).
@@ -311,8 +312,15 @@ func (h *Handler) pollLoop(ctx context.Context, repoPath string, ch chan<- handl
 			}
 			var entityStates []*handler.EntityState
 			if h.cfg.Authority.Org != "" {
-				entityStates, _ = h.IngestEntityStates(ctx, lc, h.cfg.Authority)
+				entityStates, err = h.IngestEntityStates(ctx, lc, h.cfg.Authority)
+				if err != nil {
+					h.watchErrors.Add(1)
+					logger.Warn("git watch: building entity states after HEAD change failed",
+						"repo", repoPath, "new_sha", currentSHA, "error", err)
+					continue
+				}
 			}
+			lastSHA = currentSHA
 
 			select {
 			case ch <- handler.ChangeEvent{

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semsource/entityid"
 	"github.com/c360studio/semsource/handler"
 	githandler "github.com/c360studio/semsource/handler/git"
 )
@@ -341,6 +342,55 @@ func TestGitHandler_Watch_CarriesEntityStates(t *testing.T) {
 			addCommit(t, repoDir, fmt.Sprintf("watched-%d.go", n), "watch trigger commit")
 		case <-ctx.Done():
 			t.Fatal("timed out waiting for a watch event after new commits")
+		}
+	}
+}
+
+// TestGitHandler_Watch_RetriesHeadChangeWhenStatesFail: when building a HEAD
+// change's entity states fails, the poll loop must not emit a state-less event
+// or advance past that HEAD; it counts the failure and retries on the next
+// tick (#355). An authority that fails validation makes IngestEntityStates fail
+// on every call while Ingest succeeds. Commits are added until the first
+// failure is counted (the baseline HEAD is recorded asynchronously); a second
+// failure with no further commit proves the same HEAD was retried.
+func TestGitHandler_Watch_RetriesHeadChangeWhenStatesFail(t *testing.T) {
+	repoDir := initTempRepo(t)
+	cfg := githandler.DefaultConfig()
+	cfg.PollInterval = 50 * time.Millisecond
+	cfg.Authority = entityid.Authority{Org: "acme", Platform: "bad.platform"}
+	h := githandler.New(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ch, err := h.Watch(ctx, &srcCfg{typ: "git", path: repoDir, watch: true})
+	if err != nil {
+		t.Fatalf("Watch() error = %v", err)
+	}
+
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	var firstFailure int64
+	for n := 0; ; n++ {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				t.Fatal("watch channel closed before the failed HEAD change was retried")
+			}
+			t.Fatalf("watch emitted an event (%d entities, %d states) although building its entity states failed",
+				len(ev.Entities), len(ev.EntityStates))
+		case <-tick.C:
+			got := h.WatchErrorCount()
+			switch {
+			case firstFailure == 0 && got > 0:
+				firstFailure = got
+			case firstFailure > 0 && got > firstFailure:
+				return
+			case firstFailure == 0 && n%4 == 0:
+				addCommit(t, repoDir, fmt.Sprintf("retry-%d.go", n), "watch trigger commit")
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out: watch errors %d, want a retry after the first failure %d",
+				h.WatchErrorCount(), firstFailure)
 		}
 	}
 }
