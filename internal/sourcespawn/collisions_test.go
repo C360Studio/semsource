@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os/exec"
 	"strings"
 	"testing"
@@ -411,6 +412,77 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			t.Fatalf("unrelated add refused for a pre-existing collision: %v", err)
 		}
 	})
+}
+
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestAddWithChecker_RefusesTakingOverADiscoveredName(t *testing.T) {
+	t.Parallel()
+	// Boot discovery owns ast-source-svc-feature from the worktree; an
+	// operator removed it, which disables the envelope and keeps the name.
+	discovered := planned(t, config.SourceEntry{Type: "ast", Path: "/discovered/worktree", Project: "svc", BranchSlug: "feature"})[0]
+	seed := func(t *testing.T, recorded bool) *fakeStore {
+		t.Helper()
+		store := newFakeStore()
+		cfg := store.cfg.Get()
+		removed := discovered.Config
+		removed.Enabled = false
+		cfg.Components = semconfig.ComponentConfigs{discovered.Instance: removed}
+		if recorded {
+			record, _ := json.Marshal(map[string]any{"discovered": []map[string]any{
+				{"parent": "/discovered", "kind": "branch", "components": []string{discovered.Instance}},
+			}})
+			cfg.Components["source-manifest"] = types.ComponentConfig{Type: types.ComponentTypeProcessor, Name: "source-manifest", Enabled: true, Config: record}
+		}
+		if err := store.cfg.Update(cfg); err != nil {
+			t.Fatal(err)
+		}
+		return store
+	}
+	cases := []struct {
+		name     string
+		recorded bool
+		add      config.SourceEntry
+		refused  bool
+	}{
+		{"a re-add from another root is refused", true, config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"}, true},
+		{"a re-add from the discovered root is admitted", true, config.SourceEntry{Type: "ast", Path: "/discovered/worktree", Project: "svc-feature"}, false},
+		{"a name no discovery record owns is the operator's", false, config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := seed(t, tc.recorded)
+			if got := planned(t, tc.add)[0].Instance; got != discovered.Instance {
+				t.Fatalf("fixture drift: the add builds %s, not %s", got, discovered.Instance)
+			}
+			before := maps.Clone(store.cfg.Get().Components)
+			_, err := AddWithChecker(context.Background(), tc.add, store, nil, collisionOpts)
+			if !tc.refused {
+				if err != nil {
+					t.Fatalf("add refused: %v", err)
+				}
+				return
+			}
+			if CodeOf(err) != CodeValidationFailed {
+				t.Fatalf("err = %v, want %s", err, CodeValidationFailed)
+			}
+			if !strings.Contains(err.Error(), "discovered root /discovered/worktree") {
+				t.Errorf("refusal %q does not name the discovered root", err)
+			}
+			if len(store.puts) != 0 {
+				t.Errorf("a refused add wrote %v", store.puts)
+			}
+			after := store.cfg.Get().Components
+			if len(after) != len(before) {
+				t.Errorf("components changed: %d, want %d", len(after), len(before))
+			}
+			for name, want := range before {
+				if !after[name].Equal(want) {
+					t.Errorf("%s changed by a refused add", name)
+				}
+			}
+		})
+	}
 }
 
 // withRoot returns an ast component config with its watch path moved to root.

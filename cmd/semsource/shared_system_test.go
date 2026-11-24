@@ -189,6 +189,60 @@ func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) 
 	})
 }
 
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestRemovedDiscoveredNameCannotBeTakenOverAcrossBoots(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	plan := func(t *testing.T) *discoveryPlan {
+		t.Helper()
+		p := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+		entry := config.SourceEntry{Type: "ast", Path: "/discovered/worktree", Project: "svc", BranchSlug: "feature"}
+		if err := p.add(p.owner("/discovered", "branch", false), entry, reconcileOpts); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	const name = "ast-source-svc-feature"
+	store := &reconcileStore{components: semconfig.ComponentConfigs{"source-manifest": manifestWith(t, nil, nil)}}
+
+	// Boot 1 discovers the worktree; the record owns the name.
+	if err := reconcileDiscovery(ctx, store, plan(t), nil, reconcileOpts, logger); err != nil {
+		t.Fatalf("boot 1: %v", err)
+	}
+	discovered, ok := store.components[name]
+	if !ok {
+		t.Fatalf("fixture drift: boot 1 admitted %v, not %s", slices.Sorted(maps.Keys(store.components)), name)
+	}
+	// An operator removes it: the envelope is disabled and the name kept.
+	if err := sourcespawn.Remove(ctx, name, store); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	removed := store.components[name]
+	// add_source from another root under the same name is refused.
+	_, err := sourcespawn.AddWithChecker(ctx, config.SourceEntry{Type: "ast", Path: "/retained/standalone", Project: "svc-feature"},
+		store, nil, reconcileOpts)
+	if sourcespawn.CodeOf(err) != sourcespawn.CodeValidationFailed || !strings.Contains(err.Error(), "/discovered/worktree") {
+		t.Fatalf("a takeover of a discovered name was not refused naming the discovered root: %v", err)
+	}
+	if got := store.components[name]; !got.Equal(removed) {
+		t.Fatalf("a refused add changed %s: %s", name, got.Config)
+	}
+
+	// Boot 2 rediscovers the worktree: the removal stands and nothing is
+	// written over the name.
+	store.puts = nil
+	if err := reconcileDiscovery(ctx, store, plan(t), nil, reconcileOpts, logger); err != nil {
+		t.Fatalf("boot 2: %v", err)
+	}
+	if slices.Contains(store.puts, name) {
+		t.Errorf("boot 2 wrote %s over the operator's removal", name)
+	}
+	got := store.components[name]
+	if got.Enabled || !strings.Contains(string(got.Config), "/discovered/worktree") || string(got.Config) != string(discovered.Config) {
+		t.Errorf("boot 2 left %s as enabled=%v %s, want the removed discovered source", name, got.Enabled, got.Config)
+	}
+}
+
 // pinnedCheckout is a git repository in a temp dir with one commit whose
 // message is msg (distinct messages give distinct commits), and its SHA.
 func pinnedCheckout(t *testing.T, msg string) (dir, sha string) {

@@ -405,7 +405,72 @@ func checkAddCollisions(ctx context.Context, existing semconfig.ComponentConfigs
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
 	found := groupCollisions(ctx, oneWriterEach(pendingRoots, registeredRoots))
-	return collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() }))
+	if err := collisionError(slices.DeleteFunc(found, func(c collision) bool { return !c.involvesPending() })); err != nil {
+		return err
+	}
+	return discoveredTakeover(existing, pending)
+}
+
+// discoveredTakeover refuses a pending component whose instance the
+// boot-discovery record owns unless it builds that instance from the roots
+// discovery's own component holds (#349 B1). Boot discovery rewrites a name it
+// owns as its own refresh (a moved worktree still boots), so a runtime source
+// admitted under that name from another root would be overwritten at the next
+// boot. The record carries names, not roots: the discovered root is read from
+// the component kept under the name, enabled or disabled by a runtime removal.
+// A recorded name with no component kept cannot be shown to be the same
+// writer and is refused too.
+func discoveredTakeover(existing semconfig.ComponentConfigs, pending []PlannedComponent) error {
+	owned, err := discoveredNames(existing)
+	if err != nil {
+		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
+	}
+	var msgs []string
+	for _, pc := range pending {
+		if _, ok := owned[pc.Instance]; !ok {
+			continue
+		}
+		want, err := rootPaths(pc)
+		if err != nil {
+			return err
+		}
+		have, kept := existing[pc.Instance]
+		if !kept {
+			msgs = append(msgs, fmt.Sprintf("%s (root %s) is a name boot discovery owns, and no discovered root is kept to show it is the same source",
+				pc.Instance, strings.Join(want, ", ")))
+			continue
+		}
+		held, err := rootPaths(PlannedComponent{Instance: pc.Instance, Config: have})
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(held, want) {
+			msgs = append(msgs, fmt.Sprintf("%s (root %s) would take over a name boot discovery owns from discovered root %s",
+				pc.Instance, strings.Join(want, ", "), strings.Join(held, ", ")))
+		}
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return &Error{
+		Code: CodeValidationFailed,
+		Message: strings.Join(msgs, "; ") +
+			"; the next boot's discovery would replace it, so give the source a distinct project (or version) (#349)",
+	}
+}
+
+// rootPaths is a component's roots, cleaned and sorted.
+func rootPaths(c PlannedComponent) ([]string, error) {
+	roots, err := systemRoots(c)
+	if err != nil {
+		return nil, &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
+	}
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		out = append(out, filepath.Clean(r.root))
+	}
+	slices.Sort(out)
+	return out, nil
 }
 
 // oneWriterEach is incoming plus each held root that is not one of incoming's
@@ -486,13 +551,30 @@ func rootList(c PlannedComponent) ([]string, error) {
 // PinInstances returns the instances boot-time discovery recorded as submodule
 // pins: the "discovered" record (kind "submodule") in the source-manifest
 // envelope of components. Component configs do not carry the InstanceSuffix
-// that marks a pin, and the record is what discovery owns. The record is decoded
-// here rather than through the source-manifest package, which imports this one.
+// that marks a pin, and the record is what discovery owns.
 func PinInstances(components semconfig.ComponentConfigs) (map[string]bool, error) {
+	names, err := discoveredNames(components)
+	if err != nil {
+		return nil, err
+	}
 	pins := map[string]bool{}
+	for name, kind := range names {
+		if kind == "submodule" {
+			pins[name] = true
+		}
+	}
+	return pins, nil
+}
+
+// discoveredNames returns every instance the "discovered" record in the
+// source-manifest envelope of components files, with the kind it is filed
+// under. The record is decoded here rather than through the source-manifest
+// package, which imports this one.
+func discoveredNames(components semconfig.ComponentConfigs) (map[string]string, error) {
+	names := map[string]string{}
 	envelope, ok := components["source-manifest"]
 	if !ok {
-		return pins, nil
+		return names, nil
 	}
 	var m struct {
 		Discovered []struct {
@@ -504,12 +586,9 @@ func PinInstances(components semconfig.ComponentConfigs) (map[string]bool, error
 		return nil, fmt.Errorf("decode source-manifest discovery record: %w", err)
 	}
 	for _, r := range m.Discovered {
-		if r.Kind != "submodule" {
-			continue
-		}
 		for _, name := range r.Components {
-			pins[name] = true
+			names[name] = r.Kind
 		}
 	}
-	return pins, nil
+	return names, nil
 }
