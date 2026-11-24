@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/c360studio/semengine/component"
+
+	"github.com/c360studio/semsource/entityid"
 )
 
 // Config holds configuration for the doc-source processor component.
@@ -41,10 +43,23 @@ func (c *Config) Validate() error {
 	if len(c.Paths) == 0 {
 		return fmt.Errorf("at least one path is required")
 	}
+	// Two roots under one system mint one entity ID for a document at the same
+	// relative path in each, and each replaces the other's (#349). The system
+	// is the one handler/doc computes: the project when set, else the root.
+	systems := map[string]int{}
 	for i, p := range c.Paths {
 		if p == "" {
 			return fmt.Errorf("paths[%d] must not be empty", i)
 		}
+		system := entityid.SystemSlug(p)
+		if c.Project != "" {
+			system = entityid.SystemSlug(c.Project)
+		}
+		if j, shared := systems[system]; shared {
+			return fmt.Errorf("paths[%d] (%s) and paths[%d] (%s) would share entity-ID system %q; give each root its own doc source and project",
+				j, c.Paths[j], i, p, system)
+		}
+		systems[system] = i
 	}
 	if c.Org == "" {
 		return fmt.Errorf("org is required")

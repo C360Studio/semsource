@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semengine/component"
 
+	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 	// Import language parsers to trigger init() registration.
 	_ "github.com/c360studio/semsource/source/ast/c"
@@ -124,10 +125,21 @@ func (c *Config) Validate() error {
 	if len(c.WatchPaths) == 0 {
 		return fmt.Errorf("watch_paths must contain at least one path")
 	}
+	// Two roots under one org and system mint one entity ID for a file at the
+	// same relative path in each, and each replaces the other's (#349). The
+	// system is the one initializeWatchers computes.
+	systems := map[string]int{}
 	for i, wp := range c.WatchPaths {
 		if err := wp.Validate(); err != nil {
 			return fmt.Errorf("watch_paths[%d]: %w", i, err)
 		}
+		system := entityid.ScopedSystemSlug(wp.Project, wp.Version)
+		key := wp.Org + "\x00" + system
+		if j, shared := systems[key]; shared {
+			return fmt.Errorf("watch_paths[%d] (%s) and watch_paths[%d] (%s) would share entity-ID system %q in org %q; give each a distinct project or version",
+				j, c.WatchPaths[j].Path, i, wp.Path, system, wp.Org)
+		}
+		systems[key] = i
 	}
 
 	// Validate index interval if provided

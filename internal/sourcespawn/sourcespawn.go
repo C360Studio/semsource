@@ -176,6 +176,11 @@ func AddWithChecker(
 	cfg := store.GetConfig().Get()
 	existing := cfg.Components
 
+	// Refused before any write: a colliding add persists nothing (#349).
+	if err := checkAddCollisions(existing, specs); err != nil {
+		return nil, err
+	}
+
 	type pendingWrite struct {
 		name   string
 		config types.ComponentConfig

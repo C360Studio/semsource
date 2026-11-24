@@ -305,16 +305,16 @@ func TestDocReconcileOnlyKnownChanges(t *testing.T) {
 		}
 	})
 
-	t.Run("roots sharing one project never reconcile", func(t *testing.T) {
-		a, b := t.TempDir(), t.TempDir()
-		f := newDocFixture(t, "shared", a, b)
-		path := f.write(a, "guide.md", twoSections)
-		f.write(b, "guide.md", "# Other\n\nOther root.\n")
-		f.seed()
-		f.write(a, "guide.md", "Changed.\n")
-		f.watchModify(path)
-		if ids := f.rec.IDs(); len(ids) != 0 {
-			t.Errorf("reconciled %v though two roots write one entity ID (#349)", ids)
+	// Roots sharing one project are refused at config time now (#349), so no
+	// such component exists to reconcile.
+	t.Run("roots sharing one project are refused", func(t *testing.T) {
+		raw, err := json.Marshal(map[string]any{"paths": []string{t.TempDir(), t.TempDir()}, "project": "shared", "org": "acme"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = NewComponent(raw, component.Dependencies{Platform: types.PlatformMeta{Org: "acme", Platform: "test-a1b2c3"}})
+		if err == nil || !strings.Contains(err.Error(), `would share entity-ID system "shared"`) {
+			t.Fatalf("NewComponent err = %v, want a shared-system refusal", err)
 		}
 	})
 }

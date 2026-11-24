@@ -175,6 +175,12 @@ func runCmd(args []string) (runErr error) {
 	if err != nil {
 		return err
 	}
+	// Over the full set the service manager is about to spawn, before any
+	// component starts (#349).
+	if err := checkBootCollisions(configMgr.GetConfig().Get().Components); err != nil {
+		logger.Error("source set refused", "error", err)
+		return err
+	}
 
 	registry, err := prepareComponentRegistry(ctx, semsourceCfg, configMgr, nc, watches...)
 	if err != nil {
@@ -279,6 +285,13 @@ func loadAndExpandConfig(ctx context.Context, path string) (*config.Config, *con
 		return nil, nil, fmt.Errorf("expand repo sources: %w", err)
 	}
 	cfg.Sources = result.Sources
+	// Before NATS: two file sources that build one instance over different
+	// roots collapse into one component in sourceComponents, so the boot check
+	// over the component snapshot cannot see them (#349).
+	opts := sourcespawn.Options{Org: cfg.Namespace, WorkspaceDir: cfg.WorkspaceDir, MediaStoreDir: cfg.MediaStoreDir}
+	if err := sourcespawn.CheckSourceCollisions(ctx, cfg.Sources, opts); err != nil {
+		return nil, nil, fmt.Errorf("config %q: %w", path, err)
+	}
 	return cfg, result, nil
 }
 
