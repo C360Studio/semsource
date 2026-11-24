@@ -46,25 +46,45 @@ type systemRoot struct {
 	instance     string
 	root         string
 	pin, pending bool
-	// languages is what an ast root indexes, sorted; sha is a pin's gitlink
-	// SHA as its identity records it (shortened).
-	languages []string
-	sha       string
+	// scope is what an ast root emits from its files; sha is a pin's
+	// gitlink SHA as its identity records it (shortened).
+	scope parseScope
+	sha   string
 }
+
+// parseScope is every ast-source option that changes which files or symbols
+// a root emits (processor/ast-source WatchPathConfig and Config): the
+// languages, excludes and vendored-JS indexing of its watch path and the
+// component's per-file symbol cap. Roots that share a system must agree on
+// all of it, or one root's complete-set reconcile removes what the other
+// emits. Document roots have no parse options and leave it zero.
+type parseScope struct {
+	languages, excludes []string
+	vendoredJS          bool
+	maxSymbols          int
+}
+
+// astDefaultMaxSymbols is ast-source's per-file symbol cap when its config
+// leaves max_symbols_per_file out (processor/ast-source DefaultConfig; a test
+// pins the two together).
+const astDefaultMaxSymbols = 5000
 
 // collisionConfig reads only the identity inputs of ast-source, doc-source and
 // objectstore-source configs, as cmd/semsource sourceScopeSystems does.
 type collisionConfig struct {
 	WatchPaths []struct {
-		Path      string   `json:"path"`
-		Org       string   `json:"org"`
-		Project   string   `json:"project"`
-		Version   string   `json:"version"`
-		Languages []string `json:"languages"`
+		Path            string   `json:"path"`
+		Org             string   `json:"org"`
+		Project         string   `json:"project"`
+		Version         string   `json:"version"`
+		Languages       []string `json:"languages"`
+		Excludes        []string `json:"excludes"`
+		IndexVendoredJS bool     `json:"index_vendored_js"`
 	} `json:"watch_paths"`
-	Org     string   `json:"org"`
-	Paths   []string `json:"paths"`
-	Project string   `json:"project"`
+	MaxSymbolsPerFile *int     `json:"max_symbols_per_file"`
+	Org               string   `json:"org"`
+	Paths             []string `json:"paths"`
+	Project           string   `json:"project"`
 	// objectstore-source
 	Version  string `json:"version"`
 	Bucket   string `json:"bucket"`
@@ -100,7 +120,15 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 	case "ast-source":
 		for _, wp := range cfg.WatchPaths {
 			r := add(wp.Org, entityid.ScopedSystemSlug(wp.Project, wp.Version), wp.Path)
-			r.languages = indexedLanguages(wp.Languages)
+			r.scope = parseScope{
+				languages:  indexedLanguages(wp.Languages),
+				excludes:   slices.Compact(slices.Sorted(slices.Values(wp.Excludes))),
+				vendoredJS: wp.IndexVendoredJS,
+				maxSymbols: astDefaultMaxSymbols,
+			}
+			if cfg.MaxSymbolsPerFile != nil {
+				r.scope.maxSymbols = *cfg.MaxSymbolsPerFile
+			}
 			if c.Pin {
 				r.sha = wp.Version
 			}
@@ -190,7 +218,7 @@ func (c collision) String() string {
 // root declared the pin's identity: for ast the same project and version (the
 // gitlink SHA), for docs a project that carries the SHA. The declaration is
 // checked against the checkout: each other root's HEAD must be the pinned SHA,
-// and an ast root must index the pin's languages, or the roots would write
+// and an ast root must have the pin's parse scope, or the roots would write
 // different content under the pin's IDs.
 func collisions(ctx context.Context, components []PlannedComponent) ([]collision, error) {
 	roots, err := enabledRoots(components)
@@ -246,11 +274,11 @@ func groupCollisions(ctx context.Context, roots []systemRoot) []collision {
 }
 
 // pinDifferences says how the members of a group with pin differ from it:
-// any member, pins included, that indexes another language set (pins inherit
-// each parent's languages, and roots of one ast system indexing different
-// languages strip each other's contains edges at container reconcile), and a
-// non-pin root that is not a checkout's top level or whose checkout HEAD is
-// not the pinned SHA (or cannot be read). Pins of one system are one gitlink
+// any member, pins included, with another parse scope (pins inherit each
+// parent's languages, and roots of one ast system emitting different files or
+// symbols strip each other's entities and contains edges at complete-set
+// reconcile), and a non-pin root that is not a checkout's top level or whose
+// checkout HEAD is not the pinned SHA (or cannot be read). Pins of one system are one gitlink
 // SHA by construction.
 func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) []string {
 	var out []string
@@ -258,12 +286,12 @@ func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) [
 		if r.identity() == pin.identity() {
 			continue
 		}
-		if !slices.Equal(r.languages, pin.languages) {
-			who := r.root
-			if r.pin {
-				who = "pin " + r.root
-			}
-			out = append(out, fmt.Sprintf("%s indexes %v, pin %s indexes %v", who, r.languages, pin.root, pin.languages))
+		who := r.root
+		if r.pin {
+			who = "pin " + r.root
+		}
+		for _, d := range scopeDifferences(r.scope, pin.scope) {
+			out = append(out, fmt.Sprintf("%s %s, pin %s %s", who, d[0], pin.root, d[1]))
 		}
 		if r.pin {
 			continue
@@ -279,6 +307,25 @@ func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) [
 		case pin.sha == "" || !strings.HasPrefix(head, strings.ToLower(pin.sha)):
 			out = append(out, fmt.Sprintf("%s HEAD is %s, not pinned SHA %q of %s", r.root, head, pin.sha, pin.root))
 		}
+	}
+	return out
+}
+
+// scopeDifferences names each parse option on which r differs from pin, as
+// r's setting and pin's.
+func scopeDifferences(r, pin parseScope) [][2]string {
+	var out [][2]string
+	if !slices.Equal(r.languages, pin.languages) {
+		out = append(out, [2]string{fmt.Sprintf("indexes %v", r.languages), fmt.Sprintf("indexes %v", pin.languages)})
+	}
+	if !slices.Equal(r.excludes, pin.excludes) {
+		out = append(out, [2]string{fmt.Sprintf("sets excludes %v", r.excludes), fmt.Sprintf("sets excludes %v", pin.excludes)})
+	}
+	if r.vendoredJS != pin.vendoredJS {
+		out = append(out, [2]string{fmt.Sprintf("sets index_vendored_js %t", r.vendoredJS), fmt.Sprintf("sets index_vendored_js %t", pin.vendoredJS)})
+	}
+	if r.maxSymbols != pin.maxSymbols {
+		out = append(out, [2]string{fmt.Sprintf("sets max_symbols_per_file %d", r.maxSymbols), fmt.Sprintf("sets max_symbols_per_file %d", pin.maxSymbols)})
 	}
 	return out
 }
@@ -324,8 +371,8 @@ func collisionError(found []collision) error {
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
 // or two document roots (doc-source paths, objectstore-source buckets), would
 // mint entity IDs under one org and system, unless the collision includes a
-// submodule pin, every root in it (pins included) indexes the pin's
-// languages, and every non-pin root is the top level of a checkout at the
+// submodule pin, every root in it (pins included) has the pin's parse scope
+// (languages, excludes, vendored-JS indexing, symbol cap), and every non-pin root is the top level of a checkout at the
 // pinned commit (D2 as the #349 reviews narrowed it; reading a HEAD runs git
 // under ctx). The error names each colliding instance and root,
 // the shared system and any difference from the pin, with CodeValidationFailed.

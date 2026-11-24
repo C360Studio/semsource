@@ -64,10 +64,17 @@ func TestCheckSystemCollisions(t *testing.T) {
 	docsStandalone := func(path string) config.SourceEntry {
 		return config.SourceEntry{Type: "docs", Paths: []string{path}, Project: "github-com-acme-lib-" + pinned}
 	}
+	vendored := standalone(checkout)
+	vendored.IndexVendoredJS = true
+	vendoredPin := pin("/p1/lib", "via-p1-lib")
+	vendoredPin.IndexVendoredJS = true
 	cases := []struct {
 		name    string
 		entries []config.SourceEntry
-		want    []string // substrings of the refusal; nil = admitted
+		// set edits the ast component of entries[i]: "watch_paths[0]."
+		// keys its watch path, other keys the component config.
+		set  map[int]map[string]any
+		want []string // substrings of the refusal; nil = admitted
 	}{
 		{
 			name: "same project and version collide",
@@ -179,6 +186,31 @@ func TestCheckSystemCollisions(t *testing.T) {
 			want:    []string{"(root " + checkout + ")", checkout + " indexes [go python], pin /p1/lib indexes [go]"},
 		},
 		{
+			name:    "a standalone that indexes vendored JS the pin does not is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), vendored},
+			want:    []string{"(root /p1/lib)", "(root " + checkout + ")", checkout + " sets index_vendored_js true, pin /p1/lib sets index_vendored_js false"},
+		},
+		{
+			name:    "a standalone that excludes other directories is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(checkout)},
+			set:     map[int]map[string]any{1: {"watch_paths[0].excludes": []string{"vendor"}}},
+			want:    []string{"(root " + checkout + ")", checkout + " sets excludes [vendor], pin /p1/lib sets excludes []"},
+		},
+		{
+			name:    "a standalone with another per-file symbol cap is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(checkout)},
+			set:     map[int]map[string]any{1: {"max_symbols_per_file": 100}},
+			want:    []string{checkout + " sets max_symbols_per_file 100, pin /p1/lib sets max_symbols_per_file 5000"},
+		},
+		{
+			name:    "a standalone with the pin's whole parse scope is admitted",
+			entries: []config.SourceEntry{vendoredPin, vendored},
+			set: map[int]map[string]any{
+				0: {"watch_paths[0].excludes": []string{"vendor", "gen"}, "max_symbols_per_file": 5000},
+				1: {"watch_paths[0].excludes": []string{"gen", "vendor", "gen"}},
+			},
+		},
+		{
 			name:    "a subdirectory of a checkout at the pinned commit is refused",
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(subdir)},
 			want:    []string{"(root " + subdir + ")", subdir + " is not the top level of a checkout"},
@@ -214,8 +246,12 @@ func TestCheckSystemCollisions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var components []PlannedComponent
-			for _, e := range tc.entries {
-				components = append(components, planned(t, e)...)
+			for i, e := range tc.entries {
+				pcs := planned(t, e)
+				if edits, ok := tc.set[i]; ok {
+					pcs[0].Config = withFields(t, pcs[0].Config, edits)
+				}
+				components = append(components, pcs...)
 			}
 			err := CheckSystemCollisions(context.Background(), components)
 			if tc.want == nil {
@@ -547,6 +583,29 @@ func withRoot(t *testing.T, cc types.ComponentConfig, root string) types.Compone
 	if !strings.Contains(string(cc.Config), root) {
 		t.Fatalf("fixture drift: %s", cc.Config)
 	}
+	return cc
+}
+
+// withFields sets fields of an ast component config: a "watch_paths[0]."
+// key on its first watch path, any other key on the component.
+func withFields(t *testing.T, cc types.ComponentConfig, edits map[string]any) types.ComponentConfig {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(cc.Config, &m); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range edits {
+		if field, ok := strings.CutPrefix(k, "watch_paths[0]."); ok {
+			m["watch_paths"].([]any)[0].(map[string]any)[field] = v
+			continue
+		}
+		m[k] = v
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cc.Config = raw
 	return cc
 }
 
