@@ -1,6 +1,6 @@
 # Key cfgfile entities by their declaring file
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-24) sha256:b1d1fdb976aa
 
 Track: design (identity-breaking: changes every cfgfile entity ID; clean storage break plus reseed, rule 1).
 

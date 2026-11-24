@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Hold: OPEN-Q proposal awaits owner approval. Owner approves `proposal.md` + `design.md` (Approved-by line with the spec-queue digest).
+- [x] 1.1 Owner approved `proposal.md` + `design.md` (2026-11-24, sha256:b1d1fdb976aa); line entered by claude at the owner's instruction. Option A, all cfgfile types.
 
 ## 2. Repro (fails on main)
 
