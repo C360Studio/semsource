@@ -190,6 +190,56 @@ func TestReconcileDiscoveryRefusesABranchReplacingARetainedSource(t *testing.T) 
 }
 
 // spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+func TestReconcileDiscoveryRefusesSameSHAPinsIndexingOtherLanguages(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// Pins inherit each parent's languages (internal/subwatch pinEntries).
+	pin := func(parent string, langs ...string) config.SourceEntry {
+		return config.SourceEntry{Type: "ast", Path: "/" + parent + "/lib", Project: "github-com-acme-lib",
+			Version: "b1256521ee39", Languages: langs, InstanceSuffix: "via-" + parent + "-lib"}
+	}
+	for _, tc := range []struct {
+		name    string
+		p1, p2  []string
+		refused bool
+	}{
+		{"parents indexing go and python", []string{"go"}, []string{"python"}, true},
+		{"parents indexing the same languages", []string{"go", "python"}, []string{"python", "go"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := &discoveryPlan{desired: semconfig.ComponentConfigs{}, entries: map[string]config.SourceEntry{}}
+			for parent, langs := range map[string][]string{"p1": tc.p1, "p2": tc.p2} {
+				if err := plan.add(plan.owner("/"+parent, "submodule", false), pin(parent, langs...), reconcileOpts); err != nil {
+					t.Fatal(err)
+				}
+			}
+			store := &reconcileStore{components: semconfig.ComponentConfigs{"source-manifest": manifestWith(t, nil, nil)}}
+			before := maps.Clone(store.components)
+			err := reconcileDiscovery(context.Background(), store, plan, nil, reconcileOpts, logger)
+			if !tc.refused {
+				if err != nil {
+					t.Fatalf("same-SHA, same-language pins refused: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("same-SHA pins indexing different languages were admitted")
+			}
+			for _, want := range []string{"refusing to boot", "(root /p1/lib)", "(root /p2/lib)", "indexes [go]", "indexes [python]"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("refusal %q does not name %q", err, want)
+				}
+			}
+			if len(store.puts)+len(store.dels) != 0 {
+				t.Errorf("a refused discovery wrote puts=%v deletes=%v", store.puts, store.dels)
+			}
+			if got := store.components["source-manifest"]; !got.Equal(before["source-manifest"]) {
+				t.Errorf("a refused discovery rewrote the manifest: %s", got.Config)
+			}
+		})
+	}
+}
+
+// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestRemovedDiscoveredNameCannotBeTakenOverAcrossBoots(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

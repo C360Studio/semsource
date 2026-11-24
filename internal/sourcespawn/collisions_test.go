@@ -52,6 +52,11 @@ func TestCheckSystemCollisions(t *testing.T) {
 	pin := func(path, suffix string) config.SourceEntry {
 		return config.SourceEntry{Type: "ast", Path: path, Project: "github-com-acme-lib", Version: pinned, InstanceSuffix: suffix}
 	}
+	pinOf := func(path, suffix string, langs ...string) config.SourceEntry {
+		e := pin(path, suffix)
+		e.Languages = langs
+		return e
+	}
 	standalone := func(path string, langs ...string) config.SourceEntry {
 		return config.SourceEntry{Type: "ast", Path: path, Project: "github-com-acme-lib", Version: pinned, Languages: langs}
 	}
@@ -149,6 +154,15 @@ func TestCheckSystemCollisions(t *testing.T) {
 		{
 			name:    "two pins of one submodule at one SHA are admitted",
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), pin("/p2/lib", "via-p2-lib")},
+		},
+		{
+			name:    "two pins of one SHA indexing other languages are refused",
+			entries: []config.SourceEntry{pinOf("/p1/lib", "via-p1-lib", "go"), pinOf("/p2/lib", "via-p2-lib", "python")},
+			want:    []string{"(root /p1/lib)", "(root /p2/lib)", "pin /p2/lib indexes [python], pin /p1/lib indexes [go]"},
+		},
+		{
+			name:    "two pins of one SHA indexing the same languages are admitted",
+			entries: []config.SourceEntry{pinOf("/p1/lib", "via-p1-lib", "python", "go"), pinOf("/p2/lib", "via-p2-lib", "go", "python", "go")},
 		},
 		{
 			name:    "a standalone checkout at the pinned commit and languages shares the pin's IDs",

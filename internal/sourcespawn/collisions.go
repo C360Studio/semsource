@@ -134,12 +134,14 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 
 // indexedLanguages is the language set an ast watch path indexes: none
 // configured means go, as the ast-source component and astComponentConfig
-// default it.
+// default it. A repeated name creates the same parser again, so it is one
+// member of the set; names are not case-folded, as the parser registry
+// matches them exactly.
 func indexedLanguages(langs []string) []string {
 	if len(langs) == 0 {
 		return []string{"go"}
 	}
-	return slices.Sorted(slices.Values(langs))
+	return slices.Compact(slices.Sorted(slices.Values(langs)))
 }
 
 // bucketRoot labels an object-store source's root: its endpoint, bucket and
@@ -243,12 +245,26 @@ func groupCollisions(ctx context.Context, roots []systemRoot) []collision {
 	return out
 }
 
-// pinDifferences says how each non-pin member differs from pin: a root that
-// is not a checkout's top level, a checkout HEAD that is not the pinned SHA
-// (or cannot be read), or, for ast, another language set. Pins of one system are one gitlink SHA by construction.
+// pinDifferences says how the members of a group with pin differ from it:
+// any member, pins included, that indexes another language set (pins inherit
+// each parent's languages, and roots of one ast system indexing different
+// languages strip each other's contains edges at container reconcile), and a
+// non-pin root that is not a checkout's top level or whose checkout HEAD is
+// not the pinned SHA (or cannot be read). Pins of one system are one gitlink
+// SHA by construction.
 func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) []string {
 	var out []string
 	for _, r := range members {
+		if r.identity() == pin.identity() {
+			continue
+		}
+		if !slices.Equal(r.languages, pin.languages) {
+			who := r.root
+			if r.pin {
+				who = "pin " + r.root
+			}
+			out = append(out, fmt.Sprintf("%s indexes %v, pin %s indexes %v", who, r.languages, pin.root, pin.languages))
+		}
 		if r.pin {
 			continue
 		}
@@ -262,9 +278,6 @@ func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) [
 			out = append(out, fmt.Sprintf("%s is not the top level of a checkout (it is %s inside one), so it is not pin %s's checkout", r.root, prefix, pin.root))
 		case pin.sha == "" || !strings.HasPrefix(head, strings.ToLower(pin.sha)):
 			out = append(out, fmt.Sprintf("%s HEAD is %s, not pinned SHA %q of %s", r.root, head, pin.sha, pin.root))
-		}
-		if !slices.Equal(r.languages, pin.languages) {
-			out = append(out, fmt.Sprintf("%s indexes %v, pin %s indexes %v", r.root, r.languages, pin.root, pin.languages))
 		}
 	}
 	return out
@@ -311,9 +324,10 @@ func collisionError(found []collision) error {
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
 // or two document roots (doc-source paths, objectstore-source buckets), would
 // mint entity IDs under one org and system, unless the collision includes a
-// submodule pin and every other root's checkout is at the pinned commit and
-// indexes the pin's languages (D2 as the #349 review narrowed it; reading a
-// HEAD runs git under ctx). The error names each colliding instance and root,
+// submodule pin, every root in it (pins included) indexes the pin's
+// languages, and every non-pin root is the top level of a checkout at the
+// pinned commit (D2 as the #349 reviews narrowed it; reading a HEAD runs git
+// under ctx). The error names each colliding instance and root,
 // the shared system and any difference from the pin, with CodeValidationFailed.
 func CheckSystemCollisions(ctx context.Context, components []PlannedComponent) error {
 	found, err := collisions(ctx, components)
