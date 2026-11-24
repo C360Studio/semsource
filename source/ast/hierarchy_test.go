@@ -1,6 +1,7 @@
 package ast_test
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -408,51 +409,62 @@ func TestBuildHierarchy_SystemSlugApplied(t *testing.T) {
 	}
 }
 
-func TestBuildFolderChain(t *testing.T) {
-	entities := ast.BuildFolderChain("pkg/auth/handler.go", testAuthority("acme"), "proj")
-
-	folders := make(map[string]*ast.CodeEntity)
-	for _, e := range entities {
-		if e.Type == ast.TypeRepo {
-			t.Error("BuildFolderChain should not return repo entity")
+// TestBuildHierarchyFromFiles pins each folder's complete contains set and
+// that every file's parent edge names an emitted container (#347).
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
+func TestBuildHierarchyFromFiles(t *testing.T) {
+	auth := testAuthority("acme")
+	fileID := func(p string) string { return auth.Build("proj", "golang", "file", ast.SanitizePathSegment(p)) }
+	files := map[string]string{}
+	for _, p := range []string{"main.go", "a/one.go", "a/b/x.go", "a/c/y.go"} {
+		files[p] = fileID(p)
+	}
+	byPath := map[string]*ast.CodeEntity{}
+	entities := ast.BuildHierarchyFromFiles(files, auth, "proj")
+	if entities[0].Type != ast.TypeRepo {
+		t.Fatalf("first entity is %s, want repo", entities[0].Type)
+	}
+	for _, e := range entities[1:] {
+		byPath[e.Path] = e
+	}
+	if len(byPath) != 3 {
+		t.Fatalf("got folders %v, want a, a/b, a/c", slices.Collect(maps.Keys(byPath)))
+	}
+	want := []string{byPath["a/b"].ID, byPath["a/c"].ID, fileID("a/one.go")}
+	slices.Sort(want)
+	if !slices.Equal(byPath["a"].Contains, want) {
+		t.Errorf("folder a contains %v, want %v", byPath["a"].Contains, want)
+	}
+	repoWant := []string{byPath["a"].ID, fileID("main.go")}
+	slices.Sort(repoWant)
+	if !slices.Equal(entities[0].Contains, repoWant) {
+		t.Errorf("repo contains %v, want %v", entities[0].Contains, repoWant)
+	}
+	for p := range files {
+		if got, want := ast.FileParentID(p, auth, "proj"), parentOf(entities, fileID(p)); got != want {
+			t.Errorf("%s: FileParentID = %q, container listing it = %q", p, got, want)
 		}
-		if e.Type == ast.TypeFolder {
-			folders[e.Path] = e
-		}
 	}
-
-	if len(folders) != 2 {
-		t.Fatalf("got %d folders, want 2 (pkg, pkg/auth)", len(folders))
-	}
-
-	pkgFolder := folders["pkg"]
-	authFolder := folders["pkg/auth"]
-
-	if pkgFolder == nil || authFolder == nil {
-		t.Fatal("missing expected folder entities")
-	}
-
-	// Verify containment wiring
-	if authFolder.ContainedBy != pkgFolder.ID {
-		t.Errorf("auth folder ContainedBy = %q, want pkg folder %q",
-			authFolder.ContainedBy, pkgFolder.ID)
-	}
-	if !slices.Contains(pkgFolder.Contains, authFolder.ID) {
-		t.Errorf("pkg folder should contain auth folder")
-	}
-
-	// Top-level folder should link to repo ID
-	if pkgFolder.ContainedBy == "" {
-		t.Error("top-level folder ContainedBy should reference repo, got empty")
+	if e := ast.EmptyFolder("a/c", auth, "proj"); e.ID != byPath["a/c"].ID || e.ContainedBy != byPath["a"].ID || len(e.Contains) != 0 {
+		t.Errorf("EmptyFolder(a/c) = %+v, want ID %s, parent %s, no contains", e, byPath["a/c"].ID, byPath["a"].ID)
 	}
 }
 
-func TestBuildFolderChain_RootFile(t *testing.T) {
-	// A root-level file should produce no folder entities.
-	entities := ast.BuildFolderChain("main.go", testAuthority("acme"), "proj")
-	if len(entities) != 0 {
-		t.Errorf("expected no entities for root file, got %d", len(entities))
+func TestBuildHierarchyFromFiles_Empty(t *testing.T) {
+	entities := ast.BuildHierarchyFromFiles(nil, testAuthority("acme"), "proj")
+	if len(entities) != 1 || entities[0].Type != ast.TypeRepo || len(entities[0].Contains) != 0 {
+		t.Fatalf("empty set = %+v, want the repo alone with no contains", entities)
 	}
+}
+
+// parentOf returns the ID of the entity whose Contains lists id.
+func parentOf(entities []*ast.CodeEntity, id string) string {
+	for _, e := range entities {
+		if slices.Contains(e.Contains, id) {
+			return e.ID
+		}
+	}
+	return ""
 }
 
 func TestSanitizePathSegment(t *testing.T) {

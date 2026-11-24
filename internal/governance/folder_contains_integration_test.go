@@ -27,6 +27,70 @@ import (
 // ast-source indexes a/one.go, a/b/x.go and a/c/y.go; a watch-path modify of
 // a/b/x.go must not shrink folder a's stored contains set.
 func TestIntegration_WatchEditKeepsFolderContains(t *testing.T) {
+	ctx, client, _, write := startFolderTree(t)
+	seeded, _ := waitForFolderContains(t, ctx, client, "a", 0, 3)
+
+	// The edit must land (X's revision moves past the seed's) before folder a
+	// is read; a modify of an indexed path republishes no folder at all.
+	_, xRev, _ := waitForFunction(t, ctx, client, "X", 0)
+	for deadline, n := time.Now().Add(30*time.Second), 0; ; n++ {
+		write("a/b/x.go", fmt.Sprintf("package b\n\nfunc X() {}\n\n// edit %d\n", n))
+		if _, rev, ok := readFunction(ctx, client, "X"); ok && rev > xRev {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no revision of X newer than %d reached ENTITY_STATES", xRev)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	after, _, _ := readFolderContains(ctx, client, "a")
+	if !slices.Equal(after, seeded) {
+		t.Fatalf("folder a contains changed on a watch edit of a/b/x.go:\n seeded = %v\n after  = %v", seeded, after)
+	}
+}
+
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
+func TestIntegration_WatchCreateAddsToFolder(t *testing.T) {
+	ctx, client, _, write := startFolderTree(t)
+	seeded, rev1 := waitForFolderContains(t, ctx, client, "a", 0, 3)
+
+	after := untilFolderRevision(t, ctx, client, "a", rev1, func(int) {
+		write("a/new.go", "package a\n\nfunc New() {}\n")
+	})
+	var added []string
+	for _, id := range after {
+		if !slices.Contains(seeded, id) {
+			added = append(added, id)
+		}
+	}
+	if len(after) != 4 || len(added) != 1 || !strings.HasSuffix(added[0], ".file.a-new-go") {
+		t.Fatalf("folder a after creating a/new.go = %v, want %v plus a/new.go", after, seeded)
+	}
+}
+
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: AST folder and repo publishes carry their complete contains set
+func TestIntegration_WatchDeleteRemovesFromFolder(t *testing.T) {
+	ctx, client, root, _ := startFolderTree(t)
+	seeded, rev1 := waitForFolderContains(t, ctx, client, "a", 0, 3)
+	_, revC := waitForFolderContains(t, ctx, client, "a-c", 0, 1)
+
+	after := untilFolderRevision(t, ctx, client, "a", rev1, func(int) {
+		_ = os.Remove(filepath.Join(root, "a/c/y.go"))
+	})
+	want := slices.DeleteFunc(slices.Clone(seeded), func(id string) bool { return strings.HasSuffix(id, ".folder.a-c") })
+	if !slices.Equal(after, want) {
+		t.Fatalf("folder a after deleting a/c/y.go = %v, want %v", after, want)
+	}
+	emptied := untilFolderRevision(t, ctx, client, "a-c", revC, func(int) {})
+	if len(emptied) != 0 {
+		t.Fatalf("folder a/c still contains %v after its only file was deleted", emptied)
+	}
+}
+
+// startFolderTree starts graph-ingest and a watching ast-source over a/one.go,
+// a/b/x.go and a/c/y.go, and returns its root and a writer for files under it.
+func startFolderTree(t *testing.T) (context.Context, *natsclient.Client, string, func(rel, body string)) {
+	t.Helper()
 	ctx := context.Background()
 	tc := natstest.New(t,
 		natstest.WithJetStream(),
@@ -55,27 +119,27 @@ func TestIntegration_WatchEditKeepsFolderContains(t *testing.T) {
 	write("a/one.go", "package a\n\nfunc One() {}\n")
 	write("a/b/x.go", "package b\n\nfunc X() {}\n")
 	write("a/c/y.go", "package c\n\nfunc Y() {}\n")
-
 	runPass(t, ctx, tc.Client, root, true)
-	seeded, rev1 := waitForFolderContains(t, ctx, tc.Client, "a", 0, 3)
+	return ctx, tc.Client, root, write
+}
 
-	// The watcher starts after the seed publishes, so re-apply the edit until
-	// a newer revision of folder a lands (an identical rewrite is harmless).
-	var after []string
-	for deadline, n := time.Now().Add(30*time.Second), 0; ; n++ {
-		write("a/b/x.go", fmt.Sprintf("package b\n\nfunc X() {}\n\n// edit %d\n", n))
-		if got, rev, ok := readFolderContains(ctx, tc.Client, "a"); ok && rev > rev1 {
-			after = got
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no revision of folder a newer than %d reached ENTITY_STATES", rev1)
+// untilFolderRevision applies change until folder <rel> has a revision newer
+// than after, and returns that revision's contains set. The change is
+// re-applied on every read: the watcher starts after the seed publishes, so a
+// change landing before it watches produces no event.
+func untilFolderRevision(
+	t *testing.T, ctx context.Context, client *natsclient.Client, rel string, after uint64, change func(n int),
+) []string {
+	t.Helper()
+	for deadline, n := time.Now().Add(30*time.Second), 0; time.Now().Before(deadline); n++ {
+		change(n)
+		if got, rev, ok := readFolderContains(ctx, client, rel); ok && rev > after {
+			return got
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	if !slices.Equal(after, seeded) {
-		t.Fatalf("folder a contains changed on a watch edit of a/b/x.go:\n seeded = %v\n after  = %v", seeded, after)
-	}
+	t.Fatalf("no revision of folder %q newer than %d reached ENTITY_STATES", rel, after)
+	return nil
 }
 
 // waitForFolderContains returns folder <rel>'s sorted contains objects once a

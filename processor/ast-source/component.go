@@ -82,6 +82,12 @@ type pathWatcher struct {
 	// owner map maintained by watch events if either shows up in the field.
 	foldedMu sync.Mutex
 	folded   map[string]bool
+
+	// filesMu guards files and serializes every folder and repo publish
+	// (fileset.go), so the watch goroutine and the reindex never interleave
+	// container publishes built from different sets.
+	filesMu sync.Mutex
+	files   map[string]string // root-relative path → file entity ID
 }
 
 // Component implements the ast-source processor.
@@ -480,8 +486,13 @@ func (c *Component) seedPath(ctx context.Context, pw *pathWatcher) (int, error) 
 	}
 
 	// Publish repo and folder hierarchy entities before file/symbol entities.
-	// Pass the scoped system slug so hierarchy IDs match the code entity IDs.
-	c.publishHierarchy(ctx, results, pw.scopedSystem)
+	// BuildHierarchy sets each file's parent edge; the containers come from
+	// the file set. Nothing is known to have changed on the first pass of a
+	// process, so nothing reconciles (the restart gap, semengine#730).
+	semsourceast.BuildHierarchy(results, c.authority, pw.scopedSystem)
+	pw.filesMu.Lock()
+	c.publishContainers(ctx, pw, pw.replaceFiles(results), true, false)
+	pw.filesMu.Unlock()
 
 	for _, result := range results {
 		if err := c.publishParseResult(ctx, result, pw, false); err != nil {
@@ -579,13 +590,16 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 	switch event.Operation {
 	case semsourceast.OpCreate, semsourceast.OpModify:
 		if event.Result != nil && !c.refuseFoldedFile(pw, event.Result) {
-			// Publish folder chain for new/modified files so containment
-			// edges exist even for directories created between full reindexes.
-			c.publishFolderChain(ctx, event.Path, pw.scopedSystem)
 			// The watch result never passes through BuildHierarchy, so the
-			// file's parent edge is set here to match the full index.
+			// file's parent edge is set here to match the full index. A new
+			// path republishes its ancestors with complete sets (#347).
 			if fe := event.Result.FileEntity; fe != nil {
 				fe.ContainedBy = semsourceast.FileParentID(event.Result.Path, c.authority, pw.scopedSystem)
+				pw.filesMu.Lock()
+				if pw.addFile(event.Result.Path, fe.ID) {
+					c.publishContainers(ctx, pw, []string{event.Result.Path}, false, true)
+				}
+				pw.filesMu.Unlock()
 			}
 
 			if err := c.publishParseResult(ctx, event.Result, pw, true); err != nil {
@@ -597,6 +611,11 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 		}
 	case semsourceast.OpDelete:
 		c.logger.Debug("File deleted", "path", event.Path)
+		pw.filesMu.Lock()
+		if removed := pw.removeFiles(event.Path); len(removed) > 0 {
+			c.publishContainers(ctx, pw, removed, false, true)
+		}
+		pw.filesMu.Unlock()
 		if c.deleteTriggersLifecycleRun() {
 			c.triggerLifecycleRun(ctx, pw, graph.LifecycleReasonFileDeleted)
 		}
@@ -703,8 +722,12 @@ func (c *Component) reindexPath(ctx context.Context, pw *pathWatcher) (scanned, 
 		return unchanged[r] && (!wholeFile || pw.isFolded(r.Path))
 	}))
 
-	// Re-publish hierarchy entities on reindex (idempotent — deterministic IDs).
-	c.publishHierarchy(ctx, results, pw.scopedSystem)
+	// Re-publish hierarchy entities on reindex (idempotent — deterministic
+	// IDs); the containers whose set changed since the last pass reconcile.
+	semsourceast.BuildHierarchy(results, c.authority, pw.scopedSystem)
+	pw.filesMu.Lock()
+	c.publishContainers(ctx, pw, pw.replaceFiles(results), true, true)
+	pw.filesMu.Unlock()
 
 	for _, result := range results {
 		scanned++
@@ -920,57 +943,6 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 		c.updateLastActivity()
 	}
 	return nil
-}
-
-// publishHierarchy builds and publishes repo and folder entities for a batch of parse results.
-func (c *Component) publishHierarchy(ctx context.Context, results []*semsourceast.ParseResult, project string) {
-	entities := semsourceast.BuildHierarchy(results, c.authority, project)
-	for _, entity := range entities {
-		state := entity.EntityState()
-		payload, err := payloadFromASTState(state, nil)
-		if err != nil {
-			c.logger.Warn("Invalid hierarchy entity state",
-				"id", state.ID,
-				"error", err)
-			continue
-		}
-		// shortcut: folder/repo excluded from reconcile, remove with the #347 fix
-		// (the watch path republishes them with a partial code.contains set).
-		payload.SkipReconcile = true
-		if err := c.publishEntity(ctx, payload); err != nil {
-			c.logger.Warn("Failed to publish hierarchy entity",
-				"id", entity.ID, "error", err)
-			continue
-		}
-		c.entitiesIndexed.Add(1)
-		c.distinct.Observe(state.ID)
-	}
-}
-
-// publishFolderChain publishes folder entities for a single file's ancestor directories.
-// Used during watch events to ensure containment edges exist for newly created directories.
-func (c *Component) publishFolderChain(ctx context.Context, filePath, project string) {
-	entities := semsourceast.BuildFolderChain(filePath, c.authority, project)
-	for _, entity := range entities {
-		state := entity.EntityState()
-		payload, err := payloadFromASTState(state, nil)
-		if err != nil {
-			c.logger.Warn("Invalid folder entity state",
-				"id", state.ID,
-				"error", err)
-			continue
-		}
-		// shortcut: folder/repo excluded from reconcile, remove with the #347 fix
-		// (this chain carries only part of each folder's code.contains set).
-		payload.SkipReconcile = true
-		if err := c.publishEntity(ctx, payload); err != nil {
-			c.logger.Warn("Failed to publish folder entity",
-				"id", entity.ID, "error", err)
-			continue
-		}
-		c.entitiesIndexed.Add(1)
-		c.distinct.Observe(state.ID)
-	}
 }
 
 // payloadFromASTState builds a Graphable payload from an AST entity state. ref is

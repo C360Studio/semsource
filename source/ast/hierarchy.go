@@ -23,56 +23,53 @@ func BuildHierarchy(results []*ParseResult, authority entityid.Authority, projec
 	if len(results) == 0 {
 		return nil
 	}
+	files := make(map[string]string, len(results))
+	for _, r := range results {
+		if r.FileEntity == nil {
+			continue
+		}
+		files[r.Path] = r.FileEntity.ID
+		r.FileEntity.ContainedBy = FileParentID(r.Path, authority, project)
+	}
+	return BuildHierarchyFromFiles(files, authority, project)
+}
 
+// BuildHierarchyFromFiles produces the repo entity and every folder entity
+// for a set of indexed files (root-relative path → file entity ID), each with
+// its complete Contains list: child folders and files, sorted. The repo is
+// always first, then folders shallowest first. An empty set yields the repo
+// alone, with no Contains.
+func BuildHierarchyFromFiles(files map[string]string, authority entityid.Authority, project string) []*CodeEntity {
 	now := time.Now()
 	systemSlug := entityid.SystemSlug(project)
-	repoID := buildRepoID(authority, systemSlug)
-
 	repo := &CodeEntity{
-		ID:        repoID,
+		ID:        buildRepoID(authority, systemSlug),
 		Type:      TypeRepo,
 		Name:      project,
 		IndexedAt: now,
 	}
 
-	// Collect all unique folder paths and map files to their parent folder.
 	folderPaths := make(map[string]bool)
 	filesByDir := make(map[string][]string) // dir → file entity IDs
-
-	for _, r := range results {
-		if r.FileEntity == nil {
-			continue
-		}
-		dir := filepath.Dir(r.Path)
+	for path, id := range files {
+		dir := filepath.Dir(path)
 		if dir == "." {
 			dir = ""
 		}
-		filesByDir[dir] = append(filesByDir[dir], r.FileEntity.ID)
+		filesByDir[dir] = append(filesByDir[dir], id)
 		expandAncestors(dir, folderPaths)
 	}
 
-	// Build folder entities sorted by depth (shallowest first).
 	sortedPaths := sortFolderPaths(folderPaths)
 	folders := make(map[string]*CodeEntity, len(sortedPaths))
-
 	for _, p := range sortedPaths {
 		folders[p] = newFolderEntity(authority, systemSlug, p, now)
 	}
-
-	// Wire containment: folder → parent, folder → children, repo → top-level.
 	wireContainment(repo, folders, sortedPaths)
-
-	// Assign files to their immediate parent (folder or repo).
-	assignFilesToParents(results, repo, folders)
-
-	// Collect files in folders to their Contains lists.
 	populateFolderFiles(folders, filesByDir)
 	populateRepoFiles(repo, filesByDir)
-
-	// Sort all Contains lists for deterministic output.
 	sortContains(repo, folders)
 
-	// Assemble return slice: repo first, then folders in depth order.
 	out := make([]*CodeEntity, 0, 1+len(folders))
 	out = append(out, repo)
 	for _, p := range sortedPaths {
@@ -81,45 +78,13 @@ func BuildHierarchy(results []*ParseResult, authority entityid.Authority, projec
 	return out
 }
 
-// BuildFolderChain returns folder entities for all ancestor directories of
-// filePath, with the top-level folder's ContainedBy set to the repo entity ID.
-// Does not return a repo entity (assumed already published during initial index).
-func BuildFolderChain(filePath string, authority entityid.Authority, project string) []*CodeEntity {
-	dir := filepath.Dir(filePath)
-	if dir == "." || dir == "" {
-		return nil
-	}
-
-	now := time.Now()
-	systemSlug := entityid.SystemSlug(project)
-	repoID := buildRepoID(authority, systemSlug)
-
-	folderPaths := make(map[string]bool)
-	expandAncestors(dir, folderPaths)
-
-	sortedPaths := sortFolderPaths(folderPaths)
-	folders := make(map[string]*CodeEntity, len(sortedPaths))
-
-	for _, p := range sortedPaths {
-		folders[p] = newFolderEntity(authority, systemSlug, p, now)
-	}
-
-	// Wire parent relationships between folders, linking top-level to repo.
-	for _, p := range sortedPaths {
-		parent := filepath.Dir(p)
-		if parent == "." || parent == "" {
-			folders[p].ContainedBy = repoID
-		} else if pf, ok := folders[parent]; ok {
-			folders[p].ContainedBy = pf.ID
-			pf.Contains = append(pf.Contains, folders[p].ID)
-		}
-	}
-
-	out := make([]*CodeEntity, 0, len(sortedPaths))
-	for _, p := range sortedPaths {
-		out = append(out, folders[p])
-	}
-	return out
+// EmptyFolder returns the folder entity for folderPath with its parent edge
+// and no Contains: what a folder left with no indexed file publishes so its
+// stale contains edges clear.
+func EmptyFolder(folderPath string, authority entityid.Authority, project string) *CodeEntity {
+	f := newFolderEntity(authority, entityid.SystemSlug(project), folderPath, time.Now())
+	f.ContainedBy = FileParentID(folderPath, authority, project)
+	return f
 }
 
 // FileParentID returns the ID of the folder or repo that directly contains the
@@ -195,24 +160,6 @@ func wireContainment(repo *CodeEntity, folders map[string]*CodeEntity, sortedPat
 		} else if pf, ok := folders[parent]; ok {
 			folders[p].ContainedBy = pf.ID
 			pf.Contains = append(pf.Contains, folders[p].ID)
-		}
-	}
-}
-
-// assignFilesToParents sets ContainedBy on each file entity.
-func assignFilesToParents(results []*ParseResult, repo *CodeEntity, folders map[string]*CodeEntity) {
-	for _, r := range results {
-		if r.FileEntity == nil {
-			continue
-		}
-		dir := filepath.Dir(r.Path)
-		if dir == "." {
-			dir = ""
-		}
-		if f, ok := folders[dir]; ok {
-			r.FileEntity.ContainedBy = f.ID
-		} else {
-			r.FileEntity.ContainedBy = repo.ID
 		}
 	}
 }
