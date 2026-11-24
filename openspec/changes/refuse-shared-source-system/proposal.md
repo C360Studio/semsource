@@ -1,6 +1,6 @@
 # Refuse sources that would share an entity-ID system
 
-Approved-by: Coby Leuschke (2026-11-24) sha256:fdd5abe32728
+Approved-by:
 
 Track: design (a new admission rule at three entry points, and a changed requirement in `entity-publish-integrity`).
 
@@ -30,9 +30,11 @@ Ruling: refuse at config time. Do not put the root into identity. The reproducti
 
 - **A source admission rule.** A set of sources is refused when two roots of one kind (ast-source, doc-source) would
   mint IDs under one org and system. The error names both sources and asks for a distinct `project` (or `version`) for
-  each. The one allowed exception is submodule pins: boot-time discovery expands the same submodule at the same gitlink
-  SHA from two parents into byte-identical sources (`git-submodule-ingestion` "A shared submodule dedups across
-  consumers"), so they carry the same content by construction.
+  each. The one allowed exception is a collision that includes a submodule pin. Boot-time
+  discovery expands the same submodule at the same gitlink SHA from two parents into byte-identical sources
+  (`git-submodule-ingestion` "A shared submodule dedups across consumers"), and the quickstart and ADR-0012 register the
+  same code standalone at the pin's project and version so it merges with the pin. A source that matches a pin's pinned
+  identity therefore shares its IDs; any other collision is refused.
 - **Checked at every entry point that admits sources:**
   - `semsource validate` and the `Config.Validate` call at the start of `semsource run`, over the file's `sources`;
   - boot, over the full set it is about to spawn: file sources, desired-manifest sources and discovered submodule pins;

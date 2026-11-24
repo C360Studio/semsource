@@ -34,16 +34,24 @@ already reads systems from component configs this way and is the model.
 A re-add of the same source produces the same instance name. `AddWithChecker` already treats that as an update, not a
 second writer, so specs whose instance name is already registered are left out of the comparison.
 
-### D2 — Submodule pins are the only exception
+### D2 — A collision that includes a submodule pin is admitted
 
 `subwatch.pinEntries` gives every parent that links one submodule at one SHA the same project and version on purpose,
 and marks each entry with an `InstanceSuffix` so the instances stay distinct. The pins carry the same content, so their
-statement sets agree. A collision is allowed only when every root in it is a submodule pin, which boot can tell from
-`InstanceSuffix`. A pin that collides with an operator-declared source is still refused: that is a second writer with
-different content.
+statement sets agree. The multi-source quickstart (`docs/QUICKSTART.md`), the `onboarding-quickstart` scenario
+"Shared code dedups across sources" and ADR-0012 also register the same code **standalone**, at the pin's project and
+version, and document that it merges with the pin into one entity.
 
-This exception only arises at boot. The file has no pins, and `add_source` does not expand submodules: `repoSpecs`
-builds no pins, and only boot-time discovery calls `subwatch.Expand`.
+So a collision is admitted when at least one root in it is a submodule pin. For ast-source, an equal system means equal
+project and version (`ScopedSystemSlug`), and a pin's version is its gitlink SHA. For doc-source, the pin's project
+carries the SHA (`<slug>-<sha12>`). Either way, a standalone source that collides with a pin has declared the pin's
+exact pinned identity, which is a claim of the same content. Every other collision is refused, including two
+operator-declared sources at one project and version with no pin among them. (Owner ruling, 2026-11-24, after the
+first approval.)
+
+Boot recognises pins from the discovery record (kind `submodule`). A runtime `add_source` of a standalone source at a
+pin's identity is judged the same way against the pins already registered. The file has no pins, so `semsource
+validate` refuses only operator-declared collisions.
 
 ### D3 — One check function, called from four places
 
@@ -92,6 +100,7 @@ from reconcile and watch-event container publishes is removed in the same delta.
   - a path-derived project that matches an explicit one collides;
   - doc multi-root under one project collides;
   - two pins at one SHA are allowed;
-  - a pin plus an operator source collides;
+  - a pin plus a standalone source at the pin's project and version is allowed;
+  - two operator sources at one project and version, with no pin, collide;
   - re-adding the same instance does not.
 - The existing #347 folder and reconcile tests keep passing after `sharedSystem` is removed.

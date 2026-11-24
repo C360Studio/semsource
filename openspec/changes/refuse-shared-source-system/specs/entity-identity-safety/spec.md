@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Sources that would share an entity-ID system are refused
-SemSource SHALL refuse a source set in which two ast-source roots, or two doc-source roots, would mint entity IDs under the same org and system, unless every root in the collision is a submodule pin of the same submodule at the same gitlink SHA. The refusal MUST happen before any colliding component publishes: at `semsource validate` and `semsource run` over the file's sources, at boot over the full set to be spawned, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
+SemSource SHALL refuse a source set in which two ast-source roots, or two doc-source roots, would mint entity IDs under the same org and system, unless the collision includes a submodule pin, whose pinned project and version every other root in it then declares. The refusal MUST happen before any colliding component publishes: at `semsource validate` and `semsource run` over the file's sources, at boot over the full set to be spawned, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
 
 #### Scenario: Two ast sources under one project are refused
 - **GIVEN** a config with ast sources at `./a` and `./b`, both with `project: svc` and no version
@@ -29,3 +29,14 @@ SemSource SHALL refuse a source set in which two ast-source roots, or two doc-so
 - **GIVEN** two parent repos that each link the same submodule at the same gitlink SHA
 - **WHEN** boot discovery expands both into submodule pins
 - **THEN** no collision is reported and both pins start
+
+#### Scenario: A standalone source at a pin's identity shares the pin's IDs
+- **GIVEN** a parent repo whose submodule is pinned at gitlink SHA `b1256521ee39`
+- **AND** a standalone ast source for the same code with the pin's project and `version: b1256521ee39`
+- **WHEN** boot plans both
+- **THEN** no collision is reported and both write the same entity IDs
+
+#### Scenario: Two operator sources at one project and version still collide
+- **GIVEN** ast sources at `./a` and `./b`, both with `project: lib` and `version: 1.0`, and no submodule pin
+- **WHEN** the config is validated
+- **THEN** it fails with an error naming both sources

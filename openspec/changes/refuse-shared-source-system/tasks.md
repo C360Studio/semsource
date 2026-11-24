@@ -4,6 +4,8 @@
 
 - [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-24, sha256:fdd5abe32728); line entered by claude at the owner's instruction. D4 OPEN-Q answered with option (b), recorded here so the approved digest stands. Ruling: #349 comment (refuse at config time, repro in the fix's test).
 
+- [ ] 1.2 Hold: OPEN-Q re-approval after the D2 ruling (owner, 2026-11-24): a collision that includes a submodule pin is admitted, so a standalone source at a pin's project and version shares the pin's IDs (the quickstart / ADR-0012 dedup). D2 in `design.md`, the exception bullet in `proposal.md` and the spec delta were updated. The code change to `CheckSystemCollisions` waits for this approval.
+
 ## 2. Repro (before code)
 
 - [x] 2.1 Integration repro `internal/governance/shared_system_integration_test.go`, committed failing by design. Root a seeds, then root b seeds the same project, and the graph should hold both roots' files. It holds one: `main.go file entities [[…svc.golang.function.main-go-Beta]]` and `document titles [Beta]`, so root a's file and README are replaced, not merged (seeds skip reconcile, and per-predicate replace leaves the later root's set).
