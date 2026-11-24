@@ -456,3 +456,60 @@ func TestGitHandler_Watch_ClosesOnContextCancel(t *testing.T) {
 		}
 	}
 }
+
+// TestGitHandler_Watch_KeepsURLSystemSlug: a source configured with both a
+// local path and a repo URL seeds under the URL-derived system slug, so a
+// poll re-ingest after a HEAD change must mint under the same slug. Before
+// #350 the poll loop re-ingested through a path-only config and every commit,
+// author and branch ID moved to the path-derived slug — a parallel entity set.
+func TestGitHandler_Watch_KeepsURLSystemSlug(t *testing.T) {
+	repoDir := initTempRepo(t)
+	cfg := githandler.DefaultConfig()
+	cfg.PollInterval = 50 * time.Millisecond
+	cfg.Authority = testAuthority("acme")
+	h := githandler.New(cfg)
+	src := &srcCfg{typ: "git", path: repoDir, url: "https://github.com/acme/widgets.git", watch: true}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	seed, err := h.IngestEntityStates(ctx, src, cfg.Authority)
+	if err != nil || len(seed) == 0 {
+		t.Fatalf("seed IngestEntityStates() = %d states, err %v", len(seed), err)
+	}
+	want := systemOf(t, seed[0].ID)
+
+	ch, err := h.Watch(ctx, src)
+	if err != nil {
+		t.Fatalf("Watch() error = %v", err)
+	}
+	commit := time.NewTicker(200 * time.Millisecond)
+	defer commit.Stop()
+	for n := 0; ; n++ {
+		select {
+		case ev := <-ch:
+			if len(ev.EntityStates) == 0 {
+				t.Fatal("watch event carries no EntityStates")
+			}
+			for _, s := range ev.EntityStates {
+				if got := systemOf(t, s.ID); got != want {
+					t.Errorf("poll state %q has system %q, seed system %q", s.ID, got, want)
+				}
+			}
+			return
+		case <-commit.C:
+			addCommit(t, repoDir, fmt.Sprintf("url-%d.go", n), "watch trigger commit")
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for a watch event after new commits")
+		}
+	}
+}
+
+// systemOf returns the system segment of a 6-part entity ID.
+func systemOf(t *testing.T, id string) string {
+	t.Helper()
+	parts := strings.Split(id, ".")
+	if len(parts) != 6 {
+		t.Fatalf("entity ID %q is not 6-part", id)
+	}
+	return parts[2]
+}
