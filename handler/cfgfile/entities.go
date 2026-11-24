@@ -42,8 +42,11 @@ type goModuleEntity struct {
 	DepIDs []string
 }
 
-func newGoModuleEntity(authority entityid.Authority, modulePath, goVersion, filePath, system string, rel string, indexedAt time.Time) *goModuleEntity {
+func newGoModuleEntity(authority entityid.Authority, modulePath, goVersion, filePath, system, rel string, indexedAt time.Time) *goModuleEntity {
 	instance := slugify(modulePath)
+	if instance == "" {
+		instance = "module"
+	}
 	return &goModuleEntity{
 		ID:         authority.Build(system, "config", "gomod", declared(instance, rel)),
 		ModulePath: modulePath,
@@ -94,7 +97,7 @@ type goDependencyEntity struct {
 	IndexedAt time.Time
 }
 
-func newGoDependencyEntity(authority entityid.Authority, depPath, version string, indirect bool, system string, rel string, indexedAt time.Time) *goDependencyEntity {
+func newGoDependencyEntity(authority entityid.Authority, depPath, version string, indirect bool, system, rel string, indexedAt time.Time) *goDependencyEntity {
 	instance := contentHashShort(depPath + "@" + version)
 	return &goDependencyEntity{
 		ID:        authority.Build(system, "config", "dependency", declared(instance, rel)),
@@ -142,7 +145,7 @@ type npmPackageEntity struct {
 	DepIDs []string
 }
 
-func newNPMPackageEntity(authority entityid.Authority, name, version, filePath, system string, rel string, indexedAt time.Time) *npmPackageEntity {
+func newNPMPackageEntity(authority entityid.Authority, name, version, filePath, system, rel string, indexedAt time.Time) *npmPackageEntity {
 	instance := slugify(name)
 	if instance == "" {
 		instance = "package"
@@ -196,7 +199,7 @@ type npmDependencyEntity struct {
 	IndexedAt time.Time
 }
 
-func newNPMDependencyEntity(authority entityid.Authority, name, version string, dev bool, system string, rel string, indexedAt time.Time) *npmDependencyEntity {
+func newNPMDependencyEntity(authority entityid.Authority, name, version string, dev bool, system, rel string, indexedAt time.Time) *npmDependencyEntity {
 	instance := contentHashShort(name + "@" + version)
 	kind := "npm-prod"
 	if dev {
@@ -240,7 +243,7 @@ type dockerImageEntity struct {
 	IndexedAt    time.Time
 }
 
-func newDockerImageEntity(authority entityid.Authority, image string, exposedPorts []string, filePath, system string, rel string, indexedAt time.Time) *dockerImageEntity {
+func newDockerImageEntity(authority entityid.Authority, image string, exposedPorts []string, filePath, system, rel string, indexedAt time.Time) *dockerImageEntity {
 	instance := slugify(image)
 	return &dockerImageEntity{
 		ID:           authority.Build(system, "config", "image", declared(instance, rel)),
@@ -296,7 +299,7 @@ type mavenProjectEntity struct {
 	ModuleIDs []string
 }
 
-func newMavenProjectEntity(authority entityid.Authority, groupID, artifactID, version, packaging, filePath, system string, rel string, indexedAt time.Time) *mavenProjectEntity {
+func newMavenProjectEntity(authority entityid.Authority, groupID, artifactID, version, packaging, filePath, system, rel string, indexedAt time.Time) *mavenProjectEntity {
 	instance := slugify(groupID + ":" + artifactID)
 	if instance == "" {
 		instance = "project"
@@ -364,7 +367,7 @@ type mavenDependencyEntity struct {
 	IndexedAt time.Time
 }
 
-func newMavenDependencyEntity(authority entityid.Authority, groupID, artifactID, version, scope, system string, rel string, indexedAt time.Time) *mavenDependencyEntity {
+func newMavenDependencyEntity(authority entityid.Authority, groupID, artifactID, version, scope, system, rel string, indexedAt time.Time) *mavenDependencyEntity {
 	instance := contentHashShort(groupID + ":" + artifactID + "@" + version)
 	return &mavenDependencyEntity{
 		ID:        authority.Build(system, "config", "dependency", declared(instance, rel)),
@@ -416,7 +419,7 @@ type pomModuleEntity struct {
 	IndexedAt time.Time
 }
 
-func newPOMModuleEntity(authority entityid.Authority, name, filePath, system string, rel string, indexedAt time.Time) *pomModuleEntity {
+func newPOMModuleEntity(authority entityid.Authority, name, filePath, system, rel string, indexedAt time.Time) *pomModuleEntity {
 	instance := slugify(name)
 	if instance == "" {
 		instance = contentHashShort(name)
@@ -460,7 +463,7 @@ type gradleProjectEntity struct {
 	DepIDs []string
 }
 
-func newGradleProjectEntity(authority entityid.Authority, name, filePath, system string, rel string, indexedAt time.Time) *gradleProjectEntity {
+func newGradleProjectEntity(authority entityid.Authority, name, filePath, system, rel string, indexedAt time.Time) *gradleProjectEntity {
 	instance := slugify(name)
 	if instance == "" {
 		instance = "project"
@@ -513,7 +516,7 @@ type gradleDependencyEntity struct {
 	IndexedAt     time.Time
 }
 
-func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, system string, rel string, indexedAt time.Time) *gradleDependencyEntity {
+func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, system, rel string, indexedAt time.Time) *gradleDependencyEntity {
 	instance := contentHashShort(group + ":" + name + "@" + version)
 	return &gradleDependencyEntity{
 		ID:            authority.Build(system, "config", "dependency", declared(instance, rel)),
@@ -661,7 +664,12 @@ func (h *ConfigHandler) gradleEntityStates(content []byte, path, system, rel str
 		return nil
 	}
 
+	// A root-level build.gradle is named for its source (the project
+	// override, else the root's slug), never the checkout folder (#348).
 	dirName := filepath.Base(filepath.Dir(path))
+	if filepath.Dir(rel) == "." {
+		dirName = system
+	}
 	proj := newGradleProjectEntity(authority, dirName, path, system, rel, now)
 
 	var depStates []*handler.EntityState

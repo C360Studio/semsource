@@ -159,3 +159,35 @@ func TestIngestEntityStates_IDsDoNotDependOnCheckoutLocation(t *testing.T) {
 		}
 	}
 }
+
+// spec: entity-identity-safety / Config-file entities are keyed by their declaring file
+func TestIngestEntityStates_ProjectOverrideIgnoresCheckoutFolderName(t *testing.T) {
+	// With a project override the checkout folder's own name must not reach
+	// any ID: a root-level build.gradle used to be named after it.
+	ids := func(folder string) []string {
+		root := filepath.Join(t.TempDir(), folder)
+		writeTree(t, root, map[string]string{
+			"build.gradle": "dependencies {\n    implementation 'junit:junit:4.13'\n}\n",
+		})
+		states, err := cfgfile.New(&cfgfile.Config{Project: "osh-core"}).IngestEntityStates(context.Background(),
+			&stubSourceConfig{sourceType: "config", path: root}, testAuthority("acme"))
+		if err != nil {
+			t.Fatalf("IngestEntityStates: %v", err)
+		}
+		var out []string
+		for _, s := range states {
+			out = append(out, s.ID)
+		}
+		sort.Strings(out)
+		return out
+	}
+	first, second := ids("osh-core"), ids("osh-core-2")
+	if len(first) == 0 || len(first) != len(second) {
+		t.Fatalf("entity counts: %d vs %d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Errorf("ID depends on the checkout folder name: %s vs %s", first[i], second[i])
+		}
+	}
+}

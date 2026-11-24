@@ -20,4 +20,4 @@
 
 - [x] 4.1 `task lint`, `go test ./...`, `go test -tags=integration ./handler/cfgfile/...`, `task spec:check`.
 - [ ] 4.2 `graph-event-reviewer` pass; review via `ateam review request`; archive before ready.
-- [ ] 4.3 File the follow-up: cfgfile opts into the #336 reconcile and the `idSpace` refusal.
+- [x] 4.3 Filed https://github.com/C360Studio/semsource/issues/375 (cross-root and within-manifest collisions; prerequisite for the #336 opt-in). graph-event-reviewer findings: root-level Gradle name and nameless go.mod fixed here.

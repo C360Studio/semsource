@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Config-file entities are keyed by their declaring file
-The config-file source SHALL include the declaring manifest's path, relative to the source root, in the instance of every entity it mints, and MUST NOT let two manifests write one entity ID. The instance SHALL NOT depend on the checkout's absolute location.
+The config-file source SHALL include the declaring manifest's path, relative to the source root, in the instance of every entity it mints, and MUST NOT let two manifests under one source root write one entity ID. No instance SHALL depend on the checkout's location or folder name. Roots that share a system and same-coordinate declarations within one manifest are tracked by https://github.com/C360Studio/semsource/issues/375.
 
 #### Scenario: One coordinate declared by two manifests gets two IDs
 - **WHEN** `a/pom.xml` declares `org.slf4j:slf4j-api:2.0.9` with scope `test` and `b/build.gradle` declares it under `implementation`
@@ -18,4 +18,8 @@ The config-file source SHALL include the declaring manifest's path, relative to 
 
 #### Scenario: IDs do not depend on the checkout location
 - **WHEN** one tree is ingested from two different absolute checkout paths
+- **THEN** every config-file entity ID is the same in both
+
+#### Scenario: A project override hides the checkout folder name
+- **WHEN** a source with project `osh-core` is ingested from folders named `osh-core` and `osh-core-2`, each with a root-level `build.gradle`
 - **THEN** every config-file entity ID is the same in both
