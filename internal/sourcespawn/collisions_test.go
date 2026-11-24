@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,6 +45,10 @@ func TestCheckSystemCollisions(t *testing.T) {
 	checkout, sha := gitCheckout(t, "pinned")
 	other, _ := gitCheckout(t, "other")
 	pinned := sha[:12]
+	subdir := filepath.Join(checkout, "lib")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	pin := func(path, suffix string) config.SourceEntry {
 		return config.SourceEntry{Type: "ast", Path: path, Project: "github-com-acme-lib", Version: pinned, InstanceSuffix: suffix}
 	}
@@ -157,6 +163,11 @@ func TestCheckSystemCollisions(t *testing.T) {
 			name:    "a standalone checkout indexing other languages is refused",
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(checkout, "go", "python")},
 			want:    []string{"(root " + checkout + ")", checkout + " indexes [go python], pin /p1/lib indexes [go]"},
+		},
+		{
+			name:    "a subdirectory of a checkout at the pinned commit is refused",
+			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), standalone(subdir)},
+			want:    []string{"(root " + subdir + ")", subdir + " is not the top level of a checkout"},
 		},
 		{
 			name:    "a standalone root whose HEAD cannot be read is refused",

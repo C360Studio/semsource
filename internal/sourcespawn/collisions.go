@@ -243,19 +243,23 @@ func groupCollisions(ctx context.Context, roots []systemRoot) []collision {
 	return out
 }
 
-// pinDifferences says how each non-pin member differs from pin: a checkout
-// HEAD that is not the pinned SHA (or cannot be read), or, for ast, another
-// language set. Pins of one system are one gitlink SHA by construction.
+// pinDifferences says how each non-pin member differs from pin: a root that
+// is not a checkout's top level, a checkout HEAD that is not the pinned SHA
+// (or cannot be read), or, for ast, another language set. Pins of one system are one gitlink SHA by construction.
 func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) []string {
 	var out []string
 	for _, r := range members {
 		if r.pin {
 			continue
 		}
-		head, err := checkoutHead(ctx, r.root)
+		head, prefix, err := checkoutHead(ctx, r.root)
 		switch {
 		case err != nil:
 			out = append(out, fmt.Sprintf("%s HEAD unreadable, so it cannot be shown to hold pinned SHA %s: %v", r.root, pin.sha, err))
+		case prefix != "":
+			// The HEAD of an enclosing checkout says nothing about which
+			// commit's tree a subdirectory holds as the pin's content.
+			out = append(out, fmt.Sprintf("%s is not the top level of a checkout (it is %s inside one), so it is not pin %s's checkout", r.root, prefix, pin.root))
 		case pin.sha == "" || !strings.HasPrefix(head, strings.ToLower(pin.sha)):
 			out = append(out, fmt.Sprintf("%s HEAD is %s, not pinned SHA %q of %s", r.root, head, pin.sha, pin.root))
 		}
@@ -267,19 +271,26 @@ func pinDifferences(ctx context.Context, pin systemRoot, members []systemRoot) [
 }
 
 // checkoutHead is the full SHA of the commit checked out at root, as
-// handler/git headCommitSHA reads it.
-func checkoutHead(ctx context.Context, root string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD")
+// handler/git headCommitSHA reads it, and root's path inside that checkout
+// (git rev-parse --show-prefix): empty when root is the checkout's top level.
+func checkoutHead(ctx context.Context, root string) (head, prefix string, err error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-prefix", "--verify", "HEAD")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
-			return "", fmt.Errorf("git rev-parse HEAD: %s", strings.TrimSpace(string(exit.Stderr)))
+			return "", "", fmt.Errorf("git rev-parse HEAD: %s", strings.TrimSpace(string(exit.Stderr)))
 		}
-		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+		return "", "", fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	// One line per argument, in order: the prefix (empty at the top
+	// level), then the SHA.
+	lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	if len(lines) != 2 {
+		return "", "", fmt.Errorf("git rev-parse HEAD: unexpected output %q", out)
+	}
+	return strings.TrimSpace(lines[1]), strings.TrimSpace(lines[0]), nil
 }
 
 func collisionError(found []collision) error {
