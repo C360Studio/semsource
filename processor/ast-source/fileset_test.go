@@ -32,6 +32,11 @@ func TestFileSet(t *testing.T) {
 		t.Error("addFile of a new path reported no change")
 	}
 
+	// A watch-created file folding onto an indexed one's ID is not added.
+	if pw.addFile("a-one.go", "id-a/one.go") {
+		t.Error("addFile of a path whose ID another path holds reported a change")
+	}
+
 	// A directory delete removes everything under it and nothing that only
 	// shares its name as a prefix (a/bc.go).
 	removed := pw.removeFiles("a/b")

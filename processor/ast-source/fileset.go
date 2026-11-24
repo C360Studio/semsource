@@ -2,7 +2,6 @@ package astsource
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,10 +13,12 @@ import (
 // folder is always published from the whole set, never from one file, so its
 // code.structure.contains set is complete.
 //
-// shortcut: a file created after a reindex walk passed its directory but
-// before replaceFiles drops out of the set until its next event or the next
-// pass (its file entity is still published); upgrade to a merge keyed on
-// event time if a folder edge is seen missing between passes.
+// shortcut: a reindex replaces the set with what its walk saw, so a watch
+// event landing during the walk is undone until the next event or pass: a
+// file created after the walk passed its directory loses its folder edge
+// (reconciled away), and a file deleted after the walk parsed it regains one
+// (reconciled back, to a file the lifecycle pass then marks stale). Upgrade
+// to a merge keyed on event time if either is seen between passes.
 
 // replaceFiles makes the set exactly the results' file entities and returns
 // the paths added or removed. The caller holds filesMu.
@@ -43,11 +44,18 @@ func (pw *pathWatcher) replaceFiles(results []*semsourceast.ParseResult) []strin
 	return changed
 }
 
-// addFile records one indexed file and reports whether the set changed. The
-// caller holds filesMu.
+// addFile records one indexed file and reports whether the set changed. A
+// file whose entity ID another indexed path already holds (a fold the last
+// full pass did not see) is not added, so no container lists the ID twice.
+// The caller holds filesMu.
 func (pw *pathWatcher) addFile(path, id string) bool {
 	if old, ok := pw.files[path]; ok && old == id {
 		return false
+	}
+	for p, other := range pw.files {
+		if other == id && p != path {
+			return false
+		}
 	}
 	if pw.files == nil {
 		pw.files = make(map[string]string)
@@ -74,9 +82,10 @@ func (pw *pathWatcher) removeFiles(path string) []string {
 // whole file set. With all, every container is published (a full pass);
 // otherwise only the repo and the ancestors of changed. Reconcile applies
 // only to the repo and the ancestors of changed, and never on a shared system
-// (#349). An ancestor left with no indexed file whose directory still exists
-// is published with no contains, so its stale edges clear; a removed
-// directory is the lifecycle pass's. The caller holds filesMu.
+// (#349). An ancestor left with no indexed file is published with no
+// contains, so its stale edges clear, whether or not its directory still
+// exists: the lifecycle pass never judges containers (they carry no owner
+// fact), so nothing else would clear them. The caller holds filesMu.
 func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile bool) {
 	targets := make(map[string]bool)
 	if len(changed) > 0 {
@@ -99,9 +108,6 @@ func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, chan
 		if dir == "" {
 			continue
 		}
-		if info, err := os.Stat(filepath.Join(pw.root, dir)); err != nil || !info.IsDir() {
-			continue
-		}
 		c.publishContainer(ctx, semsourceast.EmptyFolder(dir, c.authority, pw.scopedSystem), pw.sharedSystem || !reconcile)
 	}
 }
@@ -121,4 +127,17 @@ func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.C
 	}
 	c.entitiesIndexed.Add(1)
 	c.distinct.Observe(state.ID)
+}
+
+// watchContainers applies one watch event's change to the file set and, when
+// it changed, republishes the repo and the changed path's ancestors. A root
+// sharing its system with another (#349) only updates the set: its
+// containers hold the other root's children too, which its set cannot see,
+// so a watch publish would drop them; its full passes still publish.
+func (c *Component) watchContainers(ctx context.Context, pw *pathWatcher, change func() []string) {
+	pw.filesMu.Lock()
+	defer pw.filesMu.Unlock()
+	if changed := change(); len(changed) > 0 && !pw.sharedSystem {
+		c.publishContainers(ctx, pw, changed, false, true)
+	}
 }

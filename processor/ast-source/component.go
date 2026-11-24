@@ -491,7 +491,9 @@ func (c *Component) seedPath(ctx context.Context, pw *pathWatcher) (int, error) 
 	// process, so nothing reconciles (the restart gap, semengine#730).
 	semsourceast.BuildHierarchy(results, c.authority, pw.scopedSystem)
 	pw.filesMu.Lock()
-	c.publishContainers(ctx, pw, pw.replaceFiles(results), true, false)
+	if changed := pw.replaceFiles(results); len(results) > 0 {
+		c.publishContainers(ctx, pw, changed, true, false)
+	}
 	pw.filesMu.Unlock()
 
 	for _, result := range results {
@@ -595,11 +597,12 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 			// path republishes its ancestors with complete sets (#347).
 			if fe := event.Result.FileEntity; fe != nil {
 				fe.ContainedBy = semsourceast.FileParentID(event.Result.Path, c.authority, pw.scopedSystem)
-				pw.filesMu.Lock()
-				if pw.addFile(event.Result.Path, fe.ID) {
-					c.publishContainers(ctx, pw, []string{event.Result.Path}, false, true)
-				}
-				pw.filesMu.Unlock()
+				c.watchContainers(ctx, pw, func() []string {
+					if pw.addFile(event.Result.Path, fe.ID) {
+						return []string{event.Result.Path}
+					}
+					return nil
+				})
 			}
 
 			if err := c.publishParseResult(ctx, event.Result, pw, true); err != nil {
@@ -611,11 +614,7 @@ func (c *Component) handleWatchEvent(ctx context.Context, pw *pathWatcher, event
 		}
 	case semsourceast.OpDelete:
 		c.logger.Debug("File deleted", "path", event.Path)
-		pw.filesMu.Lock()
-		if removed := pw.removeFiles(event.Path); len(removed) > 0 {
-			c.publishContainers(ctx, pw, removed, false, true)
-		}
-		pw.filesMu.Unlock()
+		c.watchContainers(ctx, pw, func() []string { return pw.removeFiles(event.Path) })
 		if c.deleteTriggersLifecycleRun() {
 			c.triggerLifecycleRun(ctx, pw, graph.LifecycleReasonFileDeleted)
 		}

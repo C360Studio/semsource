@@ -26,6 +26,8 @@
 - [x] 5.2 Integration: a watch create of `a/new.go` adds it to folder `a`; a watch delete of `a/c/y.go` removes `a/c` from `a` and clears `a/c`'s `contains`.
 - [x] 5.3 `task lint`, `go test -race ./...`, `go test -race -tags=integration ./processor/ast-source/ ./internal/governance/ ./source/ast/`.
 
+- [x] 5.4 graph-event-reviewer (approve with warnings, at 8e219d4). Fixed: W1 the emptied folder of a deleted directory is now cleared (no stat gate; containers carry no owner fact, so the lifecycle pass never judges them), with a directory-delete step in the delete test; W2 the D4 shortcut names both directions; W3 shared-system roots publish no container from watch events (spec carve-out); S1 a watch fold onto an indexed ID is not added; S2 an empty seed publishes no repo. S3 (filesMu held across a full container publish) is accepted per D4. D2/D4 amended, so re-approval is needed.
+
 ## 6. Land
 
 - [ ] 6.1 Review (`ateam review request`), plus `graph-event-reviewer` on the watch path.

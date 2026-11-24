@@ -85,6 +85,21 @@ func TestIntegration_WatchDeleteRemovesFromFolder(t *testing.T) {
 	if len(emptied) != 0 {
 		t.Fatalf("folder a/c still contains %v after its only file was deleted", emptied)
 	}
+
+	// A whole-directory delete clears the gone folder's edges too: the
+	// lifecycle pass never judges containers, so nothing else would.
+	_, rev2, _ := readFolderContains(ctx, client, "a")
+	_, revB, _ := readFolderContains(ctx, client, "a-b")
+	after = untilFolderRevision(t, ctx, client, "a", rev2, func(int) {
+		_ = os.RemoveAll(filepath.Join(root, "a/b"))
+	})
+	want = slices.DeleteFunc(want, func(id string) bool { return strings.HasSuffix(id, ".folder.a-b") })
+	if !slices.Equal(after, want) {
+		t.Fatalf("folder a after deleting directory a/b = %v, want %v", after, want)
+	}
+	if gone := untilFolderRevision(t, ctx, client, "a-b", revB, func(int) {}); len(gone) != 0 {
+		t.Fatalf("folder a/b still contains %v after its directory was deleted", gone)
+	}
 }
 
 // startFolderTree starts graph-ingest and a watching ast-source over a/one.go,

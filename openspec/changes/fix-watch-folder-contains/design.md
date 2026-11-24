@@ -40,7 +40,11 @@ deleted.
 
 When a watch event changes the set, ast-source rebuilds from the whole set and publishes the repo and each ancestor
 folder of the event's path. An ancestor missing from the rebuild (no indexed file left under it) is published once with
-its name, path and `belongs-to` edge and no `contains`. The rebuild is O(files) per changing event. Modifies of known
+its name, path and `belongs-to` edge and no `contains`, whether or not its directory still exists. Containers carry no
+lifecycle owner fact, so the lifecycle pass never judges them and nothing else would clear their edges. A watch-created
+file whose entity ID another indexed path already holds (a fold the last full pass did not see) is not added to the set.
+A root with `sharedSystem` (#349) updates its set on watch events but publishes no container from them: its containers
+also hold the other root's children, which its set cannot see. Its full passes still publish, as they do today. The rebuild is O(files) per changing event. Modifies of known
 paths, the common case, cost nothing.
 
 ### D3. Reconcile follows the existing known-changed rule
@@ -58,9 +62,10 @@ changed to match.
 ### D4. Watch and reindex race on the set
 
 The watch goroutine and the reindex goroutine both write the set. The mutex keeps the map consistent, and each
-writer's publish happens under it, so publishes for the set never interleave. A file created after the reindex walk has
-passed its directory, but before the reindex replaces the set, is dropped from the set until the next pass or its next
-event. The file itself is still published by its watch event. The same window exists today for file entities. It is
+writer's publish happens under it, so publishes for the set never interleave. A watch event that lands during a reindex walk is undone
+until the next event or pass. A file created after the walk passed its directory loses its folder edge (reconciled
+away). A file deleted after the walk parsed it regains one (reconciled back, to a file the lifecycle pass then marks
+stale). The file entity itself is published as before. The same window exists today for file entities. It is
 tagged `// shortcut:` with that limit.
 
 ## Risks
