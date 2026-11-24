@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Sources that would share an entity-ID system are refused
-SemSource SHALL refuse a source set in which two ast-source roots, or two document roots (doc-source paths and objectstore-source buckets, which mint one `web` document ID space), would mint entity IDs under the same org and system, unless the collision includes a submodule pin and every root in it indexes the same languages, and every non-pin root in it declares the pin's project and version and is the top level of a checkout whose HEAD is the pinned SHA. Two sources that build one component instance from different roots SHALL be refused whatever their systems, and a runtime add SHALL NOT re-enable a name that boot discovery owns from a different root. The refusal MUST happen before any colliding component publishes or any colliding configuration is written: at `semsource validate` and `semsource run` over the file's sources, at boot over the retained and discovered sets before discovery writes them, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
+SemSource SHALL refuse a source set in which two ast-source roots, or two document roots (doc-source paths and objectstore-source buckets, which mint one `web` document ID space), would mint entity IDs under the same org and system, unless the collision includes a submodule pin and every root in it has the same parse scope (languages, excludes and vendored-JS indexing), and every non-pin root in it declares the pin's project and version and is the top level of a checkout whose HEAD is the pinned SHA. Two sources that build one component instance from different roots SHALL be refused whatever their systems, and a runtime add SHALL NOT re-enable a name that boot discovery owns from a different root. The refusal MUST happen before any colliding component publishes or any colliding configuration is written: at `semsource validate` and `semsource run` over the file's sources, at boot over the retained and discovered sets before discovery writes them, at a runtime `add_source` request, and at ast-source and doc-source component validation. The error SHALL name each colliding source and the shared system. Entity identity SHALL NOT change: the root is not added to the ID.
 
 #### Scenario: Two ast sources under one project are refused
 - **GIVEN** a config with ast sources at `./a` and `./b`, both with `project: svc` and no version
@@ -81,3 +81,14 @@ SemSource SHALL refuse a source set in which two ast-source roots, or two docume
 - **GIVEN** an object-store source for bucket `b-x` and another for bucket `b` with prefix `x`
 - **WHEN** the config is validated
 - **THEN** it fails with an error naming both roots and instance `objectstore-source-b-x`
+
+#### Scenario: Two discovered pins that build one instance from different parents are refused before they merge
+- **GIVEN** two local git parents at different paths with one project, each linking the same submodule at one gitlink SHA, one indexing `go` and the other `python`
+- **WHEN** boot discovery plans both pins
+- **THEN** boot refuses, naming both pin roots, before any discovered configuration is written
+
+#### Scenario: A pin member with a different parse scope is refused
+- **GIVEN** a submodule pin and a standalone source at its identity, at the pinned HEAD with the pin's languages
+- **AND** the standalone sets `index_vendored_js: true` while the pin does not
+- **WHEN** boot plans both
+- **THEN** it fails with an error naming both sources and the differing option
