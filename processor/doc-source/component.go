@@ -123,9 +123,6 @@ type Component struct {
 	// changes is what this process last published per entity, so only a
 	// known content change reconciles (#336, D4).
 	changes changeTracker
-	// sharedRootIDs marks every publish SkipReconcile: two roots mint one
-	// entity ID (#349).
-	sharedRootIDs bool
 
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
@@ -165,15 +162,6 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
-	// shortcut: shared-project roots excluded from reconcile, remove with the #349 fix
-	// Roots under one system slug write one entity ID each, and a reconcile
-	// from one root would delete the other's statements.
-	sharedRootIDs := rootsShareIDs(config)
-	if sharedRootIDs {
-		deps.GetLogger().Info("doc-source roots share one entity-ID system; reconcile disabled (#349)",
-			"paths", config.Paths, "project", config.Project)
-	}
-
 	// A minimal handler so c.handler is never nil before Start; Start rebuilds it
 	// with the wired body store (which needs a context to attach). The live
 	// handler is the one built in Start.
@@ -197,7 +185,6 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		handler:       h,
 		sourceCfg:     sc,
 		passageCounts: make(map[string]int),
-		sharedRootIDs: sharedRootIDs,
 	}
 
 	return c, nil

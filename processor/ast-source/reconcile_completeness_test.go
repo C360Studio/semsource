@@ -320,25 +320,3 @@ func TestBodyTruncatedBetweenParseAndOffloadIsFaulted(t *testing.T) {
 		t.Fatal("no function parsed")
 	}
 }
-
-// Two roots that mint IDs in one org and system would each reconcile away
-// what the other wrote to a shared entity, so neither reconciles (#349).
-// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: Reconcile is enabled only for handlers proven to publish complete sets
-func TestRootsSharingASystemDoNotReconcile(t *testing.T) {
-	f := newFoldFixture(t)
-	rec := f.withReconcile()
-	sibling := &pathWatcher{config: f.pw.config, scopedSystem: f.pw.scopedSystem}
-	other := &pathWatcher{config: f.pw.config, scopedSystem: "other-project"}
-	markSharedSystems([]*pathWatcher{f.pw, sibling, other})
-	if !f.pw.sharedSystem || !sibling.sharedSystem || other.sharedSystem {
-		t.Fatalf("shared flags: root %v, sibling %v, other project %v; want true, true, false",
-			f.pw.sharedSystem, sibling.sharedSystem, other.sharedSystem)
-	}
-	f.seed()
-	f.write("a/b.ts", "export function changed() {}\n")
-	f.watchModify("a/b.ts")
-	f.settle()
-	if ids := rec.reconciled(); len(ids) != 0 {
-		t.Errorf("a root sharing its system reconciled %v", ids)
-	}
-}

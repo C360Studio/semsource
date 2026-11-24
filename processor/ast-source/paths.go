@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/c360studio/semsource/entityid"
 )
 
 // ResolvePaths expands glob patterns to concrete directories.
@@ -173,4 +175,24 @@ func ResolveWatchPaths(configs []WatchPathConfig) ([]ResolvedPath, error) {
 	}
 
 	return resolved, nil
+}
+
+// refuseSharedSystems refuses two resolved roots that mint IDs under one org
+// and system: a file at the same relative path in each builds one entity ID,
+// and each root replaces the other's (#349). Config.Validate refuses this
+// across configured entries; only a glob that matches several directories
+// reaches it here, after expansion. The key is the one initializeWatchers
+// gives each root's parsers.
+func refuseSharedSystems(resolved []ResolvedPath) error {
+	seen := make(map[string]string, len(resolved))
+	for _, rp := range resolved {
+		system := entityid.ScopedSystemSlug(rp.Config.Project, rp.Config.Version)
+		key := rp.Config.Org + "\x00" + system
+		if first, shared := seen[key]; shared {
+			return fmt.Errorf("watch path %q expands to %s and %s, which would share entity-ID system %q in org %q; list each directory as its own watch path with a distinct project or version",
+				rp.Config.Path, first, rp.AbsPath, system, rp.Config.Org)
+		}
+		seen[key] = rp.AbsPath
+	}
+	return nil
 }

@@ -89,7 +89,7 @@ func TestPlanContainers(t *testing.T) {
 	}
 
 	t.Run("a watch delete reconciles the repo and ancestors and empties the emptied", func(t *testing.T) {
-		got := planned(planContainers(files("a/one.go", "a/b/x.go"), []string{"a/c/y.go"}, false, true, false, auth, "proj"))
+		got := planned(planContainers(files("a/one.go", "a/b/x.go"), []string{"a/c/y.go"}, false, true, auth, "proj"))
 		want := []string{":reconcile:1", "a:reconcile:2", "a/c:reconcile:0"}
 		if !slices.Equal(got, want) {
 			t.Fatalf("plan = %v, want %v", got, want)
@@ -99,7 +99,7 @@ func TestPlanContainers(t *testing.T) {
 	// a-b and a/b both sanitize to folder ID ...folder.a-b (codex review P1).
 	for name, all := range map[string]bool{"watch": false, "reindex": true} {
 		t.Run(name+" delete never empties a live colliding folder", func(t *testing.T) {
-			plan := planContainers(files("a/b/two.go"), []string{"a-b/one.go"}, all, true, false, auth, "proj")
+			plan := planContainers(files("a/b/two.go"), []string{"a-b/one.go"}, all, true, auth, "proj")
 			for _, p := range plan {
 				if strings.HasSuffix(p.entity.ID, ".folder.a-b") && len(p.entity.Contains) == 0 {
 					t.Fatalf("plan %v empties folder a-b, which a/b still holds", planned(plan))
@@ -113,22 +113,14 @@ func TestPlanContainers(t *testing.T) {
 
 	t.Run("two live folders sharing an ID: a watch event writes neither, a full pass never reconciles", func(t *testing.T) {
 		set := files("a-b/one.go", "a/b/two.go")
-		if got := planned(planContainers(set, []string{"a/b/two.go"}, false, true, false, auth, "proj")); slices.ContainsFunc(got, func(p string) bool {
+		if got := planned(planContainers(set, []string{"a/b/two.go"}, false, true, auth, "proj")); slices.ContainsFunc(got, func(p string) bool {
 			return strings.HasPrefix(p, "a-b:") || strings.HasPrefix(p, "a/b:")
 		}) {
 			t.Errorf("watch plan %v writes a colliding folder", got)
 		}
-		for _, p := range planned(planContainers(set, []string{"a/b/two.go"}, true, true, false, auth, "proj")) {
+		for _, p := range planned(planContainers(set, []string{"a/b/two.go"}, true, true, auth, "proj")) {
 			if (strings.HasPrefix(p, "a-b:") || strings.HasPrefix(p, "a/b:")) && !strings.Contains(p, ":skip:") {
 				t.Errorf("full-pass plan reconciles colliding folder %s", p)
-			}
-		}
-	})
-
-	t.Run("a shared system never reconciles", func(t *testing.T) {
-		for _, p := range planContainers(files("a/one.go"), []string{"a/c/y.go"}, true, true, true, auth, "proj") {
-			if !p.skipReconcile {
-				t.Errorf("shared system planned a reconcile of %s", p.entity.ID)
 			}
 		}
 	})

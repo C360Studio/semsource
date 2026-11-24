@@ -57,9 +57,6 @@ type pathWatcher struct {
 	parsers      map[string]semsourceast.FileParser // language → parser instance
 	routes       map[string]string                  // file extension → language (see routing.go)
 	excludes     map[string]bool                    // set of excluded directory names
-	// sharedSystem is set when another root mints IDs in the same org and
-	// system, so the two can write one entity ID with different sets (#349).
-	sharedSystem bool
 
 	// parseMu serializes ParseFile across this path's parsers. Parser instances
 	// carry per-file state (the tree-sitter parser, and the language import-binding
@@ -269,6 +266,10 @@ func (c *Component) initializeWatchers() error {
 	if err != nil {
 		return err
 	}
+	if err := refuseSharedSystems(resolved); err != nil {
+		// Retrying cannot change what the glob matched into one system.
+		return retry.NonRetryable(err)
+	}
 
 	for _, rp := range resolved {
 		// Check that the path is ready — not just that it exists.
@@ -334,8 +335,6 @@ func (c *Component) initializeWatchers() error {
 	if len(c.watchers) == 0 {
 		return fmt.Errorf("no valid watch paths configured")
 	}
-	markSharedSystems(c.watchers)
-
 	return nil
 }
 
@@ -390,6 +389,9 @@ func (c *Component) runSeed(ctx context.Context) error {
 	// clone is still in progress (repo expansion pattern).
 	err := retry.Do(ctx, retry.Persistent(), func() error {
 		initErr := c.initializeWatchers()
+		if retry.IsNonRetryable(initErr) {
+			return initErr // a refused configuration, not a path still on its way
+		}
 		if initErr != nil {
 			// Bounded by retry.Persistent (~30 attempts), but a source that never
 			// reaches its paths seeds nothing at all — surface it once rather than
@@ -935,8 +937,7 @@ func (c *Component) publishParseResult(ctx context.Context, result *semsourceast
 		if err != nil {
 			return fmt.Errorf("invalid AST entity state %s: %w", state.ID, err)
 		}
-		// shortcut: shared-project roots excluded from reconcile, remove with the #349 fix
-		payload.SkipReconcile = !reconcile || body.faulted || pw.sharedSystem
+		payload.SkipReconcile = !reconcile || body.faulted
 		if err := c.publishEntity(ctx, payload); err != nil {
 			return fmt.Errorf("publish entity %s: %w", state.ID, err)
 		}
@@ -1253,19 +1254,5 @@ func (c *Component) DataFlow() component.FlowMetrics {
 		BytesPerSecond:    0,
 		ErrorRate:         0,
 		LastActivity:      c.getLastActivity(),
-	}
-}
-
-// markSharedSystems flags every root whose org and system another root also
-// uses: each would reconcile away the statements the other wrote to a shared
-// entity ID, so neither reconciles (#349).
-func markSharedSystems(watchers []*pathWatcher) {
-	count := map[string]int{}
-	key := func(pw *pathWatcher) string { return pw.config.Org + "\x00" + pw.scopedSystem }
-	for _, pw := range watchers {
-		count[key(pw)]++
-	}
-	for _, pw := range watchers {
-		pw.sharedSystem = count[key(pw)] > 1
 	}
 }
