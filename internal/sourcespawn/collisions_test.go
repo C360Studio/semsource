@@ -93,12 +93,26 @@ func TestCheckSystemCollisions(t *testing.T) {
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), pin("/p2/lib", "via-p2-lib")},
 		},
 		{
-			name: "a pin plus an operator source collides",
+			name: "a standalone source at a pin's project and version shares the pin's IDs",
 			entries: []config.SourceEntry{
 				pin("/p1/lib", "via-p1-lib"),
 				{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"},
 			},
-			want: []string{"via-p1-lib (root /p1/lib)", "(root /r/lib)"},
+		},
+		{
+			name: "two standalone sources at one pinned identity, no pin, collide",
+			entries: []config.SourceEntry{
+				{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"},
+				{Type: "ast", Path: "/s/lib", Project: "github-com-acme-lib", Version: "abc123def456"},
+			},
+			want: []string{"(root /r/lib)", "(root /s/lib)"},
+		},
+		{
+			name: "a standalone source at another SHA of the pinned project does not meet the pin",
+			entries: []config.SourceEntry{
+				pin("/p1/lib", "via-p1-lib"),
+				{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "0000aaaa1111"},
+			},
 		},
 	}
 	for _, tc := range cases {
@@ -263,6 +277,34 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a standalone add at a registered pin's identity shares the pin's IDs", func(t *testing.T) {
+		t.Parallel()
+		pinned := planned(t, config.SourceEntry{Type: "ast", Path: "/p1/lib", Project: "github-com-acme-lib",
+			Version: "abc123def456", InstanceSuffix: "via-p1-lib"})[0]
+		standalone := config.SourceEntry{Type: "ast", Path: "/r/lib", Project: "github-com-acme-lib", Version: "abc123def456"}
+		for _, recorded := range []bool{true, false} {
+			store := newFakeStore()
+			cfg := store.cfg.Get()
+			cfg.Components = semconfig.ComponentConfigs{pinned.Instance: pinned.Config}
+			if recorded {
+				record, _ := json.Marshal(map[string]any{"discovered": []map[string]any{
+					{"parent": "/p1", "kind": "submodule", "components": []string{pinned.Instance}},
+				}})
+				cfg.Components["source-manifest"] = types.ComponentConfig{Type: types.ComponentTypeProcessor, Name: "source-manifest", Enabled: true, Config: record}
+			}
+			if err := store.cfg.Update(cfg); err != nil {
+				t.Fatal(err)
+			}
+			_, err := AddWithChecker(context.Background(), standalone, store, nil, collisionOpts)
+			if recorded && err != nil {
+				t.Fatalf("add at a recorded pin's identity refused: %v", err)
+			}
+			if !recorded && CodeOf(err) != CodeValidationFailed {
+				t.Fatalf("add colliding with an unrecorded (operator) source: err = %v, want %s", err, CodeValidationFailed)
+			}
+		}
+	})
 
 	t.Run("a collision already registered is not this add's", func(t *testing.T) {
 		t.Parallel()

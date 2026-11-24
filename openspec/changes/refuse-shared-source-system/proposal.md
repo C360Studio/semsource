@@ -1,6 +1,6 @@
 # Refuse sources that would share an entity-ID system
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-24) sha256:31f3f142f323
 
 Track: design (a new admission rule at three entry points, and a changed requirement in `entity-publish-integrity`).
 

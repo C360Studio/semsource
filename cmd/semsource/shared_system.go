@@ -18,18 +18,9 @@ import (
 // record is what discovery itself owns. Boot refuses rather than starting the
 // rest (design D4).
 func checkBootCollisions(components semconfig.ComponentConfigs) error {
-	record, err := previousRecord(components)
+	pins, err := sourcespawn.PinInstances(components)
 	if err != nil {
 		return err
-	}
-	pins := map[string]bool{}
-	for _, r := range record {
-		if r.Kind != "submodule" {
-			continue
-		}
-		for _, name := range r.Components {
-			pins[name] = true
-		}
 	}
 	if err := sourcespawn.CheckSystemCollisions(sourcespawn.Planned(components, pins)); err != nil {
 		return fmt.Errorf("refusing to boot: %w; remove one of the named sources from the config file, "+

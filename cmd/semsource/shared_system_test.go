@@ -28,8 +28,8 @@ func TestCheckBootCollisions(t *testing.T) {
 		refused bool
 	}{
 		{"two pins of one SHA", []config.SourceEntry{pin("p1"), pin("p2")}, 2, false},
-		{"a pin and an operator source", []config.SourceEntry{pin("p1"), operator}, 1, true},
-		{"a pin the record does not name is an operator source", []config.SourceEntry{pin("p1"), pin("p2")}, 1, true},
+		{"a pin and a standalone source at its identity", []config.SourceEntry{pin("p1"), operator}, 1, false},
+		{"pins the record does not name are operator sources", []config.SourceEntry{pin("p1"), pin("p2")}, 0, true},
 		{"one doc source over two roots of one project", []config.SourceEntry{{Type: "docs", Paths: []string{"/r/a", "/r/b"}, Project: "svc"}}, 0, true},
 	}
 	for _, tc := range cases {

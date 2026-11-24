@@ -108,9 +108,13 @@ func (c collision) String() string {
 }
 
 // collisions groups every enabled root by its system key and returns each
-// group with more than one root, except a group made only of submodule pins:
-// discovery expands one submodule at one gitlink SHA into byte-identical
-// sources, so their statement sets agree (D2).
+// group with more than one root, except a group that includes a submodule pin
+// (D2). Discovery expands one submodule at one gitlink SHA into byte-identical
+// sources, and an equal system with a pin means every other root declared the
+// pin's pinned identity: for ast the same project and version (the gitlink
+// SHA), for docs a project that carries the SHA. That is a claim of the same
+// content, so the roots share IDs, as the multi-source quickstart and ADR-0012
+// document.
 func collisions(components []PlannedComponent) ([]collision, error) {
 	roots, err := enabledRoots(components)
 	if err != nil {
@@ -149,7 +153,7 @@ func groupCollisions(roots []systemRoot) []collision {
 	var out []collision
 	for _, key := range order {
 		members := groups[key]
-		if len(members) < 2 || !slices.ContainsFunc(members, func(r systemRoot) bool { return !r.pin }) {
+		if len(members) < 2 || slices.ContainsFunc(members, func(r systemRoot) bool { return r.pin }) {
 			continue
 		}
 		out = append(out, collision{key: key, roots: members})
@@ -174,7 +178,7 @@ func collisionError(found []collision) error {
 
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
 // or two doc-source roots, would mint entity IDs under one org and system,
-// unless every root in the collision is a submodule pin. The error names each
+// unless the collision includes a submodule pin (D2). The error names each
 // colliding instance and root and the shared system, with CodeValidationFailed.
 func CheckSystemCollisions(components []PlannedComponent) error {
 	found, err := collisions(components)
@@ -263,10 +267,11 @@ func checkAddCollisions(existing semconfig.ComponentConfigs, specs []componentSp
 		pc.pending = true
 		pending = append(pending, pc)
 	}
-	registered := make([]PlannedComponent, 0, len(existing))
-	for name, cc := range existing {
-		registered = append(registered, PlannedComponent{Instance: name, Config: cc})
+	pins, err := PinInstances(existing)
+	if err != nil {
+		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
 	}
+	registered := Planned(existing, pins)
 	pendingRoots, err := enabledRoots(pending)
 	if err != nil {
 		return &Error{Code: CodeValidationFailed, Message: "check entity-ID systems", Cause: err}
@@ -323,4 +328,35 @@ func rootList(c PlannedComponent) ([]string, error) {
 		out = append(out, r.identity())
 	}
 	return out, nil
+}
+
+// PinInstances returns the instances boot-time discovery recorded as submodule
+// pins: the "discovered" record (kind "submodule") in the source-manifest
+// envelope of components. Component configs do not carry the InstanceSuffix
+// that marks a pin, and the record is what discovery owns. The record is decoded
+// here rather than through the source-manifest package, which imports this one.
+func PinInstances(components semconfig.ComponentConfigs) (map[string]bool, error) {
+	pins := map[string]bool{}
+	envelope, ok := components["source-manifest"]
+	if !ok {
+		return pins, nil
+	}
+	var m struct {
+		Discovered []struct {
+			Kind       string   `json:"kind"`
+			Components []string `json:"components"`
+		} `json:"discovered"`
+	}
+	if err := json.Unmarshal(envelope.Config, &m); err != nil {
+		return nil, fmt.Errorf("decode source-manifest discovery record: %w", err)
+	}
+	for _, r := range m.Discovered {
+		if r.Kind != "submodule" {
+			continue
+		}
+		for _, name := range r.Components {
+			pins[name] = true
+		}
+	}
+	return pins, nil
 }
