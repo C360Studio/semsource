@@ -5,6 +5,7 @@ package git_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -348,16 +349,21 @@ func TestGitHandler_Watch_CarriesEntityStates(t *testing.T) {
 
 // TestGitHandler_Watch_RetriesHeadChangeWhenStatesFail: when building a HEAD
 // change's entity states fails, the poll loop must not emit a state-less event
-// or advance past that HEAD; it counts the failure and retries on the next
-// tick (#355). An authority that fails validation makes IngestEntityStates fail
-// on every call while Ingest succeeds. Commits are added until the first
-// failure is counted (the baseline HEAD is recorded asynchronously); a second
-// failure with no further commit proves the same HEAD was retried.
+// or advance past that HEAD; it logs the failure and retries on the next tick
+// (#355). An authority that fails validation makes IngestEntityStates fail on
+// every call while Ingest succeeds. Commits are added until the first failure
+// is logged (the baseline HEAD is recorded asynchronously). A retry is proven
+// by two failure records for the same SHA: a loop that advances past a failed
+// HEAD logs each SHA at most once, however commits and polls interleave.
+//
+// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: Git watch changes carry typed entity state
 func TestGitHandler_Watch_RetriesHeadChangeWhenStatesFail(t *testing.T) {
 	repoDir := initTempRepo(t)
+	failures := make(chan string, 64)
 	cfg := githandler.DefaultConfig()
 	cfg.PollInterval = 50 * time.Millisecond
 	cfg.Authority = entityid.Authority{Org: "acme", Platform: "bad.platform"}
+	cfg.Logger = slog.New(&statesFailureRecorder{shas: failures})
 	h := githandler.New(cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -367,9 +373,9 @@ func TestGitHandler_Watch_RetriesHeadChangeWhenStatesFail(t *testing.T) {
 		t.Fatalf("Watch() error = %v", err)
 	}
 
-	tick := time.NewTicker(50 * time.Millisecond)
-	defer tick.Stop()
-	var firstFailure int64
+	commit := time.NewTicker(200 * time.Millisecond)
+	defer commit.Stop()
+	seen := make(map[string]bool)
 	for n := 0; ; n++ {
 		select {
 		case ev, ok := <-ch:
@@ -378,22 +384,47 @@ func TestGitHandler_Watch_RetriesHeadChangeWhenStatesFail(t *testing.T) {
 			}
 			t.Fatalf("watch emitted an event (%d entities, %d states) although building its entity states failed",
 				len(ev.Entities), len(ev.EntityStates))
-		case <-tick.C:
-			got := h.WatchErrorCount()
-			switch {
-			case firstFailure == 0 && got > 0:
-				firstFailure = got
-			case firstFailure > 0 && got > firstFailure:
+		case sha := <-failures:
+			if seen[sha] {
 				return
-			case firstFailure == 0 && n%4 == 0:
+			}
+			seen[sha] = true
+		case <-commit.C:
+			if len(seen) == 0 {
 				addCommit(t, repoDir, fmt.Sprintf("retry-%d.go", n), "watch trigger commit")
 			}
 		case <-ctx.Done():
-			t.Fatalf("timed out: watch errors %d, want a retry after the first failure %d",
-				h.WatchErrorCount(), firstFailure)
+			t.Fatalf("timed out: no HEAD was retried after its entity states failed (failed SHAs: %v)", seen)
 		}
 	}
 }
+
+// statesFailureRecorder is a slog.Handler that forwards the new_sha of each
+// "building entity states" failure the git poll loop logs.
+type statesFailureRecorder struct{ shas chan<- string }
+
+func (r *statesFailureRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (r *statesFailureRecorder) Handle(_ context.Context, rec slog.Record) error {
+	if !strings.Contains(rec.Message, "building entity states") {
+		return nil
+	}
+	rec.Attrs(func(a slog.Attr) bool {
+		if a.Key == "new_sha" {
+			select {
+			case r.shas <- a.Value.String():
+			default: // never block the poll loop once the test has its answer
+			}
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
+func (r *statesFailureRecorder) WithAttrs([]slog.Attr) slog.Handler { return r }
+
+func (r *statesFailureRecorder) WithGroup(string) slog.Handler { return r }
 
 func TestGitHandler_Watch_ClosesOnContextCancel(t *testing.T) {
 	repoDir := initTempRepo(t)
