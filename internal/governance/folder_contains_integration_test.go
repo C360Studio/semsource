@@ -130,8 +130,14 @@ func TestIntegration_WatchDeleteKeepsCollidingFolder(t *testing.T) {
 // awaitWatching creates a/probe.go until folder a lists it, proving the
 // watcher delivers events before a test acts once (a delete cannot be
 // re-applied). It returns the probe file's entity ID.
+//
+// The seed walks before it starts the watcher, so a probe written during the
+// walk is indexed by the walk and proves nothing (#363). The seed publishes
+// folders only after its walk, so the probe is written only once folder a
+// exists: from then on only the watcher can deliver it.
 func awaitWatching(t *testing.T, ctx context.Context, client *natsclient.Client, write func(rel, body string)) string {
 	t.Helper()
+	untilFolder(t, ctx, client, "a", func([]string) bool { return true })
 	var probe string
 	untilFolderChange(t, ctx, client, "a", func(got []string) bool {
 		i := slices.IndexFunc(got, func(id string) bool { return strings.HasSuffix(id, ".file.a-probe-go") })
