@@ -87,3 +87,60 @@ func TestConfigHandler_Watch_ChannelClosedOnContextCancel(t *testing.T) {
 		}
 	}
 }
+
+// spec: entity-identity-safety / Config-file entities are keyed by their declaring file
+func TestConfigHandler_Watch_MintsTheSeedIDs(t *testing.T) {
+	// A watch republish must mint the seed walk's IDs, or one manifest
+	// forks into two entities (#348). A relative root is the configured
+	// shape in semsource.json.
+	parent := t.TempDir()
+	t.Chdir(parent)
+	if err := os.Mkdir("repo", 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	authority := testAuthority("acme")
+	h := cfgfile.New(&cfgfile.Config{Authority: authority})
+	cfg := &stubSourceConfig{sourceType: "config", path: "repo", watch: true}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ch, err := h.Watch(ctx, cfg)
+	if err != nil || ch == nil {
+		t.Fatalf("Watch: ch=%v err=%v", ch, err)
+	}
+	time.Sleep(100 * time.Millisecond) // same registration wait as the test above
+
+	gomod := "module example.com/w\n\ngo 1.23\n\nrequire golang.org/x/text v0.14.0\n"
+	if err := os.WriteFile(filepath.Join("repo", "go.mod"), []byte(gomod), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	var watched []string
+	for len(watched) == 0 {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				t.Fatal("Watch channel closed")
+			}
+			for _, s := range ev.EntityStates {
+				watched = append(watched, s.ID)
+			}
+		case <-ctx.Done():
+			t.Fatal("timeout waiting for a watch event with entity states")
+		}
+	}
+
+	seeded, err := h.IngestEntityStates(context.Background(), cfg, authority)
+	if err != nil {
+		t.Fatalf("IngestEntityStates: %v", err)
+	}
+	want := map[string]bool{}
+	for _, s := range seeded {
+		want[s.ID] = true
+	}
+	for _, id := range watched {
+		if !want[id] {
+			t.Errorf("watch minted %s, which the seed walk does not", id)
+		}
+	}
+}
