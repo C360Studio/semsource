@@ -35,6 +35,9 @@ func TestCheckBootCollisions(t *testing.T) {
 		{"a pin and a standalone source at its identity", []config.SourceEntry{pin("p1"), operator}, 1, false},
 		{"pins the record does not name are operator sources", []config.SourceEntry{pin("p1"), pin("p2")}, 0, true},
 		{"one doc source over two roots of one project", []config.SourceEntry{{Type: "docs", Paths: []string{"/r/a", "/r/b"}, Project: "svc"}}, 0, true},
+		{"a doc source and an object-store source under one project", []config.SourceEntry{
+			{Type: "docs", Paths: []string{"/r/a"}, Project: "svc"}, {Type: "s3", Bucket: "artifacts", Project: "svc"},
+		}, 0, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

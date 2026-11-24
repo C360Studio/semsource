@@ -89,6 +89,44 @@ func TestCheckSystemCollisions(t *testing.T) {
 			},
 		},
 		{
+			name: "a docs and an object-store source under one project share the document ID space",
+			entries: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/r/a"}, Project: "handbook"},
+				{Type: "s3", Endpoint: "http://minio:9000", Bucket: "artifacts", Prefix: "docs/", Project: "handbook"},
+			},
+			want: []string{"doc-source-handbook (root /r/a)", "(root http://minio:9000/artifacts/docs/)", `system "handbook"`},
+		},
+		{
+			name: "two object-store sources under one project collide",
+			entries: []config.SourceEntry{
+				{Type: "s3", Bucket: "first", Project: "handbook"},
+				{Type: "s3", Bucket: "second", Project: "handbook"},
+			},
+			want: []string{"objectstore-source-first (root first)", "objectstore-source-second (root second)", `system "handbook"`},
+		},
+		{
+			name: "two prefixes of one bucket mint under the bucket's system",
+			entries: []config.SourceEntry{
+				{Type: "s3", Bucket: "artifacts", Prefix: "a/"},
+				{Type: "s3", Bucket: "artifacts", Prefix: "b/"},
+			},
+			want: []string{"(root artifacts/a/)", "(root artifacts/b/)", `system "artifacts"`},
+		},
+		{
+			name: "a versioned object-store source is another system than the docs",
+			entries: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/r/a"}, Project: "handbook"},
+				{Type: "s3", Bucket: "artifacts", Project: "handbook", Version: "2.0"},
+			},
+		},
+		{
+			name: "ast and object-store under one project are different ID spaces",
+			entries: []config.SourceEntry{
+				{Type: "ast", Path: "/r/svc", Project: "svc"},
+				{Type: "s3", Bucket: "artifacts", Project: "svc"},
+			},
+		},
+		{
 			name:    "two pins of one submodule at one SHA are admitted",
 			entries: []config.SourceEntry{pin("/p1/lib", "via-p1-lib"), pin("/p2/lib", "via-p2-lib")},
 		},
@@ -188,6 +226,14 @@ func TestCheckSourceCollisions(t *testing.T) {
 			refused: true,
 		},
 		{
+			name: "a docs and an object-store source under one project",
+			sources: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"./docs"}, Project: "handbook"},
+				{Type: "s3", Bucket: "artifacts", Project: "handbook"},
+			},
+			refused: true,
+		},
+		{
 			name: "multi-branch repos are left to boot",
 			sources: []config.SourceEntry{
 				{Type: "repo", URL: "https://example.invalid/acme/svc.git", Branches: []string{"main"}, Project: "svc"},
@@ -238,6 +284,17 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			name:     "a doc root under a different project",
 			existing: []config.SourceEntry{{Type: "docs", Paths: []string{"/r/a"}, Project: "svc"}},
 			add:      config.SourceEntry{Type: "docs", Paths: []string{"/r/b"}, Project: "svc-2"},
+		},
+		{
+			name:     "an object-store source under a registered docs project",
+			existing: []config.SourceEntry{{Type: "docs", Paths: []string{"/r/a"}, Project: "handbook"}},
+			add:      config.SourceEntry{Type: "s3", Bucket: "artifacts", Project: "handbook"},
+			refused:  "doc-source-handbook (root /r/a)",
+		},
+		{
+			name:     "re-adding the same object-store source",
+			existing: []config.SourceEntry{{Type: "s3", Bucket: "artifacts", Project: "handbook"}},
+			add:      config.SourceEntry{Type: "s3", Bucket: "artifacts", Project: "handbook", Watch: true},
 		},
 		{
 			name:     "re-adding the same instance",

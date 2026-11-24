@@ -27,9 +27,17 @@ type PlannedComponent struct {
 }
 
 // systemKey is what two roots must share to mint the same entity IDs (#349):
-// the component kind (ast and doc IDs differ in their domain segment), the
-// org and the system segment.
+// the ID space (ast code IDs and web document IDs differ in their domain
+// segment; doc-source and objectstore-source both mint web document and chunk
+// IDs, so they share one), the org and the system segment.
 type systemKey struct{ kind, org, system string }
+
+// idSpace is the ID space each component kind in the rule mints into.
+var idSpace = map[string]string{
+	"ast-source":         "ast",
+	"doc-source":         "doc",
+	"objectstore-source": "doc",
+}
 
 type systemRoot struct {
 	key          systemKey
@@ -38,8 +46,8 @@ type systemRoot struct {
 	pin, pending bool
 }
 
-// collisionConfig reads only the identity inputs of ast-source and doc-source
-// configs, as cmd/semsource sourceScopeSystems does.
+// collisionConfig reads only the identity inputs of ast-source, doc-source and
+// objectstore-source configs, as cmd/semsource sourceScopeSystems does.
 type collisionConfig struct {
 	WatchPaths []struct {
 		Path    string `json:"path"`
@@ -50,15 +58,23 @@ type collisionConfig struct {
 	Org     string   `json:"org"`
 	Paths   []string `json:"paths"`
 	Project string   `json:"project"`
+	// objectstore-source
+	Version  string `json:"version"`
+	Bucket   string `json:"bucket"`
+	Prefix   string `json:"prefix"`
+	Endpoint string `json:"endpoint"`
 }
 
 // systemRoots returns the roots of c with the system each mints IDs under,
 // computed as the component does: ast-source ScopedSystemSlug(project,
 // version) per watch path (processor/ast-source initializeWatchers), doc-source
-// SystemSlug(project) when set, else SystemSlug(root) (handler/doc system).
-// Other kinds are outside the rule and yield none.
+// SystemSlug(project) when set, else SystemSlug(root) (handler/doc system),
+// objectstore-source ScopedSystemSlug(project or bucket, version) for its one
+// bucket (handler/objectstore System). Other kinds are outside the rule and
+// yield none.
 func systemRoots(c PlannedComponent) ([]systemRoot, error) {
-	if c.Config.Name != "ast-source" && c.Config.Name != "doc-source" {
+	space, ok := idSpace[c.Config.Name]
+	if !ok {
 		return nil, nil
 	}
 	var cfg collisionConfig
@@ -68,14 +84,22 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 	var roots []systemRoot
 	add := func(org, system, root string) {
 		roots = append(roots, systemRoot{
-			key:      systemKey{kind: c.Config.Name, org: org, system: system},
+			key:      systemKey{kind: space, org: org, system: system},
 			instance: c.Instance, root: root, pin: c.Pin, pending: c.pending,
 		})
 	}
-	if c.Config.Name == "ast-source" {
+	switch c.Config.Name {
+	case "ast-source":
 		for _, wp := range cfg.WatchPaths {
 			add(wp.Org, entityid.ScopedSystemSlug(wp.Project, wp.Version), wp.Path)
 		}
+		return roots, nil
+	case "objectstore-source":
+		project := cfg.Bucket
+		if cfg.Project != "" {
+			project = cfg.Project
+		}
+		add(cfg.Org, entityid.ScopedSystemSlug(project, cfg.Version), bucketRoot(cfg))
 		return roots, nil
 	}
 	for _, path := range cfg.Paths {
@@ -86,6 +110,18 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 		add(cfg.Org, system, path)
 	}
 	return roots, nil
+}
+
+// bucketRoot labels an object-store source's root: its endpoint, bucket and
+// prefix, those that are set.
+func bucketRoot(cfg collisionConfig) string {
+	var parts []string
+	for _, p := range []string{strings.TrimSuffix(cfg.Endpoint, "/"), cfg.Bucket, cfg.Prefix} {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // collision is one system that more than one root would mint IDs under.
@@ -104,7 +140,7 @@ func (c collision) String() string {
 		members = append(members, fmt.Sprintf("%s (root %s)", r.instance, r.root))
 	}
 	return fmt.Sprintf("%s roots %s would share entity-ID system %q in org %q",
-		strings.TrimSuffix(c.key.kind, "-source"), strings.Join(members, " and "), c.key.system, c.key.org)
+		c.key.kind, strings.Join(members, " and "), c.key.system, c.key.org)
 }
 
 // collisions groups every enabled root by its system key and returns each
@@ -177,7 +213,7 @@ func collisionError(found []collision) error {
 }
 
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
-// or two doc-source roots, would mint entity IDs under one org and system,
+// or two document roots (doc-source paths, objectstore-source buckets), would mint entity IDs under one org and system,
 // unless the collision includes a submodule pin (D2). The error names each
 // colliding instance and root and the shared system, with CodeValidationFailed.
 func CheckSystemCollisions(components []PlannedComponent) error {
@@ -198,7 +234,7 @@ func Planned(components semconfig.ComponentConfigs, pins map[string]bool) []Plan
 	return out
 }
 
-// CheckSourceCollisions builds the ast and doc components of sources and runs
+// CheckSourceCollisions builds the ast, doc and object-store components of sources and runs
 // CheckSystemCollisions over them, for a file's sources before boot. Two
 // entries that build one instance over the same roots are one source; two that
 // build one instance over different roots collide (the second would replace
@@ -223,7 +259,7 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 			entries = expanded.Sources
 		}
 		for _, entry := range entries {
-			if entry.Type != "ast" && entry.Type != "docs" {
+			if entry.Type != "ast" && entry.Type != "docs" && entry.Type != "s3" {
 				continue
 			}
 			specs, err := buildSpecs(ctx, entry, opts)
