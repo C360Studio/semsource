@@ -624,8 +624,15 @@ func resolvePaths(cfg handler.SourceConfig) []string {
 // system returns the entity-ID system slug for a walk root: the explicit
 // project override when set, else the path-derived slug.
 func (h *ConfigHandler) system(root string) string {
-	if h.cfg.Project != "" {
-		return systemSlug(h.cfg.Project)
+	return SystemSlug(h.cfg.Project, root)
+}
+
+// SystemSlug is the entity-ID system a config-file root mints under: the
+// project override when set, else the root's slug. Exported so the
+// shared-system refusal computes exactly what ingest mints (#348).
+func SystemSlug(project, root string) string {
+	if project != "" {
+		return systemSlug(project)
 	}
 	return systemSlug(root)
 }

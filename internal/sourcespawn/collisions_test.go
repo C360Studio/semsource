@@ -392,6 +392,38 @@ func TestCheckSourceCollisions(t *testing.T) {
 			want:    []string{"cfgfile-source-svc", `system "svc"`},
 		},
 		{
+			// ConfigHandler folds case, so these mint one system (#374 review).
+			name: "one config source over case-different basenames",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a/core", "/b/Core"}},
+			},
+			refused: true,
+			want:    []string{"(root /a/core)", "(root /b/Core)"},
+		},
+		{
+			name: "two config sources over case-different basenames",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a/Core"}},
+				{Type: "config", Paths: []string{"/b/core"}},
+			},
+			refused: true,
+		},
+		{
+			name: "two config sources under case-different projects",
+			sources: []config.SourceEntry{
+				{Type: "config", Paths: []string{"/a"}, Project: "Shared"},
+				{Type: "config", Paths: []string{"/b"}, Project: "shared"},
+			},
+			refused: true,
+		},
+		{
+			name: "two docs sources under case-different projects keep distinct systems",
+			sources: []config.SourceEntry{
+				{Type: "docs", Paths: []string{"/a"}, Project: "Shared"},
+				{Type: "docs", Paths: []string{"/b"}, Project: "shared"},
+			},
+		},
+		{
 			name: "a repo and an ast source under one project",
 			sources: []config.SourceEntry{
 				{Type: "repo", Path: "/r/svc", Project: "svc"},

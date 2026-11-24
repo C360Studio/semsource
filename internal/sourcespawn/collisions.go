@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semengine/types"
 	"github.com/c360studio/semsource/config"
 	"github.com/c360studio/semsource/entityid"
+	"github.com/c360studio/semsource/handler/cfgfile"
 	githandler "github.com/c360studio/semsource/handler/git"
 )
 
@@ -155,6 +156,15 @@ func systemRoots(c PlannedComponent) ([]systemRoot, error) {
 			project = cfg.Project
 		}
 		add(cfg.Org, entityid.ScopedSystemSlug(project, cfg.Version), bucketRoot(cfg))
+		return roots, nil
+	case "cfgfile-source":
+		// ConfigHandler folds case and dots; doc roots below keep theirs.
+		for _, path := range cfg.Paths {
+			r := add(cfg.Org, cfgfile.SystemSlug(cfg.Project, path), path)
+			if c.Pin {
+				r.sha = cfg.Project[strings.LastIndex(cfg.Project, "-")+1:]
+			}
+		}
 		return roots, nil
 	case "git-source":
 		root := cfg.RepoPath
