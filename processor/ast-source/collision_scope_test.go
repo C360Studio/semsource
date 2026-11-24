@@ -14,7 +14,7 @@ import (
 // max_symbols_per_file out at this component's default, so a pin and a member
 // that spell the default out are one scope, and any other cap is not.
 //
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestPinScopeReadsTheDefaultSymbolCap(t *testing.T) {
 	pin := func(t *testing.T, instance, root string, maxSymbols *int) sourcespawn.PlannedComponent {
 		t.Helper()

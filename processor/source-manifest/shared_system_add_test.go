@@ -12,7 +12,7 @@ import (
 	"github.com/c360studio/semsource/internal/sourcespawn"
 )
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestAddSourceRefusesSharedSystemAndPersistsNothing(t *testing.T) {
 	store := newDesiredStore(t)
 	c := &Component{logger: slog.Default()}
@@ -42,7 +42,7 @@ func TestAddSourceRefusesSharedSystemAndPersistsNothing(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestRemoveDesiredSourceWithoutARunningService(t *testing.T) {
 	store := newDesiredStore(t)
 	c := &Component{logger: slog.Default()}

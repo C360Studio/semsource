@@ -37,7 +37,7 @@ func planned(t *testing.T, entry config.SourceEntry) []PlannedComponent {
 	return out
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSystemCollisions(t *testing.T) {
 	t.Parallel()
 	// checkout is a standalone copy at the pinned commit; other is a checkout
@@ -275,7 +275,7 @@ func TestCheckSystemCollisions(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSystemCollisions_DisabledEnvelopeDoesNotSpawn(t *testing.T) {
 	t.Parallel()
 	a := planned(t, config.SourceEntry{Type: "ast", Path: "/r/a", Project: "svc"})
@@ -287,7 +287,7 @@ func TestCheckSystemCollisions_DisabledEnvelopeDoesNotSpawn(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckSourceCollisions(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -367,7 +367,7 @@ func TestCheckSourceCollisions(t *testing.T) {
 	}
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 	t.Parallel()
 	register := func(t *testing.T, store *fakeStore, src config.SourceEntry) {
@@ -496,7 +496,7 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 	})
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestAddWithChecker_RefusesTakingOverADiscoveredName(t *testing.T) {
 	t.Parallel()
 	// Boot discovery owns ast-source-svc-feature from the worktree; an
@@ -628,7 +628,7 @@ func gitCheckout(t *testing.T, msg string) (dir, sha string) {
 	return dir, git("rev-parse", "HEAD")
 }
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestCheckDiscoveredCollisions_RepeatedInstance(t *testing.T) {
 	t.Parallel()
 	a := planned(t, config.SourceEntry{Type: "ast", Path: "/d/a", Project: "svc", BranchSlug: "feature"})[0]

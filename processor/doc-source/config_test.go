@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// spec: openspec/changes/refuse-shared-source-system/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Sources that would share an entity-ID system are refused
 func TestConfigValidateRefusesRootsSharingASystem(t *testing.T) {
 	cases := []struct {
 		name    string
