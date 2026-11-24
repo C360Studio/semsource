@@ -108,7 +108,7 @@ func TestConfigHandler_Watch_MintsTheSeedIDs(t *testing.T) {
 	if err != nil || ch == nil {
 		t.Fatalf("Watch: ch=%v err=%v", ch, err)
 	}
-	time.Sleep(100 * time.Millisecond) // same registration wait as the test above
+	// FSWatcher.Start registers every directory before Watch returns.
 
 	gomod := "module example.com/w\n\ngo 1.23\n\nrequire golang.org/x/text v0.14.0\n"
 	if err := os.WriteFile(filepath.Join("repo", "go.mod"), []byte(gomod), 0o644); err != nil {

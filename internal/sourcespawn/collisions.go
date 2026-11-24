@@ -46,6 +46,7 @@ var idSpace = map[string]string{
 	"audio-source":       "audio",
 	"video-source":       "video",
 	"git-source":         "git",
+	"cfgfile-source":     "cfgfile",
 }
 
 type systemRoot struct {
@@ -474,7 +475,7 @@ func CheckSourceCollisions(ctx context.Context, sources []config.SourceEntry, op
 			entries = expanded.Sources
 		}
 		for _, entry := range entries {
-			if !slices.Contains([]string{"ast", "docs", "s3", "image", "audio", "video", "git"}, entry.Type) {
+			if !slices.Contains([]string{"ast", "docs", "s3", "image", "audio", "video", "git", "config"}, entry.Type) {
 				continue
 			}
 			specs, err := buildSpecs(ctx, entry, opts)
