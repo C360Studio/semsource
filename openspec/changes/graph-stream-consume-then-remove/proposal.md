@@ -1,6 +1,6 @@
 # GRAPH ingest stream removes what graph-ingest has consumed
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-25) sha256:aa3ca23c50c9
 
 Track: design (durability/ack behaviour and the boot path; one Requirement in `entity-publish-integrity`).
 

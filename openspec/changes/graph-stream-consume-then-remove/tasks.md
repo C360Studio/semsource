@@ -2,8 +2,9 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md` and rules on Open Questions 1–4.
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-25, sha256:aa3ca23c50c9) with the recommended
+  answers: D1 workqueue; D2 memory storage stays, file storage is a follow-up; D4 bounds unchanged; PR #394 says
+  `Addresses #160` and the named durability posture is a follow-up issue. Approved-by line entered by claude at the owner's instruction.
 
 ## 2. Repro and test harness (before the change; green on main)
 
