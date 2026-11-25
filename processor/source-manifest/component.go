@@ -212,12 +212,6 @@ func (c *Component) startManifest(ctx context.Context) error {
 	c.querySub = sub
 	c.logger.Info("listening for source queries", "subject", querySubject)
 
-	// The HTTP and NATS answers are prepared above regardless; only the
-	// broadcast needs a transport. A manifest-only harness without one skips
-	// it — consumers still read the manifest over HTTP.
-	if c.client == nil && c.publishStream == nil {
-		return nil
-	}
 	c.broadcast(ctx, &c.manifestBroadcastFailing, "source manifest", c.publishManifest)
 	return nil
 }
