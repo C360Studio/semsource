@@ -414,8 +414,14 @@ func collisionError(found []collision, remedy string) error {
 	for _, c := range found {
 		msgs = append(msgs, c.String())
 		r := remedy
-		if c.key.kind == "git" {
+		switch c.key.kind {
+		case "git":
 			r = gitRemedy
+		case "image", "audio", "video":
+			r = mediaRemedy
+			if remedy == addRemedy {
+				r = addPrefix + mediaRemedy
+			}
 		}
 		if !slices.Contains(remedies, r) {
 			remedies = append(remedies, r)
@@ -432,6 +438,11 @@ func collisionError(found []collision, remedy string) error {
 // sources have no project, so their system is the repo URL's slug, else the
 // repo directory's name (#354).
 const gitRemedy = "give each git source a distinct repo URL, or a repo directory with a distinct name"
+
+// mediaRemedy is the way through two media roots that share a system: media
+// sources have no project or version, so their system is the root
+// directory's name (#369).
+const mediaRemedy = "give each media source distinct, non-overlapping paths whose directory names differ"
 
 // CheckSystemCollisions refuses a component set in which two ast-source roots,
 // or two document roots (doc-source paths, objectstore-source buckets), would
@@ -582,7 +593,9 @@ const distinctRemedy = "give each source a distinct project (or bucket, prefix o
 
 // addRemedy adds, for a runtime add, the way through a re-add that narrows a
 // registered source's roots: the add cannot shrink an instance in place.
-const addRemedy = "to change a registered source's paths, remove it, then add it; otherwise " + distinctRemedy
+const addRemedy = addPrefix + distinctRemedy
+
+const addPrefix = "to change a registered source's paths, remove it, then add it; otherwise "
 
 func takeoverError(msgs []string, remedy string) error {
 	if len(msgs) == 0 {

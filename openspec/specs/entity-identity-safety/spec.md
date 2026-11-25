@@ -250,6 +250,7 @@ SemSource SHALL refuse a source set in which two ast-source roots, two document 
 - **GIVEN** an image source with paths `/m/x` and `/m/b`, and another image source with path `/m/b`
 - **WHEN** the config is validated
 - **THEN** it fails with an error naming both sources and system `b`
+- **AND** the error tells the operator to give each media source distinct, non-overlapping paths whose directory names differ, not a project or version
 
 #### Scenario: An image and an audio source over one root are admitted
 - **GIVEN** an image source and an audio source, both with path `/m/b`
