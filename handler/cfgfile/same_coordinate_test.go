@@ -172,3 +172,21 @@ func TestIngestEntityStates_ImagesThatSlugifyAlikeStayDistinct(t *testing.T) {
 		t.Errorf("foo/bar:1 and foo-bar:1 share ID %s", a[0].ID)
 	}
 }
+
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Declarations of one artifact within a manifest fold into one entity
+func TestIngestEntityStates_POMModulesThatSlugifyAlikeStayDistinct(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{"pom.xml": `<project><groupId>g</groupId><artifactId>app</artifactId><version>1</version>
+<modules><module>my_module</module><module>my-module</module><module>my-module</module></modules></project>`})
+	states := ingestTree(t, root)
+	a, b := titledStates(states, "gomod", "my_module"), titledStates(states, "gomod", "my-module")
+	if len(a) != 1 || len(b) != 1 {
+		t.Fatalf("want one state per module, got %d and %d", len(a), len(b))
+	}
+	if a[0].ID == b[0].ID {
+		t.Errorf("my_module and my-module share ID %s", a[0].ID)
+	}
+	if n := edgeCount(states, source.ConfigContains, b[0].ID); n != 1 {
+		t.Errorf("module edges to the repeated my-module = %d, want 1", n)
+	}
+}
