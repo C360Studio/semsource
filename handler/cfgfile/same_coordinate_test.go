@@ -104,6 +104,37 @@ func TestIngestEntityStates_MavenTestJarIsItsOwnEntity(t *testing.T) {
 	if !slices.ContainsFunc(deps, func(s *handler.EntityState) bool { return strings.HasSuffix(s.ID, plain) }) {
 		t.Errorf("plain jar ID changed: got %s and %s, want one ending %s", deps[0].ID, deps[1].ID, plain)
 	}
+	if !slices.ContainsFunc(deps, func(s *handler.EntityState) bool {
+		return slices.Equal(tripleValues(s, source.ConfigDepType), []any{"test-jar"})
+	}) {
+		t.Error("no org.acme:core state carries dependency-type test-jar")
+	}
+}
+
+// spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Declarations of one artifact within a manifest fold into one entity
+func TestIngestEntityStates_MavenClassifierIsItsOwnEntityAndJarIsPlain(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{"pom.xml": `<project><groupId>com.acme</groupId><artifactId>a</artifactId><version>1</version><dependencies>
+<dependency><groupId>org.acme</groupId><artifactId>core</artifactId><version>1.0</version></dependency>
+<dependency><groupId>org.acme</groupId><artifactId>core</artifactId><version>1.0</version><type>jar</type></dependency>
+<dependency><groupId>org.acme</groupId><artifactId>core</artifactId><version>1.0</version><classifier>tests</classifier></dependency>
+</dependencies></project>`})
+	deps := titledStates(ingestTree(t, root), "dependency", "org.acme:core")
+	if len(deps) != 2 || deps[0].ID == deps[1].ID {
+		t.Fatalf("want an explicit jar folded into the plain one and the classifier apart: got %d states", len(deps))
+	}
+	var classified int
+	for _, s := range deps {
+		if slices.Equal(tripleValues(s, source.ConfigDepClassifier), []any{"tests"}) {
+			classified++
+		}
+		if len(tripleValues(s, source.ConfigDepType)) != 0 {
+			t.Errorf("%s carries a dependency-type; jar is the default and is not emitted", s.ID)
+		}
+	}
+	if classified != 1 {
+		t.Errorf("states carrying classifier tests = %d, want 1", classified)
+	}
 }
 
 // spec: openspec/specs/entity-identity-safety/spec.md#Requirement: Declarations of one artifact within a manifest fold into one entity

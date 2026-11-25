@@ -35,8 +35,10 @@ Non-goals: the #336 reconcile opt-in; Gradle map notation or version catalogs; c
   Gradle and npm dependency ID changes, and "does this manifest use X" returns several entities. Forecloses nothing
   new but doubles dependency nodes for common Gradle `implementation` + `testImplementation` pairs.
 - Adopter seam: a reader of `dependency-scope` or `dependency-configuration` must accept more than one value per
-  entity. The one in-repo reader, `processor/mcp-gateway/graph_matches.go:42-43`, lists them as match fields and
-  matches by value, so it keeps working; the OSH scorecard G band asserts name and version, not scope. Doing nothing leaves last-writer-wins facts and blocks the reconcile.
+  entity. The one in-repo reader, `processor/mcp-gateway/graph_matches.go:265-292`, renders the first value per
+  predicate, so graph search shows one of the folded usages (sorted first) until multi-value rendering lands (review
+  finding on PR #383; #385). The full facts stay in the graph. The OSH scorecard G band asserts name and
+  version, not scope. Doing nothing leaves last-writer-wins facts and blocks the reconcile.
 
 ### D2. Maven `<type>`/`<classifier>`: artifact identity (recommended) or ignore
 

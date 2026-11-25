@@ -6,6 +6,7 @@ import (
 	"github.com/c360studio/semengine/vocabulary"
 )
 
+// spec: openspec/specs/source-vocabulary-contract/spec.md#Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
 func TestConfigPredicatesRegistered(t *testing.T) {
 	predicates := []string{
 		ConfigFilePath,
@@ -46,6 +47,7 @@ func TestConfigPredicatesRegistered(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/source-vocabulary-contract/spec.md#Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
 func TestConfigPredicateDataTypes(t *testing.T) {
 	tests := []struct {
 		predicate    string
@@ -128,6 +130,7 @@ func TestConfigPredicateIRIMappings(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/source-vocabulary-contract/spec.md#Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
 func TestConfigPredicateConstantValues(t *testing.T) {
 	// Verify the string values of the constants match the intended predicate
 	// naming convention: source.{domain}.{entity_type}.{property}
