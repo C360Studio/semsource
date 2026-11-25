@@ -1,0 +1,30 @@
+{
+  "namespace": "c360sem",
+  "workspace_dir": "/var/lib/semsource/repos",
+  "sources": [
+    { "type": "repo", "url": "https://github.com/C360Studio/semsource", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" },
+    { "type": "repo", "url": "https://github.com/C360Studio/semengine", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" },
+    { "type": "repo", "url": "https://github.com/C360Studio/semteams", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" },
+    { "type": "repo", "url": "https://github.com/C360Studio/semvocab", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" },
+    { "type": "repo", "url": "https://github.com/C360Studio/semsparql", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" },
+    { "type": "repo", "url": "https://github.com/C360Studio/semconnect", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" }
+  ],
+  "graph": {
+    "semantic_search": true,
+    "index_workers": 4,
+    "coalesce_ms": 200
+  },
+  "model_registry": {
+    "endpoints": {
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "dimensions": 384
+      }
+    },
+    "capabilities": {
+      "embedding": { "preferred": ["semembed"] }
+    }
+  }
+}

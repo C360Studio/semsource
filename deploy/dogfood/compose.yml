@@ -1,0 +1,69 @@
+# Dogfood instance stack (#391): one SemSource + its own NATS, on the released image.
+#
+# Run one copy per instance, each with its own env file, so COMPOSE_PROJECT_NAME
+# scopes containers, volumes, and the private network per instance:
+#
+#   docker compose --env-file deploy/dogfood/sem.env -f deploy/dogfood/compose.yml up -d
+#
+# NATS is never shared between instances: a warm-restart replay in one would load
+# the other (#351, semengine#740). semembed is shared and runs from
+# semembed.compose.yml on the external `c360-dogfood-embed` network.
+#
+# Only the HTTP/MCP port is published on all interfaces (the first query comes
+# from another LAN machine). NATS client and monitor ports are bound to loopback.
+
+services:
+  semsource:
+    # Released beta.11, pinned by index digest. ghcr carries `1.0.0-beta.11`
+    # (no `v` prefix).
+    image: ghcr.io/c360studio/semsource:1.0.0-beta.11@sha256:54496b15c35dd7ed6c04b5cc83245a126fe7b6f1137bd92e79885c159a3c2cc0
+    ports:
+      - "${SEMSOURCE_HTTP_PORT:?set in the instance env file}:8080"
+    volumes:
+      - ./${SEMSOURCE_CONFIG:?set in the instance env file}:/etc/semsource/semsource.json:ro
+      # Remote clones (workspace_dir in the instance config). Kept across
+      # restarts so a restart pulls instead of re-cloning.
+      - repos:/var/lib/semsource/repos
+    environment:
+      - SEMSOURCE_LOG_LEVEL=${LOG_LEVEL:-info}
+      - NATS_URL=nats://nats:4222
+    command: ["run", "--config", "/etc/semsource/semsource.json", "--log-level", "${LOG_LEVEL:-info}"]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/source-manifest/status"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [instance, embed]
+    restart: unless-stopped
+
+  nats:
+    # Same server and digest as the root docker-compose.yml.
+    image: nats:2.14.10-alpine@sha256:311da47e2f31c26e99c623cd78d486a1e8ab039c49b32652770bb91a4f70512e
+    command: ["-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222", "--name", "${COMPOSE_PROJECT_NAME}-nats"]
+    volumes:
+      - nats-data:/data
+      - ../../configs/nats.conf:/etc/nats/nats.conf:ro
+    ports:
+      - "127.0.0.1:${NATS_HOST_PORT:?set in the instance env file}:4222"
+      - "127.0.0.1:${NATS_MONITOR_HOST_PORT:?set in the instance env file}:8222"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [instance]
+    restart: unless-stopped
+
+networks:
+  instance: {}
+  embed:
+    name: c360-dogfood-embed
+    external: true
+
+volumes:
+  nats-data: {}
+  repos: {}
