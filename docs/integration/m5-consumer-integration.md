@@ -40,10 +40,13 @@ Source Processors → graph.ingest.entity → graph-ingest → ENTITY_STATES KV
 
 Before querying the graph, consumers must wait for SemSource to complete its initial seed pass.
 
-### Option A: Subscribe to the GRAPH JetStream stream
+### Option A: Do not consume the GRAPH stream
 
-Subscribe to `graph.ingest.status` on the `GRAPH` stream and watch for a message with
-`"phase": "ready"`.
+`GRAPH` is SemSource's ingest transport, not a read surface. Do not create any JetStream consumer on
+it. Its retention is workqueue, with graph-ingest as the consumer: the server refuses a consumer whose
+filter overlaps graph-ingest's, and it accepts one that does not (for example on
+`graph.ingest.status`), but that consumer's acknowledgements delete the messages for every reader.
+Gate on Option B or Option C instead.
 
 ### Option B: Poll via NATS request/reply
 
