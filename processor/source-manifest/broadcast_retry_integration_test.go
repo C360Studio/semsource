@@ -76,7 +76,7 @@ func (s *broadcastSeam) deliveries(subject string) int {
 
 // awaitRefused blocks until subject has been refused n times, so the inline
 // attempt and at least one background retry have run.
-func (s *broadcastSeam) awaitRefused(t *testing.T, ctx context.Context, subject string, n int) {
+func (s *broadcastSeam) awaitRefused(ctx context.Context, t *testing.T, subject string, n int) {
 	t.Helper()
 	for seen := 0; seen < n; {
 		select {
@@ -92,7 +92,7 @@ func (s *broadcastSeam) awaitRefused(t *testing.T, ctx context.Context, subject 
 
 // awaitDelivered accepts from now on and blocks until both broadcasts land,
 // draining refused attempts still queued from before.
-func (s *broadcastSeam) awaitDelivered(t *testing.T, ctx context.Context) {
+func (s *broadcastSeam) awaitDelivered(ctx context.Context, t *testing.T) {
 	t.Helper()
 	s.accept()
 	landed := map[string]bool{}
@@ -137,7 +137,7 @@ func (h *recordingHandler) count(level slog.Level, msg string) int {
 
 // startRefusedManifest starts a source-manifest whose GRAPH publish is the
 // seam, refusing, with a backoff short enough that retries are not the wait.
-func startRefusedManifest(t *testing.T, ctx context.Context, logger *slog.Logger) (*Component, *broadcastSeam, *natstest.Server) {
+func startRefusedManifest(ctx context.Context, t *testing.T, logger *slog.Logger) (*Component, *broadcastSeam, *natstest.Server) {
 	t.Helper()
 	tc := natstest.New(t)
 	rawCfg, err := json.Marshal(Config{
@@ -172,10 +172,10 @@ func startRefusedManifest(t *testing.T, ctx context.Context, logger *slog.Logger
 func TestIntegrationRefusedBroadcastsDoNotStopStartAndLandOnce(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, seam, tc := startRefusedManifest(t, ctx, nil)
+	c, seam, tc := startRefusedManifest(ctx, t, nil)
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, c.Stop) })
-	seam.awaitRefused(t, ctx, manifestSubject, 2)
-	seam.awaitRefused(t, ctx, predicatesSubject, 2)
+	seam.awaitRefused(ctx, t, manifestSubject, 2)
+	seam.awaitRefused(ctx, t, predicatesSubject, 2)
 
 	// The surfaces answer from memory while both broadcasts are pending.
 	var manifest ManifestPayload
@@ -197,7 +197,7 @@ func TestIntegrationRefusedBroadcastsDoNotStopStartAndLandOnce(t *testing.T) {
 		t.Fatalf("GET /source-manifest/sources while the broadcast is refused = %d %s", rec.Code, rec.Body.String())
 	}
 
-	seam.awaitDelivered(t, ctx)
+	seam.awaitDelivered(ctx, t)
 	// Stop joins the retry workers, so no later delivery can be missed.
 	if err := stopWithin(5*time.Second, c.Stop); err != nil {
 		t.Fatalf("Stop: %v", err)
@@ -214,10 +214,10 @@ func TestIntegrationRefusedBroadcastLogsOnceOnEntryAndOnceOnDelivery(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	logs := &recordingHandler{}
-	c, seam, _ := startRefusedManifest(t, ctx, slog.New(logs))
+	c, seam, _ := startRefusedManifest(ctx, t, slog.New(logs))
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, c.Stop) })
-	seam.awaitRefused(t, ctx, manifestSubject, 3)
-	seam.awaitDelivered(t, ctx)
+	seam.awaitRefused(ctx, t, manifestSubject, 3)
+	seam.awaitDelivered(ctx, t)
 	if err := stopWithin(5*time.Second, c.Stop); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
@@ -236,9 +236,9 @@ func TestIntegrationRefusedBroadcastLogsOnceOnEntryAndOnceOnDelivery(t *testing.
 func TestIntegrationStopEndsABroadcastStillRetrying(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, seam, _ := startRefusedManifest(t, ctx, nil)
-	seam.awaitRefused(t, ctx, manifestSubject, 2)
-	seam.awaitRefused(t, ctx, predicatesSubject, 2)
+	c, seam, _ := startRefusedManifest(ctx, t, nil)
+	seam.awaitRefused(ctx, t, manifestSubject, 2)
+	seam.awaitRefused(ctx, t, predicatesSubject, 2)
 
 	// The seam still refuses, so only Stop can end the retries.
 	if err := stopWithin(5*time.Second, c.Stop); err != nil {
@@ -258,9 +258,9 @@ func TestIntegrationStopEndsABroadcastStillRetrying(t *testing.T) {
 func TestIntegrationPhaseIsReadyWhileTheBroadcastIsUndelivered(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, seam, tc := startRefusedManifest(t, ctx, nil)
+	c, seam, tc := startRefusedManifest(ctx, t, nil)
 	t.Cleanup(func() { _ = stopWithin(5*time.Second, c.Stop) })
-	seam.awaitRefused(t, ctx, manifestSubject, 2)
+	seam.awaitRefused(ctx, t, manifestSubject, 2)
 
 	report, err := json.Marshal(SourceStatusReport{
 		InstanceName: "ast-source-repo",
