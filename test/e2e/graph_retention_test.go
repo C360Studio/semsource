@@ -467,6 +467,10 @@ func TestE2E_BootIntoFullGraphStream(t *testing.T) {
 	stop := upgradeStartWriter(t, binPath, configPath, workDir, natsURL, httpPort, wsPort)
 	first := waitForDrained(t, httpPort, nc, 180*time.Second)
 	assertCleanReady(t, "first boot", first)
+	// Boot 1 only seeds the filler. Stop it once graph-index has caught up,
+	// so its graceful stop is not racing an index backlog against the 30 s
+	// shutdown deadline (seen under -race on a loaded host, #406).
+	waitForIndexReady(t, httpPort, 120*time.Second)
 	firstCount := len(readEntityStates(t, nc))
 	stop()
 	if err := sub.Unsubscribe(); err != nil {
@@ -505,4 +509,21 @@ func TestE2E_BootIntoFullGraphStream(t *testing.T) {
 	if got, was := after.Subjects["graph.ingest.manifest"], before.Subjects["graph.ingest.manifest"]; got <= was {
 		t.Errorf("graph.ingest.manifest count = %d after the boot, want more than %d (the manifest broadcast was never delivered)", got, was)
 	}
+}
+
+// waitForIndexReady polls the status endpoint until the structural index
+// reports ready.
+func waitForIndexReady(t *testing.T, httpPort int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last quickstartStatus
+	var lastErr error
+	for time.Now().Before(deadline) {
+		last, lastErr = fetchQuickstartStatus(t, httpPort)
+		if lastErr == nil && last.Index.Ready {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("structural index not ready within %s; last=%+v lastErr=%v", timeout, last.Index, lastErr)
 }
