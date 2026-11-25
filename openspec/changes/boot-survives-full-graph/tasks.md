@@ -2,8 +2,10 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md` and rules on design Open Questions 1-4.
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approved `proposal.md` and `design.md` (2026-11-25, sha256:8a88c174f38f) with the recommended
+  answers: D1 (a) non-fatal with background retry; D2 retry until delivered or Stop; D3 `ready` does not wait for
+  the broadcasts, no new status field; ADR-0003's stale republish claim goes to a follow-up issue. Approved-by line
+  entered by claude at the owner's instruction.
 
 ## 2. Repro (before the change; must fail on main)
 

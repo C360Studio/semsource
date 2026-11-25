@@ -1,6 +1,6 @@
 # A full GRAPH stream at boot no longer crash-loops SemSource
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-25) sha256:8a88c174f38f
 
 Track: design (the boot path; one added Requirement in `ingestion-readiness`).
 
