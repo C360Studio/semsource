@@ -506,11 +506,18 @@ func NamespaceSegments(node *sitter.Node, source []byte) []string {
 	}
 	name := nodeText(nameNode, source)
 	if nameNode.Type() == "string" {
-		// A module specifier is one name, dots and all.
+		// A module specifier is one name, dots and all (#340). The ":" is
+		// never ID-valid, so the segment carries a hash of the raw specifier
+		// and "foo.bar", "foo/bar" and "foo-bar" stay apart. The trailing
+		// "-0" keeps it disjoint from any dotted namespace once segments are
+		// joined with "-": a namespace segment is an identifier (never "0")
+		// or a sanitized one ending in "-<8 hex>" (never "-0"), so no
+		// namespace chain flattens to "...-<hash>-0", even one that spells
+		// the hash out (namespace module.foo.bar.<hash>).
 		if name = strings.Trim(name, "\"'`"); name == "" {
 			return nil
 		}
-		return []string{name}
+		return []string{entityid.SanitizeSegment("module:"+name) + "-0"}
 	}
 	if name == "" {
 		return nil
