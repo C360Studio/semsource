@@ -176,17 +176,17 @@ passing. The record is in
 ## Open SemEngine Asks
 
 SemEngine owns substrate repairs and SemSource files them as issues there (ADR-0013 decision 4); this section is the
-evidence home for the asks SemSource carries at the pinned `v0.1.0-alpha.7`. States below were read with
-`gh issue view -R C360Studio/semengine <n>` on 2026-11-19, and #722–#724 on 2026-11-22. All of them concern
+evidence home for the asks SemSource carries at the pinned `v0.1.0-alpha.8`. States below were read with
+`gh issue view -R C360Studio/semengine <n>` on 2026-11-19, #722–#724 on 2026-11-22, and #667 and #722–#724 again on 2026-11-25 (all closed in alpha.8). All of them concern
 Tier 1 (neural search, #234); Tier 0 runs with embeddings off and does not depend on them.
 
 | Issue | Gap | State | What SemSource does meanwhile |
 | --- | --- | --- | --- |
-| [semengine#667](https://github.com/C360Studio/semengine/issues/667) | Text cut at the embedder's input window (512 tokens for `arctic-embed-s`) is not counted: `httpembedder` ignores the per-entry `truncated` mark and `IncTruncated` is an empty stub (`processor/graph-embedding/metrics.go:52` at alpha.6) | open | Nothing: a deployment cannot see how many entities were embedded from their opening text only |
+| [semengine#667](https://github.com/C360Studio/semengine/issues/667) | Text cut at the embedder's input window (512 tokens for `arctic-embed-s`) is not counted: `httpembedder` ignores the per-entry `truncated` mark and `IncTruncated` is an empty stub (`processor/graph-embedding/metrics.go:52` at alpha.6) | closed; shipped in `v0.1.0-alpha.8`, which SemSource pins | Nothing more: httpembedder counts entries embedded from their opening text only |
 | [semengine#686](https://github.com/C360Studio/semengine/issues/686) | `httpembedder` sent no `input_type`, so the product had to supply each model's query prefix | closed 2026-11-17 by [PR #691](https://github.com/C360Studio/semengine/pull/691); shipped in `v0.1.0-alpha.7`, which SemSource pins | Nothing: at alpha.7 `httpembedder` sends `input_type` and semembed applies the model's instruction, so `configs/tiers/tier1-semantic.json` sets no `query_prefix` (#234) |
-| [semengine#722](https://github.com/C360Studio/semengine/issues/722) | A restart re-embeds the corpus: `httpembedder` reports `Dimensions()` 0 until its first reply, so graph-embedding cannot vouch for the stored vectors it replays before it | open (filed 2026-11-22) | Documents the per-restart embedding burst (`configs/tiers/README.md`) |
-| [semengine#723](https://github.com/C360Studio/semengine/issues/723) | A fusion `nl` answer cannot disclose a failed or late merge: `fusion.Response` carries `provenance` only | open (filed 2026-11-22) | `graph_search` surfaces `merge` verbatim; the fusion tools disclose `provenance` only |
-| [semengine#724](https://github.com/C360Studio/semengine/issues/724) | graph-embedding's Worker failures are never retried, so after a provider recovers the failed entities stay failed and readiness stays degraded | open (filed 2026-11-22) | Documents that recovering from a provider outage needs a restart |
+| [semengine#722](https://github.com/C360Studio/semengine/issues/722) | A restart re-embeds the corpus: `httpembedder` reports `Dimensions()` 0 until its first reply, so graph-embedding cannot vouch for the stored vectors it replays before it | closed; shipped in `v0.1.0-alpha.8`, which SemSource pins | Adopted (#376): the embedder passes the endpoint's `dimensions`, and `tier1-semantic.json` declares 384 |
+| [semengine#723](https://github.com/C360Studio/semengine/issues/723) | A fusion `nl` answer cannot disclose a failed or late merge: `fusion.Response` carries `provenance` only | closed; shipped in `v0.1.0-alpha.8`, which SemSource pins | `graph_search` surfaces `merge` verbatim; passing `Resolution.Merge` through the fusion tools is [#377](https://github.com/C360Studio/semsource/issues/377) |
+| [semengine#724](https://github.com/C360Studio/semengine/issues/724) | graph-embedding's Worker failures are never retried, so after a provider recovers the failed entities stay failed and readiness stays degraded | closed; shipped in `v0.1.0-alpha.8`, which SemSource pins | Nothing: graph-embedding retries provider failures, so recovery needs no restart |
 | [semengine#683](https://github.com/C360Studio/semengine/issues/683) | No context in the embedded text to tell sibling entities apart: `graph-embedding` joins `name + " " + body`, so sections of one file share their leading tokens | open | Nothing |
 
 Closed upstream: [semengine#620](https://github.com/C360Studio/semengine/issues/620) (re-measure lexical `NameWeight` on
