@@ -297,7 +297,7 @@ The config-file source SHALL include the declaring manifest's path, relative to 
 - **THEN** every config-file entity ID is the same in both
 
 ### Requirement: TypeScript module-declaration members are keyed by their raw specifier
-The TypeScript and Svelte parsers SHALL scope a member of a `declare module "<specifier>"` block by a segment derived from the raw specifier, and MUST NOT give it the ID of a dotted-namespace member or of a member of another specifier that differs only in `.`, `/` or `-`.
+The TypeScript and Svelte parsers SHALL scope a member of a `declare module "<specifier>"` block by a segment derived from the raw specifier, and MUST NOT give it the ID of a dotted-namespace member or of a member of another specifier that differs only in `.`, `/` or `-`. Identifiers deliberately constructed to spell a segment's hash are outside this guarantee (https://github.com/C360Studio/semsource/issues/380); the runtime collision guard keeps the first such declaration.
 
 #### Scenario: A string module and a dotted namespace declare one name
 - **WHEN** one file declares `declare module "foo.bar" { export function x() {} }`, `declare module "foo/bar" { export function x() {} }` and `namespace foo.bar { export function x() {} }`
