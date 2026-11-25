@@ -7,6 +7,10 @@ SemSource is in **public beta**. The current public tag is `v1.0.0-beta.10`
 **breaking**: upgrading needs fresh storage and a re-ingest. See
 [v1.0.0-beta.10](#v100-beta10-the-first-semengine-release).
 
+`main` has since moved past that tag. The next tag, `v1.0.0-beta.11`, is
+unreleased and **breaking** again: fresh storage and a re-ingest. See
+[v1.0.0-beta.11](#v100-beta11-identity-hardening-unreleased).
+
 The previous tag, `v1.0.0-beta.9`, is described below for reference.
 
 `v1.0.0-beta.9` is the onboarding release — and the **first non-breaking
@@ -45,6 +49,66 @@ This page is an honest snapshot, not a dated commitment. Items are grouped by
 confidence and dependency shape. The "why" behind durable choices lives in
 [`docs/adr/`](docs/adr/); non-trivial work is specced first under
 [`openspec/`](openspec/).
+
+## v1.0.0-beta.11: Identity Hardening (Unreleased)
+
+The second SemEngine release, on SemEngine `v0.1.0-alpha.8` (#378). Like beta.10
+it cannot be upgraded in place. This section describes `main`, not a published
+tag; the tag is tracked on
+[#389](https://github.com/C360Studio/semsource/issues/389). Consumers should
+read the [beta.11 adoption note](docs/integration/beta11-adoption-note.md)
+first.
+
+- **A second clean storage break.** Entity IDs change again and the GRAPH
+  stream's retention changes, so upgrading from beta.10 means fresh NATS storage
+  and a re-ingest: `docker compose down -v`, then `docker compose up -d`. IDs are
+  never aliased or rewritten. The identity breaks since beta.10: one ID per code
+  declaration (#329, then Python, C and C++ in #338); TypeScript
+  `declare module` members keyed by their raw specifier (#340); config-file
+  entities keyed by their declaring file (#348), one entity per same-coordinate
+  declaration within a manifest with image IDs that hash the raw reference
+  (#375), and POM `<module>` IDs that hash the raw name (#384). The
+  [migration note](docs/migration/ast-entity-identity.md) covers the code IDs.
+- **Configs whose sources share an entity-ID system no longer boot.** ast, docs
+  and object-store roots (#349), media roots of one kind (#366), git sources
+  (#354) and config-file roots (#348) that would mint IDs under one org and
+  system are refused by `semsource validate`, `semsource run`, boot and runtime
+  `add_source`. The error names both sources and the remedy. A persisted entry
+  that blocks boot comes out with `semsource remove --manifest <instance>` while
+  the service is stopped.
+- **Substrate.** SemEngine `v0.1.0-alpha.8` at Tier 0. Tier 1 neural search was
+  qualified on alpha.7 with semembed 0.2.1 (#327) and stays opt-in
+  (`graph.semantic_search`). alpha.8 requires NATS `max_pending` 512 MiB: the
+  bundled Compose NATS sets it (#357), and an operator running their own NATS
+  must too (`configs/nats.conf`).
+- **A GRAPH stream that drains.** GRAPH uses workqueue retention, so a message
+  goes once graph-ingest has applied it (#160). A SemSource-only restart within
+  the hour no longer refills the stream and leaves a large corpus `degraded`;
+  the OSH warm-restart proof passed on #394's build (#388). A NATS server still
+  holding the beta.10 stream refuses boot and names the retention drift. GRAPH
+  is transport only, and external JetStream consumers on it are unsupported.
+- **Re-ingest removes what a source stopped emitting** (#336). The ast, doc, url,
+  image, audio, video, object-store and config-file sources opt in (#346, #384);
+  git does not. It acts only on content the process knows changed, never on the
+  first pass after a start.
+- **Consumer contracts.** Natural-language resolves are refused as
+  `not_enabled`, HTTP 501, when no search index runs, on every fusion verb and
+  lens (#291). Source status gains a per-source `id_collisions` count (#329).
+  Ast sources accept `index_vendored_js` (#329).
+- **Evidence.** The acceptance floor is still the graded scorecard. After the
+  AST identity change, Tier 0 on alpha.6 scored R1 36/36 rank-stable and OSH
+  13/13, with every dogfood verdict equal to beta.10 (#324,
+  [record](scripts/scorecard/results/SUMMARY-fix329-tier0.md)). The Tier 1 arm
+  on alpha.7 with semembed 0.2.1 scored dogfood 33/36, OSH 13/13, setup03a's
+  neural lane 72/72 and provider faults 15/15
+  ([record](scripts/scorecard/results/SUMMARY-tier1-alpha7.md)). The regrade on
+  the released beta.11 image is post-tag (#387).
+- **Also in this tag.** Java calls inside anonymous and local class bodies no
+  longer bind to the enclosing class (#339); AST folder `contains` sets stay
+  complete under watch edits (#347); a git source keeps its configured URL when
+  it re-ingests after a HEAD change (#350), and a failed re-ingest is retried
+  (#355); media collision refusals name the media remedy (#369); the summary
+  status no longer races on its degraded flag (#278).
 
 ## v1.0.0-beta.10: The First SemEngine Release
 
@@ -149,16 +213,23 @@ cannot be upgraded in place. Consumers should read the
 
 ## Recently Shipped
 
-- **On `main` since beta.10, for the next tag (breaking; fresh storage and
-  re-ingest):** one entity ID per code declaration (#329). Java methods and
-  constructors carry a signature discriminator, locals and Go `init`/blank
-  declarations are no longer entities, same-arity Java overload calls emit no
-  edge, IIFE/AMD-wrapped JS and vendored twins index as files only, and the
-  AST source reports any remaining duplicate as `id_collisions`. Python, C and
-  C++ follow (#338): C/C++ prototypes, `#if` twins and redefined macros fold
-  onto one entity, Python setters/deleters get distinct IDs, and `@overload`
-  stubs give way to the implementation. R1 is
-  rank-stable again (#324). See the
+- `v1.0.0-beta.11` (unreleased; breaking; fresh storage and re-ingest): the
+  second SemEngine release, on `v0.1.0-alpha.8` (#378). One entity ID per code
+  declaration (#329): Java methods and constructors carry a signature
+  discriminator, locals and Go `init`/blank declarations are no longer
+  entities, same-arity Java overload calls emit no edge, IIFE/AMD-wrapped JS
+  and vendored twins index as files only, and the AST source reports any
+  remaining duplicate as `id_collisions`. Python, C and C++ follow (#338):
+  C/C++ prototypes, `#if` twins and redefined macros fold onto one entity,
+  Python setters/deleters get distinct IDs, and `@overload` stubs give way to
+  the implementation. TypeScript `declare module` members are keyed by their raw
+  specifier (#340); config-file entities by their declaring file (#348, #375,
+  #384). Sources that share an entity-ID system are refused (#349, #354, #366).
+  GRAPH removes consumed messages (#160) and the NATS `max_pending` 512 MiB
+  setting is required (#357). Re-ingest removes dropped predicates (#336);
+  Tier 1 is qualified on alpha.7 (#327); nl resolves answer `not_enabled`
+  without a search index (#291); R1 is rank-stable again (#324). See the
+  [adoption note](docs/integration/beta11-adoption-note.md) and the
   [migration note](docs/migration/ast-entity-identity.md).
 - `v1.0.0-beta.10`: the first SemEngine release (breaking; fresh storage and
   re-ingest) — Tier 0 on SemEngine `v0.1.0-alpha.6` with embeddings off, the
