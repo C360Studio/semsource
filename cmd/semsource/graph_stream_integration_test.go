@@ -114,9 +114,17 @@ func TestIntegration_GraphStreamKeepsPublishBeforeConsumerBinds(t *testing.T) {
 		t.Fatalf("stored ID = %q, want %q", stored.ID, entityID)
 	}
 
-	// graph-ingest acks after the ENTITY_STATES write, and the ack removes the
-	// message. The consumer's ack floor reaching the published sequence is
-	// the event to wait for; after it the stream must hold no entity message.
+	waitForGraphIngestAck(ctx, t, stream)
+	if n := entityMessages(ctx, t, stream); n != 0 {
+		t.Fatalf("GRAPH holds %d graph.ingest.entity messages after graph-ingest applied the entity, want 0", n)
+	}
+}
+
+// waitForGraphIngestAck returns once graph-ingest has acknowledged the
+// stream's first message. graph-ingest acks after the ENTITY_STATES write,
+// and under workqueue the ack removes the message.
+func waitForGraphIngestAck(ctx context.Context, t *testing.T, stream jetstream.Stream) {
+	t.Helper()
 	consumer, err := stream.Consumer(ctx, "graph-ingest-graph-ingest-entity")
 	if err != nil {
 		t.Fatalf("graph-ingest consumer: %v", err)
@@ -127,16 +135,13 @@ func TestIntegration_GraphStreamKeepsPublishBeforeConsumerBinds(t *testing.T) {
 			t.Fatalf("consumer info: %v", err)
 		}
 		if info.AckFloor.Stream >= 1 && info.NumAckPending == 0 {
-			break
+			return
 		}
 		select {
 		case <-ctx.Done():
 			t.Fatalf("graph-ingest never acknowledged the entity: ack_floor=%d ack_pending=%d", info.AckFloor.Stream, info.NumAckPending)
 		case <-time.After(10 * time.Millisecond):
 		}
-	}
-	if n := entityMessages(ctx, t, stream); n != 0 {
-		t.Fatalf("GRAPH holds %d graph.ingest.entity messages after graph-ingest applied the entity, want 0", n)
 	}
 }
 
