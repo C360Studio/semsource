@@ -493,11 +493,12 @@ func (c *Component) refreshStatus() *StatusPayload {
 }
 
 // buildSummary constructs a SummaryPayload from current aggregator state
-// and the predicate schema. Called on-demand for query responses.
+// and the predicate schema. Called on-demand for query responses. It takes the
+// write lock because buildStatus updates the aggregator's degraded flag (#278).
 func (c *Component) buildSummary() *SummaryPayload {
-	c.statusMu.RLock()
+	c.statusMu.Lock()
 	status := c.aggregator.buildStatus(c.config.Namespace)
-	c.statusMu.RUnlock()
+	c.statusMu.Unlock()
 
 	// Aggregate type counts by domain across all source instances.
 	domainMap := make(map[string]*DomainSummary)
