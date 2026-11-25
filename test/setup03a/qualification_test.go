@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -60,6 +61,22 @@ type harness struct {
 	starts                                                       int
 	result                                                       report
 	ids                                                          map[string]string
+	// GRAPH removes what graph-ingest has applied (#160), so authentic
+	// envelopes are captured off a core subscription as they are published,
+	// never read back from the stream. captureMu guards captured, which the
+	// subscription callback appends to.
+	captureMu   sync.Mutex
+	captured    []capturedEnvelope
+	connections int
+}
+
+// capturedEnvelope is one graph.ingest.entity publication seen by the
+// harness's core subscription, headers included so Nats-Msg-Id is evidence.
+type capturedEnvelope struct {
+	Connection int         `json:"connection"`
+	Subject    string      `json:"subject"`
+	Header     nats.Header `json:"header,omitempty"`
+	Data       []byte      `json:"-"`
 }
 type exact struct {
 	Entity *struct {
@@ -374,6 +391,47 @@ func (h *harness) connect() {
 	if err != nil {
 		h.t.Fatal(err)
 	}
+	h.captureEntities()
+}
+
+// captureEntities subscribes (core NATS, not a JetStream consumer) to every
+// graph.ingest.entity publication on this connection. The flush returns once
+// the server holds the interest, so nothing published after connect() is
+// missed. The subscription ends when the connection is closed.
+func (h *harness) captureEntities() {
+	h.t.Helper()
+	h.connections++
+	connection := h.connections
+	if _, err := h.nc.Subscribe("graph.ingest.entity", func(m *nats.Msg) {
+		envelope := capturedEnvelope{Connection: connection, Subject: m.Subject, Header: m.Header, Data: bytes.Clone(m.Data)}
+		h.captureMu.Lock()
+		defer h.captureMu.Unlock()
+		h.captured = append(h.captured, envelope)
+	}); err != nil {
+		h.t.Fatalf("subscribe graph.ingest.entity: %v", err)
+	}
+	if err := h.nc.Flush(); err != nil {
+		h.t.Fatalf("flush graph.ingest.entity subscription: %v", err)
+	}
+}
+
+// capturedFor returns, oldest first, the captured envelopes whose payload is
+// the entity id itself (not one that merely references it).
+func (h *harness) capturedFor(id string) []capturedEnvelope {
+	h.captureMu.Lock()
+	defer h.captureMu.Unlock()
+	var out []capturedEnvelope
+	for _, envelope := range h.captured {
+		var decoded struct {
+			Payload struct {
+				ID string `json:"id"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(envelope.Data, &decoded) == nil && decoded.Payload.ID == id {
+			out = append(out, envelope)
+		}
+	}
+	return out
 }
 func freePort(t *testing.T) int {
 	t.Helper()
@@ -1026,19 +1084,16 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 		h.t.Error(err)
 		return
 	}
-	var captured *jetstream.RawStreamMsg
-	for seq := info.State.LastSeq; seq >= info.State.FirstSeq && seq > 0; seq-- {
-		msg, getErr := stream.GetMsg(h.ctx, seq)
-		if getErr == nil && msg.Subject == "graph.ingest.entity" && bytes.Contains(msg.Data, []byte(h.ids["run"])) {
-			captured = msg
-			break
-		}
-	}
-	if captured == nil {
+	runEnvelopes := h.capturedFor(h.ids["run"])
+	if len(runEnvelopes) == 0 {
 		h.t.Error("no authentic Run envelope captured for pending-write probe")
 		return
 	}
+	captured := runEnvelopes[len(runEnvelopes)-1]
 	h.save("pending-authentic-envelope.json", captured.Data)
+	if header, headerErr := json.MarshalIndent(captured.Header, "", "  "); headerErr == nil {
+		h.save("pending-authentic-envelope-header.json", header)
+	}
 	if err = h.cmd.Process.Signal(syscall.SIGSTOP); err != nil {
 		h.t.Error(err)
 		return
@@ -1052,6 +1107,9 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 		h.checkedStop("pending_broker_restart_forced_exit", true)
 		return
 	}
+	// The replay carries the data, not the headers: its Nats-Msg-Id is still
+	// inside GRAPH's duplicate window, so the server would answer a duplicate
+	// PubAck and store nothing, and the probe needs the write accepted.
 	ack, err := h.js.Publish(h.ctx, captured.Subject, captured.Data)
 	if err != nil {
 		h.t.Error(err)
@@ -1313,12 +1371,25 @@ func (h *harness) captureRestartGuard() {
 	if err != nil {
 		return
 	}
-	var sequences []uint64
-	for seq := info.State.FirstSeq; seq <= info.State.LastSeq; seq++ {
-		msg, getErr := stream.GetMsg(h.ctx, seq)
-		if getErr == nil && bytes.Contains(msg.Data, []byte(h.ids["run"])) {
-			sequences = append(sequences, seq)
-		}
+	// The stream sequence of a Run publication goes to its publisher's
+	// PubAck, which a core subscription never sees, and GRAPH has removed
+	// every applied message (#160). The evidence records the captured
+	// envelopes and says the sequences are not recoverable.
+	type envelopeEvidence struct {
+		Connection int    `json:"connection"`
+		MsgID      string `json:"nats_msg_id"`
+		Bytes      int    `json:"bytes"`
+		SHA256     string `json:"sha256"`
+	}
+	var envelopes []envelopeEvidence
+	for _, envelope := range h.capturedFor(h.ids["run"]) {
+		digest := sha256.Sum256(envelope.Data)
+		envelopes = append(envelopes, envelopeEvidence{
+			Connection: envelope.Connection,
+			MsgID:      envelope.Header.Get(nats.MsgIdHdr),
+			Bytes:      len(envelope.Data),
+			SHA256:     hex.EncodeToString(digest[:]),
+		})
 	}
 	var appliedGeneration, appliedSeq uint64
 	if len(entry.Value()) == 16 {
@@ -1332,7 +1403,9 @@ func (h *harness) captureRestartGuard() {
 		"applied_generation":             appliedGeneration,
 		"applied_sequence":               appliedSeq,
 		"restarted_stream_last_sequence": info.State.LastSeq,
-		"run_payload_sequences":          sequences,
+		"run_payload_envelopes":          envelopes,
+		"run_payload_sequences":          nil,
+		"run_payload_sequences_reason":   "not recoverable: GRAPH workqueue retention removes applied messages, and a core subscription does not see the PubAck sequence",
 	}, "", "  ")
 	if err == nil {
 		h.save("restart-guard.json", raw)

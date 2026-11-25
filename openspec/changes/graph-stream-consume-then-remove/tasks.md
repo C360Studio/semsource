@@ -17,10 +17,17 @@
   on one NATS. It sets `streams.GRAPH.max_bytes` to about 1.5× the bytes from 2.2, boots to ready, stops, and boots
   again at once. It asserts: phase `ready`, no failed or dropped counts in source status, and the entity count equal
   across both boots. It must fail on main (10077 / `degraded`).
+- [x] 2.4 setup03a `pendingBrokerRestart` and `captureRestartGuard` (`test/setup03a/qualification_test.go`) stop reading
+  GRAPH by sequence (found after 3.1: workqueue removes the applied Run envelope the probe replays). The harness holds a
+  core subscription on `graph.ingest.entity` from each connect and replays the latest captured envelope whose payload is
+  the Run entity; the restart-guard evidence records the captured envelopes and states that the stream sequences are not
+  recoverable. Proved by: `TestKnownAnswerCorpus` green on bm25 and foundation with the workqueue binary and with main's.
+- [ ] 2.5 `TestE2E_SubmoduleIngest` (`test/e2e/submodule_test.go:84-98`) stops pre-creating GRAPH and reads
+  ENTITY_STATES, as in 2.1. Proved by: the test green.
 
 ## 3. Retention (breaking: needs a fresh GRAPH stream)
 
-- [ ] 3.1 `graphStreamConfig` declares `Retention: "workqueue"` (D1; the value follows the ruling)
+- [x] 3.1 `graphStreamConfig` declares `Retention: "workqueue"` (D1; the value follows the ruling)
   (`cmd/semsource/run.go:966-995`). The comment keeps the refuse-don't-evict rationale and corrects "terminal" to
   "retried within the delivery budget, then failed" (`internal/entitypub/classify.go:60-65`). The fixtures at
   `internal/sourcespawn/sourcespawn_test.go:41-53` and `internal/governance/source_removal_integration_test.go:47-59`
