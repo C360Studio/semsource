@@ -51,6 +51,14 @@ const (
 	// ConfigDepConfiguration is the Gradle dependency configuration (build.gradle only).
 	// Example: "implementation", "testImplementation", "api"
 	ConfigDepConfiguration = "source.config.dependency-configuration"
+
+	// ConfigDepType is a Maven dependency's <type> when it is not "jar" (pom.xml only).
+	// Example: "test-jar", "war", "pom"
+	ConfigDepType = "source.config.dependency-type"
+
+	// ConfigDepClassifier is a Maven dependency's <classifier> (pom.xml only).
+	// Example: "tests", "sources", "linux-x86_64"
+	ConfigDepClassifier = "source.config.dependency-classifier"
 )
 
 // npm package predicates (package.json).
@@ -161,6 +169,16 @@ func registerConfigPredicates() {
 		vocabulary.WithDescription("Gradle dependency configuration: implementation, testImplementation, api, etc."),
 		vocabulary.WithDataType("string"),
 		vocabulary.WithIRI(Namespace+"depConfiguration"))
+
+	vocabulary.Register(ConfigDepType,
+		vocabulary.WithDescription("Maven dependency type when not jar: test-jar, war, pom, etc."),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"depType"))
+
+	vocabulary.Register(ConfigDepClassifier,
+		vocabulary.WithDescription("Maven dependency classifier: tests, sources, a platform, etc."),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI(Namespace+"depClassifier"))
 
 	// npm package
 	vocabulary.Register(ConfigPkgName,

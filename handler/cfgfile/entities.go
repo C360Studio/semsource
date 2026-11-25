@@ -2,6 +2,7 @@ package cfgfile
 
 import (
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/c360studio/semengine/message"
@@ -110,6 +111,12 @@ func newGoDependencyEntity(authority entityid.Authority, depPath, version string
 	}
 }
 
+// fold merges a repeated require of the same module version: it is
+// indirect only when every require says so (#375).
+func (e *goDependencyEntity) fold(o *goDependencyEntity) { e.Indirect = e.Indirect && o.Indirect }
+
+func (e *goDependencyEntity) entityID() string { return e.ID }
+
 func (e *goDependencyEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	indirect := "false"
@@ -216,6 +223,16 @@ func newNPMDependencyEntity(authority entityid.Authority, name, version string, 
 	}
 }
 
+// fold merges a dependency listed in both dependencies and devDependencies:
+// npm installs it for production, so prod wins (#375).
+func (e *npmDependencyEntity) fold(o *npmDependencyEntity) {
+	if o.Kind == "npm-prod" {
+		e.Kind = "npm-prod"
+	}
+}
+
+func (e *npmDependencyEntity) entityID() string { return e.ID }
+
 func (e *npmDependencyEntity) triples() []message.Triple {
 	now := e.IndexedAt
 	return []message.Triple{
@@ -244,7 +261,9 @@ type dockerImageEntity struct {
 }
 
 func newDockerImageEntity(authority entityid.Authority, image string, exposedPorts []string, filePath, system, rel string, indexedAt time.Time) *dockerImageEntity {
-	instance := slugify(image)
+	// The slug alone is not injective (foo/bar:1 and foo-bar:1), so the raw
+	// reference's hash keeps distinct images apart (#375).
+	instance := slugify(image) + "-" + contentHashShort(image)
 	return &dockerImageEntity{
 		ID:           authority.Build(system, "config", "image", declared(instance, rel)),
 		Image:        image,
@@ -358,25 +377,43 @@ func (e *mavenProjectEntity) entityState() *handler.EntityState {
 
 // mavenDependencyEntity is a fully-typed Maven/pom.xml dependency entity.
 type mavenDependencyEntity struct {
-	ID        string
-	Name      string // "groupId:artifactId"
-	Version   string
-	Scope     string
-	System    string
-	Org       string
-	IndexedAt time.Time
+	ID      string
+	Name    string // "groupId:artifactId"
+	Version string
+	Scopes  []string // every scope the manifest declares it under (#375)
+	// Type (when not "jar") and Classifier name a distinct artifact, so they
+	// are part of the instance (#375).
+	Type       string
+	Classifier string
+	System     string
+	Org        string
+	IndexedAt  time.Time
 }
 
-func newMavenDependencyEntity(authority entityid.Authority, groupID, artifactID, version, scope, system, rel string, indexedAt time.Time) *mavenDependencyEntity {
-	instance := contentHashShort(groupID + ":" + artifactID + "@" + version)
+func newMavenDependencyEntity(authority entityid.Authority, dep POMDep, system, rel string, indexedAt time.Time) *mavenDependencyEntity {
+	typ := dep.Type
+	if typ == "jar" {
+		typ = ""
+	}
+	key := dep.GroupID + ":" + dep.ArtifactID
+	if typ != "" || dep.Classifier != "" {
+		key += ":" + typ + ":" + dep.Classifier
+	}
+	instance := contentHashShort(key + "@" + dep.Version)
+	var scopes []string
+	if dep.Scope != "" {
+		scopes = []string{dep.Scope}
+	}
 	return &mavenDependencyEntity{
-		ID:        authority.Build(system, "config", "dependency", declared(instance, rel)),
-		Name:      groupID + ":" + artifactID,
-		Version:   version,
-		Scope:     scope,
-		System:    system,
-		Org:       authority.Org,
-		IndexedAt: indexedAt,
+		ID:         authority.Build(system, "config", "dependency", declared(instance, rel)),
+		Name:       dep.GroupID + ":" + dep.ArtifactID,
+		Version:    dep.Version,
+		Scopes:     scopes,
+		Type:       typ,
+		Classifier: dep.Classifier,
+		System:     system,
+		Org:        authority.Org,
+		IndexedAt:  indexedAt,
 	}
 }
 
@@ -388,18 +425,18 @@ func (e *mavenDependencyEntity) triples() []message.Triple {
 		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "maven", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
-	if e.Scope != "" {
-		triples = append(triples, message.Triple{
-			Subject:    e.ID,
-			Predicate:  source.ConfigDepScope,
-			Object:     e.Scope,
-			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
-			Confidence: 1.0,
-		})
-	}
-	return triples
+	triples = appendValues(triples, e.ID, source.ConfigDepScope, e.Scopes, now)
+	triples = appendValues(triples, e.ID, source.ConfigDepType, []string{e.Type}, now)
+	return appendValues(triples, e.ID, source.ConfigDepClassifier, []string{e.Classifier}, now)
 }
+
+// fold merges a repeated declaration of the same artifact under another
+// scope (#375).
+func (e *mavenDependencyEntity) fold(o *mavenDependencyEntity) {
+	e.Scopes = append(e.Scopes, o.Scopes...)
+}
+
+func (e *mavenDependencyEntity) entityID() string { return e.ID }
 
 func (e *mavenDependencyEntity) entityState() *handler.EntityState {
 	return controlState(e.ID, e.triples(), e.IndexedAt)
@@ -507,25 +544,25 @@ func (e *gradleProjectEntity) entityState() *handler.EntityState {
 
 // gradleDependencyEntity is a fully-typed build.gradle dependency entity.
 type gradleDependencyEntity struct {
-	ID            string
-	Name          string // "group:name"
-	Version       string
-	Configuration string
-	System        string
-	Org           string
-	IndexedAt     time.Time
+	ID             string
+	Name           string // "group:name"
+	Version        string
+	Configurations []string // every configuration the build file declares it under (#375)
+	System         string
+	Org            string
+	IndexedAt      time.Time
 }
 
 func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, system, rel string, indexedAt time.Time) *gradleDependencyEntity {
 	instance := contentHashShort(group + ":" + name + "@" + version)
 	return &gradleDependencyEntity{
-		ID:            authority.Build(system, "config", "dependency", declared(instance, rel)),
-		Name:          group + ":" + name,
-		Version:       version,
-		Configuration: configuration,
-		System:        system,
-		Org:           authority.Org,
-		IndexedAt:     indexedAt,
+		ID:             authority.Build(system, "config", "dependency", declared(instance, rel)),
+		Name:           group + ":" + name,
+		Version:        version,
+		Configurations: []string{configuration},
+		System:         system,
+		Org:            authority.Org,
+		IndexedAt:      indexedAt,
 	}
 }
 
@@ -538,18 +575,16 @@ func (e *gradleDependencyEntity) triples() []message.Triple {
 		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "gradle", Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0},
 	}
-	if e.Configuration != "" {
-		triples = append(triples, message.Triple{
-			Subject:    e.ID,
-			Predicate:  source.ConfigDepConfiguration,
-			Object:     e.Configuration,
-			Source:     entityid.PlatformSemsource,
-			Timestamp:  now,
-			Confidence: 1.0,
-		})
-	}
-	return triples
+	return appendValues(triples, e.ID, source.ConfigDepConfiguration, e.Configurations, now)
 }
+
+// fold merges a repeated declaration of the same coordinate under another
+// configuration (#375).
+func (e *gradleDependencyEntity) fold(o *gradleDependencyEntity) {
+	e.Configurations = append(e.Configurations, o.Configurations...)
+}
+
+func (e *gradleDependencyEntity) entityID() string { return e.ID }
 
 func (e *gradleDependencyEntity) entityState() *handler.EntityState {
 	return controlState(e.ID, e.triples(), e.IndexedAt)
@@ -588,9 +623,12 @@ func (h *ConfigHandler) goModEntityStates(content []byte, path, system, rel stri
 
 	mod := newGoModuleEntity(authority, result.Module, result.GoVersion, path, system, rel, now)
 
-	var depStates []*handler.EntityState
+	deps := make([]*goDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		d := newGoDependencyEntity(authority, dep.Path, dep.Version, dep.Indirect, system, rel, now)
+		deps = append(deps, newGoDependencyEntity(authority, dep.Path, dep.Version, dep.Indirect, system, rel, now))
+	}
+	var depStates []*handler.EntityState
+	for _, d := range foldByID(deps) {
 		mod.DepIDs = append(mod.DepIDs, d.ID)
 		depStates = append(depStates, d.entityState())
 	}
@@ -608,9 +646,12 @@ func (h *ConfigHandler) npmPackageEntityStates(content []byte, path, system, rel
 
 	pkg := newNPMPackageEntity(authority, result.Name, result.Version, path, system, rel, now)
 
-	var depStates []*handler.EntityState
+	deps := make([]*npmDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		d := newNPMDependencyEntity(authority, dep.Name, dep.Version, dep.Dev, system, rel, now)
+		deps = append(deps, newNPMDependencyEntity(authority, dep.Name, dep.Version, dep.Dev, system, rel, now))
+	}
+	var depStates []*handler.EntityState
+	for _, d := range foldByID(deps) {
 		pkg.DepIDs = append(pkg.DepIDs, d.ID)
 		depStates = append(depStates, d.entityState())
 	}
@@ -642,9 +683,12 @@ func (h *ConfigHandler) mavenEntityStates(content []byte, path, system, rel stri
 
 	proj := newMavenProjectEntity(authority, result.GroupID, result.ArtifactID, result.Version, result.Packaging, path, system, rel, now)
 
-	var childStates []*handler.EntityState
+	deps := make([]*mavenDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		d := newMavenDependencyEntity(authority, dep.GroupID, dep.ArtifactID, dep.Version, dep.Scope, system, rel, now)
+		deps = append(deps, newMavenDependencyEntity(authority, dep, system, rel, now))
+	}
+	var childStates []*handler.EntityState
+	for _, d := range foldByID(deps) {
 		proj.DepIDs = append(proj.DepIDs, d.ID)
 		childStates = append(childStates, d.entityState())
 	}
@@ -672,9 +716,12 @@ func (h *ConfigHandler) gradleEntityStates(content []byte, path, system, rel str
 	}
 	proj := newGradleProjectEntity(authority, dirName, path, system, rel, now)
 
-	var depStates []*handler.EntityState
+	deps := make([]*gradleDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		d := newGradleDependencyEntity(authority, dep.Group, dep.Name, dep.Version, dep.Configuration, system, rel, now)
+		deps = append(deps, newGradleDependencyEntity(authority, dep.Group, dep.Name, dep.Version, dep.Configuration, system, rel, now))
+	}
+	var depStates []*handler.EntityState
+	for _, d := range foldByID(deps) {
 		proj.DepIDs = append(proj.DepIDs, d.ID)
 		depStates = append(depStates, d.entityState())
 	}
@@ -698,4 +745,41 @@ func declaringPath(root, path string) string {
 // ID with different facts (#348).
 func declared(instance, rel string) string {
 	return instance + "-" + contentHashShort(rel)
+}
+
+// foldByID keeps the first declaration of each entity ID in one manifest and
+// folds later declarations of that ID into it, so a manifest never emits two
+// states under one ID or names one ID twice in its edges (#375).
+func foldByID[T interface {
+	entityID() string
+	fold(T)
+}](decls []T) []T {
+	seen := make(map[string]T, len(decls))
+	out := decls[:0:0]
+	for _, d := range decls {
+		if prev, ok := seen[d.entityID()]; ok {
+			prev.fold(d)
+			continue
+		}
+		seen[d.entityID()] = d
+		out = append(out, d)
+	}
+	return out
+}
+
+// appendValues adds one triple per distinct non-empty value, sorted, so a
+// folded entity does not depend on declaration order (#375).
+func appendValues(triples []message.Triple, id, pred string, values []string, now time.Time) []message.Triple {
+	vals := slices.Clone(values)
+	slices.Sort(vals)
+	for _, v := range slices.Compact(vals) {
+		if v == "" {
+			continue
+		}
+		triples = append(triples, message.Triple{
+			Subject: id, Predicate: pred, Object: v,
+			Source: entityid.PlatformSemsource, Timestamp: now, Confidence: 1.0,
+		})
+	}
+	return triples
 }

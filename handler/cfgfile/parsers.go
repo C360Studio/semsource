@@ -223,6 +223,10 @@ type POMDep struct {
 	// Scope is the Maven dependency scope: compile, test, provided, runtime, system.
 	// Defaults to "compile" when absent.
 	Scope string
+	// Type is the declared <type> (e.g. "test-jar"); empty means "jar".
+	Type string
+	// Classifier is the declared <classifier>, if any.
+	Classifier string
 }
 
 // pomXML mirrors the pom.xml structure for xml.Unmarshal.
@@ -249,6 +253,8 @@ type pomDepXML struct {
 	ArtifactID string `xml:"artifactId"`
 	Version    string `xml:"version"`
 	Scope      string `xml:"scope"`
+	Type       string `xml:"type"`
+	Classifier string `xml:"classifier"`
 }
 
 // ParsePOM parses the content of a Maven pom.xml file.
@@ -281,6 +287,8 @@ func ParsePOM(content []byte) (*POMResult, error) {
 			ArtifactID: d.ArtifactID,
 			Version:    d.Version,
 			Scope:      scope,
+			Type:       strings.TrimSpace(d.Type),
+			Classifier: strings.TrimSpace(d.Classifier),
 		})
 	}
 

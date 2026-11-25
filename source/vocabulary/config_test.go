@@ -6,6 +6,7 @@ import (
 	"github.com/c360studio/semengine/vocabulary"
 )
 
+// spec: openspec/specs/source-vocabulary-contract/spec.md#Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
 func TestConfigPredicatesRegistered(t *testing.T) {
 	predicates := []string{
 		ConfigFilePath,
@@ -17,6 +18,8 @@ func TestConfigPredicatesRegistered(t *testing.T) {
 		ConfigDepKind,
 		ConfigDepScope,
 		ConfigDepConfiguration,
+		ConfigDepType,
+		ConfigDepClassifier,
 		ConfigPkgName,
 		ConfigPkgVersion,
 		ConfigProjectGroup,
@@ -44,6 +47,7 @@ func TestConfigPredicatesRegistered(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/source-vocabulary-contract/spec.md#Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
 func TestConfigPredicateDataTypes(t *testing.T) {
 	tests := []struct {
 		predicate    string
@@ -58,6 +62,8 @@ func TestConfigPredicateDataTypes(t *testing.T) {
 		{ConfigDepKind, "string"},
 		{ConfigDepScope, "string"},
 		{ConfigDepConfiguration, "string"},
+		{ConfigDepType, "string"},
+		{ConfigDepClassifier, "string"},
 		{ConfigPkgName, "string"},
 		{ConfigPkgVersion, "string"},
 		{ConfigProjectGroup, "string"},
@@ -124,6 +130,7 @@ func TestConfigPredicateIRIMappings(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/source-vocabulary-contract/spec.md#Requirement: Registered vocabulary is emitted or removed, never reserved indefinitely
 func TestConfigPredicateConstantValues(t *testing.T) {
 	// Verify the string values of the constants match the intended predicate
 	// naming convention: source.{domain}.{entity_type}.{property}
@@ -141,6 +148,8 @@ func TestConfigPredicateConstantValues(t *testing.T) {
 		{"ConfigDepKind", ConfigDepKind, "source.config.dependency-kind"},
 		{"ConfigDepScope", ConfigDepScope, "source.config.dependency-scope"},
 		{"ConfigDepConfiguration", ConfigDepConfiguration, "source.config.dependency-configuration"},
+		{"ConfigDepType", ConfigDepType, "source.config.dependency-type"},
+		{"ConfigDepClassifier", ConfigDepClassifier, "source.config.dependency-classifier"},
 		{"ConfigPkgName", ConfigPkgName, "source.config.package-name"},
 		{"ConfigPkgVersion", ConfigPkgVersion, "source.config.package-version"},
 		{"ConfigProjectGroup", ConfigProjectGroup, "source.config.project-group-id"},
