@@ -342,8 +342,9 @@ Retained entities can therefore continue to look current. No independent review 
 clean storage break after the SemEngine cutover. Same-key collisions inside one AST parse were stored as hybrids:
 graph-ingest merges same-key writes per (predicate, source) set. The fix changes code entity IDs, so the rules above
 apply unchanged: provision fresh storage and re-ingest. No aliases, no old-ID rewrite, no dual reader. An in-place
-re-ingest is not equivalent, because re-ingest never removes predicates
-([#336](https://github.com/C360Studio/semsource/issues/336)).
+re-ingest is not equivalent: existing IDs are never rewritten, and the re-ingest reconcile
+([#336](https://github.com/C360Studio/semsource/issues/336)) runs only on a known content change, so the first pass
+after a start leaves a stored hybrid in place until its file is next edited.
 
 | Change | Identity effect | Visible loss |
 | --- | --- | --- |
