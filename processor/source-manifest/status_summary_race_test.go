@@ -9,6 +9,8 @@ import (
 // the aggregator's sticky degraded flag, so summaries built side by side must
 // not share a read lock. A lossy report makes every build take that write.
 // Run under -race; the phase assertion pins that the flag still lands.
+//
+// spec: openspec/specs/ingestion-readiness/spec.md#Requirement: Ready means seeded
 func TestComponent_ConcurrentSummariesDoNotRace(t *testing.T) {
 	c := slowSeedComponent(t)
 	c.aggregator.update(seeded("ast-a", 7, 7))
