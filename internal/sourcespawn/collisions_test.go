@@ -189,7 +189,7 @@ func TestCheckSystemCollisions(t *testing.T) {
 				{Type: "image", Paths: []string{"/m/x", "/m/b"}},
 				{Type: "image", Paths: []string{"/m/b"}},
 			},
-			want: []string{"image-source-b (root /m/b)", "image-source-x (root /m/b)", `system "b"`},
+			want: []string{"image-source-b (root /m/b)", "image-source-x (root /m/b)", `system "b"`, "distinct, non-overlapping paths whose directory names differ"},
 		},
 		{
 			name: "two video roots with one basename collide",
@@ -197,7 +197,7 @@ func TestCheckSystemCollisions(t *testing.T) {
 				{Type: "video", Paths: []string{"/a/clips"}},
 				{Type: "video", Paths: []string{"/b/clips"}},
 			},
-			want: []string{"video-source-clips (root /a/clips)", "video-source-clips (root /b/clips)", `system "clips"`},
+			want: []string{"video-source-clips (root /a/clips)", "video-source-clips (root /b/clips)", `system "clips"`, "distinct, non-overlapping paths whose directory names differ"},
 		},
 		{
 			name: "an image and an audio source over one root are different ID spaces",
@@ -455,7 +455,7 @@ func TestCheckSourceCollisions(t *testing.T) {
 				{Type: "image", Paths: []string{"/m/b"}},
 			},
 			refused: true,
-			want:    []string{"image-source-x (root /m/b)", "image-source-b (root /m/b)"},
+			want:    []string{"image-source-x (root /m/b)", "image-source-b (root /m/b)", "distinct, non-overlapping paths whose directory names differ"},
 		},
 		{
 			name: "an image and an audio source over one root",
@@ -619,6 +619,18 @@ func TestAddWithChecker_RefusesSharedSystem(t *testing.T) {
 			existing: []config.SourceEntry{{Type: "image", Paths: []string{"/m/x", "/m/b"}}},
 			add:      config.SourceEntry{Type: "image", Paths: []string{"/m/b"}},
 			refused:  "image-source-x (root /m/b)",
+		},
+		{
+			name:     "a media collision names the media remedy, not a project",
+			existing: []config.SourceEntry{{Type: "image", Paths: []string{"/m/x", "/m/b"}}},
+			add:      config.SourceEntry{Type: "image", Paths: []string{"/m/b"}},
+			refused:  "so give each media source distinct, non-overlapping paths whose directory names differ (#349)",
+		},
+		{
+			name:     "moving a registered media instance onto another root names remove-then-add and the media remedy",
+			existing: []config.SourceEntry{{Type: "video", Paths: []string{"/a/clips"}}},
+			add:      config.SourceEntry{Type: "video", Paths: []string{"/b/clips"}},
+			refused:  "remove it, then add it; otherwise give each media source distinct, non-overlapping paths",
 		},
 		{
 			name:     "an audio source over a registered image root",
