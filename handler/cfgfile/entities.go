@@ -447,9 +447,12 @@ type pomModuleEntity struct {
 }
 
 func newPOMModuleEntity(authority entityid.Authority, name, filePath, system, rel string, indexedAt time.Time) *pomModuleEntity {
-	instance := slugify(name)
-	if instance == "" {
-		instance = contentHashShort(name)
+	// The raw name's hash follows the slug, so names that slugify alike
+	// (`my_module`, `my-module`) stay two entities instead of two writers of
+	// one ID, which the #336 reconcile would make erase each other (#384).
+	instance := contentHashShort(name)
+	if slug := slugify(name); slug != "" {
+		instance = slug + "-" + instance
 	}
 	return &pomModuleEntity{
 		ID:        authority.Build(system, "config", "gomod", declared(instance, rel)),
@@ -678,8 +681,14 @@ func (h *ConfigHandler) mavenEntityStates(content []byte, path, system, rel stri
 		proj.DepIDs = append(proj.DepIDs, d.ID)
 		childStates = append(childStates, d.entityState())
 	}
+	seenModules := make(map[string]bool, len(result.Modules))
 	for _, mod := range result.Modules {
 		m := newPOMModuleEntity(authority, mod, path, system, rel, now)
+		// A repeated <module> is one entity, emitted and edged once.
+		if seenModules[m.ID] {
+			continue
+		}
+		seenModules[m.ID] = true
 		proj.ModuleIDs = append(proj.ModuleIDs, m.ID)
 		childStates = append(childStates, m.entityState())
 	}

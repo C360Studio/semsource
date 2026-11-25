@@ -140,9 +140,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		// Every cfgfile publish carries the entity's complete semsource set:
 		// IDs are scoped to the declaring manifest (#348) and a manifest's
 		// same-ID declarations fold into one entity (#375), and a watch event
-		// re-parses the whole manifest
-		// (TestCfgfileWatchRepublishCarriesTheCompleteGroupSet). publishEntity
-		// limits the reconcile to known content changes (#336, D4).
+		// re-parses the whole manifest (TestFanOutCarriesTheManifestsCompleteStates).
+		// Two paths minting under one system could still share a manifest's
+		// ID; sourcespawn refuses that config before it reaches here (#349).
+		// publishEntity limits the reconcile to known content changes (#336, D4).
 		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
 		if err != nil {
 			return nil, fmt.Errorf("create source reconciler: %w", err)

@@ -15,6 +15,8 @@ import (
 // when this process knows the entity's content changed (#336, D4). A first
 // sighting — the seed, or a manifest created while watching — is not a known
 // change: the stored entity may predate this process.
+//
+// shortcut: never forgets an ID, so orphaned dependency IDs stay for the process lifetime; bounded by the manifests' declarations, upgrade if cfgfile ever retracts entities.
 type sentContent struct {
 	mu   sync.Mutex
 	sums map[string][sha256.Size]byte
