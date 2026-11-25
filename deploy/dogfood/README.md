@@ -56,6 +56,21 @@ curl -s 'localhost:18222/jsz?streams=true' | jq '.account_details[].stream_detai
 
 The GRAPH backlog cap is 256 MiB of unapplied messages; refusals show as 10077 in status.
 
+## Changing an instance config
+
+A booted instance runs its **retained** configuration (NATS KV), not the file. A
+hand edit to `sem.json` applies on restart only when `config_revision` is raised
+above the retained one; otherwise boot logs `WARN configuration file differs from
+the retained configuration` and ignores the edit.
+
+```bash
+# edit deploy/dogfood/sem.json, bump "config_revision", then:
+docker compose --env-file deploy/dogfood/sem.env -f deploy/dogfood/compose.yml restart semsource
+```
+
+`index_interval` on a `repo` source is accepted but not passed through to its
+code source (finding F7 on #391); `watch` is.
+
 ## Upgrade and reset
 
 - Image upgrade: change the digest in `compose.yml`, then `docker compose ... up -d semsource`

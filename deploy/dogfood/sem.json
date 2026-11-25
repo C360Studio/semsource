@@ -1,5 +1,6 @@
 {
   "namespace": "c360sem",
+  "config_revision": 4,
   "workspace_dir": "/var/lib/semsource/repos",
   "sources": [
     { "type": "repo", "url": "https://github.com/C360Studio/semsource", "branch": "main", "languages": ["go", "typescript", "javascript", "svelte", "python"], "watch": true, "poll_interval": "5m" },
