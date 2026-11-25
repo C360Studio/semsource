@@ -381,7 +381,9 @@ func (h *harness) connect() {
 	}
 	var last error
 	if !h.poll(20*time.Second, func() bool {
-		h.nc, last = nats.Connect(h.natsURL, nats.Timeout(time.Second), nats.NoReconnect())
+		// NoEcho: the harness's own replay of a captured envelope must not be
+		// captured back as if the application had published it.
+		h.nc, last = nats.Connect(h.natsURL, nats.Timeout(time.Second), nats.NoReconnect(), nats.NoEcho())
 		return last == nil
 	}) {
 		h.t.Fatalf("NATS readiness: %v", last)
@@ -1406,6 +1408,7 @@ func (h *harness) captureRestartGuard() {
 		"run_payload_envelopes":          envelopes,
 		"run_payload_sequences":          nil,
 		"run_payload_sequences_reason":   "not recoverable: GRAPH workqueue retention removes applied messages, and a core subscription does not see the PubAck sequence",
+		"run_payload_envelopes_scope":    "application publications seen by the harness's core subscription on each connection; publications between a broker restart and the harness reconnecting are not captured, and the harness's own replay is excluded (NoEcho)",
 	}, "", "  ")
 	if err == nil {
 		h.save("restart-guard.json", raw)
