@@ -44,7 +44,7 @@
 
 ## 4. Docs and spec
 
-- [ ] 4.1 `docs/integration/m5-consumer-integration.md:43-46`: Option A no longer says to subscribe on GRAPH; it points
+- [x] 4.1 `docs/integration/m5-consumer-integration.md:43-46`: Option A no longer says to subscribe on GRAPH; it points
   to Options B and C.
 - [ ] 4.2 Adoption-note line under #386 (design, Migration Plan).
 - [ ] 4.3 `openspec validate --all` and `task spec:check` green. Archive the change before the PR is ready.
