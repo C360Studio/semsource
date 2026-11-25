@@ -12,8 +12,8 @@
   (`test/e2e/e2e_test.go:677-700,760` and `:1064-1080,1162`) stop doing so and read ENTITY_STATES instead. This must
   land before 3.1, because workqueue refuses that consumer (10099/10100) and the pre-created limits stream trips the
   drift refusal. Proved by: `TestE2E_RunStartsAndPublishesEntities` and `TestE2E_OSH_JavaMavenIngest` green on main.
-- [ ] 2.2 Measure the GRAPH bytes one seed of the e2e fixture publishes (stream info after ready, on main).
-- [ ] 2.3 `TestE2E_WarmRestartWithinStreamWindow`, using the boot/stop pattern of `test/e2e/discovery_restart_test.go:135-170`
+- [x] 2.2 Measure the GRAPH bytes one seed of the e2e fixture publishes (stream info after ready, on main).
+- [x] 2.3 `TestE2E_WarmRestartWithinStreamWindow`, using the boot/stop pattern of `test/e2e/discovery_restart_test.go:135-170`
   on one NATS. It sets `streams.GRAPH.max_bytes` to about 1.5× the bytes from 2.2, boots to ready, stops, and boots
   again at once. It asserts: phase `ready`, no failed or dropped counts in source status, and the entity count equal
   across both boots. It must fail on main (10077 / `degraded`).
