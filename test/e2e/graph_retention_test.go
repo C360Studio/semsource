@@ -72,8 +72,8 @@ func writeRetentionConfig(t *testing.T, workDir, fixture string, httpPort int, m
 	return path
 }
 
-// graphStreamState reads GRAPH's byte count and its per-subject message counts.
-func graphStreamState(t *testing.T, nc *nats.Conn) (bytes uint64, perSubject map[string]uint64) {
+// graphStreamState reads GRAPH's state, including per-subject message counts.
+func graphStreamState(t *testing.T, nc *nats.Conn) jetstream.StreamState {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -89,7 +89,7 @@ func graphStreamState(t *testing.T, nc *nats.Conn) (bytes uint64, perSubject map
 	if err != nil {
 		t.Fatalf("GRAPH info: %v", err)
 	}
-	return info.State.Bytes, info.State.Subjects
+	return info.State
 }
 
 // assertCleanReady fails unless the status is ready with no lost, failed, or
@@ -132,9 +132,17 @@ func TestE2E_WarmRestartWithinStreamWindow(t *testing.T) {
 	first := waitForDrained(t, httpPort, nc, 180*time.Second)
 	assertCleanReady(t, "first boot", first)
 	firstCount := len(readEntityStates(t, nc))
-	seedBytes, subjects := graphStreamState(t, nc)
-	t.Logf("first seed: GRAPH bytes=%d subjects=%v entities=%d cap=%d", seedBytes, subjects, firstCount, warmRestartMaxBytes)
-	if n := subjects["graph.ingest.entity"]; n != 0 {
+	firstState := graphStreamState(t, nc)
+	// Every applied entity message is removed, so what remains is the
+	// non-entity transport (manifest, status, predicates), which has no
+	// consumer and stays until MaxAge (design Open Question 5).
+	var nonEntityBytes uint64
+	if firstState.Subjects["graph.ingest.entity"] == 0 {
+		nonEntityBytes = firstState.Bytes
+	}
+	t.Logf("first seed: GRAPH bytes=%d non_entity_bytes=%d last_seq=%d subjects=%v entities=%d cap=%d",
+		firstState.Bytes, nonEntityBytes, firstState.LastSeq, firstState.Subjects, firstCount, warmRestartMaxBytes)
+	if n := firstState.Subjects["graph.ingest.entity"]; n != 0 {
 		t.Errorf("after the first seed GRAPH holds %d graph.ingest.entity messages, want 0 (applied messages are removed)", n)
 	}
 	stop()
@@ -144,8 +152,15 @@ func TestE2E_WarmRestartWithinStreamWindow(t *testing.T) {
 	second := waitForDrained(t, httpPort, nc, 180*time.Second)
 	assertCleanReady(t, "second boot", second)
 	secondCount := len(readEntityStates(t, nc))
-	if _, subjects := graphStreamState(t, nc); subjects["graph.ingest.entity"] != 0 {
-		t.Errorf("after the second seed GRAPH holds %d graph.ingest.entity messages, want 0", subjects["graph.ingest.entity"])
+	secondState := graphStreamState(t, nc)
+	if n := secondState.Subjects["graph.ingest.entity"]; n != 0 {
+		t.Errorf("after the second seed GRAPH holds %d graph.ingest.entity messages, want 0", n)
+	}
+	// ENTITY_STATES keeps the first boot's state, so an equal count alone
+	// would pass a second boot that published nothing: the stream must have
+	// taken at least one more seed's worth of messages.
+	if published := secondState.LastSeq - firstState.LastSeq; published < uint64(firstCount) {
+		t.Errorf("second boot advanced GRAPH by %d messages, want at least %d (one seed)", published, firstCount)
 	}
 	if secondCount != firstCount {
 		t.Errorf("entities after second boot = %d, want %d (first boot)", secondCount, firstCount)

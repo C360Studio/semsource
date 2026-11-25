@@ -35,6 +35,7 @@
   `TestGraphStreamConfig_SubjectsExplicit_NoRPCOverlap` (`cmd/semsource/run_test.go:237`); 2.3 green.
 - [x] 3.2 After 2.3's first boot reaches ready, the GRAPH stream holds no `graph.ingest.entity` message (per-subject
   stream info). Proved by: an assertion added to 2.3.
+  Note: the test also requires the second boot to advance GRAPH by at least one seed, and logs the non-entity bytes left after the first seed (7,790 B, design Open Question 5).
 - [x] 3.3 A message published before graph-ingest binds is applied after the bind. Proved by: an integration test over
   `internal/natstest` that publishes to a fresh GRAPH, then starts graph-ingest, then reads the entity.
 - [x] 3.4 A config carrying `streams.GRAPH.retention` fails to load and names the field (`config/loader.go:29`). Proved

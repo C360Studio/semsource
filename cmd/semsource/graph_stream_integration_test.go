@@ -29,7 +29,7 @@ import (
 // entity to a fresh GRAPH stream built from graphStreamConfig before
 // graph-ingest exists, then starts graph-ingest with its production config.
 // Workqueue retention keeps the message until a consumer takes it, so the
-// entity is applied after the bind.
+// entity is applied after the bind, and graph-ingest's ack then removes it.
 //
 // spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
 func TestIntegration_GraphStreamKeepsPublishBeforeConsumerBinds(t *testing.T) {
@@ -74,6 +74,13 @@ func TestIntegration_GraphStreamKeepsPublishBeforeConsumerBinds(t *testing.T) {
 	}
 
 	ingest := startProductionGraphIngest(ctx, t, tc)
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		if err := ingest.Stop(stopCtx); err != nil {
+			t.Errorf("graph-ingest Stop() error = %v", err)
+		}
+	})
 
 	kv, err := js.KeyValue(ctx, semgraph.BucketEntityStates)
 	if err != nil {
@@ -107,10 +114,29 @@ func TestIntegration_GraphStreamKeepsPublishBeforeConsumerBinds(t *testing.T) {
 		t.Fatalf("stored ID = %q, want %q", stored.ID, entityID)
 	}
 
-	stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer stopCancel()
-	if err := ingest.Stop(stopCtx); err != nil {
-		t.Errorf("graph-ingest Stop() error = %v", err)
+	// graph-ingest acks after the ENTITY_STATES write, and the ack removes the
+	// message. The consumer's ack floor reaching the published sequence is
+	// the event to wait for; after it the stream must hold no entity message.
+	consumer, err := stream.Consumer(ctx, "graph-ingest-graph-ingest-entity")
+	if err != nil {
+		t.Fatalf("graph-ingest consumer: %v", err)
+	}
+	for {
+		info, err := consumer.Info(ctx)
+		if err != nil {
+			t.Fatalf("consumer info: %v", err)
+		}
+		if info.AckFloor.Stream >= 1 && info.NumAckPending == 0 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("graph-ingest never acknowledged the entity: ack_floor=%d ack_pending=%d", info.AckFloor.Stream, info.NumAckPending)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if n := entityMessages(ctx, t, stream); n != 0 {
+		t.Fatalf("GRAPH holds %d graph.ingest.entity messages after graph-ingest applied the entity, want 0", n)
 	}
 }
 
