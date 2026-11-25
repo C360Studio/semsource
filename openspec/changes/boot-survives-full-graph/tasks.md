@@ -41,8 +41,9 @@
 
 ## 4. Spec and docs
 
-- [ ] 4.1 Every new test cites `ingestion-readiness / A full ingest transport stream SHALL NOT stop SemSource from
+- [x] 4.1 Every new test cites `ingestion-readiness / A full ingest transport stream SHALL NOT stop SemSource from
   starting` (`ateam test-spec`).
-- [ ] 4.2 The comment on `Start` (`component.go:140-141`) and the type comment (`:44-48`) say the broadcasts are
+- [x] 4.2 The comment on `Start` (`component.go:140-141`) and the type comment (`:44-48`) say the broadcasts are
   best-effort and retried. The ADR-0003 follow-up follows Open Question 4.
-- [ ] 4.3 `task spec:check` green. Archive the change before the PR is ready.
+- [x] 4.3 `task spec:check` green. Archive the change before the PR is ready.
+  ADR-0003 follow-up filed as #405. `TestE2E_BootIntoFullGraphStream` added to ci.yml e2e-local.

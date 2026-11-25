@@ -202,7 +202,7 @@ jobs:
       - name: Black-box e2e (no external clones)
         run: |
           go test -tags=e2e -v -timeout 10m ./test/e2e/ \
-            -run 'TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal|TestE2E_DiscoveryAcrossRestarts|TestE2E_WarmRestartWithinStreamWindow|TestE2E_LimitsGraphStreamRefusesBoot'
+            -run 'TestE2E_Version|TestE2E_Validate|TestE2E_NativeQuickStart|TestE2E_RunStartsAndPublishesEntities|TestE2E_RunFailsGracefullyWithoutNATS|TestE2E_RuntimeSourceAdd|TestE2E_UpgradePathRehearsal|TestE2E_DiscoveryAcrossRestarts|TestE2E_WarmRestartWithinStreamWindow|TestE2E_LimitsGraphStreamRefusesBoot|TestE2E_BootIntoFullGraphStream'
 
 
       - name: Desired source lifecycle without private recovery
