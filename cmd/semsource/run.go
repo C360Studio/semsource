@@ -490,7 +490,6 @@ func connectNATS(
 		natsclient.WithName("semsource"),
 		natsclient.WithMaxReconnects(-1),
 		natsclient.WithReconnectWait(2 * time.Second),
-		natsclient.WithHealthInterval(30 * time.Second),
 	}
 	if connectionLossGrace > 0 && onConnectionLost != nil {
 		opts = append(opts,

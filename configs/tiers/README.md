@@ -19,7 +19,7 @@ index or an embedder and work at every tier. `doc_context` needs a source that p
 [Tier 0 — Structural](#tier-0--structural-tier0-foundationjson--works-today)). The tier only changes
 `code_search` NL quality and (Tier 2) community/summary features.
 
-> **On `semengine v0.1.0-alpha.7` Tier 0 is the default and Tier 1 is opt-in.** Tier 0 word search is
+> **On `semengine v0.1.0-alpha.8` Tier 0 is the default and Tier 1 is opt-in.** Tier 0 word search is
 > `graph-lexical`, on by default; `graph.embedder_type` is retired and refused at load. Tier 1 is
 > `graph.semantic_search: true` with a `model_registry` embedding endpoint (`tier1-semantic.json`); its
 > qualification against the measured floors is [#234](https://github.com/C360Studio/semsource/issues/234).
@@ -103,7 +103,7 @@ instruction itself.
   "graph": { "semantic_search": true },
   "model_registry": {
     "endpoints": {
-      "semembed": { "provider": "openai", "url": "http://semembed:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s" }
+      "semembed": { "provider": "openai", "url": "http://semembed:8081/v1", "model": "Snowflake/snowflake-arctic-embed-s", "dimensions": 384 }
     },
     "capabilities": { "embedding": { "preferred": ["semembed"] } }
   }
@@ -116,6 +116,9 @@ retained Tier 0 wiring stays. Whether graph-embedding backfills a retained store
 (#234); until then, reseed.
 
 The URL must end in `/v1` (the client adds `/embeddings`), and a reply naming another model is refused.
+Set `dimensions` to the model's vector width (384 for arctic-embed-s): with the width declared, a restart keeps
+the stored vectors instead of re-embedding what replays before semembed's first reply, and every reply is checked
+against it.
 To run semembed outside compose, point the URL at `http://localhost:8081/v1`:
 
 ```bash
@@ -126,12 +129,12 @@ docker run -d -p 8081:8081 ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33
 > real embedding inference (fastembed-rs / ONNX, arctic-embed-s). Embedding a full initial index is a
 > burst of inference and, by default, ONNX fans out across every core: **measured ~561% CPU (≈5.6 cores)
 > embedding a 21.5k-entity graph on a laptop** — fine on a server, rough on a dev machine. It is **not a
-> one-time cost on this pin**: vectors land in `EMBEDDING_INDEX` and steady-state watch is cheap, but the
-> HTTP embedder learns its vector width from its first reply, so on a restart graph-embedding cannot
-> vouch for the stored vectors it replays before that reply and embeds those again
-> ([semengine#722](https://github.com/C360Studio/semengine/issues/722)). Measured on the dogfood corpus:
-> 10 provider requests after a same-config restart against 7,271 for the seed, settled in 121 s,
-> consistent with #722 (the static setup03a fixture re-embedded 6–9 of 10–11 seed texts across runs). A small burst on each restart.
+> one-time cost without a declared width**: vectors land in `EMBEDDING_INDEX` and steady-state watch is
+> cheap, but an HTTP embedder with no `dimensions` learns its vector width from its first reply, so on a
+> restart graph-embedding cannot vouch for the stored vectors it replays before that reply and embeds those
+> again ([semengine#722](https://github.com/C360Studio/semengine/issues/722); measured on alpha.7: 10 provider
+> requests after a same-config restart against 7,271 for the seed). With `dimensions` set, as
+> `tier1-semantic.json` ships, alpha.8 keeps the stored vectors; not yet re-measured on SemSource.
 > Levers if it's hammering your machine:
 > - **Cap the container CPU** — `docker run --cpus=2 ...` up front, or **live with no restart / no lost
 >   progress**: `docker update --cpus=2 semembed` (drops ~561%→~200%; the initial index just takes
@@ -206,12 +209,13 @@ liveness: the `embedding` block (on `/source-manifest/status` and `source_status
 `semantic_index` capability are ready only while graph-lexical and graph-embedding both are, so
 embeddings that fail during the build keep them not ready, but a provider that stops after the index
 caught up leaves them ready. Read `merge.honoured` on each answer for liveness. The fusion response does
-not carry the merge step itself ([semengine#723](https://github.com/C360Studio/semengine/issues/723)).
+not surface the merge step yet: alpha.8 adds it to `fusion.Resolution`
+([semengine#723](https://github.com/C360Studio/semengine/issues/723)), and SemSource's fusion tools do not pass it on
+([#377](https://github.com/C360Studio/semsource/issues/377)).
 
-**Recovering from a provider outage needs a restart.** graph-embedding does not retry an entity whose
-embedding failed: it waits for a new revision of that entity or a restart
-([semengine#724](https://github.com/C360Studio/semengine/issues/724)). After the provider is back, restart
-SemSource so the failed entities are embedded again.
+**A provider outage recovers without a restart.** On alpha.8 graph-embedding retries the embeddings the
+provider failed, and a semembed 429 is recorded as `rate_limited`
+([semengine#724](https://github.com/C360Studio/semengine/issues/724)).
 
 ## Tier 2 — Generative (seminstruct) — not shipped
 

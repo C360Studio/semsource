@@ -46,6 +46,9 @@ func httpEmbedderFor(models *model.Registry) func() (embedding.Embedder, error) 
 			Model:       resolved.Model,
 			APIKey:      resolved.APIKey,
 			QueryPrefix: endpoint.QueryPrefix,
+			// A declared width lets a restart keep the stored vectors instead
+			// of re-embedding what replays before the first reply (semengine#722).
+			Dimensions: endpoint.Dimensions,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("graph-embedding: build http embedder: %w", err)
