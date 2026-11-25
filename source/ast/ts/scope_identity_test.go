@@ -398,10 +398,13 @@ export function useWin(w: Win): Win { return w; }
 	mod := func(typ ast.CodeEntityType, name string) string {
 		return ast.NewCodeEntity(auth, "typescript", "test-project", typ, name, "a.ts").ID
 	}
-	inM := ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, []string{"m"}, "Mod", "a.ts").ID
+	// `declare module "m"` scopes its members by "module-" + "m" + a hash of
+	// the raw specifier (sha256("module:m")[:4], hex) since #340.
+	mScope := []string{"module-m-4c89ba36"}
+	inM := ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, mScope, "Mod", "a.ts").ID
 	assertRefEdges(t, parseTSFile(t, "a.ts", src), map[string]refEdges{
 		mod(ast.TypeFunction, "useWin"): {params: []string{mod(ast.TypeInterface, "Win")}, returns: []string{mod(ast.TypeInterface, "Win")}},
-		ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, []string{"m"}, "Sub", "a.ts").ID: {extends: []string{inM}},
+		ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, mScope, "Sub", "a.ts").ID: {extends: []string{inM}},
 	})
 }
 
