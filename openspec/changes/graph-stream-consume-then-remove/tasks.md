@@ -33,13 +33,13 @@
   `internal/sourcespawn/sourcespawn_test.go:41-53` and `internal/governance/source_removal_integration_test.go:47-59`
   move in step. Proved by: a unit test pinning retention, discard `new`, the age bound and the byte bound, next to
   `TestGraphStreamConfig_SubjectsExplicit_NoRPCOverlap` (`cmd/semsource/run_test.go:237`); 2.3 green.
-- [ ] 3.2 After 2.3's first boot reaches ready, the GRAPH stream holds no `graph.ingest.entity` message (per-subject
+- [x] 3.2 After 2.3's first boot reaches ready, the GRAPH stream holds no `graph.ingest.entity` message (per-subject
   stream info). Proved by: an assertion added to 2.3.
-- [ ] 3.3 A message published before graph-ingest binds is applied after the bind. Proved by: an integration test over
+- [x] 3.3 A message published before graph-ingest binds is applied after the bind. Proved by: an integration test over
   `internal/natstest` that publishes to a fresh GRAPH, then starts graph-ingest, then reads the entity.
-- [ ] 3.4 A config carrying `streams.GRAPH.retention` fails to load and names the field (`config/loader.go:29`). Proved
+- [x] 3.4 A config carrying `streams.GRAPH.retention` fails to load and names the field (`config/loader.go:29`). Proved
   by: a loader test.
-- [ ] 3.5 A pre-existing limits-retention GRAPH stream refuses boot with the drift remedy
+- [x] 3.5 A pre-existing limits-retention GRAPH stream refuses boot with the drift remedy
   (semengine `config/stream_drift.go:35-39`). Proved by: an e2e assertion on the process exit and its log line.
 
 ## 4. Docs and spec

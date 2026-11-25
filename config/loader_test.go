@@ -954,3 +954,27 @@ func TestWriteSources_ReplacesCaseVariantKeys(t *testing.T) {
 		t.Fatalf("a case-variant key survived the write:\n%s", data)
 	}
 }
+
+// TestLoadConfigFromReader_GraphRetentionRefused: the GRAPH stream's retention
+// is fixed (workqueue, #160), so an override naming it fails to load, and the
+// error names the field, whatever value it carries.
+//
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
+func TestLoadConfigFromReader_GraphRetentionRefused(t *testing.T) {
+	for _, retention := range []string{"limits", "interest", "workqueue"} {
+		t.Run(retention, func(t *testing.T) {
+			input := `{
+  "namespace": "acme",
+  "sources": [{"type": "ast", "path": "./", "language": "go"}],
+  "streams": {"GRAPH": {"retention": "` + retention + `"}}
+}`
+			_, err := config.LoadConfigFromReader(strings.NewReader(input))
+			if err == nil {
+				t.Fatal("expected streams.GRAPH.retention to be refused, got nil")
+			}
+			if !strings.Contains(err.Error(), `unknown field "retention"`) {
+				t.Fatalf("error %q does not name the retention field", err)
+			}
+		})
+	}
+}

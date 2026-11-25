@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -133,6 +134,9 @@ func TestE2E_WarmRestartWithinStreamWindow(t *testing.T) {
 	firstCount := len(readEntityStates(t, nc))
 	seedBytes, subjects := graphStreamState(t, nc)
 	t.Logf("first seed: GRAPH bytes=%d subjects=%v entities=%d cap=%d", seedBytes, subjects, firstCount, warmRestartMaxBytes)
+	if n := subjects["graph.ingest.entity"]; n != 0 {
+		t.Errorf("after the first seed GRAPH holds %d graph.ingest.entity messages, want 0 (applied messages are removed)", n)
+	}
 	stop()
 
 	stop = upgradeStartWriter(t, binPath, configPath, workDir, natsURL, httpPort, wsPort)
@@ -140,7 +144,73 @@ func TestE2E_WarmRestartWithinStreamWindow(t *testing.T) {
 	second := waitForDrained(t, httpPort, nc, 180*time.Second)
 	assertCleanReady(t, "second boot", second)
 	secondCount := len(readEntityStates(t, nc))
+	if _, subjects := graphStreamState(t, nc); subjects["graph.ingest.entity"] != 0 {
+		t.Errorf("after the second seed GRAPH holds %d graph.ingest.entity messages, want 0", subjects["graph.ingest.entity"])
+	}
 	if secondCount != firstCount {
 		t.Errorf("entities after second boot = %d, want %d (first boot)", secondCount, firstCount)
+	}
+}
+
+// TestE2E_LimitsGraphStreamRefusesBoot: a NATS server still holding the
+// beta.10 GRAPH stream (limits retention) refuses SemSource's boot with the
+// retention drift and its remedy, rather than reusing or recreating it.
+//
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
+func TestE2E_LimitsGraphStreamRefusesBoot(t *testing.T) {
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	fixture := writeRetentionFixture(t, t.TempDir())
+	configPath := writeRetentionConfig(t, workDir, fixture, freePort(t), warmRestartMaxBytes)
+
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect to NATS: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	// The beta.10 declaration: same subjects and storage, limits retention.
+	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:      "GRAPH",
+		Subjects:  []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest", "graph.ingest.status", "graph.ingest.predicates"},
+		Storage:   jetstream.MemoryStorage,
+		Retention: jetstream.LimitsPolicy,
+		MaxBytes:  256 * 1024 * 1024,
+		MaxAge:    time.Hour,
+		Discard:   jetstream.DiscardNew,
+	}); err != nil {
+		t.Fatalf("create limits GRAPH: %v", err)
+	}
+
+	cmd := exec.CommandContext(ctx, binPath, "run", "--config", configPath, "--nats-url", natsURL)
+	cmd.Dir = workDir
+	out, runErr := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("semsource did not exit within the deadline: %v\n%s", ctx.Err(), out)
+	}
+	if runErr == nil {
+		t.Fatalf("semsource booted over a limits GRAPH stream, want a refusal\n%s", out)
+	}
+	for _, want := range []string{
+		`reconcile stream "GRAPH" failed: existing stream diverges in a field that cannot be reconciled in place`,
+		`refuses a retention change to or from "workqueue"`,
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("boot output lacks %q\n%s", want, out)
+		}
+	}
+	stream, err := js.Stream(ctx, "GRAPH")
+	if err != nil {
+		t.Fatalf("GRAPH after refused boot: %v", err)
+	}
+	if got := stream.CachedInfo().Config.Retention; got != jetstream.LimitsPolicy {
+		t.Errorf("GRAPH retention after refused boot = %v, want limits (left untouched)", got)
 	}
 }
