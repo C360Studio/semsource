@@ -511,3 +511,42 @@ namespace N { function priv() { return 2; } export function b() { return priv();
 		})
 	}
 }
+
+// #340: string module names keep their raw specifier in the ID, so a
+// `declare module "foo.bar"` member no longer shares an ID with the same name
+// in `namespace foo.bar` or in `declare module "foo/bar"`. Calls inside each
+// block still resolve to that block's own member.
+// spec: entity-identity-safety / TypeScript module-declaration members are keyed by their raw specifier
+func TestStringModuleMembersDoNotShareNamespaceIDs(t *testing.T) {
+	src := `declare module "foo.bar" { export function x() {} export function c1() { return x(); } }
+declare module "foo/bar" { export function x() {} export function c2() { return x(); } }
+namespace foo.bar { export function x() {} export function c3() { return x(); } }
+`
+	ents := parseTSFile(t, "m.ts", src)
+	xs := map[string]*ast.CodeEntity{}
+	byName := map[string]*ast.CodeEntity{}
+	for _, e := range ents {
+		if e.Name == "x" {
+			xs[e.ID] = e
+		}
+		byName[e.Name] = e
+	}
+	if len(xs) != 3 {
+		t.Fatalf("want 3 distinct IDs for x, got %d: %v", len(xs), sortedNames(ents))
+	}
+	// The dotted namespace keeps its pre-#340 ID.
+	auth := testAuthority("test-org")
+	nsX := ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeFunction, []string{"foo", "bar"}, "x", "m.ts").ID
+	if xs[nsX] == nil {
+		t.Errorf("namespace foo.bar member x lost its ID %s", nsX)
+	}
+	for _, caller := range []string{"c1", "c2", "c3"} {
+		c := byName[caller]
+		if c == nil || len(c.Calls) != 1 || xs[c.Calls[0]] == nil {
+			t.Fatalf("%s: want one call to a block-local x, got %+v", caller, c)
+		}
+	}
+	if byName["c1"].Calls[0] == byName["c2"].Calls[0] || byName["c2"].Calls[0] == byName["c3"].Calls[0] || byName["c1"].Calls[0] == byName["c3"].Calls[0] {
+		t.Errorf("callers resolve x to a shared ID: c1=%s c2=%s c3=%s", byName["c1"].Calls[0], byName["c2"].Calls[0], byName["c3"].Calls[0])
+	}
+}
