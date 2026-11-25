@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -242,8 +243,73 @@ const jsStoreFailed jetstream.ErrorCode = 10077
 type watchedWriter struct {
 	exited <-chan struct{}
 	stop   func()
-	mu     sync.Mutex
-	out    strings.Builder
+	// line is signalled (coalesced) after each output line is kept.
+	line chan struct{}
+	mu   sync.Mutex
+	out  strings.Builder
+}
+
+// awaitOutput waits until the output contains want and returns its offset.
+// It fails if semsource exits first or timeout passes.
+func (w *watchedWriter) awaitOutput(t *testing.T, want string, timeout time.Duration) int {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		if i := strings.Index(w.output(), want); i >= 0 {
+			return i
+		}
+		select {
+		case <-w.line:
+		case <-w.exited:
+			if i := strings.Index(w.output(), want); i >= 0 {
+				return i
+			}
+			t.Fatalf("semsource exited before logging %q\n%s", want, w.output())
+		case <-timer.C:
+			t.Fatalf("semsource did not log %q within %s", want, timeout)
+		}
+	}
+}
+
+// awaitDrained is waitForDrained for a watched writer: a crash while draining
+// fails as an exit, not as a drain timeout.
+func (w *watchedWriter) awaitDrained(t *testing.T, httpPort int, nc *nats.Conn, timeout time.Duration) statusPayload {
+	t.Helper()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := fmt.Sprintf("http://127.0.0.1:%d/source-manifest/status", httpPort)
+	deadline := time.Now().Add(timeout)
+	why := "no status yet"
+	for time.Now().Before(deadline) {
+		if resp, err := client.Get(url); err == nil {
+			var status statusPayload
+			decodeErr := json.NewDecoder(resp.Body).Decode(&status)
+			_ = resp.Body.Close()
+			switch {
+			case resp.StatusCode != http.StatusOK:
+				why = fmt.Sprintf("status HTTP %d", resp.StatusCode)
+			case decodeErr != nil:
+				why = "decode status: " + decodeErr.Error()
+			default:
+				if why = drainedWhyNot(js, status); why == "" {
+					return status
+				}
+			}
+		} else {
+			why = err.Error()
+		}
+		select {
+		case <-w.exited:
+			t.Fatalf("semsource exited while draining (%s)\n%s", why, w.output())
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	t.Fatalf("not drained within %s: %s", timeout, why)
+	return statusPayload{}
 }
 
 func (w *watchedWriter) output() string {
@@ -267,7 +333,7 @@ func startWatchedWriter(t *testing.T, binPath, configPath, workDir, natsURL stri
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start semsource: %v", err)
 	}
-	w := &watchedWriter{}
+	w := &watchedWriter{line: make(chan struct{}, 1)}
 	scanned := make(chan struct{})
 	go func() {
 		defer close(scanned)
@@ -278,6 +344,10 @@ func startWatchedWriter(t *testing.T, binPath, configPath, workDir, natsURL stri
 			w.mu.Lock()
 			w.out.WriteString(line + "\n")
 			w.mu.Unlock()
+			select {
+			case w.line <- struct{}{}:
+			default:
+			}
 		}
 	}()
 	exited := make(chan struct{})
@@ -412,13 +482,11 @@ func TestE2E_BootIntoFullGraphStream(t *testing.T) {
 
 	w := startWatchedWriter(t, binPath, configPath, workDir, natsURL, httpPort, wsPort)
 	defer w.stop()
-	select {
-	case <-w.exited:
-		t.Fatalf("semsource exited while booting into a full GRAPH stream, want it running\n%s", w.output())
-	case <-time.After(30 * time.Second):
-	}
+	// The inline manifest broadcast must meet the full stream; otherwise the
+	// test would pass without exercising the retry.
+	refused := w.awaitOutput(t, "source manifest broadcast refused — retrying in the background", 60*time.Second)
 
-	second := waitForDrained(t, httpPort, nc, 180*time.Second)
+	second := w.awaitDrained(t, httpPort, nc, 180*time.Second)
 	assertCleanReady(t, "boot into full stream", second)
 	after := graphStreamState(t, nc)
 	if n := after.Subjects["graph.ingest.entity"]; n != 0 {
@@ -428,12 +496,12 @@ func TestE2E_BootIntoFullGraphStream(t *testing.T) {
 		t.Errorf("entities after boot into full stream = %d, want %d (first boot)", got, firstCount)
 	}
 	// The retried manifest lands after graph-ingest makes room, so it can
-	// trail the drain by one backoff step.
-	deadline := time.Now().Add(30 * time.Second)
-	for after.Subjects["graph.ingest.manifest"] <= before.Subjects["graph.ingest.manifest"] && time.Now().Before(deadline) {
-		time.Sleep(500 * time.Millisecond)
-		after = graphStreamState(t, nc)
+	// trail the drain by one backoff step. It is logged after the stream
+	// acknowledged it, so the subject count is current once the line appears.
+	if delivered := w.awaitOutput(t, "source manifest broadcast delivered after retry", 60*time.Second); delivered < refused {
+		t.Errorf("manifest delivery logged at offset %d, before its refusal at %d", delivered, refused)
 	}
+	after = graphStreamState(t, nc)
 	if got, was := after.Subjects["graph.ingest.manifest"], before.Subjects["graph.ingest.manifest"]; got <= was {
 		t.Errorf("graph.ingest.manifest count = %d after the boot, want more than %d (the manifest broadcast was never delivered)", got, was)
 	}
