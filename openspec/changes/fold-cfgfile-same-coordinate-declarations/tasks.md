@@ -2,7 +2,7 @@
 
 ## 1. Approval
 
-- [ ] 1.1 Hold: OPEN-Q proposal awaits owner approval (D1 fold vs per usage; D2/D3 as written).
+- [x] 1.1 Owner approved `proposal.md` + `design.md` (2026-11-25, sha256:3de5c126b709) as recommended: D1 fold, D2, D3; line entered by claude at the owner's instruction.
 
 ## 2. Repro (fails on main)
 

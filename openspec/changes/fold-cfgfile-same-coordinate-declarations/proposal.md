@@ -1,6 +1,6 @@
 # Fold same-coordinate declarations within one cfgfile manifest
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-25) sha256:3de5c126b709
 
 Track: design (modifies an entity-identity Requirement; changes some cfgfile IDs, which rides the beta.11 reseed).
 
