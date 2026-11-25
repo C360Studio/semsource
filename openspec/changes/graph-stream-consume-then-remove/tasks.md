@@ -8,7 +8,7 @@
 
 ## 2. Repro and test harness (before the change; green on main)
 
-- [ ] 2.1 The two e2e tests that pre-create GRAPH and fetch from an unfiltered consumer
+- [x] 2.1 The two e2e tests that pre-create GRAPH and fetch from an unfiltered consumer
   (`test/e2e/e2e_test.go:677-700,760` and `:1064-1080,1162`) stop doing so and read ENTITY_STATES instead. This must
   land before 3.1, because workqueue refuses that consumer (10099/10100) and the pre-created limits stream trips the
   drift refusal. Proved by: `TestE2E_RunStartsAndPublishesEntities` and `TestE2E_OSH_JavaMavenIngest` green on main.

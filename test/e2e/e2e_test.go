@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -650,6 +649,7 @@ func TestE2E_NativeQuickStart(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
 func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	// Start NATS via Docker.
 	natsURL, cleanup := startNATS(t)
@@ -660,39 +660,15 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	httpPort := freePort(t)
 	configPath := writeConfig(t, workDir, httpPort)
 
-	// Subscribe to the graph ingest subject BEFORE starting semsource so we
-	// don't miss any messages. Use JetStream consumer for reliable delivery.
+	// Entities are read from ENTITY_STATES after ready, never from the GRAPH
+	// transport stream: graph-ingest is GRAPH's only consumer (#160).
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
 		t.Fatalf("connect to NATS: %v", err)
 	}
 	defer nc.Close()
 
-	js, err := jetstream.New(nc)
-	if err != nil {
-		t.Fatalf("create jetstream context: %v", err)
-	}
-
-	// Create the GRAPH stream before semsource starts — semsource also does
-	// EnsureStreams but the subscriber needs it first.
 	ctx := context.Background()
-	stream, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "GRAPH",
-		Subjects: []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest", "graph.ingest.status", "graph.ingest.predicates"},
-		Storage:  jetstream.MemoryStorage,
-	})
-	if err != nil {
-		t.Fatalf("create GRAPH stream: %v", err)
-	}
-
-	// Create ephemeral consumer.
-	cons, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
-		DeliverPolicy: jetstream.DeliverAllPolicy,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-	})
-	if err != nil {
-		t.Fatalf("create consumer: %v", err)
-	}
 
 	// Start semsource as a subprocess. Generous so a slow CI runner can finish
 	// the full seed (a few thousand entities) before the process is killed.
@@ -744,76 +720,6 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 		}
 	}()
 
-	// Collect entity messages from NATS.
-	var entities []entityPayload
-	collectCtx, collectCancel := context.WithTimeout(ctx, 90*time.Second)
-	defer collectCancel()
-
-	// Fetch messages in a loop until we have enough or timeout.
-	fetchDone := make(chan struct{})
-	go func() {
-		defer close(fetchDone)
-		for {
-			if collectCtx.Err() != nil {
-				return
-			}
-			msgs, err := cons.Fetch(10, jetstream.FetchMaxWait(2*time.Second))
-			if err != nil {
-				continue
-			}
-			for msg := range msgs.Messages() {
-				// Log first raw message for debugging envelope shape.
-				if len(entities) == 0 {
-					t.Logf("raw message sample: %s", string(msg.Data()[:min(len(msg.Data()), 500)]))
-				}
-
-				// Parse as generic JSON to find the payload.
-				var raw map[string]json.RawMessage
-				if err := json.Unmarshal(msg.Data(), &raw); err != nil {
-					t.Logf("unmarshal raw: %v", err)
-					msg.Ack()
-					continue
-				}
-
-				// The payload may be under "payload" or "data".
-				payloadJSON, ok := raw["payload"]
-				if !ok {
-					payloadJSON, ok = raw["data"]
-				}
-				if !ok {
-					msg.Ack()
-					continue
-				}
-
-				var payload entityPayload
-				if err := json.Unmarshal(payloadJSON, &payload); err != nil {
-					t.Logf("unmarshal payload: %v", err)
-					msg.Ack()
-					continue
-				}
-				if payload.ID == "" {
-					msg.Ack()
-					continue
-				}
-				entities = append(entities, payload)
-				msg.Ack()
-
-				// Stop after collecting enough entities to validate.
-				if len(entities) >= 20 {
-					return
-				}
-			}
-		}
-	}()
-
-	// Wait for entity collection or timeout.
-	select {
-	case <-fetchDone:
-		t.Logf("collected %d entities from NATS", len(entities))
-	case <-collectCtx.Done():
-		t.Logf("collection timed out with %d entities", len(entities))
-	}
-
 	// Query the source manifest via HTTP while semsource is still running.
 	manifest := queryManifestHTTP(t, httpPort)
 	t.Logf("manifest: namespace=%s, sources=%d", manifest.Namespace, len(manifest.Sources))
@@ -821,6 +727,12 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 	// Query ingestion status — should reach "ready" since all sources are no-watch.
 	status := waitForReady(t, httpPort, 120*time.Second)
 	t.Logf("status: phase=%s, total_entities=%d, sources=%d", status.Phase, status.TotalEntities, len(status.Sources))
+
+	// Read applied entities from the graph while semsource is still running,
+	// once every offered entity has been delivered and applied.
+	waitForDrained(t, httpPort, nc, 120*time.Second)
+	entities := readEntityStates(t, nc)
+	t.Logf("read %d entities from ENTITY_STATES", len(entities))
 
 	// Query graph summary — agent bootstrap endpoint.
 	summary := querySummaryHTTP(t, httpPort)
@@ -947,9 +859,8 @@ func TestE2E_RunStartsAndPublishesEntities(t *testing.T) {
 
 	// 4. Entities were published to NATS.
 	if len(entities) == 0 {
-		t.Fatal("no entities received on graph.ingest.entity")
+		t.Fatal("no entities applied to ENTITY_STATES")
 	}
-	t.Logf("received %d entities on graph.ingest.entity", len(entities))
 
 	// 5. All entities use the exact persisted deployment authority.
 	platformID := effectivePlatform(t, nc, "e2etest")
@@ -1034,6 +945,7 @@ func parseEntityID(id string) (org, platform, domain, system, entityType, instan
 	return parts[0], parts[1], parts[3], parts[2], parts[4], parts[5], true
 }
 
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
 func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping OSH integration test in short mode")
@@ -1049,36 +961,15 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	httpPort := freePort(t)
 	configPath := writeOSHConfig(t, workDir, workspaceDir, httpPort)
 
-	// Subscribe to graph ingest subject BEFORE starting semsource.
+	// Entities are read from ENTITY_STATES after ready, never from the GRAPH
+	// transport stream: graph-ingest is GRAPH's only consumer (#160).
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
 		t.Fatalf("connect to NATS: %v", err)
 	}
 	defer nc.Close()
 
-	js, err := jetstream.New(nc)
-	if err != nil {
-		t.Fatalf("create jetstream context: %v", err)
-	}
-
 	ctx := context.Background()
-	stream, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "GRAPH",
-		Subjects: []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest", "graph.ingest.status", "graph.ingest.predicates"},
-		Storage:  jetstream.MemoryStorage,
-	})
-	if err != nil {
-		t.Fatalf("create GRAPH stream: %v", err)
-	}
-
-	cons, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
-		DeliverPolicy: jetstream.DeliverAllPolicy,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-	})
-	if err != nil {
-		t.Fatalf("create consumer: %v", err)
-	}
-
 	// Start semsource — the "repo" meta-source expands into git+ast+docs+config.
 	// Clones osh-core (shallow), so give it a generous timeout.
 	runCtx, runCancel := context.WithTimeout(ctx, 240*time.Second)
@@ -1122,110 +1013,6 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 		}
 	}()
 
-	// Collect entities from NATS, organized by domain.
-	// We wait until all 4 expected domains have entities OR we timeout.
-	type domainEntities struct {
-		entities []entityPayload
-	}
-	domains := make(map[string]*domainEntities) // git, config, web, java
-	var allEntities []entityPayload
-	var mu sync.Mutex
-
-	wantDomains := map[string]bool{"git": true, "config": true, "web": true, "java": true}
-
-	collectCtx, collectCancel := context.WithTimeout(ctx, 180*time.Second)
-	defer collectCancel()
-
-	// stabilityTimeout: after all domains are present, wait for the stream
-	// to go quiet (no new entities for this duration) before stopping.
-	const stabilityTimeout = 5 * time.Second
-
-	fetchDone := make(chan struct{})
-	go func() {
-		defer close(fetchDone)
-		lastActivity := time.Now()
-		allDomainsPresent := false
-
-		for {
-			if collectCtx.Err() != nil {
-				return
-			}
-
-			// Once all domains are present, check if stream has stabilised.
-			if allDomainsPresent && time.Since(lastActivity) >= stabilityTimeout {
-				mu.Lock()
-				t.Logf("entity stream stabilised after %d entities (quiet for %s)", len(allEntities), stabilityTimeout)
-				mu.Unlock()
-				return
-			}
-
-			msgs, err := cons.Fetch(50, jetstream.FetchMaxWait(2*time.Second))
-			if err != nil {
-				continue
-			}
-			for msg := range msgs.Messages() {
-				var raw map[string]json.RawMessage
-				if err := json.Unmarshal(msg.Data(), &raw); err != nil {
-					msg.Ack()
-					continue
-				}
-
-				payloadJSON, ok := raw["payload"]
-				if !ok {
-					payloadJSON, ok = raw["data"]
-				}
-				if !ok {
-					msg.Ack()
-					continue
-				}
-
-				var payload entityPayload
-				if err := json.Unmarshal(payloadJSON, &payload); err != nil {
-					msg.Ack()
-					continue
-				}
-				if payload.ID == "" {
-					msg.Ack()
-					continue
-				}
-				msg.Ack()
-
-				_, _, domain, _, _, _, idOK := parseEntityID(payload.ID)
-				if !idOK {
-					continue
-				}
-
-				mu.Lock()
-				allEntities = append(allEntities, payload)
-				lastActivity = time.Now()
-				if domains[domain] == nil {
-					domains[domain] = &domainEntities{}
-					t.Logf("domain %q first entity: %s (total so far: %d)", domain, payload.ID, len(allEntities))
-				}
-				domains[domain].entities = append(domains[domain].entities, payload)
-
-				if !allDomainsPresent {
-					allDomainsPresent = true
-					for d := range wantDomains {
-						if domains[d] == nil {
-							allDomainsPresent = false
-							break
-						}
-					}
-				}
-				mu.Unlock()
-			}
-		}
-	}()
-
-	// Wait for entity collection or timeout.
-	select {
-	case <-fetchDone:
-		t.Logf("all domains satisfied, collected %d total entities", len(allEntities))
-	case <-collectCtx.Done():
-		t.Logf("collection timed out with %d entities", len(allEntities))
-	}
-
 	// Query the source manifest via HTTP while semsource is still running.
 	// The "repo" meta-source expands to git+ast+docs+config.
 	manifest := queryManifestHTTP(t, httpPort)
@@ -1236,6 +1023,27 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	oshStatus := waitForReady(t, httpPort, 120*time.Second)
 	t.Logf("OSH status: phase=%s, total_entities=%d, sources=%d",
 		oshStatus.Phase, oshStatus.TotalEntities, len(oshStatus.Sources))
+
+	// Read applied entities from the graph, organized by domain, while
+	// semsource is still running.
+	type domainEntities struct {
+		entities []entityPayload
+	}
+	domains := make(map[string]*domainEntities) // git, config, web, java
+	wantDomains := map[string]bool{"git": true, "config": true, "web": true, "java": true}
+	waitForDrained(t, httpPort, nc, 120*time.Second)
+	allEntities := readEntityStates(t, nc)
+	for _, payload := range allEntities {
+		_, _, domain, _, _, _, idOK := parseEntityID(payload.ID)
+		if !idOK {
+			continue
+		}
+		if domains[domain] == nil {
+			domains[domain] = &domainEntities{}
+		}
+		domains[domain].entities = append(domains[domain].entities, payload)
+	}
+	t.Logf("read %d entities from ENTITY_STATES", len(allEntities))
 
 	// Stop semsource gracefully.
 	cmd.Process.Signal(os.Interrupt)
@@ -1299,7 +1107,7 @@ func TestE2E_OSH_JavaMavenIngest(t *testing.T) {
 	}
 
 	if len(allEntities) == 0 {
-		t.Fatal("no entities received on graph.ingest.entity for OSH repo")
+		t.Fatal("no entities applied to ENTITY_STATES for OSH repo")
 	}
 
 	// --- Structural: every entity has canonical identity and persisted authority. ---
@@ -1822,6 +1630,104 @@ func waitForRuntimeContext(t *testing.T, nc *nats.Conn, answer string, want bool
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("default document scope contains runtime answer=%t not achieved: %s", want, last)
+}
+
+// waitForDrained polls until status is past seeding, every source has settled
+// every entity it offered (offered = delivered + lost), and graph-ingest's
+// GRAPH consumer has nothing pending or unacknowledged. "ready" alone is not
+// enough: a source reports it while its publisher is still delivering.
+func waitForDrained(t *testing.T, httpPort int, nc *nats.Conn, timeout time.Duration) statusPayload {
+	t.Helper()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	deadline := time.Now().Add(timeout)
+	var last statusPayload
+	var lastWhy string
+	for time.Now().Before(deadline) {
+		last = queryStatusHTTPWithin(t, httpPort, time.Until(deadline))
+		lastWhy = drainedWhyNot(js, last)
+		if lastWhy == "" {
+			return last
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("not drained within %s: %s; status=%+v", timeout, lastWhy, last)
+	return last
+}
+
+// drainedWhyNot returns why the status and GRAPH consumer are not yet drained,
+// or "" when they are.
+func drainedWhyNot(js jetstream.JetStream, status statusPayload) string {
+	if status.Phase != "ready" && status.Phase != "degraded" {
+		return "phase " + status.Phase
+	}
+	if len(status.Sources) == 0 {
+		return "no sources"
+	}
+	for _, src := range status.Sources {
+		if src.OfferedTotal == 0 || src.OfferedTotal != src.DeliveredTotal+src.LostTotal {
+			return fmt.Sprintf("source %s offered=%d delivered=%d lost=%d",
+				src.InstanceName, src.OfferedTotal, src.DeliveredTotal, src.LostTotal)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	consumer, err := js.Consumer(ctx, "GRAPH", "graph-ingest-graph-ingest-entity")
+	if err != nil {
+		return "graph-ingest consumer: " + err.Error()
+	}
+	info, err := consumer.Info(ctx)
+	if err != nil {
+		return "graph-ingest consumer info: " + err.Error()
+	}
+	if info.NumPending != 0 || info.NumAckPending != 0 {
+		return fmt.Sprintf("graph-ingest pending=%d ack_pending=%d", info.NumPending, info.NumAckPending)
+	}
+	return ""
+}
+
+// readEntityStates returns every entity graph-ingest has applied to
+// ENTITY_STATES. The watch delivers each current value, then a nil marker once
+// it is caught up, so the read is a snapshot rather than a timed collection.
+func readEntityStates(t *testing.T, nc *nats.Conn) []entityPayload {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	kv, err := js.KeyValue(ctx, "ENTITY_STATES")
+	if err != nil {
+		t.Fatalf("open ENTITY_STATES: %v", err)
+	}
+	watcher, err := kv.WatchAll(ctx, jetstream.IgnoreDeletes())
+	if err != nil {
+		t.Fatalf("watch ENTITY_STATES: %v", err)
+	}
+	defer func() {
+		if err := watcher.Stop(); err != nil {
+			t.Errorf("stop ENTITY_STATES watch: %v", err)
+		}
+	}()
+	var entities []entityPayload
+	for {
+		select {
+		case entry := <-watcher.Updates():
+			if entry == nil {
+				return entities
+			}
+			var e entityPayload
+			if err := json.Unmarshal(entry.Value(), &e); err != nil {
+				t.Fatalf("decode ENTITY_STATES %s: %v", entry.Key(), err)
+			}
+			entities = append(entities, e)
+		case <-ctx.Done():
+			t.Fatalf("ENTITY_STATES watch did not catch up: %v (read %d)", ctx.Err(), len(entities))
+		}
+	}
 }
 
 func effectivePlatform(t *testing.T, nc *nats.Conn, org string) string {
