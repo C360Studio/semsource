@@ -101,6 +101,9 @@ type Component struct {
 	// (publish counters inflate under periodic reindex — audit 2026-07-19).
 	distinct *entitypub.DistinctTracker
 
+	// sent gates the #336 reconcile to republishes this process knows changed.
+	sent sentContent
+
 	// Background goroutine cancellation
 	cancelFuncs []context.CancelFunc
 	workers     workerjoin.Group
@@ -128,10 +131,25 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		coalesceMs:   config.CoalesceMs,
 	}
 
-	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(),
+	pubOpts := []entitypub.Option{
 		// Publish-boundary telemetry, keyed by instance so one stalled source
 		// cannot hide behind healthy siblings. Registry is nil in tests.
-		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName))
+		entitypub.WithMetrics(deps.MetricsRegistry, config.InstanceName),
+	}
+	if deps.NATSClient != nil {
+		// Every cfgfile publish carries the entity's complete semsource set:
+		// IDs are scoped to the declaring manifest (#348) and a manifest's
+		// same-ID declarations fold into one entity (#375), and a watch event
+		// re-parses the whole manifest
+		// (TestCfgfileWatchRepublishCarriesTheCompleteGroupSet). publishEntity
+		// limits the reconcile to known content changes (#336, D4).
+		reconciler, err := entitypub.NewSourceReconciler(deps.NATSClient)
+		if err != nil {
+			return nil, fmt.Errorf("create source reconciler: %w", err)
+		}
+		pubOpts = append(pubOpts, entitypub.WithReconcile(reconciler))
+	}
+	pub, err := entitypub.New(deps.NATSClient, deps.GetLogger(), pubOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create entity publisher: %w", err)
 	}
@@ -358,9 +376,17 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 }
 
 // publishEntity enqueues an EntityPayload for buffered publishing via the
-// entity publisher. Non-blocking; the publisher handles NATS delivery.
+// entity publisher. Non-blocking; the publisher handles NATS delivery. It is
+// reconciled only when this process already sent the entity with different
+// statements, so the first pass after a start never reconciles (#336, D4).
 func (c *Component) publishEntity(_ context.Context, payload *graph.EntityPayload) error {
-	return c.publisher.Send(payload)
+	sum := fingerprint(payload.TripleData)
+	payload.SkipReconcile = !c.sent.differs(payload.ID, sum)
+	if err := c.publisher.Send(payload); err != nil {
+		return err
+	}
+	c.sent.record(payload.ID, sum)
+	return nil
 }
 
 // updateLastActivity safely updates the last activity timestamp.
