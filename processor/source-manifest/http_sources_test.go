@@ -16,8 +16,8 @@ import (
 func httpTestLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 // newHTTPComponent builds a running source-manifest with the HTTP façade routes
-// registered on a fresh mux. A nil client is fine — publishManifest skips the
-// NATS broadcast and only prepares the HTTP responseData.
+// registered on a fresh mux. A nil client is fine: the component is never
+// started, and the HTTP handlers read only the fields set here.
 func newHTTPComponent(t *testing.T, cfg *IngestHandlerConfig, manifest []ManifestSource) *http.ServeMux {
 	t.Helper()
 	c := &Component{

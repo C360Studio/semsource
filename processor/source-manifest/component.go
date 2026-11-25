@@ -43,18 +43,32 @@ const (
 )
 
 // Component implements the source-manifest processor.
-// On startup it publishes a ManifestPayload to the GRAPH stream and
-// subscribes to graph.query.sources for on-demand request/reply queries.
-// It also aggregates status reports from source components and publishes
-// ingestion status and predicate schema to consumers.
+// On startup it serves the manifest on graph.query.sources and the predicate
+// schema on graph.query.predicates (and over HTTP) from memory, then broadcasts
+// both to the GRAPH stream. The broadcasts are best-effort: one the stream
+// refuses (a GRAPH at its cap answers 10077) is retried in the background until
+// it is delivered or the component stops, so a full stream never stops the
+// process (#399). It also aggregates status reports from source components and
+// publishes ingestion status to consumers.
 type Component struct {
 	name   string
 	config Config
 	// heartbeatFailing: the heartbeat is the liveness signal, so its loss must
 	// be visible without logging once per interval (ADR-0011).
 	heartbeatFailing degraded.Condition
-	client           *natsclient.Client
-	logger           *slog.Logger
+	// manifestBroadcastFailing and predicatesBroadcastFailing log a refused
+	// start-time broadcast once on entry and once on delivery, not per retry.
+	manifestBroadcastFailing   degraded.Condition
+	predicatesBroadcastFailing degraded.Condition
+	// publishStream is a test seam over the GRAPH stream publish. Production
+	// leaves it nil and publishes through client.
+	publishStream func(ctx context.Context, subject string, data []byte) error
+	// broadcastBackoffMin and broadcastBackoffMax bound the retry delay of a
+	// refused start-time broadcast. Zero means 500 ms and 10 s.
+	broadcastBackoffMin time.Duration
+	broadcastBackoffMax time.Duration
+	client              *natsclient.Client
+	logger              *slog.Logger
 	// readinessRequest is a test seam for the two bounded index-status probes
 	// used by the workbench capability document. Production leaves it nil and
 	// reads GRAPH_STATUS through graphStatus instead.
@@ -137,8 +151,10 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 // Initialize prepares the component (no-op).
 func (c *Component) Initialize() error { return nil }
 
-// Start publishes the manifest and predicate schema, then begins
-// listening for source status reports and serving queries.
+// Start serves the manifest and predicate schema, broadcasts both to GRAPH
+// (best-effort: a refused broadcast is retried in the background, never
+// returned), then begins listening for source status reports and serving
+// queries.
 func (c *Component) Start(ctx context.Context) error {
 	c.mu.Lock()
 	if c.running {
@@ -175,13 +191,13 @@ func (c *Component) Start(ctx context.Context) error {
 	return nil
 }
 
-// startManifest publishes the manifest and sets up query handlers.
+// startManifest sets up the manifest query handler, then broadcasts the
+// manifest.
 func (c *Component) startManifest(ctx context.Context) error {
 	c.manifestMu.Lock()
 	c.manifestSources = append([]ManifestSource(nil), c.config.Sources...)
 	c.manifestMu.Unlock()
-
-	if err := c.publishManifest(ctx); err != nil {
+	if _, err := c.marshalManifest(); err != nil {
 		return err
 	}
 
@@ -195,12 +211,14 @@ func (c *Component) startManifest(ctx context.Context) error {
 	}
 	c.querySub = sub
 	c.logger.Info("listening for source queries", "subject", querySubject)
+
+	c.broadcast(ctx, &c.manifestBroadcastFailing, "source manifest", c.publishManifest)
 	return nil
 }
 
-// publishManifest re-marshals the current manifest sources and publishes a
-// fresh ManifestPayload to manifestSubject. Caller must NOT hold manifestMu.
-func (c *Component) publishManifest(ctx context.Context) error {
+// marshalManifest re-marshals the current manifest sources into responseData
+// and returns the payload. Caller must NOT hold manifestMu.
+func (c *Component) marshalManifest() (*ManifestPayload, error) {
 	c.manifestMu.RLock()
 	payload := &ManifestPayload{
 		Namespace: c.config.Namespace,
@@ -211,38 +229,33 @@ func (c *Component) publishManifest(ctx context.Context) error {
 
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal manifest response: %w", err)
+		return nil, fmt.Errorf("marshal manifest response: %w", err)
 	}
 
 	c.manifestMu.Lock()
 	c.responseData = raw
 	c.manifestMu.Unlock()
+	return payload, nil
+}
 
-	// The HTTP responseData is prepared above regardless; only the NATS broadcast
-	// needs a client. A nil client (e.g. a manifest-only test harness) skips the
-	// publish rather than panicking — consumers still read the manifest over HTTP.
-	if c.client == nil {
-		return nil
+// publishManifest re-marshals the current manifest, so a late delivery is
+// never stale, and publishes it to manifestSubject.
+func (c *Component) publishManifest(ctx context.Context) error {
+	payload, err := c.marshalManifest()
+	if err != nil {
+		return err
 	}
-
 	if err := c.publishPayload(ctx, ManifestType, payload, manifestSubject); err != nil {
 		return fmt.Errorf("publish manifest: %w", err)
 	}
-	c.logger.Info("source manifest published",
-		"namespace", c.config.Namespace,
-		"sources", len(payload.Sources))
 	return nil
 }
 
-// startPredicateSchema builds and publishes the predicate schema.
+// startPredicateSchema builds the predicate schema, sets up its query
+// handler, then broadcasts it.
 func (c *Component) startPredicateSchema(ctx context.Context) error {
 	sourceTypes := c.configuredSourceTypes()
 	schema := buildPredicateSchema(sourceTypes)
-
-	if err := c.publishPayload(ctx, PredicatesType, schema, predicatesSubject); err != nil {
-		return fmt.Errorf("publish predicate schema: %w", err)
-	}
-	c.logger.Info("predicate schema published", "source_types", len(sourceTypes))
 
 	var err error
 	c.predicatesData, err = json.Marshal(schema)
@@ -258,7 +271,62 @@ func (c *Component) startPredicateSchema(ctx context.Context) error {
 	}
 	c.predicatesQuerySub = sub
 	c.logger.Info("listening for predicate queries", "subject", predicatesQuerySubject)
+
+	c.broadcast(ctx, &c.predicatesBroadcastFailing, "predicate schema", func(pubCtx context.Context) error {
+		if err := c.publishPayload(pubCtx, PredicatesType, schema, predicatesSubject); err != nil {
+			return fmt.Errorf("publish predicate schema: %w", err)
+		}
+		return nil
+	})
 	return nil
+}
+
+// broadcast makes one start-time publish attempt. A refusal does not fail
+// Start: the surfaces already answer from memory, and a full GRAPH stream only
+// drains once Start returns and graph-ingest runs (#399). It is logged once and
+// handed to a background retry that runs until delivery or Stop.
+func (c *Component) broadcast(ctx context.Context, failing *degraded.Condition, what string, publish func(context.Context) error) {
+	if err := publish(ctx); err != nil {
+		failing.Enter(c.logger, what+" broadcast refused — retrying in the background",
+			"error", err)
+		c.retryBroadcast(ctx, failing, what, publish)
+		return
+	}
+	c.logger.Info(what+" broadcast published", "namespace", c.config.Namespace)
+}
+
+// retryBroadcast retries publish with capped exponential backoff until it
+// succeeds or Stop cancels it. It never gives up: the served copy keeps
+// answering, and a stream reader sees the broadcast late, not never.
+func (c *Component) retryBroadcast(ctx context.Context, failing *degraded.Condition, what string, publish func(context.Context) error) {
+	retryCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	c.mu.Lock()
+	c.cancelFuncs = append(c.cancelFuncs, cancel)
+	c.mu.Unlock()
+	minDelay, maxDelay := c.broadcastBackoffMin, c.broadcastBackoffMax
+	if minDelay <= 0 {
+		minDelay = 500 * time.Millisecond
+	}
+	if maxDelay <= 0 {
+		maxDelay = 10 * time.Second
+	}
+	c.workers.Go(func() {
+		delay := minDelay
+		for {
+			timer := time.NewTimer(delay)
+			select {
+			case <-retryCtx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			if err := publish(retryCtx); err == nil {
+				failing.Clear(c.logger, what+" broadcast delivered after retry")
+				return
+			}
+			delay = min(2*delay, maxDelay)
+		}
+	})
 }
 
 // startStatusAggregation subscribes to internal status reports, starts the
@@ -571,13 +639,16 @@ func (c *Component) buildSummary() *SummaryPayload {
 
 // publishPayload marshals and publishes a payload to JetStream.
 func (c *Component) publishPayload(ctx context.Context, msgType message.Type, payload message.Payload, subject string) error {
-	if c.client == nil {
+	if c.client == nil && c.publishStream == nil {
 		return fmt.Errorf("publish %s: NATS client is unavailable", subject)
 	}
 	msg := message.NewBaseMessage(msgType, payload, "semsource")
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal message: %w", err)
+	}
+	if c.publishStream != nil {
+		return c.publishStream(ctx, subject, data)
 	}
 	return c.client.PublishToStream(ctx, subject, data)
 }
