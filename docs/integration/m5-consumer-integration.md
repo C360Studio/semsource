@@ -42,9 +42,11 @@ Before querying the graph, consumers must wait for SemSource to complete its ini
 
 ### Option A: Do not consume the GRAPH stream
 
-`GRAPH` is SemSource's ingest transport, not a read surface. Its retention is workqueue: graph-ingest
-is its consumer, the server refuses a consumer whose filter overlaps another's, and an acknowledged
-message is removed for every reader. Gate on Option B or Option C instead.
+`GRAPH` is SemSource's ingest transport, not a read surface. Do not create any JetStream consumer on
+it. Its retention is workqueue, with graph-ingest as the consumer: the server refuses a consumer whose
+filter overlaps graph-ingest's, and it accepts one that does not (for example on
+`graph.ingest.status`), but that consumer's acknowledgements delete the messages for every reader.
+Gate on Option B or Option C instead.
 
 ### Option B: Poll via NATS request/reply
 

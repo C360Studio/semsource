@@ -73,8 +73,8 @@ type SourceStatus struct {
 type SubmoduleStatus = sourcestatus.SubmoduleStatus
 
 // SourceErrorCode is a typed code for asynchronous source-runtime failures.
-// Codes flow to remote callers (subscribers of graph.ingest.status) so they
-// can branch on retryability without scraping log strings.
+// Codes flow to remote callers (graph.query.status and the HTTP status
+// route) so they can branch on retryability without scraping log strings.
 type SourceErrorCode string
 
 const (
