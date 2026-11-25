@@ -399,8 +399,8 @@ export function useWin(w: Win): Win { return w; }
 		return ast.NewCodeEntity(auth, "typescript", "test-project", typ, name, "a.ts").ID
 	}
 	// `declare module "m"` scopes its members by "module-" + "m" + a hash of
-	// the raw specifier (sha256("module:m")[:4], hex) since #340.
-	mScope := []string{"module-m-4c89ba36"}
+	// the raw specifier (sha256("module:m")[:4], hex) + "-0" since #340.
+	mScope := []string{"module-m-4c89ba36-0"}
 	inM := ast.NewScopedCodeEntity(auth, "typescript", "test-project", ast.TypeInterface, mScope, "Mod", "a.ts").ID
 	assertRefEdges(t, parseTSFile(t, "a.ts", src), map[string]refEdges{
 		mod(ast.TypeFunction, "useWin"): {params: []string{mod(ast.TypeInterface, "Win")}, returns: []string{mod(ast.TypeInterface, "Win")}},
@@ -524,6 +524,7 @@ func TestStringModuleMembersDoNotShareNamespaceIDs(t *testing.T) {
 	src := `declare module "foo.bar" { export function x() {} export function c1() { return x(); } }
 declare module "foo/bar" { export function x() {} export function c2() { return x(); } }
 namespace foo.bar { export function x() {} export function c3() { return x(); } }
+namespace module.foo.bar.c82997e5 { export function x() {} export function c4() { return x(); } }
 `
 	ents := parseTSFile(t, "m.ts", src)
 	xs := map[string]*ast.CodeEntity{}
@@ -534,8 +535,10 @@ namespace foo.bar { export function x() {} export function c3() { return x(); } 
 		}
 		byName[e.Name] = e
 	}
-	if len(xs) != 3 {
-		t.Fatalf("want 3 distinct IDs for x, got %d: %v", len(xs), sortedNames(ents))
+	// c82997e5 is sha256("module:foo.bar")[:4]: a namespace that spells the
+	// module segment's hash out must still get its own ID (#379 review).
+	if len(xs) != 4 {
+		t.Fatalf("want 4 distinct IDs for x, got %d: %v", len(xs), sortedNames(ents))
 	}
 	// The dotted namespace keeps its pre-#340 ID.
 	auth := testAuthority("test-org")
@@ -543,13 +546,39 @@ namespace foo.bar { export function x() {} export function c3() { return x(); } 
 	if xs[nsX] == nil {
 		t.Errorf("namespace foo.bar member x lost its ID %s", nsX)
 	}
-	for _, caller := range []string{"c1", "c2", "c3"} {
+	for _, caller := range []string{"c1", "c2", "c3", "c4"} {
 		c := byName[caller]
 		if c == nil || len(c.Calls) != 1 || xs[c.Calls[0]] == nil {
 			t.Fatalf("%s: want one call to a block-local x, got %+v", caller, c)
 		}
 	}
-	if byName["c1"].Calls[0] == byName["c2"].Calls[0] || byName["c2"].Calls[0] == byName["c3"].Calls[0] || byName["c1"].Calls[0] == byName["c3"].Calls[0] {
-		t.Errorf("callers resolve x to a shared ID: c1=%s c2=%s c3=%s", byName["c1"].Calls[0], byName["c2"].Calls[0], byName["c3"].Calls[0])
+	targets := map[string]bool{}
+	for _, caller := range []string{"c1", "c2", "c3", "c4"} {
+		targets[byName[caller].Calls[0]] = true
 	}
+	if len(targets) != 4 {
+		t.Errorf("callers resolve x to %d distinct IDs, want 4", len(targets))
+	}
+}
+
+// Type references inside a string module and inside a namespace that spells
+// the module segment's hash out each resolve to their own block's type (#340).
+// spec: entity-identity-safety / TypeScript module-declaration members are keyed by their raw specifier
+func TestStringModuleTypeReferencesStayInTheirBlock(t *testing.T) {
+	src := `declare module "foo.bar" { export interface T {} export function u(t: T): T { return t; } }
+namespace module.foo.bar.c82997e5 { export interface T {} export function u(t: T): T { return t; } }
+`
+	auth := testAuthority("test-org")
+	id := func(typ ast.CodeEntityType, scope []string, name string) string {
+		return ast.NewScopedCodeEntity(auth, "typescript", "test-project", typ, scope, name, "t.ts").ID
+	}
+	mod := []string{"module-foo-bar-c82997e5-0"} // sha256("module:foo.bar")[:4] + "-0"
+	ns := []string{"module", "foo", "bar", "c82997e5"}
+	if id(ast.TypeInterface, mod, "T") == id(ast.TypeInterface, ns, "T") {
+		t.Fatal("module and namespace T share an ID")
+	}
+	assertRefEdges(t, parseTSFile(t, "t.ts", src), map[string]refEdges{
+		id(ast.TypeFunction, mod, "u"): {params: []string{id(ast.TypeInterface, mod, "T")}, returns: []string{id(ast.TypeInterface, mod, "T")}},
+		id(ast.TypeFunction, ns, "u"):  {params: []string{id(ast.TypeInterface, ns, "T")}, returns: []string{id(ast.TypeInterface, ns, "T")}},
+	})
 }

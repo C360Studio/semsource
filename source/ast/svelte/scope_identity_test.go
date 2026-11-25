@@ -191,6 +191,7 @@ func TestSvelteStringModuleMembersDoNotShareNamespaceIDs(t *testing.T) {
 	src := `<script lang="ts">
   declare module "foo.bar" { export const cfg = 1; }
   namespace foo.bar { export const cfg = 2; }
+  namespace module.foo.bar.c82997e5 { export const cfg = 3; }
 </script>
 `
 	auth := testAuthority("test-org")
@@ -200,8 +201,10 @@ func TestSvelteStringModuleMembersDoNotShareNamespaceIDs(t *testing.T) {
 	for _, e := range got {
 		ids[e.ID] = true
 	}
-	if len(got) != 2 || len(ids) != 2 {
-		t.Fatalf("want 2 cfg entities with distinct IDs, got %d entities / %d IDs: %v", len(got), len(ids), names(got))
+	// c82997e5 is sha256("module:foo.bar")[:4]: the namespace spelling it
+	// out must not take the module member's ID (#379 review).
+	if len(got) != 3 || len(ids) != 3 {
+		t.Fatalf("want 3 cfg entities with distinct IDs, got %d entities / %d IDs: %v", len(got), len(ids), names(got))
 	}
 	if !ids[nsID] {
 		t.Errorf("namespace foo.bar member lost its ID %s", nsID)
