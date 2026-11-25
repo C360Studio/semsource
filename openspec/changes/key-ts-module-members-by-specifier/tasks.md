@@ -16,4 +16,4 @@
 ## 4. Gates
 
 - [x] 4.1 `task lint`, `go test ./...`, `go test -tags=integration ./source/ast/...`, `task spec:check`.
-- [ ] 4.2 `graph-event-reviewer` pass; review via `ateam review request`; archive before ready.
+- [x] 4.2 `graph-event-reviewer` pass (approve; Svelte case added from its findings); review via `ateam review request`; archive before ready.

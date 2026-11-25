@@ -181,3 +181,29 @@ func TestSvelteMergedNamespacePrivatesAreLocals(t *testing.T) {
 		}
 	}
 }
+
+// TestSvelteStringModuleMembersDoNotShareNamespaceIDs applies #340 to a
+// component script: the shared NamespaceSegments keys a `declare module`
+// member by its raw specifier, so it no longer collides with the same name in
+// `namespace foo.bar`, whose ID is unchanged.
+// spec: entity-identity-safety / TypeScript module-declaration members are keyed by their raw specifier
+func TestSvelteStringModuleMembersDoNotShareNamespaceIDs(t *testing.T) {
+	src := `<script lang="ts">
+  declare module "foo.bar" { export const cfg = 1; }
+  namespace foo.bar { export const cfg = 2; }
+</script>
+`
+	auth := testAuthority("test-org")
+	nsID := ast.NewScopedCodeEntity(auth, "svelte", "test-project", ast.TypeConst, []string{"foo", "bar"}, "cfg", "Component.svelte").ID
+	got := parseSvelte(t, src)
+	ids := map[string]bool{}
+	for _, e := range got {
+		ids[e.ID] = true
+	}
+	if len(got) != 2 || len(ids) != 2 {
+		t.Fatalf("want 2 cfg entities with distinct IDs, got %d entities / %d IDs: %v", len(got), len(ids), names(got))
+	}
+	if !ids[nsID] {
+		t.Errorf("namespace foo.bar member lost its ID %s", nsID)
+	}
+}
