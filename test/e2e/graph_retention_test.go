@@ -3,13 +3,17 @@
 package e2e
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,5 +231,210 @@ func TestE2E_LimitsGraphStreamRefusesBoot(t *testing.T) {
 	}
 	if got := stream.CachedInfo().Config.Retention; got != jetstream.LimitsPolicy {
 		t.Errorf("GRAPH retention after refused boot = %v, want limits (left untouched)", got)
+	}
+}
+
+// jsStoreFailed is JetStream's err_code for a publish the stream refuses at its
+// byte bound ("maximum bytes exceeded" under discard new).
+const jsStoreFailed jetstream.ErrorCode = 10077
+
+// watchedWriter is a running semsource whose exit and output the test can see.
+type watchedWriter struct {
+	exited <-chan struct{}
+	stop   func()
+	mu     sync.Mutex
+	out    strings.Builder
+}
+
+func (w *watchedWriter) output() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.out.String()
+}
+
+// startWatchedWriter starts semsource like upgradeStartWriter, but exposes its
+// exit and keeps its output, so a test can tell a crash from a running process.
+func startWatchedWriter(t *testing.T, binPath, configPath, workDir, natsURL string, httpPort, wsPort int) *watchedWriter {
+	t.Helper()
+	cmd := exec.Command(binPath, "run", "--config", configPath, "--log-level", "info", "--nats-url", natsURL)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("SEMSOURCE_HTTP_PORT=%d", httpPort),
+		fmt.Sprintf("SEMSOURCE_WS_BIND=127.0.0.1:%d", wsPort),
+	)
+	pr, pw := io.Pipe()
+	cmd.Stdout, cmd.Stderr = pw, pw
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start semsource: %v", err)
+	}
+	w := &watchedWriter{}
+	scanned := make(chan struct{})
+	go func() {
+		defer close(scanned)
+		scanner := bufio.NewScanner(pr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			t.Logf("[semsource] %s", line)
+			w.mu.Lock()
+			w.out.WriteString(line + "\n")
+			w.mu.Unlock()
+		}
+	}()
+	exited := make(chan struct{})
+	var waitErr error
+	go func() {
+		waitErr = cmd.Wait()
+		_ = pw.Close()
+		<-scanned
+		close(exited)
+	}()
+	w.exited = exited
+	var once sync.Once
+	w.stop = func() {
+		once.Do(func() {
+			select {
+			case <-exited:
+				return
+			default:
+			}
+			_ = cmd.Process.Signal(os.Interrupt)
+			select {
+			case <-exited:
+				if waitErr != nil {
+					t.Errorf("semsource exit: %v", waitErr)
+				}
+			case <-time.After(35 * time.Second):
+				_ = cmd.Process.Kill()
+				<-exited
+				t.Errorf("semsource did not stop gracefully within 35s")
+			}
+		})
+	}
+	return w
+}
+
+// fillGraphStream republishes captured entity envelopes, with no Msg-Id, until
+// GRAPH refuses one at its byte bound, then pads the room left (less than one
+// envelope, but enough for a manifest) with tiny graph.ingest.status messages,
+// which no consumer reads. It returns how many entity envelopes it published.
+func fillGraphStream(t *testing.T, nc *nats.Conn, envelopes [][]byte) int {
+	t.Helper()
+	published := publishUntilRefused(t, nc, "graph.ingest.entity", envelopes)
+	publishUntilRefused(t, nc, "graph.ingest.status", [][]byte{[]byte("{}")})
+	return published
+}
+
+// publishUntilRefused publishes payloads round-robin to subject until GRAPH
+// refuses one with 10077, and returns how many it accepted.
+func publishUntilRefused(t *testing.T, nc *nats.Conn, subject string, envelopes [][]byte) int {
+	t.Helper()
+	if len(envelopes) == 0 {
+		t.Fatal("no entity envelopes captured to fill GRAPH with")
+	}
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("create jetstream context: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	published := 0
+	for pass := 0; pass < 100_000/len(envelopes)+1; pass++ {
+		for _, data := range envelopes {
+			_, err := js.Publish(ctx, subject, data)
+			if err == nil {
+				published++
+				continue
+			}
+			var jsErr jetstream.JetStreamError
+			if errors.As(err, &jsErr) && jsErr.APIError() != nil && jsErr.APIError().ErrorCode == jsStoreFailed {
+				return published
+			}
+			t.Fatalf("fill GRAPH on %s after %d messages: %v", subject, published, err)
+		}
+	}
+	t.Fatalf("GRAPH accepted %d messages on %s without refusing; is it bounded?", published, subject)
+	return published
+}
+
+// TestE2E_BootIntoFullGraphStream boots SemSource onto a GRAPH stream already
+// at its byte bound with entity messages graph-ingest has not consumed, the
+// state stacked boots leave behind (#399). SemSource must stay up, graph-ingest
+// must drain the stream, and the manifest broadcast must land once there is
+// room.
+//
+// spec: openspec/specs/ingestion-readiness/spec.md#Requirement: A full ingest transport stream SHALL NOT stop SemSource from starting
+func TestE2E_BootIntoFullGraphStream(t *testing.T) {
+	natsURL, cleanup := startNATS(t)
+	defer cleanup()
+	binPath := buildBinary(t)
+	workDir := t.TempDir()
+	httpPort, wsPort := freePort(t), freePort(t)
+	fixture := writeRetentionFixture(t, t.TempDir())
+	configPath := writeRetentionConfig(t, workDir, fixture, httpPort, warmRestartMaxBytes)
+
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect to NATS: %v", err)
+	}
+	defer nc.Close()
+
+	// Capture the real envelopes boot 1 publishes, so the filler is entities
+	// graph-ingest applies (and so removes), not junk it might never drain.
+	var capMu sync.Mutex
+	var captured [][]byte
+	sub, err := nc.Subscribe("graph.ingest.entity", func(m *nats.Msg) {
+		capMu.Lock()
+		defer capMu.Unlock()
+		captured = append(captured, append([]byte(nil), m.Data...))
+	})
+	if err != nil {
+		t.Fatalf("subscribe graph.ingest.entity: %v", err)
+	}
+	if err := sub.SetPendingLimits(-1, -1); err != nil {
+		t.Fatalf("set pending limits: %v", err)
+	}
+
+	stop := upgradeStartWriter(t, binPath, configPath, workDir, natsURL, httpPort, wsPort)
+	first := waitForDrained(t, httpPort, nc, 180*time.Second)
+	assertCleanReady(t, "first boot", first)
+	firstCount := len(readEntityStates(t, nc))
+	stop()
+	if err := sub.Unsubscribe(); err != nil {
+		t.Fatalf("unsubscribe graph.ingest.entity: %v", err)
+	}
+	capMu.Lock()
+	envelopes := captured
+	capMu.Unlock()
+
+	filled := fillGraphStream(t, nc, envelopes)
+	before := graphStreamState(t, nc)
+	t.Logf("filled GRAPH: published=%d bytes=%d cap=%d subjects=%v", filled, before.Bytes, warmRestartMaxBytes, before.Subjects)
+
+	w := startWatchedWriter(t, binPath, configPath, workDir, natsURL, httpPort, wsPort)
+	defer w.stop()
+	select {
+	case <-w.exited:
+		t.Fatalf("semsource exited while booting into a full GRAPH stream, want it running\n%s", w.output())
+	case <-time.After(30 * time.Second):
+	}
+
+	second := waitForDrained(t, httpPort, nc, 180*time.Second)
+	assertCleanReady(t, "boot into full stream", second)
+	after := graphStreamState(t, nc)
+	if n := after.Subjects["graph.ingest.entity"]; n != 0 {
+		t.Errorf("after the boot GRAPH holds %d graph.ingest.entity messages, want 0 (drained)", n)
+	}
+	if got := len(readEntityStates(t, nc)); got != firstCount {
+		t.Errorf("entities after boot into full stream = %d, want %d (first boot)", got, firstCount)
+	}
+	// The retried manifest lands after graph-ingest makes room, so it can
+	// trail the drain by one backoff step.
+	deadline := time.Now().Add(30 * time.Second)
+	for after.Subjects["graph.ingest.manifest"] <= before.Subjects["graph.ingest.manifest"] && time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		after = graphStreamState(t, nc)
+	}
+	if got, was := after.Subjects["graph.ingest.manifest"], before.Subjects["graph.ingest.manifest"]; got <= was {
+		t.Errorf("graph.ingest.manifest count = %d after the boot, want more than %d (the manifest broadcast was never delivered)", got, was)
 	}
 }
