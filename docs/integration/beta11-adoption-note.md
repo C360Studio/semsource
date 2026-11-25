@@ -14,7 +14,9 @@ docker compose down -v   # removes NATS volumes
 docker compose up -d     # fresh provision + reseed from source
 ```
 
-Wait for `/source-manifest/status` → `phase: "ready"` before querying. Three reasons an in-place upgrade is not enough:
+Wait for `/source-manifest/status` → `phase: "ready"`, then `index.ready: true`, before the first query. `ready`
+guarantees no source silently lost part of its seed; it does not wait for entities still in flight
+(`ingestion-readiness` spec). `index.ready` turns true once the name index has caught up to the latest write. Three reasons an in-place upgrade is not enough:
 
 1. Code and config-file entity IDs changed (next section). IDs are never aliased or rewritten, so beta.10's entities
    would stay in `ENTITY_STATES` beside the new ones.
