@@ -1667,7 +1667,7 @@ func drainedWhyNot(js jetstream.JetStream, status statusPayload) string {
 		return "no sources"
 	}
 	for _, src := range status.Sources {
-		if src.OfferedTotal == 0 || src.OfferedTotal != src.DeliveredTotal+src.LostTotal {
+		if src.OfferedTotal != src.DeliveredTotal+src.LostTotal {
 			return fmt.Sprintf("source %s offered=%d delivered=%d lost=%d",
 				src.InstanceName, src.OfferedTotal, src.DeliveredTotal, src.LostTotal)
 		}

@@ -22,7 +22,7 @@
   core subscription on `graph.ingest.entity` from each connect and replays the latest captured envelope whose payload is
   the Run entity; the restart-guard evidence records the captured envelopes and states that the stream sequences are not
   recoverable. Proved by: `TestKnownAnswerCorpus` green on bm25 and foundation with the workqueue binary and with main's.
-- [ ] 2.5 `TestE2E_SubmoduleIngest` (`test/e2e/submodule_test.go:84-98`) stops pre-creating GRAPH and reads
+- [x] 2.5 `TestE2E_SubmoduleIngest` (`test/e2e/submodule_test.go:84-98`) stops pre-creating GRAPH and reads
   ENTITY_STATES, as in 2.1. Proved by: the test green.
 
 ## 3. Retention (breaking: needs a fresh GRAPH stream)

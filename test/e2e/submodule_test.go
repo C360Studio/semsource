@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 // The public fixture: C360Studio/semdev-test dual-pins semdev-test-sub —
@@ -38,6 +37,8 @@ const (
 //
 // First boot only: the restart that expands the pins is covered by
 // TestE2E_DiscoveryAcrossRestarts.
+//
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
 func TestE2E_SubmoduleIngest(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network e2e in short mode")
@@ -71,31 +72,14 @@ func TestE2E_SubmoduleIngest(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Entities are read from ENTITY_STATES once delivery settles, never from
+	// the GRAPH transport stream: graph-ingest is its only consumer (#160).
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
 		t.Fatalf("connect to NATS: %v", err)
 	}
 	defer nc.Close()
-	js, err := jetstream.New(nc)
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx := context.Background()
-	stream, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "GRAPH",
-		Subjects: []string{"graph.ingest.>"},
-		Storage:  jetstream.MemoryStorage,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cons, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
-		DeliverPolicy: jetstream.DeliverAllPolicy,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	runCtx, runCancel := context.WithTimeout(ctx, 300*time.Second)
 	defer runCancel()
@@ -137,50 +121,11 @@ func TestE2E_SubmoduleIngest(t *testing.T) {
 		}
 	}()
 
-	// Collect entity IDs until the stream goes quiet after the first entity,
-	// or timeout. Nothing waits on submodule scopes: on a first boot none appear.
-	var mu sync.Mutex
+	// Nothing waits on submodule scopes: on a first boot none appear.
+	waitForDrained(t, httpPort, nc, 240*time.Second)
 	var ids []string
-	collectCtx, collectCancel := context.WithTimeout(ctx, 240*time.Second)
-	defer collectCancel()
-	const stability = 15 * time.Second
-	fetchDone := make(chan struct{})
-	go func() {
-		defer close(fetchDone)
-		lastActivity := time.Now()
-		for collectCtx.Err() == nil {
-			mu.Lock()
-			seen := len(ids)
-			mu.Unlock()
-			if seen > 0 && time.Since(lastActivity) >= stability {
-				return
-			}
-			msgs, err := cons.Fetch(100, jetstream.FetchMaxWait(2*time.Second))
-			if err != nil {
-				continue
-			}
-			for msg := range msgs.Messages() {
-				var raw map[string]json.RawMessage
-				if err := json.Unmarshal(msg.Data(), &raw); err == nil {
-					payloadJSON, ok := raw["payload"]
-					if !ok {
-						payloadJSON = raw["data"]
-					}
-					var p entityPayload
-					if json.Unmarshal(payloadJSON, &p) == nil && p.ID != "" {
-						mu.Lock()
-						ids = append(ids, p.ID)
-						lastActivity = time.Now()
-						mu.Unlock()
-					}
-				}
-				msg.Ack()
-			}
-		}
-	}()
-	select {
-	case <-fetchDone:
-	case <-collectCtx.Done():
+	for _, e := range readEntityStates(t, nc) {
+		ids = append(ids, e.ID)
 	}
 
 	select {
@@ -189,8 +134,6 @@ func TestE2E_SubmoduleIngest(t *testing.T) {
 		t.Error("discovery: no awaiting_checkout submodule discovery state for the fixture source")
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
 	if len(ids) == 0 {
 		t.Fatal("parent: no entities collected — the parent repository did not ingest")
 	}
