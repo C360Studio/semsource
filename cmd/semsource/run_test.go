@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	semconfig "github.com/c360studio/semengine/config"
 	"github.com/c360studio/semengine/health"
 	"github.com/c360studio/semengine/service"
 	"github.com/c360studio/semengine/types"
@@ -224,6 +225,59 @@ func TestGraphSubsystemComponents_GraphGatewayDeclaresRequesterOutputs(t *testin
 	}
 	if _, present := raw["bind_address"]; present {
 		t.Fatalf("graph-gateway bind_address = %v, want omitted (shared ServiceManager HTTP mux)", raw["bind_address"])
+	}
+}
+
+// TestGraphStreamConfig_RetentionDiscardAndBounds pins the GRAPH transport
+// posture (#160): workqueue retention, so graph-ingest's acknowledgement frees
+// the space and the byte bound measures backlog; discard new, so the ceiling
+// refuses rather than evicts; and the 1h / 256 MiB bounds. Retention has no
+// override: the other override fields leave it alone, and discard is the one
+// policy an operator may change.
+//
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
+func TestGraphStreamConfig_RetentionDiscardAndBounds(t *testing.T) {
+	maxBytes := int64(1 << 20)
+	replicas := 1
+	tests := []struct {
+		name         string
+		override     *config.StreamOverride
+		wantDiscard  string
+		wantMaxBytes int64
+		wantMaxAge   string
+	}{
+		{name: "default", wantDiscard: semconfig.StreamDiscardNew, wantMaxBytes: 256 * 1024 * 1024, wantMaxAge: "1h"},
+		{
+			name:         "every override field set",
+			override:     &config.StreamOverride{Storage: "memory", MaxBytes: &maxBytes, MaxAge: "2h", Replicas: &replicas, Discard: "old"},
+			wantDiscard:  "old",
+			wantMaxBytes: maxBytes,
+			wantMaxAge:   "2h",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			if tt.override != nil {
+				cfg.Streams = map[string]config.StreamOverride{"GRAPH": *tt.override}
+			}
+			stream, ok := graphStreamConfig(cfg)["GRAPH"]
+			if !ok {
+				t.Fatal("GRAPH stream not configured")
+			}
+			if stream.Retention != "workqueue" {
+				t.Errorf("Retention = %q, want workqueue", stream.Retention)
+			}
+			if stream.Discard != tt.wantDiscard {
+				t.Errorf("Discard = %q, want %q", stream.Discard, tt.wantDiscard)
+			}
+			if stream.MaxBytes != tt.wantMaxBytes {
+				t.Errorf("MaxBytes = %d, want %d", stream.MaxBytes, tt.wantMaxBytes)
+			}
+			if stream.MaxAge != tt.wantMaxAge {
+				t.Errorf("MaxAge = %q, want %q", stream.MaxAge, tt.wantMaxAge)
+			}
+		})
 	}
 }
 

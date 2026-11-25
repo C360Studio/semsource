@@ -976,6 +976,15 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		MaxBytes: 256 * 1024 * 1024,
 		MaxAge:   "1h",
 		Replicas: 1,
+		// workqueue, fixed: graph-ingest acknowledges an entity only after its
+		// ENTITY_STATES write and redelivery stamp, and the acknowledgement
+		// removes the message, so MaxBytes bounds the unconsumed backlog
+		// rather than everything published within MaxAge (#160: a restart
+		// within the hour republished into a full stream). Unlike interest
+		// retention, workqueue keeps a message published before graph-ingest's
+		// consumer binds. The cost is that no other consumer may read these
+		// subjects: the server refuses it at bind. No override field exists.
+		Retention: "workqueue",
 		// semengine requires an ordinary stream to declare its
 		// discard policy — it was hardcoded to "old" before, so the policy was
 		// never anyone's choice.
@@ -987,10 +996,11 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		// consumed them — producer-side surfaces all report healthy while the
 		// graph quietly loses entities, which is precisely the failure class
 		// the no-silent-entity-loss work exists to eliminate. "new" refuses the
-		// publish instead, and entitypub treats a non-circuit-breaker publish
-		// error as terminal and returns it, so the pressure is visible rather
-		// than silent. MaxAge still expires messages, so a stalled producer
-		// recovers without intervention.
+		// publish instead; entitypub retries the refusal within its delivery
+		// budget, then fails it and counts the loss on the source's status, so
+		// the pressure is visible rather than silent. MaxAge still expires
+		// messages; with consumed ones removed, an expiry is always a message
+		// graph-ingest never applied, which takes it stalling for MaxAge.
 		Discard: semconfig.StreamDiscardNew,
 	}
 
