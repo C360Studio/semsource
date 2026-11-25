@@ -47,9 +47,10 @@
 
 - [x] 4.1 `docs/integration/m5-consumer-integration.md:43-46`: Option A no longer says to subscribe on GRAPH; it points
   to Options B and C.
-- [ ] 4.2 Adoption-note line under #386 (design, Migration Plan).
-- [ ] 4.3 `openspec validate --all` and `task spec:check` green. Archive the change before the PR is ready.
+- [x] 4.2 Adoption-note line under #386 (design, Migration Plan). Handed to #386 as a comment (7169335471); the note itself lands with #386.
+- [x] 4.3 `openspec validate --all` and `task spec:check` green. Archive the change before the PR is ready.
 
 ## 5. Gate
 
-- [ ] 5.1 The OSH warm-restart proof (#388) passes on this branch. That is beta.11's gate, recorded on #388.
+- [x] 5.1 The OSH warm-restart proof (#388) passes on this branch. That is beta.11's gate, recorded on #388.
+  Passed 2026-11-25 on the ae3389b build (#388 comment): semsource-only restart ready at ~150 s, 0 drops, 0 errors; GRAPH 19 KB after the seed.
