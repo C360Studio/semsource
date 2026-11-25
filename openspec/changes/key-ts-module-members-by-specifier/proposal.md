@@ -1,6 +1,6 @@
 # Key TypeScript module-declaration members by their raw specifier
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-25) sha256:1d6ea997c90c
 
 Track: standard (one encoding change in `source/ast/ts`; identity-breaking for members of `declare module "…"` blocks
 only, which rides the beta.11 reseed).
