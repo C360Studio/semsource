@@ -22,10 +22,20 @@ docker compose up -d
 
 Wait for `/source-manifest/status` to report `phase: "ready"` before querying.
 
-An in-place re-ingest is not enough. A hybrid whose ID survives keeps the other declaration's predicates, because
-re-ingest never removes a predicate a source stops emitting
-([#336](https://github.com/C360Studio/semsource/issues/336)). The corpus would look migrated while still serving
-hybrids.
+An in-place re-ingest is not enough, for two reasons:
+
+- Existing IDs are never aliased or rewritten, so everything stored under a beta.10 ID stays in `ENTITY_STATES`
+  next to the new entities.
+- A hybrid whose ID survives keeps the other declaration's predicates. Examples are a C/C++ name declared twice in
+  one file and a Python getter that shared its ID with its setter. Since
+  [#336](https://github.com/C360Studio/semsource/issues/336) a republish removes a predicate its source stopped
+  emitting, but only when the process knows the content changed: a watch edit, or a reindex that finds a file's hash
+  differs from the one it recorded. The first pass after a start never reconciles, so a restart over beta.10 storage
+  leaves the hybrid as it is until that file is next edited. The corpus would look migrated while still serving
+  hybrids.
+
+The other post-beta.10 identity breaks (config files, TypeScript `declare module`) ride the same reseed; the
+[beta.11 adoption note](../integration/beta11-adoption-note.md) lists them all.
 
 ## What changes in identity
 
@@ -34,12 +44,16 @@ hybrids.
   type arguments erased, array dimensions kept, and type variables reduced to their first bound. Renaming a
   parameter or adding a sibling overload does not change it.
 - **TypeScript, JavaScript and Svelte** accessor pairs and static members get distinct IDs. Namespace members
-  are scoped by their namespace chain: `namespace A.B { export function g() {} }` gives `...-A-B-g`, and
-  `declare module "m" {}` scopes by `m`. Members of `declare global {}` stay unscoped. Other module-level IDs are
-  unchanged.
+  are scoped by their namespace chain: `namespace A.B { export function g() {} }` gives `...-A-B-g`. A member of
+  `declare module "m" {}` is scoped by a segment built from the raw specifier, `module-m-4c89ba36-0`, whose
+  hash keeps `"foo.bar"`, `"foo/bar"` and `namespace foo.bar` apart
+  ([#340](https://github.com/C360Studio/semsource/issues/340)). Members of `declare global {}` stay unscoped. Other
+  module-level IDs are unchanged.
 - **Python property setters and deleters** get `-setter` and `-deleter` instances (`...-Tokenizer-model-setter`);
   the getter keeps the plain name ([#338](https://github.com/C360Studio/semsource/issues/338)).
-- Every other code ID is unchanged in shape. Docs, config, git and URL entities are not affected.
+- Every other code ID is unchanged in shape. Docs, git and URL entities are not affected by this change. Config-file
+  entity IDs changed separately (#348, #375, #384); see the
+  [beta.11 adoption note](../integration/beta11-adoption-note.md).
 
 ## What you will no longer see
 
@@ -51,11 +65,12 @@ These are deliberate, and each was ruled on #329 or #338.
   the first overload; declare `cpp` on the watch path to index them.
 - **Python `@overload` stubs are not entities when the implementation exists**, and a name bound twice in one scope
   keeps its last binding, the one Python runs.
-
 - **Locals are not entities.** Function-scoped TS/JS/Svelte declarations, local functions included, no longer
-  appear, and test-file locals go too. Non-exported members of a namespace declared more than once in the same file go too. Each body's private declarations are separately scoped in TypeScript but would share one ID, and calls to them emit no edge. So do block-scoped declarations at module level: anything declared inside a
-  module-level `if`/`else`, `try`/`catch`, loop, `switch` or bare `{}` block, `var` and classes included. Namespace
-  members are kept.
+  appear, and test-file locals go too. Non-exported members of a namespace declared more than once in the same file
+  go too. Each body's private declarations are separately scoped in TypeScript but would share one ID, and calls to
+  them emit no edge. So do block-scoped declarations at module level: anything declared inside a module-level
+  `if`/`else`, `try`/`catch`, loop, `switch` or bare `{}` block, `var` and classes included. Namespace members are
+  kept.
 - **IIFE-, AMD- and UMD-wrapped JavaScript indexes as a file only.** Everything inside the wrapper function is
   local, so such a file contributes its file entity and nothing else.
 - **Go `func init()` and blank declarations are not entities.** This covers `var _`, `const _`, `func _` and
@@ -87,6 +102,14 @@ These are deliberate, and each was ruled on #329 or #338.
 
 ## Known follow-ups
 
-- Python, C and C++ collisions are guarded but not fixed: [#338](https://github.com/C360Studio/semsource/issues/338).
-- Predicates a re-ingest drops are never removed from a retained entity (#336, above).
-- A Java anonymous-class wrong edge: [#339](https://github.com/C360Studio/semsource/issues/339).
+- A file edited while SemSource was down keeps the predicates it dropped until its next edit; closing the gap
+  depends on upstream semengine#730.
+- TypeScript scope segments joined with `-` are not injective: identifiers deliberately spelling a segment's hash
+  can share an ID, and the runtime guard keeps the first
+  ([#380](https://github.com/C360Studio/semsource/issues/380)).
+
+Fixed since this note was first written: Python, C and C++ collisions
+([#338](https://github.com/C360Studio/semsource/issues/338), above); calls inside Java anonymous, local-class and
+local interface or enum bodies no longer bind to the enclosing class
+([#339](https://github.com/C360Studio/semsource/issues/339), #342); re-ingest drops predicates a source stopped
+emitting, on a known content change ([#336](https://github.com/C360Studio/semsource/issues/336), #346).

@@ -1,13 +1,12 @@
 # SemSource Roadmap
 
-SemSource is in **public beta**. The current public tag is `v1.0.0-beta.10`
-(2026-11-20), the **first SemEngine release**: SemSource now runs on SemEngine
-`v0.1.0-alpha.6` at Tier 0, and SemStreams is retired
-([ADR-0013](docs/adr/0013-substrate-cutover-to-semengine.md)). It is
-**breaking**: upgrading needs fresh storage and a re-ingest. See
-[v1.0.0-beta.10](#v100-beta10-the-first-semengine-release).
+SemSource is in **public beta**. The current public tag is `v1.0.0-beta.11`
+(2026-11-25), the second SemEngine release, on SemEngine `v0.1.0-alpha.8`. It is
+**breaking**: upgrading from beta.10 needs fresh storage and a re-ingest. See
+[v1.0.0-beta.11](#v100-beta11-identity-hardening) and the
+[beta.11 adoption note](docs/integration/beta11-adoption-note.md).
 
-The previous tag, `v1.0.0-beta.9`, is described below for reference.
+The previous tags, `v1.0.0-beta.10` and `v1.0.0-beta.9`, are described below for reference.
 
 `v1.0.0-beta.9` is the onboarding release — and the **first non-breaking
 release in the beta line**: no substrate cutover, no fresh storage, no
@@ -45,6 +44,66 @@ This page is an honest snapshot, not a dated commitment. Items are grouped by
 confidence and dependency shape. The "why" behind durable choices lives in
 [`docs/adr/`](docs/adr/); non-trivial work is specced first under
 [`openspec/`](openspec/).
+
+## v1.0.0-beta.11: Identity Hardening
+
+The second SemEngine release, on SemEngine `v0.1.0-alpha.8` (#378). Like beta.10
+it cannot be upgraded in place. This section describes `main`, not a published
+tag; the tag is tracked on
+[#389](https://github.com/C360Studio/semsource/issues/389). Consumers should
+read the [beta.11 adoption note](docs/integration/beta11-adoption-note.md)
+first.
+
+- **A second clean storage break.** Entity IDs change again and the GRAPH
+  stream's retention changes, so upgrading from beta.10 means fresh NATS storage
+  and a re-ingest: `docker compose down -v`, then `docker compose up -d`. IDs are
+  never aliased or rewritten. The identity breaks since beta.10: one ID per code
+  declaration (#329, then Python, C and C++ in #338); TypeScript
+  `declare module` members keyed by their raw specifier (#340); config-file
+  entities keyed by their declaring file (#348), one entity per same-coordinate
+  declaration within a manifest with image IDs that hash the raw reference
+  (#375), and POM `<module>` IDs that hash the raw name (#384). The
+  [migration note](docs/migration/ast-entity-identity.md) covers the code IDs.
+- **Configs whose sources share an entity-ID system no longer boot.** ast, docs
+  and object-store roots (#349), media roots of one kind (#366), git sources
+  (#354) and config-file roots (#348) that would mint IDs under one org and
+  system are refused by `semsource validate`, `semsource run`, boot and runtime
+  `add_source`. The error names both sources and the remedy. A persisted entry
+  that blocks boot comes out with `semsource remove --manifest <instance>` while
+  the service is stopped.
+- **Substrate.** SemEngine `v0.1.0-alpha.8` at Tier 0. Tier 1 neural search was
+  qualified on alpha.7 with semembed 0.2.1 (#327) and stays opt-in
+  (`graph.semantic_search`). alpha.8 requires NATS `max_pending` 512 MiB: the
+  bundled Compose NATS sets it (#357), and an operator running their own NATS
+  must too (`configs/nats.conf`).
+- **A GRAPH stream that drains.** GRAPH uses workqueue retention, so a message
+  goes once graph-ingest has applied it (#160). A SemSource-only restart within
+  the hour no longer refills the stream and leaves a large corpus `degraded`;
+  the OSH warm-restart proof passed on #394's build (#388). A NATS server still
+  holding the beta.10 stream refuses boot and names the retention drift. GRAPH
+  is transport only, and external JetStream consumers on it are unsupported.
+- **Re-ingest removes what a source stopped emitting** (#336). The ast, doc, url,
+  image, audio, video, object-store and config-file sources opt in (#346, #384);
+  git does not. It acts only on content the process knows changed, never on the
+  first pass after a start.
+- **Consumer contracts.** Natural-language resolves are refused as
+  `not_enabled`, HTTP 501, when no search index runs, on every fusion verb and
+  lens (#291). Source status gains a per-source `id_collisions` count (#329).
+  Ast sources accept `index_vendored_js` (#329).
+- **Evidence.** The acceptance floor is still the graded scorecard. After the
+  AST identity change, Tier 0 on alpha.6 scored R1 36/36 rank-stable and OSH
+  13/13, with every dogfood verdict equal to beta.10 (#324,
+  [record](scripts/scorecard/results/SUMMARY-fix329-tier0.md)). The Tier 1 arm
+  on alpha.7 with semembed 0.2.1 scored dogfood 33/36, OSH 13/13, setup03a's
+  neural lane 72/72 and provider faults 15/15
+  ([record](scripts/scorecard/results/SUMMARY-tier1-alpha7.md)). The regrade on
+  the released beta.11 image is post-tag (#387).
+- **Also in this tag.** Java calls inside anonymous and local class bodies no
+  longer bind to the enclosing class (#339); AST folder `contains` sets stay
+  complete under watch edits (#347); a git source keeps its configured URL when
+  it re-ingests after a HEAD change (#350), and a failed re-ingest is retried
+  (#355); media collision refusals name the media remedy (#369); the summary
+  status no longer races on its degraded flag (#278).
 
 ## v1.0.0-beta.10: The First SemEngine Release
 
@@ -149,16 +208,23 @@ cannot be upgraded in place. Consumers should read the
 
 ## Recently Shipped
 
-- **On `main` since beta.10, for the next tag (breaking; fresh storage and
-  re-ingest):** one entity ID per code declaration (#329). Java methods and
-  constructors carry a signature discriminator, locals and Go `init`/blank
-  declarations are no longer entities, same-arity Java overload calls emit no
-  edge, IIFE/AMD-wrapped JS and vendored twins index as files only, and the
-  AST source reports any remaining duplicate as `id_collisions`. Python, C and
-  C++ follow (#338): C/C++ prototypes, `#if` twins and redefined macros fold
-  onto one entity, Python setters/deleters get distinct IDs, and `@overload`
-  stubs give way to the implementation. R1 is
-  rank-stable again (#324). See the
+- `v1.0.0-beta.11` (breaking; fresh storage and re-ingest): the
+  second SemEngine release, on `v0.1.0-alpha.8` (#378). One entity ID per code
+  declaration (#329): Java methods and constructors carry a signature
+  discriminator, locals and Go `init`/blank declarations are no longer
+  entities, same-arity Java overload calls emit no edge, IIFE/AMD-wrapped JS
+  and vendored twins index as files only, and the AST source reports any
+  remaining duplicate as `id_collisions`. Python, C and C++ follow (#338):
+  C/C++ prototypes, `#if` twins and redefined macros fold onto one entity,
+  Python setters/deleters get distinct IDs, and `@overload` stubs give way to
+  the implementation. TypeScript `declare module` members are keyed by their raw
+  specifier (#340); config-file entities by their declaring file (#348, #375,
+  #384). Sources that share an entity-ID system are refused (#349, #354, #366).
+  GRAPH removes consumed messages (#160) and the NATS `max_pending` 512 MiB
+  setting is required (#357). Re-ingest removes dropped predicates (#336);
+  Tier 1 is qualified on alpha.7 (#327); nl resolves answer `not_enabled`
+  without a search index (#291); R1 is rank-stable again (#324). See the
+  [adoption note](docs/integration/beta11-adoption-note.md) and the
   [migration note](docs/migration/ast-entity-identity.md).
 - `v1.0.0-beta.10`: the first SemEngine release (breaking; fresh storage and
   re-ingest) — Tier 0 on SemEngine `v0.1.0-alpha.6` with embeddings off, the
@@ -360,9 +426,15 @@ is how we prioritize.
 Moved verbatim from `CLAUDE.md` when the repository adopted ateam (#238); the
 narrative above is the public summary, this list keeps the per-tag mechanics.
 
-The list below is the shape up to the latest public tag, beta.10:
+The list below is the shape up to the latest public tag, beta.11:
 
-1. `v1.0.0-beta.10` is the first SemEngine release — **breaking**: Tier 0 on
+1. `v1.0.0-beta.11` is the second SemEngine release — **breaking**: semengine
+   `v0.1.0-alpha.8`, one entity ID per declaration across code and config files,
+   refusals for sources that would share an entity-ID system, and GRAPH workqueue
+   retention (a beta.10 GRAPH stream refuses boot). Acceptance was the OSH
+   warm-restart proof on alpha.8 (#388); the scorecard regrade on the released
+   image follows (#387). See `docs/integration/beta11-adoption-note.md`.
+2. `v1.0.0-beta.10` is the first SemEngine release — **breaking**: Tier 0 on
    semengine `v0.1.0-alpha.6` (embeddings off; `graph-lexical` word search on
    by default), a substrate cutover with zero SemStreams imports, and a clean
    storage break (reordered entity IDs, `semengine_config_<org>_<stem>`, boot
@@ -370,7 +442,7 @@ The list below is the shape up to the latest public tag, beta.10:
    alpha.6 (dogfood 32/36, OSH 12/13, R1 36/36). Neural search (04C, #234)
    qualifies after the tag. See ADR-0013 and
    `docs/integration/semengine-adoption-note.md`.
-2. `v1.0.0-beta.9` is the onboarding release — the first **non-breaking**
+3. `v1.0.0-beta.9` is the onboarding release — the first **non-breaking**
    tag in the beta line (still SemStreams `v1.0.0-beta.161`; no fresh
    storage, no reseed). It closes v1-blocker #184: `docs/QUICKSTART.md` is
    executable truth — CI extracts its `quickstart:single|multi`-marked
@@ -384,7 +456,7 @@ The list below is the shape up to the latest public tag, beta.10:
    `semsource add ast|repo --project/--version` (#189). New capability
    `onboarding-quickstart`; modified `ingestion-readiness` and
    `cli-onboarding`.
-3. `v1.0.0-beta.8` is the git-submodule release (#185, ADR-0012), still on
+4. `v1.0.0-beta.8` is the git-submodule release (#185, ADR-0012), still on
    SemStreams `v1.0.0-beta.161` (no substrate cutover). Repos with submodules
    ingest completely (clone/pull materialize declared trees at their gitlink
    pins, shallow-first with full-fetch fallback; `submodules: false` opts out),
@@ -400,7 +472,7 @@ The list below is the shape up to the latest public tag, beta.10:
    ingested submodule code under parent identity (fresh reseed). Known
    upstream dependency: semstreams#986 (config-watcher burst race; SemSource
    defends with a confirm re-put).
-4. `v1.0.0-beta.7` targeted SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
+5. `v1.0.0-beta.7` targeted SemStreams `v1.0.0-beta.161` — the post-beta.160 reliability and
    lifecycle-control slice on top of
    the intentionally breaking graph/foundation refactor checkpoint (no
    upstream shims; fresh NATS storage mandated on adoption, so deployments upgrade via
