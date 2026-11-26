@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Config-file entities go stale with their manifest
-The config-file source SHALL give every entity it publishes a lifecycle owner fact and its declaring manifest's file path, and SHALL trigger the staleness pass for its root after the initial seed and on a watch delete. When a manifest is deleted, every entity it declared SHALL carry `entity.lifecycle.stale` once the pass completes, and re-creating the manifest SHALL clear the marker. A dependency removed from a manifest that still exists is retained live, without the marker.
+The config-file source SHALL give every entity it publishes a lifecycle owner fact and its declaring manifest's file path, and SHALL trigger the staleness pass for its root after the initial seed when watching, and on a watch delete or create. When a manifest is deleted, every entity it declared SHALL carry `entity.lifecycle.stale` once the pass completes, and re-creating the manifest SHALL clear the marker. A dependency removed from a manifest that still exists is retained live, without the marker.
 
 #### Scenario: A deleted manifest's entities are marked stale
 - **GIVEN** a watched config source has ingested `svc/go.mod` with one dependency
