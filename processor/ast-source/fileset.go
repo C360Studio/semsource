@@ -154,8 +154,7 @@ func planContainers(files map[string]string, changed []string, all, reconcile bo
 // next create or delete. Upgrade to a retry timer if refusals are seen.
 // With skipUnchanged (the periodic reindex only), a container whose
 // statements match what the publisher last admitted from this process is
-// not sent again (#401). Skipping is safe whether or not that publish
-// reconciled: resending identical statements changes nothing. The caller holds filesMu.
+// not sent again when it would only merge (#401). The caller holds filesMu.
 func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile, skipUnchanged bool) {
 	changed = append(changed, pw.pendingContainers...)
 	pw.pendingContainers = nil
@@ -172,8 +171,8 @@ func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, chan
 }
 
 // publishContainer publishes one repo or folder entity and reports whether
-// the publisher admitted it. With skipUnchanged, an entity whose statements
-// equal the last admitted ones counts as admitted without a publish.
+// the publisher admitted it. With skipUnchanged, a merge-only publish whose
+// statements equal the last admitted ones counts as admitted without a send.
 func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.CodeEntity, skipReconcile, skipUnchanged bool) bool {
 	state := entity.EntityState()
 	payload, err := payloadFromASTState(state, nil)
@@ -182,7 +181,11 @@ func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.C
 		return true // retrying cannot make it valid
 	}
 	sum := containerFingerprint(state.Triples)
-	if skipUnchanged && c.sentContainers.same(state.ID, sum) {
+	// Only a merge is skipped: a reconcile target (the repo and ancestors
+	// of a changed path) always sends, because its reconcile clears edges a
+	// merge left behind (the seed's, or a dropped reconcile's) even when
+	// its statements are unchanged.
+	if skipUnchanged && skipReconcile && c.sentContainers.same(state.ID, sum) {
 		return true
 	}
 	payload.SkipReconcile = skipReconcile

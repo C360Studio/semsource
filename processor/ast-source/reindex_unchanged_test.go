@@ -79,9 +79,11 @@ func TestReindex_AddedFileRepublishesItsContainers(t *testing.T) {
 	f.write("a/c/z.ts", "export function zed() {}\n")
 	f.reindex()
 
-	// Only a/c's member set changed; a contains the folder a/c, not its files.
-	if got := f.publishedContainers(); !slices.Equal(got, []string{"acme.test.proj.code.folder.a-c"}) {
-		t.Errorf("after adding a/c/z.ts the reindex published %v, want only folder a/c", got)
+	// The repo and every ancestor of the added path are reconcile targets,
+	// so they send even where their own set is unchanged.
+	want := []string{"acme.test.proj.code.folder.a", "acme.test.proj.code.folder.a-c", "acme.test.proj.code.repo.proj"}
+	if got := f.publishedContainers(); !slices.Equal(got, want) {
+		t.Errorf("after adding a/c/z.ts the reindex published %v, want %v", got, want)
 	}
 	var withZ bool
 	for _, m := range f.client.containing(".folder.a-c") {

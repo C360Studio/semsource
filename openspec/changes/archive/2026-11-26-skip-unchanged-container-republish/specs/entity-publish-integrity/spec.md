@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: A periodic reindex does not rewrite unchanged folder and repo entities
-A periodic ast-source reindex SHALL NOT publish a `folder` or `repo` entity whose statements, apart from `dc.terms.created`, equal those this process last had admitted by the publisher for that ID. A publish the publisher refused MUST NOT count as admitted, so the next pass publishes it again. The initial seed and watch-event publishes are not gated.
+A periodic ast-source reindex SHALL NOT send a merge-only publish of a `folder` or `repo` entity whose statements, apart from `dc.terms.created`, equal those this process last had admitted by the publisher for that ID. A publish the publisher refused MUST NOT count as admitted, so the next pass publishes it again. A reconcile target (the repo and each ancestor of a changed path) SHALL always be published. The initial seed and watch-event publishes are not gated.
 
 #### Scenario: An idle reindex publishes no containers
 - **GIVEN** ast-source has seeded `a/one.go` and `a/b/x.go`
@@ -12,7 +12,7 @@ A periodic ast-source reindex SHALL NOT publish a `folder` or `repo` entity whos
 - **GIVEN** ast-source has seeded `a/one.go` and `a/b/x.go`
 - **WHEN** `a/b/y.go` is added and the next periodic reindex runs
 - **THEN** folder `a/b` is published with `a/b/y.go` in its `contains` set
-- **AND** folder `a` and the repo, whose sets did not change, are not
+- **AND** folder `a` and the repo, reconcile targets of the changed path, are published too
 
 #### Scenario: A refused container publish is retried
 - **GIVEN** the publisher refused folder `a`'s publish on one reindex
