@@ -39,6 +39,14 @@ extra now (the server refuses storage drift).
 - `tier0-consumer-qualification`: REMOVED "GRAPH stream overrides stay on the ingest subjects" (no subjects override
   remains to guard).
 
+## Decisions you are making by approving
+
+- `semsource.json` files that set `streams` stop loading; the replacement is `graph_stream`.
+- GRAPH stores on disk by default, so a NATS restart no longer loses unapplied facts; `ephemeral` keeps the old
+  memory behaviour.
+- Upgrading from beta.11 needs one GRAPH stream reset, which the beta.12 reseed already covers.
+- `max_bytes` stays tunable; nothing else about GRAPH can be changed from config.
+
 ## Non-goals
 
 - Retention, discard, subjects, age bound and replicas stay fixed; no other knob is added.

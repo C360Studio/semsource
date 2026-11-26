@@ -17,5 +17,5 @@
 ## 4. Docs and release
 
 - [ ] 4.1 Document `graph_stream` where the config reference lives; add the drift remedy to the release note on #408.
-- [ ] 4.2 `task verify`; `go test -race -tags=integration ./config/... ./cmd/semsource/...`; `go test -tags=e2e -run Retention ./test/e2e/`.
+- [ ] 4.2 `task verify`; `go test -race -tags=integration ./config/... ./cmd/semsource/...`; `go test -tags=e2e -run "WarmRestartWithinStreamWindow|LimitsGraphStreamRefusesBoot|BootIntoFullGraphStream" ./test/e2e/`.
 - [ ] 4.3 Review via `ateam review request`; archive before ready.
