@@ -40,6 +40,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Longer than run.go's 30 s StopAll deadline, so a stop with an index
+    # backlog ends on our deadline, not Docker's 10 s SIGKILL (#406).
+    stop_grace_period: 40s
     # Publish the ServiceManager HTTP API + MCP gateway to the host so an agent can
     # reach it directly in the core profile (no Caddy). In the ui profile Caddy also
     # proxies it on :3000.
