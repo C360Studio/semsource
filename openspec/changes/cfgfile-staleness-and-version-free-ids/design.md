@@ -21,5 +21,11 @@
   `filepath.IsAbs`, else joins `RootPath`.
 
 ## D3 Why the clear works
-A re-created manifest is republished whole, and the pass's clear path removes the marker from entities whose path
-stats present (`lifecycle.go`, `toClear`). No new code is needed beyond D2.
+The pass's clear path removes the marker from entities whose path stats present (`lifecycle.go`, `toClear`), but
+only a pass runs it: a re-created manifest with unchanged content is a skip-reconcile republish and touches no
+lifecycle fact. So cfgfile-source triggers the pass for the file's root on a watch create as well as a delete (a
+create also covers an editor's atomic save by rename), and not on a plain modify, which is frequent and leaves the
+path present. The seed sweep runs only when watching: a watch:false source is a frozen snapshot that never goes stale.
+
+Gradle coordinates split a trailing `:classifier` and `@ext` out of the version into the key, as Maven's classifier
+already is, so a plain jar and its natives variants stay distinct once the version leaves the ID.
