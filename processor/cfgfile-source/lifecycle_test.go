@@ -119,6 +119,11 @@ func TestCfgfileRootsForPath(t *testing.T) {
 			t.Errorf("rootsForPath(%q) = %v, want %v", tc.path, got, tc.want)
 		}
 	}
+	// A filesystem-root source contains every absolute path (PR #422 review).
+	fsRoot := &Component{config: Config{Paths: []string{"/"}}}
+	if got := fsRoot.rootsForPath("/workspace/go.mod"); !reflect.DeepEqual(got, []string{"/"}) {
+		t.Errorf("rootsForPath under / = %v, want [/]", got)
+	}
 }
 
 // A watch:false source is a frozen snapshot that never goes stale, so its

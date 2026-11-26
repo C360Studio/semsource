@@ -536,7 +536,9 @@ func (c *Component) rootsForPath(path string) []string {
 		if err != nil || seen[absRoot] {
 			continue
 		}
-		if path == absRoot || strings.HasPrefix(path, absRoot+string(filepath.Separator)) {
+		// Rel, not a prefix test: a "/" root would need the prefix "//".
+		if rel, err := filepath.Rel(absRoot, path); err == nil && rel != ".." &&
+			!strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			seen[absRoot] = true
 			roots = append(roots, p)
 		}
