@@ -106,7 +106,7 @@ func TestIngestEntityStates_DockerfilesSharingABaseImageKeepTheirPorts(t *testin
 		"api/Dockerfile":    "FROM golang:1.23\nEXPOSE 8080\n",
 		"worker/Dockerfile": "FROM golang:1.23\nEXPOSE 9090\n",
 	})
-	images := statesTitled(ingestTree(t, root), "image", "golang:1.23")
+	images := statesTitled(ingestTree(t, root), "image", "golang")
 	if len(images) != 2 {
 		t.Fatalf("want 2 image IDs (one per Dockerfile), got %d", len(images))
 	}

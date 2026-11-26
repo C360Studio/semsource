@@ -98,9 +98,10 @@ func TestIngestEntityStates_MavenTestJarIsItsOwnEntity(t *testing.T) {
 	if len(deps) != 2 || deps[0].ID == deps[1].ID {
 		t.Fatalf("want two distinct org.acme:core IDs, got %d states", len(deps))
 	}
-	// The plain jar's instance as minted before <type> was parsed (pinned at
-	// main 61edfd7); the system segment is the temp root's, so compare the tail.
-	const plain = ".config.dependency.a4999690-9c5fb3d1"
+	// The plain jar's instance hashes its coordinate alone (#393):
+	// hash("org.acme:core")-hash("pom.xml"); the system segment is the temp
+	// root's, so compare the tail.
+	const plain = ".config.dependency.6806fad4-9c5fb3d1"
 	if !slices.ContainsFunc(deps, func(s *handler.EntityState) bool { return strings.HasSuffix(s.ID, plain) }) {
 		t.Errorf("plain jar ID changed: got %s and %s, want one ending %s", deps[0].ID, deps[1].ID, plain)
 	}
@@ -164,12 +165,12 @@ func TestIngestEntityStates_ImagesThatSlugifyAlikeStayDistinct(t *testing.T) {
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{"Dockerfile": "FROM foo/bar:1 AS a\nFROM foo-bar:1\n"})
 	states := ingestTree(t, root)
-	a, b := titledStates(states, "image", "foo/bar:1"), titledStates(states, "image", "foo-bar:1")
+	a, b := titledStates(states, "image", "foo/bar"), titledStates(states, "image", "foo-bar")
 	if len(a) != 1 || len(b) != 1 {
 		t.Fatalf("want one state per image, got %d and %d", len(a), len(b))
 	}
 	if a[0].ID == b[0].ID {
-		t.Errorf("foo/bar:1 and foo-bar:1 share ID %s", a[0].ID)
+		t.Errorf("foo/bar and foo-bar share ID %s", a[0].ID)
 	}
 }
 

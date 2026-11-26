@@ -3,6 +3,7 @@ package cfgfile
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semengine/message"
@@ -20,6 +21,13 @@ func controlState(id string, triples []message.Triple, indexedAt time.Time) *han
 		UpdatedAt:       indexedAt,
 		IndexingProfile: semvocab.IndexingProfileControl,
 	}
+}
+
+// filePathTriple names the manifest that declares subject. Dependencies and
+// images carry it too, so the staleness pass judges them by that manifest
+// (#393).
+func filePathTriple(subject, path string) message.Triple {
+	return message.Triple{Subject: subject, Predicate: source.ConfigFilePath, Object: path, Source: entityid.PlatformSemsource, Confidence: 1.0}
 }
 
 // --------------------------------------------------------------------------
@@ -91,29 +99,36 @@ func (e *goModuleEntity) entityState() *handler.EntityState {
 type goDependencyEntity struct {
 	ID        string
 	Name      string
-	Version   string
+	Versions  []string // every version the manifest requires it at (#393)
 	Indirect  bool
+	FilePath  string
 	System    string
 	Org       string
 	IndexedAt time.Time
 }
 
-func newGoDependencyEntity(authority entityid.Authority, depPath, version string, indirect bool, system, rel string, indexedAt time.Time) *goDependencyEntity {
-	instance := contentHashShort(depPath + "@" + version)
+func newGoDependencyEntity(authority entityid.Authority, depPath, version string, indirect bool, filePath, system, rel string, indexedAt time.Time) *goDependencyEntity {
+	// The version is a fact, not identity: a bump updates the entity in place
+	// instead of minting a new one (#393).
+	instance := contentHashShort(depPath)
 	return &goDependencyEntity{
 		ID:        authority.Build(system, "config", "dependency", declared(instance, rel)),
 		Name:      depPath,
-		Version:   version,
+		Versions:  []string{version},
 		Indirect:  indirect,
+		FilePath:  filePath,
 		System:    system,
 		Org:       authority.Org,
 		IndexedAt: indexedAt,
 	}
 }
 
-// fold merges a repeated require of the same module version: it is
-// indirect only when every require says so (#375).
-func (e *goDependencyEntity) fold(o *goDependencyEntity) { e.Indirect = e.Indirect && o.Indirect }
+// fold merges a repeated require of the same module: it is indirect only
+// when every require says so (#375), and carries every version (#393).
+func (e *goDependencyEntity) fold(o *goDependencyEntity) {
+	e.Indirect = e.Indirect && o.Indirect
+	e.Versions = append(e.Versions, o.Versions...)
+}
 
 func (e *goDependencyEntity) entityID() string { return e.ID }
 
@@ -122,13 +137,14 @@ func (e *goDependencyEntity) triples() []message.Triple {
 	if e.Indirect {
 		indirect = "true"
 	}
-	return []message.Triple{
+	triples := []message.Triple{
 		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepIndirect, Object: indirect, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "go", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		filePathTriple(e.ID, e.FilePath),
 	}
+	return appendValues(triples, e.ID, source.ConfigDepVersion, e.Versions)
 }
 
 func (e *goDependencyEntity) entityState() *handler.EntityState {
@@ -196,15 +212,16 @@ func (e *npmPackageEntity) entityState() *handler.EntityState {
 type npmDependencyEntity struct {
 	ID        string
 	Name      string
-	Version   string
-	Kind      string // "npm-prod" or "npm-dev"
+	Versions  []string // every version range the manifest declares (#393)
+	Kind      string   // "npm-prod" or "npm-dev"
+	FilePath  string
 	System    string
 	Org       string
 	IndexedAt time.Time
 }
 
-func newNPMDependencyEntity(authority entityid.Authority, name, version string, dev bool, system, rel string, indexedAt time.Time) *npmDependencyEntity {
-	instance := contentHashShort(name + "@" + version)
+func newNPMDependencyEntity(authority entityid.Authority, name, version string, dev bool, filePath, system, rel string, indexedAt time.Time) *npmDependencyEntity {
+	instance := contentHashShort(name)
 	kind := "npm-prod"
 	if dev {
 		kind = "npm-dev"
@@ -212,8 +229,9 @@ func newNPMDependencyEntity(authority entityid.Authority, name, version string, 
 	return &npmDependencyEntity{
 		ID:        authority.Build(system, "config", "dependency", declared(instance, rel)),
 		Name:      name,
-		Version:   version,
+		Versions:  []string{version},
 		Kind:      kind,
+		FilePath:  filePath,
 		System:    system,
 		Org:       authority.Org,
 		IndexedAt: indexedAt,
@@ -221,22 +239,24 @@ func newNPMDependencyEntity(authority entityid.Authority, name, version string, 
 }
 
 // fold merges a dependency listed in both dependencies and devDependencies:
-// npm installs it for production, so prod wins (#375).
+// npm installs it for production, so prod wins (#375); both ranges stay (#393).
 func (e *npmDependencyEntity) fold(o *npmDependencyEntity) {
 	if o.Kind == "npm-prod" {
 		e.Kind = "npm-prod"
 	}
+	e.Versions = append(e.Versions, o.Versions...)
 }
 
 func (e *npmDependencyEntity) entityID() string { return e.ID }
 
 func (e *npmDependencyEntity) triples() []message.Triple {
-	return []message.Triple{
+	triples := []message.Triple{
 		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: e.Kind, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		filePathTriple(e.ID, e.FilePath),
 	}
+	return appendValues(triples, e.ID, source.ConfigDepVersion, e.Versions)
 }
 
 func (e *npmDependencyEntity) entityState() *handler.EntityState {
@@ -247,8 +267,11 @@ func (e *npmDependencyEntity) entityState() *handler.EntityState {
 
 // dockerImageEntity is a fully-typed Dockerfile image entity.
 type dockerImageEntity struct {
-	ID           string
-	Image        string
+	ID   string
+	Name string // the reference without tag or digest, e.g. "golang"
+	// References holds every full reference the Dockerfile names the image
+	// by, e.g. "golang:1.22" and "golang:1.23" (#393).
+	References   []string
 	ExposedPorts []string
 	FilePath     string
 	System       string
@@ -257,12 +280,15 @@ type dockerImageEntity struct {
 }
 
 func newDockerImageEntity(authority entityid.Authority, image string, exposedPorts []string, filePath, system, rel string, indexedAt time.Time) *dockerImageEntity {
-	// The slug alone is not injective (foo/bar:1 and foo-bar:1), so the raw
-	// reference's hash keeps distinct images apart (#375).
-	instance := slugify(image) + "-" + contentHashShort(image)
+	// The slug alone is not injective (foo/bar and foo-bar), so the name's
+	// hash keeps distinct images apart (#375). A tag or digest is a fact,
+	// not identity (#393).
+	name := imageName(image)
+	instance := slugify(name) + "-" + contentHashShort(name)
 	return &dockerImageEntity{
 		ID:           authority.Build(system, "config", "image", declared(instance, rel)),
-		Image:        image,
+		Name:         name,
+		References:   []string{image},
 		ExposedPorts: exposedPorts,
 		FilePath:     filePath,
 		System:       system,
@@ -271,12 +297,32 @@ func newDockerImageEntity(authority entityid.Authority, image string, exposedPor
 	}
 }
 
+// imageName strips an image reference's digest and tag. A colon is a tag
+// separator only after the last slash, so a registry port
+// (registry:5000/team/app) stays part of the name.
+func imageName(ref string) string {
+	if i := strings.Index(ref, "@"); i >= 0 {
+		ref = ref[:i]
+	}
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		ref = ref[:i]
+	}
+	return ref
+}
+
+// fold merges another tag of the same image into one entity (#393).
+func (e *dockerImageEntity) fold(o *dockerImageEntity) {
+	e.References = append(e.References, o.References...)
+}
+
+func (e *dockerImageEntity) entityID() string { return e.ID }
+
 func (e *dockerImageEntity) triples() []message.Triple {
 	triples := []message.Triple{
-		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Image, Source: entityid.PlatformSemsource, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigImageName, Object: e.Image, Source: entityid.PlatformSemsource, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigFilePath, Object: e.FilePath, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
+		filePathTriple(e.ID, e.FilePath),
 	}
+	triples = appendValues(triples, e.ID, source.ConfigImageName, e.References)
 	for _, port := range e.ExposedPorts {
 		triples = append(triples, message.Triple{
 			Subject:    e.ID,
@@ -368,20 +414,21 @@ func (e *mavenProjectEntity) entityState() *handler.EntityState {
 
 // mavenDependencyEntity is a fully-typed Maven/pom.xml dependency entity.
 type mavenDependencyEntity struct {
-	ID      string
-	Name    string // "groupId:artifactId"
-	Version string
-	Scopes  []string // every scope the manifest declares it under (#375)
+	ID       string
+	Name     string   // "groupId:artifactId"
+	Versions []string // every version the manifest declares (#393)
+	Scopes   []string // every scope the manifest declares it under (#375)
 	// Type (when not "jar") and Classifier name a distinct artifact, so they
 	// are part of the instance (#375).
 	Type       string
 	Classifier string
+	FilePath   string
 	System     string
 	Org        string
 	IndexedAt  time.Time
 }
 
-func newMavenDependencyEntity(authority entityid.Authority, dep POMDep, system, rel string, indexedAt time.Time) *mavenDependencyEntity {
+func newMavenDependencyEntity(authority entityid.Authority, dep POMDep, filePath, system, rel string, indexedAt time.Time) *mavenDependencyEntity {
 	typ := dep.Type
 	if typ == "jar" {
 		typ = ""
@@ -390,7 +437,7 @@ func newMavenDependencyEntity(authority entityid.Authority, dep POMDep, system, 
 	if typ != "" || dep.Classifier != "" {
 		key += ":" + typ + ":" + dep.Classifier
 	}
-	instance := contentHashShort(key + "@" + dep.Version)
+	instance := contentHashShort(key)
 	var scopes []string
 	if dep.Scope != "" {
 		scopes = []string{dep.Scope}
@@ -398,10 +445,11 @@ func newMavenDependencyEntity(authority entityid.Authority, dep POMDep, system, 
 	return &mavenDependencyEntity{
 		ID:         authority.Build(system, "config", "dependency", declared(instance, rel)),
 		Name:       dep.GroupID + ":" + dep.ArtifactID,
-		Version:    dep.Version,
+		Versions:   []string{dep.Version},
 		Scopes:     scopes,
 		Type:       typ,
 		Classifier: dep.Classifier,
+		FilePath:   filePath,
 		System:     system,
 		Org:        authority.Org,
 		IndexedAt:  indexedAt,
@@ -412,18 +460,20 @@ func (e *mavenDependencyEntity) triples() []message.Triple {
 	triples := []message.Triple{
 		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "maven", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		filePathTriple(e.ID, e.FilePath),
 	}
+	triples = appendValues(triples, e.ID, source.ConfigDepVersion, e.Versions)
 	triples = appendValues(triples, e.ID, source.ConfigDepScope, e.Scopes)
 	triples = appendValues(triples, e.ID, source.ConfigDepType, []string{e.Type})
 	return appendValues(triples, e.ID, source.ConfigDepClassifier, []string{e.Classifier})
 }
 
 // fold merges a repeated declaration of the same artifact under another
-// scope (#375).
+// scope (#375) or version (#393).
 func (e *mavenDependencyEntity) fold(o *mavenDependencyEntity) {
 	e.Scopes = append(e.Scopes, o.Scopes...)
+	e.Versions = append(e.Versions, o.Versions...)
 }
 
 func (e *mavenDependencyEntity) entityID() string { return e.ID }
@@ -535,21 +585,23 @@ func (e *gradleProjectEntity) entityState() *handler.EntityState {
 // gradleDependencyEntity is a fully-typed build.gradle dependency entity.
 type gradleDependencyEntity struct {
 	ID             string
-	Name           string // "group:name"
-	Version        string
+	Name           string   // "group:name"
+	Versions       []string // every version the build file declares (#393)
 	Configurations []string // every configuration the build file declares it under (#375)
+	FilePath       string
 	System         string
 	Org            string
 	IndexedAt      time.Time
 }
 
-func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, system, rel string, indexedAt time.Time) *gradleDependencyEntity {
-	instance := contentHashShort(group + ":" + name + "@" + version)
+func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, filePath, system, rel string, indexedAt time.Time) *gradleDependencyEntity {
+	instance := contentHashShort(group + ":" + name)
 	return &gradleDependencyEntity{
 		ID:             authority.Build(system, "config", "dependency", declared(instance, rel)),
 		Name:           group + ":" + name,
-		Version:        version,
+		Versions:       []string{version},
 		Configurations: []string{configuration},
+		FilePath:       filePath,
 		System:         system,
 		Org:            authority.Org,
 		IndexedAt:      indexedAt,
@@ -561,16 +613,18 @@ func (e *gradleDependencyEntity) triples() []message.Triple {
 		// Title makes the entity NAME_INDEX-visible and gives graph_search a label (#142).
 		{Subject: e.ID, Predicate: source.DcTitle, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepName, Object: e.Name, Source: entityid.PlatformSemsource, Confidence: 1.0},
-		{Subject: e.ID, Predicate: source.ConfigDepVersion, Object: e.Version, Source: entityid.PlatformSemsource, Confidence: 1.0},
 		{Subject: e.ID, Predicate: source.ConfigDepKind, Object: "gradle", Source: entityid.PlatformSemsource, Confidence: 1.0},
+		filePathTriple(e.ID, e.FilePath),
 	}
+	triples = appendValues(triples, e.ID, source.ConfigDepVersion, e.Versions)
 	return appendValues(triples, e.ID, source.ConfigDepConfiguration, e.Configurations)
 }
 
 // fold merges a repeated declaration of the same coordinate under another
-// configuration (#375).
+// configuration (#375) or version (#393).
 func (e *gradleDependencyEntity) fold(o *gradleDependencyEntity) {
 	e.Configurations = append(e.Configurations, o.Configurations...)
+	e.Versions = append(e.Versions, o.Versions...)
 }
 
 func (e *gradleDependencyEntity) entityID() string { return e.ID }
@@ -588,19 +642,29 @@ func (e *gradleDependencyEntity) entityState() *handler.EntityState {
 func (h *ConfigHandler) parseFileEntityStates(base, path string, content []byte, root string, authority entityid.Authority, now time.Time) []*handler.EntityState {
 	system := h.system(root)
 	rel := declaringPath(root, path)
+	// The file-path fact is absolute, as its predicate documents, so the
+	// staleness pass can stat it whatever the configured root's form (#393).
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	var states []*handler.EntityState
 	switch base {
 	case "go.mod":
-		return h.goModEntityStates(content, path, system, rel, authority, now)
+		states = h.goModEntityStates(content, path, system, rel, authority, now)
 	case "package.json":
-		return h.npmPackageEntityStates(content, path, system, rel, authority, now)
+		states = h.npmPackageEntityStates(content, path, system, rel, authority, now)
 	case "Dockerfile":
-		return h.dockerEntityStates(content, path, system, rel, authority, now)
+		states = h.dockerEntityStates(content, path, system, rel, authority, now)
 	case "pom.xml":
-		return h.mavenEntityStates(content, path, system, rel, authority, now)
+		states = h.mavenEntityStates(content, path, system, rel, authority, now)
 	case "build.gradle":
-		return h.gradleEntityStates(content, path, system, rel, authority, now)
+		states = h.gradleEntityStates(content, path, system, rel, authority, now)
 	}
-	return nil
+	// The source derives each entity's lifecycle owner from its root (#393).
+	for _, s := range states {
+		s.Root = root
+	}
+	return states
 }
 
 func (h *ConfigHandler) goModEntityStates(content []byte, path, system, rel string, authority entityid.Authority, now time.Time) []*handler.EntityState {
@@ -614,7 +678,7 @@ func (h *ConfigHandler) goModEntityStates(content []byte, path, system, rel stri
 
 	deps := make([]*goDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		deps = append(deps, newGoDependencyEntity(authority, dep.Path, dep.Version, dep.Indirect, system, rel, now))
+		deps = append(deps, newGoDependencyEntity(authority, dep.Path, dep.Version, dep.Indirect, path, system, rel, now))
 	}
 	var depStates []*handler.EntityState
 	for _, d := range foldByID(deps) {
@@ -637,7 +701,7 @@ func (h *ConfigHandler) npmPackageEntityStates(content []byte, path, system, rel
 
 	deps := make([]*npmDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		deps = append(deps, newNPMDependencyEntity(authority, dep.Name, dep.Version, dep.Dev, system, rel, now))
+		deps = append(deps, newNPMDependencyEntity(authority, dep.Name, dep.Version, dep.Dev, path, system, rel, now))
 	}
 	var depStates []*handler.EntityState
 	for _, d := range foldByID(deps) {
@@ -655,9 +719,12 @@ func (h *ConfigHandler) dockerEntityStates(content []byte, path, system, rel str
 		return nil
 	}
 
-	var states []*handler.EntityState
+	images := make([]*dockerImageEntity, 0, len(result.BaseImages))
 	for _, img := range result.BaseImages {
-		e := newDockerImageEntity(authority, img, result.ExposedPorts, path, system, rel, now)
+		images = append(images, newDockerImageEntity(authority, img, result.ExposedPorts, path, system, rel, now))
+	}
+	var states []*handler.EntityState
+	for _, e := range foldByID(images) {
 		states = append(states, e.entityState())
 	}
 	return states
@@ -674,7 +741,7 @@ func (h *ConfigHandler) mavenEntityStates(content []byte, path, system, rel stri
 
 	deps := make([]*mavenDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		deps = append(deps, newMavenDependencyEntity(authority, dep, system, rel, now))
+		deps = append(deps, newMavenDependencyEntity(authority, dep, path, system, rel, now))
 	}
 	var childStates []*handler.EntityState
 	for _, d := range foldByID(deps) {
@@ -713,7 +780,7 @@ func (h *ConfigHandler) gradleEntityStates(content []byte, path, system, rel str
 
 	deps := make([]*gradleDependencyEntity, 0, len(result.Deps))
 	for _, dep := range result.Deps {
-		deps = append(deps, newGradleDependencyEntity(authority, dep.Group, dep.Name, dep.Version, dep.Configuration, system, rel, now))
+		deps = append(deps, newGradleDependencyEntity(authority, dep.Group, dep.Name, dep.Version, dep.Configuration, path, system, rel, now))
 	}
 	var depStates []*handler.EntityState
 	for _, d := range foldByID(deps) {
