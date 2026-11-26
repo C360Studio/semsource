@@ -23,6 +23,6 @@
 
 ## 5. Gates
 
-- [ ] 5.1 `task verify`; `go test -race -tags=integration ./handler/cfgfile/... ./processor/cfgfile-source/... ./processor/supersession/...`.
-- [ ] 5.2 `graph-event-reviewer` pass; review via `ateam review request`; archive before ready.
-- [ ] 5.3 Identity-break and reseed note recorded on #408 for the beta.12 ROADMAP/adoption note.
+- [x] 5.1 `task verify`; `go test -race -tags=integration ./handler/cfgfile/... ./processor/cfgfile-source/... ./processor/supersession/...`.
+- [x] 5.2 `graph-event-reviewer` pass; review via `ateam review request`; archive before ready.
+- [x] 5.3 Identity-break and reseed note recorded on #408 for the beta.12 ROADMAP/adoption note.
