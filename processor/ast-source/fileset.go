@@ -2,10 +2,15 @@ package astsource
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
+	"sync"
 
+	"github.com/c360studio/semengine/message"
 	"github.com/c360studio/semsource/entityid"
 	semsourceast "github.com/c360studio/semsource/source/ast"
 )
@@ -147,13 +152,15 @@ func planContainers(files map[string]string, changed []string, all, reconcile bo
 // shortcut: a watch modify of an indexed path publishes no container, so it
 // does not retry; with index_interval off, a refused publish waits for the
 // next create or delete. Upgrade to a retry timer if refusals are seen.
-// The caller holds filesMu.
-func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile bool) {
+// With skipUnchanged (the periodic reindex only), a container whose
+// statements match what the publisher last admitted from this process is
+// not sent again when it would only merge (#401). The caller holds filesMu.
+func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, changed []string, all, reconcile, skipUnchanged bool) {
 	changed = append(changed, pw.pendingContainers...)
 	pw.pendingContainers = nil
 	failed := false
 	for _, p := range planContainers(pw.files, changed, all, reconcile, c.authority, pw.scopedSystem) {
-		if !c.publishContainer(ctx, p.entity, p.skipReconcile) {
+		if !c.publishContainer(ctx, p.entity, p.skipReconcile, skipUnchanged) {
 			failed = true
 		}
 	}
@@ -164,13 +171,22 @@ func (c *Component) publishContainers(ctx context.Context, pw *pathWatcher, chan
 }
 
 // publishContainer publishes one repo or folder entity and reports whether
-// the publisher admitted it.
-func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.CodeEntity, skipReconcile bool) bool {
+// the publisher admitted it. With skipUnchanged, a merge-only publish whose
+// statements equal the last admitted ones counts as admitted without a send.
+func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.CodeEntity, skipReconcile, skipUnchanged bool) bool {
 	state := entity.EntityState()
 	payload, err := payloadFromASTState(state, nil)
 	if err != nil {
 		c.logger.Warn("Invalid hierarchy entity state", "id", state.ID, "error", err)
 		return true // retrying cannot make it valid
+	}
+	sum := containerFingerprint(state.Triples)
+	// Only a merge is skipped: a reconcile target (the repo and ancestors
+	// of a changed path) always sends, because its reconcile clears edges a
+	// merge left behind (the seed's, or a dropped reconcile's) even when
+	// its statements are unchanged.
+	if skipUnchanged && skipReconcile && c.sentContainers.same(state.ID, sum) {
+		return true
 	}
 	payload.SkipReconcile = skipReconcile
 	if err := c.publishEntity(ctx, payload); err != nil {
@@ -178,6 +194,7 @@ func (c *Component) publishContainer(ctx context.Context, entity *semsourceast.C
 			"id", entity.ID, "error", err)
 		return false
 	}
+	c.sentContainers.record(state.ID, sum)
 	c.entitiesIndexed.Add(1)
 	c.distinct.Observe(state.ID)
 	return true
@@ -189,6 +206,48 @@ func (c *Component) watchContainers(ctx context.Context, pw *pathWatcher, change
 	pw.filesMu.Lock()
 	defer pw.filesMu.Unlock()
 	if changed := change(); len(changed) > 0 {
-		c.publishContainers(ctx, pw, changed, false, true)
+		c.publishContainers(ctx, pw, changed, false, true, false)
 	}
+}
+
+// containerSums records, per container ID, a fingerprint of the statements
+// the publisher last admitted from this process (#401). Admitted is the bar,
+// as for the file hash gate: a publish lost downstream after admission is not
+// resent until the container changes or the process restarts.
+//
+// shortcut: a third copy of cfgfile-source's and url-source's sentContent
+// fingerprint; extract a shared package when a fourth source needs it.
+type containerSums struct {
+	mu   sync.Mutex
+	sums map[string][sha256.Size]byte
+}
+
+func (s *containerSums) same(id string, sum [sha256.Size]byte) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev, ok := s.sums[id]
+	return ok && prev == sum
+}
+
+func (s *containerSums) record(id string, sum [sha256.Size]byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sums == nil {
+		s.sums = make(map[string][sha256.Size]byte)
+	}
+	s.sums[id] = sum
+}
+
+// containerFingerprint hashes a container's statements order-independently,
+// leaving out dc.terms.created, which is the wall clock of every build.
+func containerFingerprint(triples []message.Triple) [sha256.Size]byte {
+	lines := make([]string, 0, len(triples))
+	for _, t := range triples {
+		if t.Predicate == semsourceast.DcCreated {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s\x00%s\x00%v\x00%s", t.Subject, t.Predicate, t.Object, t.Datatype))
+	}
+	sort.Strings(lines)
+	return sha256.Sum256([]byte(strings.Join(lines, "\n")))
 }
