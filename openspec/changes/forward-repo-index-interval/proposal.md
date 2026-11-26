@@ -1,6 +1,6 @@
 # Forward a repo source's index_interval to its ast child
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-26) sha256:df98622bde17
 
 Track: small (one config pass-through; no identity, payload, or exported-surface change).
 
