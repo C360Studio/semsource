@@ -1,6 +1,6 @@
 # GRAPH stream: a named durability posture, file storage by default
 
-Approved-by: Coby Leuschke (2026-11-26) sha256:f694bb12b705
+Approved-by: Coby Leuschke (2026-11-26) sha256:5223145f2c9c
 Track: design (config surface break and a GRAPH stream reset, both riding the beta.12 reseed).
 
 ## Why
