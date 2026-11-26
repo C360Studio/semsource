@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -90,15 +91,21 @@ func TestIntegration_FusionRepliesCarryMergedSearchProvenance(t *testing.T) {
 		}
 	}
 
+	// merge is the reply's merge answer, passed through unchanged (#377): it is
+	// what tells a word-list fallback from an applied merge with no embedding
+	// seed, which provenance alone cannot. Tier 0 runs no merge and has none.
+	merged := &fusion.Merge{Honoured: true, Detail: "merged"}
 	for _, tc := range []struct {
 		lens, verb, question string
 		want                 fusion.Provenance
 		similarity           float64
+		merge                *fusion.Merge
 	}{
-		{lens: "code", verb: "search", question: "tier one meaning", want: fusion.ProvenanceEmbedding, similarity: 0.0163},
-		{lens: "docs", verb: "context", question: "tier one meaning", want: fusion.ProvenanceEmbedding, similarity: 0.0163},
+		{lens: "code", verb: "search", question: "tier one meaning", want: fusion.ProvenanceEmbedding, similarity: 0.0163, merge: merged},
+		{lens: "docs", verb: "context", question: "tier one meaning", want: fusion.ProvenanceEmbedding, similarity: 0.0163, merge: merged},
 		{lens: "code", verb: "search", question: "tier zero words", want: fusion.ProvenanceLexical, similarity: 3.2},
-		{lens: "code", verb: "search", question: "provider is down", want: fusion.ProvenanceLexical, similarity: 3.2},
+		{lens: "code", verb: "search", question: "provider is down", want: fusion.ProvenanceLexical, similarity: 3.2,
+			merge: &fusion.Merge{Detail: "merged", Reason: "embed the query: provider answered 503", Code: "internal"}},
 	} {
 		t.Run(tc.lens+" "+tc.verb+" "+tc.question, func(t *testing.T) {
 			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -121,6 +128,9 @@ func TestIntegration_FusionRepliesCarryMergedSearchProvenance(t *testing.T) {
 			var resp fusion.Response
 			if err := json.Unmarshal(raw, &resp); err != nil {
 				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(resp.Merge, tc.merge) {
+				t.Fatalf("merge = %+v, want %+v: %s", resp.Merge, tc.merge, raw)
 			}
 			if len(resp.Nodes) == 0 || resp.Nodes[0].Name != "retry" {
 				t.Fatalf("nodes = %+v, want the merged seed hydrated: %s", resp.Nodes, raw)

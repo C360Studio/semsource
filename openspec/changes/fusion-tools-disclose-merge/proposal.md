@@ -1,6 +1,6 @@
 # Fusion tools disclose the merge answer
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-26) sha256:c62fe6e8aca0
 Track: small (documents and pins a field the substrate already returns; no code path changes).
 
 ## Why
