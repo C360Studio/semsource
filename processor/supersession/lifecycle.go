@@ -84,14 +84,42 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	if req.Org != c.authority.Org {
 		return graph.LifecycleRunResponse{}, fmt.Errorf("lifecycle request org %q differs from deployment authority", req.Org)
 	}
+
+	// A source's own republish can land between a mutation's authoritative
+	// read and graph-ingest's compare, refusing the write with
+	// revision_mismatch (#424). Only that refusal re-runs the pass, which
+	// re-reads current state, and only lifecycleAttempts times; the gate stays
+	// held across attempts (no attempt acquires it, so holding cannot deadlock,
+	// and no other pass interleaves). Every other failure returns at once.
+	var total graph.LifecycleRunResponse
+	for attempt := 1; ; attempt++ {
+		resp, conflictOnly, err := c.lifecycleAttempt(ctx, q, mut, req)
+		total.Entities, total.Paths = resp.Entities, resp.Paths
+		total.Marked += resp.Marked
+		total.Cleared += resp.Cleared
+		if err == nil || !conflictOnly || attempt == lifecycleAttempts || ctx.Err() != nil {
+			return total, err
+		}
+		c.logger.Info("lifecycle pass hit revision_mismatch; re-running",
+			"systems", req.Systems, "root_path", req.RootPath, "attempt", attempt, "error", err)
+	}
+}
+
+// lifecycleAttempts bounds the passes one request runs when every failure is
+// revision_mismatch (owner ruling on #424).
+const lifecycleAttempts = 3
+
+// lifecycleAttempt is one read-decide-write pass. conflictOnly reports that
+// every failure it returns is a revision_mismatch refusal, which wrote nothing.
+func (c *Component) lifecycleAttempt(ctx context.Context, q *prefixQuerier, mut lifecycleMutator, req graph.LifecycleRunRequest) (resp graph.LifecycleRunResponse, conflictOnly bool, err error) {
 	prefix := c.authority.Org + "." + c.authority.Platform
 	entities, truncated, err := q.queryPrefixAll(ctx, prefix, c.config.maxEntities())
 	if err != nil {
-		return graph.LifecycleRunResponse{}, fmt.Errorf("enumerate entities: %w", err)
+		return graph.LifecycleRunResponse{}, false, fmt.Errorf("enumerate entities: %w", err)
 	}
 
 	if truncated {
-		return graph.LifecycleRunResponse{}, fmt.Errorf("lifecycle enumeration truncated at max_entities")
+		return graph.LifecycleRunResponse{}, false, fmt.Errorf("lifecycle enumeration truncated at max_entities")
 	}
 	systemSet := make(map[string]struct{}, len(req.Systems))
 	for _, s := range req.Systems {
@@ -99,17 +127,19 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	}
 	statFn, err := livenessOracle(req)
 	if err != nil {
-		return graph.LifecycleRunResponse{}, err
+		return graph.LifecycleRunResponse{}, false, err
 	}
 	inScope := lifecycleScope(entities, systemSet, req.Owner, statFn != nil)
 	toMark, toClear, pathCount := decideLifecycleActions(inScope, req.Reason, statFn)
 
-	resp := graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
+	resp = graph.LifecycleRunResponse{Entities: len(inScope), Paths: pathCount}
 	var failures error
+	conflictOnly = true
 
 	for _, tr := range toMark {
 		if err := markStale(ctx, mut, tr); err != nil {
 			failures = errors.Join(failures, err)
+			conflictOnly = conflictOnly && isRevisionMismatch(err)
 			continue
 		}
 		resp.Marked++
@@ -117,6 +147,7 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	for _, id := range toClear {
 		if err := clearStale(ctx, mut, id); err != nil {
 			failures = errors.Join(failures, err)
+			conflictOnly = conflictOnly && isRevisionMismatch(err)
 			continue
 		}
 		resp.Cleared++
@@ -125,7 +156,14 @@ func (c *Component) runLifecyclePass(ctx context.Context, req graph.LifecycleRun
 	c.logger.Info("lifecycle pass complete",
 		"org", req.Org, "systems", req.Systems, "reason", req.Reason, "root_path", req.RootPath,
 		"entities", resp.Entities, "paths", resp.Paths, "marked", resp.Marked, "cleared", resp.Cleared)
-	return resp, failures
+	return resp, conflictOnly, failures
+}
+
+// isRevisionMismatch reports graph-ingest's classified revision_mismatch
+// refusal, which the mutation client carries as MutationError.Code.
+func isRevisionMismatch(err error) bool {
+	var me *projection.MutationError
+	return errors.As(err, &me) && me.Code == gtypes.ErrorCodeRevisionMismatch
 }
 
 // lifecycleScope selects the entities a pass judges: those in the request's
@@ -419,7 +457,9 @@ func reconcileStale(ctx context.Context, mut lifecycleMutator, marker message.Tr
 // entity_not_found outcome is benign here — an entity that no longer exists
 // has nothing to clear — and is skipped without error, mirroring the old
 // update lane's silent no-op on absent predicates. Every other failure
-// surfaces distinctly; nothing is blind-retried.
+// surfaces distinctly and nothing here is retried. The one bounded exception
+// is a revision_mismatch refusal, on which runLifecyclePass re-runs the whole
+// pass against re-read state (owner ruling on #424), never this call alone.
 func clearStale(ctx context.Context, mut lifecycleMutator, id string) error {
 	_, err := mut.Reconcile(ctx, projection.ReconcileMutation{
 		Contract: graph.SourceEntityContract().Name,
