@@ -237,6 +237,15 @@ exist today). Add when first caller hits them.
   the HTTP `/source-manifest/sources` handler always reflect the
   current set under a read-write mutex.
 
+  > **Amended 2026-11-26 (#405):** no longer true since #213
+  > (3604a9c). Add and Remove persist desired state that applies after
+  > the next restart (see the amendment at the top), and they do not
+  > touch the manifest. The manifest is built from the configured
+  > sources and published once, at Start (`startManifest` in
+  > `processor/source-manifest/component.go`). An added source appears
+  > in the manifest, in `graph.query.sources` and in
+  > `/source-manifest/sources` only after that restart.
+
 ### Trust model and risk
 
 The shared `semstreams_config` KV bucket is not segmented per app.
