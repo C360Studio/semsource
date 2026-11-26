@@ -166,7 +166,12 @@ func livenessOracle(req graph.LifecycleRunRequest) (func(path string) bool, erro
 
 	if req.RootPath != "" {
 		return func(path string) bool {
-			_, err := os.Stat(filepath.Join(req.RootPath, path))
+			// Code and doc paths are root-relative; a config file's path fact
+			// is absolute (#393), and joining it to the root would never stat.
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(req.RootPath, path)
+			}
+			_, err := os.Stat(path)
 			return err == nil
 		}, nil
 	}
@@ -358,14 +363,13 @@ func isMarkedStale(triples []message.Triple) bool {
 	return false
 }
 
-// pathOf returns an entity's backing artifact path, checked across both the
-// code and doc path predicates (an entity carries at most one).
+// pathOf returns an entity's backing artifact path, checked across the code,
+// doc and config-file path predicates (an entity carries at most one).
 func pathOf(triples []message.Triple) (string, bool) {
-	if p := tripleString(triples, semsourceast.CodePath); p != "" {
-		return p, true
-	}
-	if p := tripleString(triples, source.DocFilePath); p != "" {
-		return p, true
+	for _, pred := range []string{semsourceast.CodePath, source.DocFilePath, source.ConfigFilePath} {
+		if p := tripleString(triples, pred); p != "" {
+			return p, true
+		}
 	}
 	return "", false
 }
