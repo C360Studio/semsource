@@ -368,13 +368,15 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 	// manifest, or an editor's save by rename) clears that mark, since its
 	// same-content republish does not reconcile (#393). A plain modify needs
 	// no pass: the manifest is still there.
-	if event.Operation == handler.OperationDelete || event.Operation == handler.OperationCreate {
-		for _, root := range c.rootsForPath(event.Path) {
-			c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
-		}
-	}
 	if event.Operation == handler.OperationDelete {
+		c.triggerLifecycleRuns(ctx, event.Path)
 		return
+	}
+	// The create's pass fires after its republish is queued, narrowing the
+	// window in which the pass races this event's own writes; supersession
+	// re-runs a pass that still loses that race (#424).
+	if event.Operation == handler.OperationCreate {
+		defer c.triggerLifecycleRuns(ctx, event.Path)
 	}
 
 	for _, state := range event.EntityStates {
@@ -559,6 +561,13 @@ func (c *Component) lifecycleRequest(root, reason string) graph.LifecycleRunRequ
 		RootPath: absRoot,
 		Reason:   reason,
 		Owner:    c.ownerFor(root),
+	}
+}
+
+// triggerLifecycleRuns triggers the pass for every root that contains path.
+func (c *Component) triggerLifecycleRuns(ctx context.Context, path string) {
+	for _, root := range c.rootsForPath(path) {
+		c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
 	}
 }
 
