@@ -1,0 +1,37 @@
+# The one semembed both dogfood instances share (#391). semembed is stateless,
+# so sharing it only saves CPU and RAM. Instances reach it as
+# http://semembed:8081 on the external `c360-dogfood-embed` network.
+#
+#   docker network create c360-dogfood-embed   # once per host
+#   docker compose -p dogfood-semembed -f deploy/dogfood/semembed.compose.yml up -d
+#
+# If embedding on the Intel host is too slow, run this on the M4 instead, publish
+# 8081 there, and point each instance config's model_registry url at
+# http://<m4-lan-ip>:8081/v1.
+
+services:
+  semembed:
+    # Same pin as the root docker-compose.yml.
+    image: ghcr.io/c360studio/semembed:0.2.1@sha256:22ea57c60e33bcb8ae9bfd4f08888340824ed48dbc0c85b981b19a69557a292e
+    environment:
+      - SEMEMBED_PORT=8081
+      - SEMEMBED_MODEL=Snowflake/snowflake-arctic-embed-s
+    deploy:
+      resources:
+        limits:
+          cpus: "${SEMEMBED_CPUS:-4}"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    networks:
+      embed:
+        aliases: [semembed]
+    restart: unless-stopped
+
+networks:
+  embed:
+    name: c360-dogfood-embed
+    external: true
