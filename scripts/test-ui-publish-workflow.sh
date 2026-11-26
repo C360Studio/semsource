@@ -38,6 +38,13 @@ require_text 'SEMSOURCE_UI_VERSION=${{ steps.image.outputs.version }}'
 require_text 'SEMSOURCE_UI_COMMIT=${{ github.sha }}'
 require_text 'org.opencontainers.image.version=${{ steps.image.outputs.version }}'
 require_text 'org.opencontainers.image.revision=${{ github.sha }}'
+
+# The core image carries the v-prefixed tag like the UI image does; semver
+# patterns other than {{version}} are dropped on prereleases (#402).
+require_text "type=ref,event=tag"
+if grep -F "pattern=v{{version}}" "$workflow" >/dev/null; then
+	fail "type=semver,pattern=v{{version}} emits nothing on a prerelease; use type=ref,event=tag"
+fi
 require_text 'image: ${{ steps.image.outputs.repository }}'
 require_text 'digest: ${{ steps.publish.outputs.digest }}'
 require_text 'smoke_tag: ${{ steps.image.outputs.primary_tag }}'
