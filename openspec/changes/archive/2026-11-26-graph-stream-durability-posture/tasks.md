@@ -12,10 +12,10 @@
 ## 3. Measure (D3)
 
 - [x] 3.1 Five seeds per posture of the retention fixture; post the median, spread and GRAPH bytes on the PR.
-- [ ] 3.2 If the bar is missed, stop and take the numbers to the owner before 2.1's default lands.
+- [x] 3.2 If the bar is missed, stop and take the numbers to the owner before 2.1's default lands.
 
 ## 4. Docs and release
 
-- [ ] 4.1 Document `graph_stream` where the config reference lives; add the drift remedy to the release note on #408.
-- [ ] 4.2 `task verify`; `go test -race -tags=integration ./config/... ./cmd/semsource/...`; `go test -tags=e2e -run "WarmRestartWithinStreamWindow|LimitsGraphStreamRefusesBoot|BootIntoFullGraphStream" ./test/e2e/`.
-- [ ] 4.3 Review via `ateam review request`; archive before ready.
+- [x] 4.1 Document `graph_stream` where the config reference lives; add the drift remedy to the release note on #408.
+- [x] 4.2 `task verify`; `go test -race -tags=integration ./config/... ./cmd/semsource/...`; `go test -tags=e2e -run "WarmRestartWithinStreamWindow|LimitsGraphStreamRefusesBoot|BootIntoFullGraphStream" ./test/e2e/`.
+- [x] 4.3 Review via `ateam review request`; archive before ready.

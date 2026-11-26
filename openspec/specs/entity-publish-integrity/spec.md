@@ -80,7 +80,9 @@ The JetStream stream carrying SemSource's `graph.ingest.*` publications SHALL de
 bound, a finite byte bound, an explicit discard policy that refuses writes at the ceiling rather
 than evicting undelivered messages, and a fixed retention policy that removes a message once
 graph-ingest has acknowledged it and retains one published before graph-ingest's consumer exists.
-An operator MAY override the discard policy; the retention policy SHALL NOT be configurable.
+The stream SHALL use file storage unless the operator selects the `ephemeral` posture, which uses
+memory storage. Only the posture and the byte bound SHALL be configurable; the subjects, age bound,
+replicas, discard policy and retention policy SHALL NOT be.
 
 #### Scenario: Transport pressure is visible to the producer
 
@@ -114,17 +116,35 @@ An operator MAY override the discard policy; the retention policy SHALL NOT be c
 - **WHEN** a source publishes an entity and graph-ingest binds afterwards
 - **THEN** graph-ingest applies that entity
 
-#### Scenario: An operator overrides the discard policy
+#### Scenario: The durable posture survives a NATS restart
 
-- **GIVEN** a deployment that configures a discard policy for the ingest transport stream
+- **GIVEN** a deployment with the default posture and messages published but not yet applied
+- **WHEN** NATS restarts before graph-ingest applies them
+- **THEN** the messages are still in the stream and graph-ingest applies them after it reconnects
+
+#### Scenario: The ephemeral posture uses memory storage
+
+- **GIVEN** a configuration whose `graph_stream.posture` is `ephemeral`
 - **WHEN** the stream configuration is resolved
-- **THEN** the configured policy replaces the default
+- **THEN** the stream uses memory storage and every other fixed property is unchanged
 
-#### Scenario: Retention cannot be overridden
+#### Scenario: An operator sizes the byte bound
 
-- **GIVEN** a configuration whose `streams.GRAPH` names a retention policy
+- **GIVEN** a configuration that sets `graph_stream.max_bytes`
+- **WHEN** the stream configuration is resolved
+- **THEN** the configured bound replaces the default and nothing else changes
+
+#### Scenario: The raw stream overrides are gone
+
+- **GIVEN** a configuration with a top-level `streams` key
 - **WHEN** the configuration loads
-- **THEN** loading fails and the error names the field
+- **THEN** loading fails and the error names `streams`
+
+#### Scenario: An unknown posture is refused
+
+- **GIVEN** a configuration whose `graph_stream.posture` is neither `durable` nor `ephemeral`
+- **WHEN** the configuration loads
+- **THEN** loading fails and the error names the posture
 
 ### Requirement: Backpressure is visible even when nothing is lost
 

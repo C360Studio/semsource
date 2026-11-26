@@ -60,17 +60,3 @@ without being claimed by the Tier 0 cutover.
 - **THEN** mainline cuts over to SemEngine for Tier 0 structural (`lexical_search: false`) and statistical (`graph-lexical`) compositions
 - **AND** neural (`http`) and LLM community-summary qualification remain deferred to 04C (`semengine#489`, `semengine#485`)
 
-### Requirement: GRAPH stream overrides stay on the ingest subjects
-
-An explicit `streams.GRAPH.subjects` override SHALL name exactly the five default `graph.ingest.*`
-subjects and no other explicit subject, so it cannot bind a request/reply subject SemSource serves.
-The covering wildcards `graph.ingest.>`, `graph.>`, and `>` SHALL pass configuration and reach
-SemEngine's boot refusal; `graph.ingest.*` SHALL pass because it covers no served subject.
-
-#### Scenario: An override names a subject SemSource answers
-
-- **GIVEN** a configuration whose GRAPH subjects add `graph.query.status` to the five defaults
-- **WHEN** the configuration loads
-- **THEN** loading fails and the error names `graph.query.status`
-- **AND** the same holds for `graph.query.sources`, `graph.query.sourceSummary`, `graph.query.versionDiff`,
-  `graph.ingest.add.<namespace>`, and `graph.ingest.remove.<namespace>`
