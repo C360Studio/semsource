@@ -364,11 +364,16 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		"entity_states", len(event.EntityStates))
 
 	// A deleted manifest's entities stay in the graph; the staleness pass
-	// marks them once it finds the manifest gone (#393).
-	if event.Operation == handler.OperationDelete {
+	// marks them once it finds the manifest gone, and a create (a re-created
+	// manifest, or an editor's save by rename) clears that mark, since its
+	// same-content republish does not reconcile (#393). A plain modify needs
+	// no pass: the manifest is still there.
+	if event.Operation == handler.OperationDelete || event.Operation == handler.OperationCreate {
 		for _, root := range c.rootsForPath(event.Path) {
 			c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
 		}
+	}
+	if event.Operation == handler.OperationDelete {
 		return
 	}
 
@@ -473,7 +478,7 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 // figures correct only on the periodic tick (#284). ctx is the seed context,
 // which Stop cancels before it joins the workers.
 //
-// Once settled, it also sweeps every root, so a manifest deleted while this
+// Once settled, a watching source also sweeps every root, so a manifest deleted while this
 // process was down is marked and one re-created is cleared (#393).
 func (c *Component) reportWhenSettled(ctx context.Context) {
 	c.workers.Go(func() {
@@ -481,10 +486,19 @@ func (c *Component) reportWhenSettled(ctx context.Context) {
 			return
 		}
 		c.publishStatusReport(ctx, c.currentPhase())
-		for _, root := range c.config.Paths {
+		for _, root := range c.seedSweepRoots() {
 			c.runLifecycle(ctx, root, graph.LifecycleReasonPathMissing)
 		}
 	})
+}
+
+// seedSweepRoots are the roots the settled seed sweeps: none for a watch:false
+// source, a frozen snapshot that never goes stale (staleness D5).
+func (c *Component) seedSweepRoots() []string {
+	if !c.config.WatchEnabled {
+		return nil
+	}
+	return c.config.Paths
 }
 
 // ownerFor is the lifecycle owner key of one configured root, keyed by its

@@ -120,3 +120,18 @@ func TestCfgfileRootsForPath(t *testing.T) {
 		}
 	}
 }
+
+// A watch:false source is a frozen snapshot that never goes stale, so its
+// seed sweeps nothing; a watching source sweeps every root (#393).
+// spec: entity-staleness / Config-file entities go stale with their manifest
+func TestCfgfileSeedSweepOnlyWhenWatching(t *testing.T) {
+	paths := []string{"/workspace/svc", "/workspace/web"}
+	frozen := &Component{config: Config{Paths: paths, WatchEnabled: false}}
+	if got := frozen.seedSweepRoots(); len(got) != 0 {
+		t.Errorf("watch:false seed sweeps %v, want none", got)
+	}
+	watching := &Component{config: Config{Paths: paths, WatchEnabled: true}}
+	if got := watching.seedSweepRoots(); !reflect.DeepEqual(got, paths) {
+		t.Errorf("watching seed sweeps %v, want %v", got, paths)
+	}
+}

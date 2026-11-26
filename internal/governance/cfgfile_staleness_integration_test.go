@@ -27,7 +27,7 @@ import (
 // TestIntegration_CfgfileStaleness proves, over a real graph stack and a real
 // cfgfile-source, that deleting a watched manifest marks its module and
 // dependency entities stale through cfgfile-source's own trigger, that
-// re-creating it clears the marker, and that a dependency dropped from a
+// re-creating it clears the marker through the same trigger, and that a dependency dropped from a
 // manifest that still exists is retained unmarked (#393).
 //
 // spec: entity-staleness / Config-file entities go stale with their manifest
@@ -132,15 +132,9 @@ func TestIntegration_CfgfileStaleness(t *testing.T) {
 		}
 	}
 
-	// Re-creating the manifest clears the marker once the pass runs.
+	// Re-creating the manifest is a watch create, and cfgfile-source's own
+	// pass clears the marker.
 	writeManifest(t, svcMod, svcContent)
-	if _, err := semsourcegraph.PublishLifecycleTrigger(ctx, tc.Client, semsourcegraph.LifecycleRunRequest{
-		Org: "acme", Systems: []string{cfghandler.SystemSlug("", root)}, RootPath: root,
-		Reason: semsourcegraph.LifecycleReasonFileDeleted,
-		Owner:  semsourcegraph.LifecycleOwner("cfgfile-source-test", root),
-	}); err != nil {
-		t.Fatalf("trigger lifecycle pass: %v", err)
-	}
 	for _, title := range []string{"example.com/svc", "github.com/a/b"} {
 		waitPredicateAbsent(t, ctx, tc.Client, seeded[title].ID, source.EntityLifecycleStale, 20*time.Second)
 	}
