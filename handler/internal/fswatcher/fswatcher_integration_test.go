@@ -204,6 +204,39 @@ func TestFSWatcher_ExtensionFiltering(t *testing.T) {
 // Debounce: rapid writes produce a single event
 // ---------------------------------------------------------------------------
 
+// TestFSWatcher_SpreadBurstIsOneEvent: writes 100 ms apart with a 300 ms
+// delay span several flush ticks but never go quiet, so they emit one event.
+// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: A watched file emits one change after it goes quiet
+func TestFSWatcher_SpreadBurstIsOneEvent(t *testing.T) {
+	dir := t.TempDir()
+	w, err := fswatcher.New(fswatcher.WatchConfig{Enabled: true, DebounceDelay: "300ms", FileExtensions: []string{".md"}}, dir)
+	if err != nil {
+		t.Fatalf("fswatcher.New: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Stop() })
+	if err := w.Start(t.Context()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond) // let fsnotify register the root
+
+	target := filepath.Join(dir, "spread.md")
+	for i := range 5 {
+		if err := os.WriteFile(target, []byte("write "+string(rune('0'+i))), 0o644); err != nil {
+			t.Fatalf("WriteFile %d: %v", i, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if _, ok := waitEvent(t, w); !ok {
+		t.Fatal("timed out waiting for the burst's event")
+	}
+	select {
+	case ev := <-w.Events():
+		t.Errorf("a burst that never went quiet emitted a second event: %+v", ev)
+	case <-time.After(600 * time.Millisecond):
+	}
+}
+
+// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: A watched file emits one change after it goes quiet
 func TestFSWatcher_Debounce(t *testing.T) {
 	dir := t.TempDir()
 	// Use a slightly longer debounce so rapid writes collapse reliably.
@@ -259,8 +292,8 @@ loop:
 		}
 	}
 
-	// Debounce collapses rapid same-file writes; allow at most 2 (edge timing).
-	if count > 2 {
-		t.Errorf("debounce failed: got %d events for 5 rapid writes, want ≤2", count)
+	// The burst never went quiet for the delay, so it is one event (#419).
+	if count != 1 {
+		t.Errorf("debounce failed: got %d events for 5 rapid writes, want 1", count)
 	}
 }

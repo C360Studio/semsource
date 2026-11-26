@@ -1,6 +1,6 @@
 # Debounce each watched path until it goes quiet, with a cap
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-26) sha256:166a0f418e50
 
 Track: design (changes when every fsnotify-based source emits watch events).
 

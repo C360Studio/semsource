@@ -76,6 +76,17 @@ func ContentHash(content []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// pendingEvent is a path's latest op and when it was first and last seen
+// since its previous flush.
+type pendingEvent struct {
+	op          fsnotify.Op
+	first, last time.Time
+}
+
+// maxWaitFactor caps the debounce: a path pending this many delays since its
+// first event flushes even while it is still being written (#419).
+const maxWaitFactor = 5
+
 // FSWatcher watches a directory tree for file changes and emits
 // handler.ChangeEvent values. It is safe for concurrent use.
 //
@@ -89,9 +100,10 @@ type FSWatcher struct {
 	extensions map[string]bool // normalised extensions → true
 	excludes   map[string]bool // directory base names to skip
 
-	// Debouncing: accumulate file → latest op before flushing.
+	// Debouncing: accumulate file → latest op until the file goes quiet.
 	pendingMu sync.Mutex
-	pending   map[string]fsnotify.Op
+	pending   map[string]pendingEvent
+	now       func() time.Time
 
 	// Hash-based dedup: emit only when content actually changes.
 	hashMu sync.RWMutex
@@ -140,7 +152,8 @@ func New(cfg WatchConfig, root string) (*FSWatcher, error) {
 		logger:     slog.Default(),
 		extensions: extensions,
 		excludes:   excludes,
-		pending:    make(map[string]fsnotify.Op),
+		pending:    make(map[string]pendingEvent),
+		now:        time.Now,
 		hashes:     make(map[string]string),
 		events:     make(chan handler.ChangeEvent, eventChannelBuffer),
 	}, nil
@@ -224,7 +237,7 @@ func (w *FSWatcher) addWatchesRecursive(root string) error {
 func (w *FSWatcher) processEvents(ctx context.Context) {
 	defer close(w.events)
 
-	ticker := time.NewTicker(w.config.GetDebounceDelay())
+	ticker := time.NewTicker(max(w.config.GetDebounceDelay()/4, 10*time.Millisecond))
 	defer ticker.Stop()
 
 	for {
@@ -274,8 +287,14 @@ func (w *FSWatcher) handleFSEvent(event fsnotify.Event) {
 		}
 	}
 
+	now := w.now()
 	w.pendingMu.Lock()
-	w.pending[path] = event.Op
+	p, ok := w.pending[path]
+	if !ok {
+		p.first = now
+	}
+	p.op, p.last = event.Op, now
+	w.pending[path] = p
 	w.pendingMu.Unlock()
 }
 
@@ -295,21 +314,25 @@ func (w *FSWatcher) handleNewDirectory(path string) {
 	}
 }
 
-// flushPending drains the pending map and emits ChangeEvent values. It
-// computes the content hash to avoid emitting spurious events when the file
-// content has not actually changed.
+// flushPending emits ChangeEvent values for the pending paths that are ready:
+// quiet for the debounce delay, or pending for maxWaitFactor delays. Paths
+// still being written stay pending. It computes the content hash to avoid
+// emitting spurious events when the file content has not actually changed.
 func (w *FSWatcher) flushPending(ctx context.Context) {
+	delay := w.config.GetDebounceDelay()
+	now := w.now()
 	w.pendingMu.Lock()
-	if len(w.pending) == 0 {
-		w.pendingMu.Unlock()
+	toProcess := make(map[string]fsnotify.Op)
+	for path, p := range w.pending {
+		if now.Sub(p.last) >= delay || now.Sub(p.first) >= maxWaitFactor*delay {
+			toProcess[path] = p.op
+			delete(w.pending, path)
+		}
+	}
+	w.pendingMu.Unlock()
+	if len(toProcess) == 0 {
 		return
 	}
-	toProcess := make(map[string]fsnotify.Op, len(w.pending))
-	for k, v := range w.pending {
-		toProcess[k] = v
-	}
-	w.pending = make(map[string]fsnotify.Op)
-	w.pendingMu.Unlock()
 
 	for path, op := range toProcess {
 		select {
