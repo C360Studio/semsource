@@ -1,6 +1,6 @@
 # Config-file staleness, and dependency and image IDs without versions
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-26) sha256:eed09562c886
 
 Track: design (identity break riding the beta.12 reseed; extends the staleness pass to config files).
 
