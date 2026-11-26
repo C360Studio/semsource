@@ -11,6 +11,7 @@ import (
 // entry reaches the ast child it expands into, for single-branch and
 // per-branch expansion alike, and stays unset when the repo leaves it unset
 // (so the spawn path's own default still applies).
+// spec: openspec/specs/ast-source-configuration/spec.md#Requirement: A repo source's index interval governs its ast child
 func TestRepoExpansionForwardsIndexInterval(t *testing.T) {
 	expanders := map[string]func(t *testing.T, src SourceEntry) []SourceEntry{
 		"single branch": func(t *testing.T, src SourceEntry) []SourceEntry {
