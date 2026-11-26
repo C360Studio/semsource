@@ -283,11 +283,14 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
+          # type=ref,event=tag is the git tag verbatim (v1.0.0-beta.N), as the
+          # UI image publishes. type=semver drops every pattern but {{version}}
+          # on a prerelease (#402), so a v-prefixed semver pattern emits nothing.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=
             type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
+            type=ref,event=tag
 
       - uses: docker/setup-qemu-action@v4
 
