@@ -1162,10 +1162,11 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 		_, err = stream.GetMsg(h.ctx, ack.Sequence)
 		pendingSurvived = err == nil
 	}
-	observedAbsent := errors.Is(err, jetstream.ErrStreamNotFound) || errors.Is(err, jetstream.ErrMsgNotFound)
-	h.result.Observations = append(h.result.Observations, observation{Name: "memory_transport_not_durable", Passed: observedAbsent, Detail: map[string]any{"pending_sequence": ack.Sequence, "survived": pendingSurvived, "observation_error": fmt.Sprint(err), "contract": "source re-ingestion, not publish-ack durability"}})
-	if !observedAbsent {
-		h.t.Errorf("memory transport absence not established: survived=%t error=%v", pendingSurvived, err)
+	// GRAPH is file-backed by default (#395), so the published-but-unapplied
+	// message must survive the broker restart.
+	h.result.Observations = append(h.result.Observations, observation{Name: "durable_transport_survives_broker_restart", Passed: pendingSurvived, Detail: map[string]any{"pending_sequence": ack.Sequence, "survived": pendingSurvived, "observation_error": fmt.Sprint(err), "contract": "file-backed GRAPH keeps unapplied publications across a broker restart"}})
+	if !pendingSurvived {
+		h.t.Errorf("durable transport lost a pending publication across the broker restart: error=%v", err)
 	}
 	h.check("authority_survives_broker_restart_before_reingest", 10*time.Second, func() (any, error) {
 		persisted, openErr := h.js.KeyValue(h.ctx, kv.Bucket())
