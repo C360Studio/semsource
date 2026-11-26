@@ -10,7 +10,8 @@ import "github.com/c360studio/semengine/vocabulary"
 // Config file predicates shared across all entity types.
 const (
 	// ConfigFilePath is the absolute path to the source config file on disk.
-	// Present on module, package, project, and image entities.
+	// Present on every config entity; a dependency or image carries the
+	// manifest that declares it, so the staleness pass can judge it (#393).
 	ConfigFilePath = "source.config.file-path"
 )
 
@@ -94,7 +95,8 @@ const (
 
 // Dockerfile image predicates.
 const (
-	// ConfigImageName is the base image name from a FROM instruction.
+	// ConfigImageName is a base image reference from a FROM instruction, one
+	// value per reference the Dockerfile names the image by (#393).
 	// Example: "golang:1.22-alpine", "node:20"
 	ConfigImageName = "source.config.image-name"
 

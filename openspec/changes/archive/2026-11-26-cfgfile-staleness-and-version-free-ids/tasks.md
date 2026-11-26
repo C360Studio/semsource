@@ -1,0 +1,28 @@
+# Config-file staleness and version-free IDs — tasks
+
+## 1. Approval
+
+- [x] 1.1 Owner approved `proposal.md` + `design.md` (2026-11-26, sha256:eed09562c886); line entered by claude at the owner's instruction.
+
+## 2. Repro (fails on main)
+
+- [x] 2.1 Go and npm version bump leave one dependency entity with the new version; Maven and Gradle likewise.
+- [x] 2.2 Two tags of one image in one Dockerfile are one entity; the registry port is kept in the name.
+- [x] 2.3 Deleting a watched manifest marks its module and dependency entities stale; re-creating clears it.
+
+## 3. Identity (D1)
+
+- [x] 3.1 Version-free instances in the four dependency builders; `imageName`; multi-valued version/reference folding.
+
+## 4. Staleness (D2)
+
+- [x] 4.1 Owner fact and declaring file path on every cfgfile entity.
+- [x] 4.2 cfgfile-source lifecycle trigger on seed and on watch delete.
+- [x] 4.3 `pathOf` reads `source.config.file-path`; the stat oracle handles absolute paths.
+- [x] 4.4 Document retained removed-dependency entities in the cfgfile spec text.
+
+## 5. Gates
+
+- [x] 5.1 `task verify`; `go test -race -tags=integration ./handler/cfgfile/... ./processor/cfgfile-source/... ./processor/supersession/...`.
+- [x] 5.2 `graph-event-reviewer` pass; review via `ateam review request`; archive before ready.
+- [x] 5.3 Identity-break and reseed note recorded on #408 for the beta.12 ROADMAP/adoption note.

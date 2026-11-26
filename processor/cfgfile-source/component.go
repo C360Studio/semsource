@@ -8,7 +8,9 @@ import (
 	"github.com/c360studio/semsource/internal/sourceauthority"
 	"github.com/c360studio/semsource/internal/workerjoin"
 	"log/slog"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +30,10 @@ import (
 	"github.com/c360studio/semsource/internal/sourcestatus"
 	"github.com/c360studio/semsource/workspace"
 )
+
+// lifecycleTriggerTimeout bounds the background NATS round trip triggering a
+// staleness lifecycle pass, so a stalled responder cannot hold Stop's join.
+const lifecycleTriggerTimeout = 30 * time.Second
 
 // cfgfileSourceSchema defines the configuration schema for the cfgfile-source component.
 var cfgfileSourceSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
@@ -90,6 +96,8 @@ type Component struct {
 	// pathsUnavailable: a source that cannot reach its configured paths seeds
 	// nothing, silently, for the whole retry window.
 	pathsUnavailable degraded.Condition
+	// lifecycleFailing: staleness marking has stopped working.
+	lifecycleFailing degraded.Condition
 
 	// Metrics
 	entitiesPublished atomic.Int64
@@ -279,6 +287,7 @@ func (c *Component) ingestOnce(ctx context.Context) error {
 	}
 
 	for _, state := range states {
+		c.stampOwner(state)
 		payload, err := entitypub.PayloadFromState(state)
 		if err != nil {
 			c.logger.Warn("Invalid cfgfile entity state",
@@ -354,7 +363,22 @@ func (c *Component) handleChangeEvent(ctx context.Context, event handler.ChangeE
 		"operation", event.Operation,
 		"entity_states", len(event.EntityStates))
 
+	// A deleted manifest's entities stay in the graph; the staleness pass
+	// marks them once it finds the manifest gone, and a create (a re-created
+	// manifest, or an editor's save by rename) clears that mark, since its
+	// same-content republish does not reconcile (#393). A plain modify needs
+	// no pass: the manifest is still there.
+	if event.Operation == handler.OperationDelete || event.Operation == handler.OperationCreate {
+		for _, root := range c.rootsForPath(event.Path) {
+			c.triggerLifecycleRun(ctx, root, graph.LifecycleReasonFileDeleted)
+		}
+	}
+	if event.Operation == handler.OperationDelete {
+		return
+	}
+
 	for _, state := range event.EntityStates {
+		c.stampOwner(state)
 		payload, err := entitypub.PayloadFromState(state)
 		if err != nil {
 			c.logger.Warn("Invalid cfgfile entity state on change",
@@ -453,12 +477,109 @@ func (c *Component) buildStatusReport(phase string) sourcestatus.Report {
 // after the last Send, so it can carry delivered < offered; without this the
 // figures correct only on the periodic tick (#284). ctx is the seed context,
 // which Stop cancels before it joins the workers.
+//
+// Once settled, a watching source also sweeps every root, so a manifest deleted while this
+// process was down is marked and one re-created is cleared (#393).
 func (c *Component) reportWhenSettled(ctx context.Context) {
 	c.workers.Go(func() {
-		if c.publisher.WaitSettled(ctx) == nil {
-			c.publishStatusReport(ctx, c.currentPhase())
+		if c.publisher.WaitSettled(ctx) != nil {
+			return
+		}
+		c.publishStatusReport(ctx, c.currentPhase())
+		for _, root := range c.seedSweepRoots() {
+			c.runLifecycle(ctx, root, graph.LifecycleReasonPathMissing)
 		}
 	})
+}
+
+// seedSweepRoots are the roots the settled seed sweeps: none for a watch:false
+// source, a frozen snapshot that never goes stale (staleness D5).
+func (c *Component) seedSweepRoots() []string {
+	if !c.config.WatchEnabled {
+		return nil
+	}
+	return c.config.Paths
+}
+
+// ownerFor is the lifecycle owner key of one configured root, keyed by its
+// absolute form so the stamp and the sweep agree.
+func (c *Component) ownerFor(root string) string {
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	instance := c.config.InstanceName
+	if instance == "" {
+		instance = "cfgfile-source"
+	}
+	return graph.LifecycleOwner(instance, root)
+}
+
+// stampOwner writes the owner fact of the root an entity came from, so only
+// that root's sweep judges it (#286, #393).
+func (c *Component) stampOwner(state *handler.EntityState) {
+	if state == nil || state.Root == "" {
+		return
+	}
+	state.Triples = append(state.Triples, graph.LifecycleOwnerTriple(state.ID, c.ownerFor(state.Root), state.UpdatedAt))
+}
+
+// rootsForPath returns every distinct configured root that contains path, as
+// configured, since the system slug is derived from the configured form.
+func (c *Component) rootsForPath(path string) []string {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	var roots []string
+	seen := make(map[string]bool, len(c.config.Paths))
+	for _, p := range c.config.Paths {
+		absRoot, err := filepath.Abs(p)
+		if err != nil || seen[absRoot] {
+			continue
+		}
+		// Rel, not a prefix test: a "/" root would need the prefix "//".
+		if rel, err := filepath.Rel(absRoot, path); err == nil && rel != ".." &&
+			!strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			seen[absRoot] = true
+			roots = append(roots, p)
+		}
+	}
+	return roots
+}
+
+// lifecycleRequest scopes a staleness pass to one root: the system its
+// entities carry and the owner they were stamped with.
+func (c *Component) lifecycleRequest(root, reason string) graph.LifecycleRunRequest {
+	absRoot := root
+	if abs, err := filepath.Abs(root); err == nil {
+		absRoot = abs
+	}
+	return graph.LifecycleRunRequest{
+		Org:      c.authority.Org,
+		Systems:  []string{cfghandler.SystemSlug(c.config.Project, root)},
+		RootPath: absRoot,
+		Reason:   reason,
+		Owner:    c.ownerFor(root),
+	}
+}
+
+// triggerLifecycleRun runs the pass for root in the background so the watch
+// loop never blocks on a full graph pass; Stop joins it.
+func (c *Component) triggerLifecycleRun(ctx context.Context, root, reason string) {
+	c.workers.Go(func() { c.runLifecycle(ctx, root, reason) })
+}
+
+// runLifecycle sends one lifecycle request and reports a failure on the
+// transition into it (ADR-0011): when it fails, staleness marking stops.
+func (c *Component) runLifecycle(ctx context.Context, root, reason string) {
+	runCtx, cancel := context.WithTimeout(ctx, lifecycleTriggerTimeout)
+	defer cancel()
+	if _, err := graph.PublishLifecycleTrigger(runCtx, c.natsClient, c.lifecycleRequest(root, reason)); err != nil {
+		c.lifecycleFailing.Enter(c.logger,
+			"staleness lifecycle trigger is failing — retractions may linger",
+			"root", root, "reason", reason, "error", err)
+		return
+	}
+	c.lifecycleFailing.Clear(c.logger, "staleness lifecycle trigger recovered")
 }
 
 func (c *Component) publishStatusReport(ctx context.Context, phase string) {

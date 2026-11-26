@@ -1,7 +1,10 @@
 package supersession
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 
 	gtypes "github.com/c360studio/semengine/graph"
@@ -259,5 +262,56 @@ func TestLivenessOracleRequiresAnOwner(t *testing.T) {
 		if _, err := livenessOracle(req); err == nil {
 			t.Errorf("%s: accepted, want refused", name)
 		}
+	}
+}
+
+// A config-file entity is judged by its declaring manifest, whose path fact
+// is absolute; a relative code or doc path is still joined to the root (#393).
+// spec: entity-staleness / Config-file entities go stale with their manifest
+func TestLifecyclePassJudgesConfigFilesByTheirAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	present := filepath.Join(root, "svc", "go.mod")
+	if err := os.MkdirAll(filepath.Dir(present), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(present, []byte("module x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "run.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(root, "web", "package.json")
+
+	cfgEntity := func(id, path string, marked bool) gtypes.EntityState {
+		tr := []message.Triple{{Subject: id, Predicate: source.ConfigFilePath, Object: path}}
+		if marked {
+			tr = append(tr, message.Triple{Subject: id, Predicate: source.EntityLifecycleStale, Object: "file_deleted"})
+		}
+		return gtypes.EntityState{ID: id, Triples: tr}
+	}
+	if p, ok := pathOf(cfgEntity("x", present, false).Triples); !ok || p != present {
+		t.Fatalf("pathOf(config) = (%q,%v), want (%q,true)", p, ok, present)
+	}
+
+	stat, err := livenessOracle(graph.LifecycleRunRequest{RootPath: root, Owner: "cfgfile-source/abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	toMark, toClear, _ := decideLifecycleActions([]gtypes.EntityState{
+		cfgEntity("dep-of-live", present, true),
+		cfgEntity("dep-of-gone", gone, false),
+		codeEntityAt("code", "run.go", true),
+	}, graph.LifecycleReasonFileDeleted, stat)
+
+	var marked []string
+	for _, tr := range toMark {
+		marked = append(marked, tr.Subject)
+	}
+	if want := []string{"dep-of-gone"}; !reflect.DeepEqual(marked, want) {
+		t.Errorf("marked = %v, want %v", marked, want)
+	}
+	sort.Strings(toClear)
+	if want := []string{"code", "dep-of-live"}; !reflect.DeepEqual(toClear, want) {
+		t.Errorf("cleared = %v, want %v", toClear, want)
 	}
 }
