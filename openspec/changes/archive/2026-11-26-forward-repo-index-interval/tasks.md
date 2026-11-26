@@ -12,4 +12,4 @@
 ## 3. Gates
 
 - [x] 3.1 `task lint`, `go test ./config/ ./internal/sourcespawn/`, `task spec:check`.
-- [ ] 3.2 Review via `ateam review request`; archive before ready.
+- [x] 3.2 Archived before ready; review requested via `ateam review request` (record on #409).
