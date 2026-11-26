@@ -3,7 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
-	"strconv"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -789,131 +789,58 @@ func TestLoadConfigFromReader_MetricsConfig(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFromReader_StreamOverrides(t *testing.T) {
-	input := `{
-  "namespace": "acme",
-  "sources": [{"type": "ast", "path": "./", "language": "go"}],
-  "streams": {
-    "GRAPH": {
-      "storage": "file",
-      "max_age": "24h",
-      "max_bytes": 1073741824,
-      "replicas": 3
-    }
-  }
-}`
-	cfg, err := config.LoadConfigFromReader(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Streams == nil {
-		t.Fatal("streams config is nil")
-	}
-	graph, ok := cfg.Streams["GRAPH"]
-	if !ok {
-		t.Fatal("GRAPH stream override missing")
-	}
-	if graph.Storage != "file" {
-		t.Errorf("storage: got %q, want %q", graph.Storage, "file")
-	}
-	if graph.MaxAge != "24h" {
-		t.Errorf("max_age: got %q, want %q", graph.MaxAge, "24h")
-	}
-	if graph.MaxBytes == nil || *graph.MaxBytes != 1073741824 {
-		t.Errorf("max_bytes: got %v, want 1073741824", graph.MaxBytes)
-	}
-	if graph.Replicas == nil || *graph.Replicas != 3 {
-		t.Errorf("replicas: got %v, want 3", graph.Replicas)
-	}
-
-	missingEntitySubj := `{
-  "namespace": "acme",
-  "sources": [{"type": "ast", "path": "./", "language": "go"}],
-  "streams": {
-    "GRAPH": {
-      "subjects": ["graph.ingest.manifest"]
-    }
-  }
-}`
-	if _, err := config.LoadConfigFromReader(strings.NewReader(missingEntitySubj)); err == nil {
-		t.Fatal("expected streams.GRAPH.subjects omitting graph.ingest.entity to fail validation")
-	}
-
-	entityOnlySubj := `{
-  "namespace": "acme",
-  "sources": [{"type": "ast", "path": "./", "language": "go"}],
-  "streams": {
-    "GRAPH": {
-      "subjects": ["graph.ingest.entity"]
-    }
-  }
-}`
-	if _, err := config.LoadConfigFromReader(strings.NewReader(entityOnlySubj)); err == nil {
-		t.Fatal("expected streams.GRAPH.subjects omitting manifest/status/predicates to fail validation")
-	}
-
-	allDefaultSubj := `{
-  "namespace": "acme",
-  "sources": [{"type": "ast", "path": "./", "language": "go"}],
-  "streams": {
-    "GRAPH": {
-      "subjects": [
-        "graph.ingest.entity",
-        "graph.ingest.batch",
-        "graph.ingest.manifest",
-        "graph.ingest.status",
-        "graph.ingest.predicates"
-      ]
-    }
-  }
-}`
-	if _, err := config.LoadConfigFromReader(strings.NewReader(allDefaultSubj)); err != nil {
-		t.Fatalf("expected complete default streams.GRAPH.subjects to pass validation: %v", err)
-	}
-}
-
-// TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects: a GRAPH stream
-// bound over a request/reply subject SemSource serves would PubAck the request
-// before the responder replies, so readiness and source queries return wrong or
-// empty answers (add_source would report success with nothing registered).
-// SemEngine refuses only its own query verbs at boot; these are SemSource's,
-// so config refuses them.
+// TestLoadConfigFromReader_GraphStream: graph_stream carries only the
+// posture and the byte bound (#395). An unknown posture or a non-positive
+// bound fails to load naming the field, and the retired raw streams
+// overrides fail to load naming streams.
 //
-// spec: openspec/specs/tier0-consumer-qualification/spec.md#Requirement: GRAPH stream overrides stay on the ingest subjects
-func TestLoadConfigFromReader_StreamOverridesStayOnIngestSubjects(t *testing.T) {
-	load := func(subjects ...string) error {
-		quoted := make([]string, len(subjects))
-		for i, s := range subjects {
-			quoted[i] = strconv.Quote(s)
-		}
-		input := `{"namespace": "acme", "sources": [{"type": "ast", "path": "./", "language": "go"}],
-  "streams": {"GRAPH": {"subjects": [` + strings.Join(quoted, ",") + `]}}}`
-		_, err := config.LoadConfigFromReader(strings.NewReader(input))
-		return err
+// spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
+func TestLoadConfigFromReader_GraphStream(t *testing.T) {
+	load := func(extra string) (*config.Config, error) {
+		input := `{"namespace": "acme", "sources": [{"type": "ast", "path": "./", "language": "go"}]` + extra + `}`
+		return config.LoadConfigFromReader(strings.NewReader(input))
 	}
-	defaults := []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest",
-		"graph.ingest.status", "graph.ingest.predicates"}
-
-	for _, served := range []string{
-		"graph.query.status", "graph.query.sources", "graph.query.sourceSummary", "graph.query.versionDiff",
-		"graph.ingest.add.acme", "graph.ingest.remove.acme", "graph.ingest.add.*", "graph.ingest.*.*",
-	} {
-		err := load(append(append([]string{}, defaults...), served)...)
-		if err == nil || !strings.Contains(err.Error(), strconv.Quote(served)) {
-			t.Errorf("defaults + %s: got %v, want a refusal naming the subject", served, err)
-		}
-		if err := load("graph.ingest.>", served); err == nil {
-			t.Errorf("covering wildcard + %s: accepted, want refusal", served)
-		}
+	maxBytes := int64(1 << 30)
+	tests := []struct {
+		name         string
+		extra        string
+		wantPosture  string
+		wantMaxBytes *int64
+		wantErr      string
+	}{
+		{name: "omitted", wantPosture: ""},
+		{name: "durable", extra: `, "graph_stream": {"posture": "durable"}`, wantPosture: config.GraphStreamDurable},
+		{name: "ephemeral", extra: `, "graph_stream": {"posture": "ephemeral"}`, wantPosture: config.GraphStreamEphemeral},
+		{name: "max_bytes only", extra: `, "graph_stream": {"max_bytes": 1073741824}`, wantMaxBytes: &maxBytes},
+		{name: "posture and max_bytes", extra: `, "graph_stream": {"posture": "durable", "max_bytes": 1073741824}`, wantPosture: config.GraphStreamDurable, wantMaxBytes: &maxBytes},
+		{name: "unknown posture", extra: `, "graph_stream": {"posture": "memory"}`, wantErr: `"memory"`},
+		{name: "zero max_bytes", extra: `, "graph_stream": {"max_bytes": 0}`, wantErr: "graph_stream.max_bytes"},
+		{name: "negative max_bytes", extra: `, "graph_stream": {"max_bytes": -1}`, wantErr: "graph_stream.max_bytes"},
+		{name: "unknown field", extra: `, "graph_stream": {"storage": "file"}`, wantErr: `unknown field "storage"`},
+		{name: "retired streams", extra: `, "streams": {"GRAPH": {"max_bytes": 1073741824}}`, wantErr: `"streams"`},
 	}
-
-	if err := load(defaults...); err != nil {
-		t.Errorf("the five defaults: %v", err)
-	}
-	for _, w := range []string{"graph.ingest.>", "graph.>", ">", "graph.ingest.*"} {
-		if err := load(w); err != nil {
-			t.Errorf("%s must pass config (boot refusal, or covers no served subject): %v", w, err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := load(tt.extra)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("loaded, want an error naming %s", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error %q does not name %s", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.GraphStream.Posture != tt.wantPosture {
+				t.Errorf("posture = %q, want %q", cfg.GraphStream.Posture, tt.wantPosture)
+			}
+			if !reflect.DeepEqual(cfg.GraphStream.MaxBytes, tt.wantMaxBytes) {
+				t.Errorf("max_bytes = %v, want %v", cfg.GraphStream.MaxBytes, tt.wantMaxBytes)
+			}
+		})
 	}
 }
 
@@ -966,11 +893,11 @@ func TestLoadConfigFromReader_GraphRetentionRefused(t *testing.T) {
 			input := `{
   "namespace": "acme",
   "sources": [{"type": "ast", "path": "./", "language": "go"}],
-  "streams": {"GRAPH": {"retention": "` + retention + `"}}
+  "graph_stream": {"retention": "` + retention + `"}
 }`
 			_, err := config.LoadConfigFromReader(strings.NewReader(input))
 			if err == nil {
-				t.Fatal("expected streams.GRAPH.retention to be refused, got nil")
+				t.Fatal("expected graph_stream.retention to be refused, got nil")
 			}
 			if !strings.Contains(err.Error(), `unknown field "retention"`) {
 				t.Fatalf("error %q does not name the retention field", err)

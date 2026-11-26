@@ -1262,8 +1262,11 @@ func (h *harness) rpcCollision() {
 		if runErr == nil {
 			return string(out), errors.New("expected startup refusal for reserved RPC wildcard capture, but process exited 0")
 		}
-		if !bytes.Contains(out, []byte("reserved_subject_capture")) && !bytes.Contains(out, []byte("captures reserved request subject")) {
-			return string(out), fmt.Errorf("process exited (%v) without reserved_subject_capture refusal: %s", runErr, out)
+		// The raw streams overrides are gone (#395), so the wildcard can no
+		// longer reach SemEngine's reserved_subject_capture boot refusal: the
+		// strict config decoder refuses the key before boot.
+		if !bytes.Contains(out, []byte(`unknown field "streams"`)) {
+			return string(out), fmt.Errorf("process exited (%v) without refusing the retired streams key: %s", runErr, out)
 		}
 		exitCode := -1
 		if cmd.ProcessState != nil {

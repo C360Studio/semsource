@@ -65,7 +65,7 @@ func writeRetentionConfig(t *testing.T, workDir, fixture string, httpPort int, m
 			{"type": "ast", "path": fixture, "language": "go", "watch": false},
 		},
 	}
-	cfg["streams"] = map[string]any{"GRAPH": map[string]any{"max_bytes": maxBytes}}
+	cfg["graph_stream"] = map[string]any{"max_bytes": maxBytes}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
@@ -196,7 +196,7 @@ func TestE2E_LimitsGraphStreamRefusesBoot(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	// The beta.10 declaration: same subjects and storage, limits retention.
+	// The beta.10 declaration: same subjects, memory storage, limits retention.
 	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
 		Name:      "GRAPH",
 		Subjects:  []string{"graph.ingest.entity", "graph.ingest.batch", "graph.ingest.manifest", "graph.ingest.status", "graph.ingest.predicates"},

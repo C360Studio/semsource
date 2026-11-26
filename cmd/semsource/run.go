@@ -636,7 +636,7 @@ func buildSemstreamsConfig(cfg *config.Config, org string) (*semconfig.Config, e
 		ModelRegistry: cfg.ModelRegistry,
 	}
 
-	// Declare the full GRAPH stream with user overrides.
+	// Declare the full GRAPH stream for the configured posture.
 	ssCfg.Streams = graphStreamConfig(cfg)
 
 	return ssCfg, nil
@@ -962,8 +962,22 @@ func graphSubsystemComponents(cfg *config.Config) (semconfig.ComponentConfigs, e
 	return result, nil
 }
 
-// graphStreamConfig builds the GRAPH stream config with user overrides applied.
+// graphStreamConfig builds the GRAPH stream for the configured posture (#395).
+// Only storage and the byte bound vary; everything else is fixed.
 func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
+	// durable, the default, is file storage: a fact NATS accepted but
+	// graph-ingest has not yet applied survives a NATS restart. entitypub
+	// counts a fact published at the PubAck, so under memory storage a
+	// restart would lose it with nothing reporting the loss. ephemeral is
+	// the operator's explicit choice of memory storage.
+	storage := "file"
+	if cfg.GraphStream.Posture == config.GraphStreamEphemeral {
+		storage = "memory"
+	}
+	maxBytes := int64(256 * 1024 * 1024)
+	if cfg.GraphStream.MaxBytes != nil {
+		maxBytes = *cfg.GraphStream.MaxBytes
+	}
 	sc := semconfig.StreamConfig{
 		Subjects: []string{
 			"graph.ingest.entity",
@@ -972,8 +986,8 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 			"graph.ingest.status",
 			"graph.ingest.predicates",
 		},
-		Storage:  "memory",
-		MaxBytes: 256 * 1024 * 1024,
+		Storage:  storage,
+		MaxBytes: maxBytes,
 		MaxAge:   "1h",
 		Replicas: 1,
 		// workqueue, fixed: graph-ingest acknowledges an entity only after its
@@ -983,7 +997,7 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		// within the hour republished into a full stream). Unlike interest
 		// retention, workqueue keeps a message published before graph-ingest's
 		// consumer binds. The cost is that no other consumer may read these
-		// subjects: the server refuses it at bind. No override field exists.
+		// subjects: the server refuses it at bind. No config field exists.
 		Retention: "workqueue",
 		// semengine requires an ordinary stream to declare its
 		// discard policy — it was hardcoded to "old" before, so the policy was
@@ -1002,27 +1016,6 @@ func graphStreamConfig(cfg *config.Config) semconfig.StreamConfigs {
 		// messages; with consumed ones removed, an expiry is always a message
 		// graph-ingest never applied, which takes it stalling for MaxAge.
 		Discard: semconfig.StreamDiscardNew,
-	}
-
-	if override, ok := cfg.Streams["GRAPH"]; ok {
-		if len(override.Subjects) > 0 {
-			sc.Subjects = override.Subjects
-		}
-		if override.Storage != "" {
-			sc.Storage = override.Storage
-		}
-		if override.MaxBytes != nil {
-			sc.MaxBytes = *override.MaxBytes
-		}
-		if override.MaxAge != "" {
-			sc.MaxAge = override.MaxAge
-		}
-		if override.Replicas != nil {
-			sc.Replicas = *override.Replicas
-		}
-		if override.Discard != "" {
-			sc.Discard = override.Discard
-		}
 	}
 
 	return semconfig.StreamConfigs{"GRAPH": sc}
