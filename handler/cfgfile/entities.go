@@ -588,19 +588,32 @@ type gradleDependencyEntity struct {
 	Name           string   // "group:name"
 	Versions       []string // every version the build file declares (#393)
 	Configurations []string // every configuration the build file declares it under (#375)
-	FilePath       string
-	System         string
-	Org            string
-	IndexedAt      time.Time
+	// Classifier and Ext (a notation's trailing ":classifier" and "@ext")
+	// name a distinct artifact, so they are part of the instance, as
+	// Maven's type and classifier are (#393).
+	Classifier string
+	Ext        string
+	FilePath   string
+	System     string
+	Org        string
+	IndexedAt  time.Time
 }
 
 func newGradleDependencyEntity(authority entityid.Authority, group, name, version, configuration, filePath, system, rel string, indexedAt time.Time) *gradleDependencyEntity {
-	instance := contentHashShort(group + ":" + name)
+	version, ext, _ := strings.Cut(version, "@")
+	version, classifier, _ := strings.Cut(version, ":")
+	key := group + ":" + name
+	if classifier != "" || ext != "" {
+		key += ":" + classifier + "@" + ext
+	}
+	instance := contentHashShort(key)
 	return &gradleDependencyEntity{
 		ID:             authority.Build(system, "config", "dependency", declared(instance, rel)),
 		Name:           group + ":" + name,
 		Versions:       []string{version},
 		Configurations: []string{configuration},
+		Classifier:     classifier,
+		Ext:            ext,
 		FilePath:       filePath,
 		System:         system,
 		Org:            authority.Org,
@@ -617,6 +630,8 @@ func (e *gradleDependencyEntity) triples() []message.Triple {
 		filePathTriple(e.ID, e.FilePath),
 	}
 	triples = appendValues(triples, e.ID, source.ConfigDepVersion, e.Versions)
+	triples = appendValues(triples, e.ID, source.ConfigDepClassifier, []string{e.Classifier})
+	triples = appendValues(triples, e.ID, source.ConfigDepType, []string{e.Ext})
 	return appendValues(triples, e.ID, source.ConfigDepConfiguration, e.Configurations)
 }
 
@@ -831,6 +846,8 @@ func foldByID[T interface {
 
 // appendValues adds one triple per distinct non-empty value, sorted, so a
 // folded entity does not depend on declaration order (#375).
+//
+// shortcut: an empty value (a dependencyManagement-managed version) emits no fact, so a version -> managed change made while the process is down leaves the old version on the in-place entity until the next known change reconciles it (the first publish after a restart skips the reconcile, #336 D4); upgrade if managed versions are resolved or the restart publish is reconciled.
 func appendValues(triples []message.Triple, id, pred string, values []string) []message.Triple {
 	vals := slices.Clone(values)
 	slices.Sort(vals)

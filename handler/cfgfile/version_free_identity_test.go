@@ -146,3 +146,33 @@ func TestIngestEntityStates_EveryEntityCarriesItsDeclaringFilePath(t *testing.T)
 		}
 	}
 }
+
+// A Gradle classifier or extension names a distinct artifact, so it is part of
+// the identity, never folded into the plain jar's version (#393).
+// spec: entity-identity-safety / Config-file dependency and image identity excludes the version
+func TestIngestEntityStates_GradleClassifierIsItsOwnEntity(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{"build.gradle": "dependencies {\n" +
+		"    implementation 'org.lwjgl:lwjgl:3.3.1'\n" +
+		"    runtimeOnly 'org.lwjgl:lwjgl:3.3.1:natives-linux'\n" +
+		"    runtimeOnly 'org.lwjgl:lwjgl:3.3.1@zip'\n}\n"})
+	deps := titledStates(ingestTree(t, root), "dependency", "org.lwjgl:lwjgl")
+	if len(deps) != 3 {
+		t.Fatalf("want plain, natives-linux and zip as three entities, got %d", len(deps))
+	}
+	var classified, typed int
+	for _, d := range deps {
+		if got := tripleValues(d, source.ConfigDepVersion); !slices.Equal(got, []any{"3.3.1"}) {
+			t.Errorf("%s versions = %v, want [3.3.1]", d.ID, got)
+		}
+		if slices.Equal(tripleValues(d, source.ConfigDepClassifier), []any{"natives-linux"}) {
+			classified++
+		}
+		if slices.Equal(tripleValues(d, source.ConfigDepType), []any{"zip"}) {
+			typed++
+		}
+	}
+	if classified != 1 || typed != 1 {
+		t.Errorf("classifier natives-linux on %d states, type zip on %d; want 1 each", classified, typed)
+	}
+}
