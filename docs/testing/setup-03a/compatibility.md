@@ -132,8 +132,12 @@ evidence. Do not infer complete shutdown correctness from the semantic report al
 
 For accepted but unfinished work, pause the application, publish an authentic fixture envelope as a
 new stream message, prove acknowledgement with no authority revision advancement, kill the process, and
-restart the broker with its retained file store. Inspect the transport before re-ingestion. Default
-memory GRAPH may lose accepted transport messages; acceptance is not a durability claim. Restart and
+restart the broker with its retained file store. Inspect the transport before re-ingestion. The
+recorded SemStreams-pin runs had a default memory GRAPH that may lose accepted transport messages
+(observation `memory_transport_not_durable`); acceptance was not a durability claim. Since beta.12
+([#395](https://github.com/C360Studio/semsource/issues/395)) the default GRAPH is file-backed, and the
+harness asserts the reverse: `durable_transport_survives_broker_restart` requires the unapplied message
+to be retrievable after the broker restart, before the application restarts. Restart and
 verify recovery from the changed source. If target storage differs, record intended policy and prove
 that outcome rather than normalizing the difference away.
 
