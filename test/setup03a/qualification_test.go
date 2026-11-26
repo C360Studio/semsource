@@ -1162,10 +1162,11 @@ func (h *harness) pendingBrokerRestart(edited []byte) {
 		_, err = stream.GetMsg(h.ctx, ack.Sequence)
 		pendingSurvived = err == nil
 	}
-	observedAbsent := errors.Is(err, jetstream.ErrStreamNotFound) || errors.Is(err, jetstream.ErrMsgNotFound)
-	h.result.Observations = append(h.result.Observations, observation{Name: "memory_transport_not_durable", Passed: observedAbsent, Detail: map[string]any{"pending_sequence": ack.Sequence, "survived": pendingSurvived, "observation_error": fmt.Sprint(err), "contract": "source re-ingestion, not publish-ack durability"}})
-	if !observedAbsent {
-		h.t.Errorf("memory transport absence not established: survived=%t error=%v", pendingSurvived, err)
+	// GRAPH is file-backed by default (#395), so the published-but-unapplied
+	// message must survive the broker restart.
+	h.result.Observations = append(h.result.Observations, observation{Name: "durable_transport_survives_broker_restart", Passed: pendingSurvived, Detail: map[string]any{"pending_sequence": ack.Sequence, "survived": pendingSurvived, "observation_error": fmt.Sprint(err), "contract": "file-backed GRAPH keeps unapplied publications across a broker restart"}})
+	if !pendingSurvived {
+		h.t.Errorf("durable transport lost a pending publication across the broker restart: error=%v", err)
 	}
 	h.check("authority_survives_broker_restart_before_reingest", 10*time.Second, func() (any, error) {
 		persisted, openErr := h.js.KeyValue(h.ctx, kv.Bucket())
@@ -1262,8 +1263,11 @@ func (h *harness) rpcCollision() {
 		if runErr == nil {
 			return string(out), errors.New("expected startup refusal for reserved RPC wildcard capture, but process exited 0")
 		}
-		if !bytes.Contains(out, []byte("reserved_subject_capture")) && !bytes.Contains(out, []byte("captures reserved request subject")) {
-			return string(out), fmt.Errorf("process exited (%v) without reserved_subject_capture refusal: %s", runErr, out)
+		// The raw streams overrides are gone (#395), so the wildcard can no
+		// longer reach SemEngine's reserved_subject_capture boot refusal: the
+		// strict config decoder refuses the key before boot.
+		if !bytes.Contains(out, []byte(`unknown field "streams"`)) {
+			return string(out), fmt.Errorf("process exited (%v) without refusing the retired streams key: %s", runErr, out)
 		}
 		exitCode := -1
 		if cmd.ProcessState != nil {

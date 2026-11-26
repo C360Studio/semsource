@@ -228,54 +228,56 @@ func TestGraphSubsystemComponents_GraphGatewayDeclaresRequesterOutputs(t *testin
 	}
 }
 
-// TestGraphStreamConfig_RetentionDiscardAndBounds pins the GRAPH transport
-// posture (#160): workqueue retention, so graph-ingest's acknowledgement frees
-// the space and the byte bound measures backlog; discard new, so the ceiling
-// refuses rather than evicts; and the 1h / 256 MiB bounds. Retention has no
-// override: the other override fields leave it alone, and discard is the one
-// policy an operator may change.
+// TestGraphStreamConfig_PostureAndFixedShape pins the GRAPH transport
+// (#160, #395): durable (the default) is file storage and ephemeral is memory;
+// both keep workqueue retention, so graph-ingest's acknowledgement frees the
+// space and the byte bound measures backlog; discard new, so the ceiling
+// refuses rather than evicts; the five ingest subjects, 1h and one replica.
+// max_bytes replaces only the 256 MiB byte bound.
 //
 // spec: openspec/specs/entity-publish-integrity/spec.md#Requirement: The ingest transport stream refuses rather than evicts
-func TestGraphStreamConfig_RetentionDiscardAndBounds(t *testing.T) {
+func TestGraphStreamConfig_PostureAndFixedShape(t *testing.T) {
 	maxBytes := int64(1 << 20)
-	replicas := 1
+	wantSubjects := []string{
+		"graph.ingest.entity",
+		"graph.ingest.batch",
+		"graph.ingest.manifest",
+		"graph.ingest.status",
+		"graph.ingest.predicates",
+	}
 	tests := []struct {
 		name         string
-		override     *config.StreamOverride
-		wantDiscard  string
+		graphStream  config.GraphStreamConfig
+		wantStorage  string
 		wantMaxBytes int64
-		wantMaxAge   string
 	}{
-		{name: "default", wantDiscard: semconfig.StreamDiscardNew, wantMaxBytes: 256 * 1024 * 1024, wantMaxAge: "1h"},
-		{
-			name:         "every override field set",
-			override:     &config.StreamOverride{Storage: "memory", MaxBytes: &maxBytes, MaxAge: "2h", Replicas: &replicas, Discard: "old"},
-			wantDiscard:  "old",
-			wantMaxBytes: maxBytes,
-			wantMaxAge:   "2h",
-		},
+		{name: "default", wantStorage: "file", wantMaxBytes: 256 * 1024 * 1024},
+		{name: "durable", graphStream: config.GraphStreamConfig{Posture: config.GraphStreamDurable}, wantStorage: "file", wantMaxBytes: 256 * 1024 * 1024},
+		{name: "ephemeral", graphStream: config.GraphStreamConfig{Posture: config.GraphStreamEphemeral}, wantStorage: "memory", wantMaxBytes: 256 * 1024 * 1024},
+		{name: "durable max_bytes", graphStream: config.GraphStreamConfig{MaxBytes: &maxBytes}, wantStorage: "file", wantMaxBytes: maxBytes},
+		{name: "ephemeral max_bytes", graphStream: config.GraphStreamConfig{Posture: config.GraphStreamEphemeral, MaxBytes: &maxBytes}, wantStorage: "memory", wantMaxBytes: maxBytes},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{}
-			if tt.override != nil {
-				cfg.Streams = map[string]config.StreamOverride{"GRAPH": *tt.override}
+			streams := graphStreamConfig(&config.Config{GraphStream: tt.graphStream})
+			if len(streams) != 1 {
+				t.Fatalf("graphStreamConfig returned %d streams, want only GRAPH", len(streams))
 			}
-			stream, ok := graphStreamConfig(cfg)["GRAPH"]
+			stream, ok := streams["GRAPH"]
 			if !ok {
 				t.Fatal("GRAPH stream not configured")
 			}
-			if stream.Retention != "workqueue" {
-				t.Errorf("Retention = %q, want workqueue", stream.Retention)
+			want := semconfig.StreamConfig{
+				Subjects:  wantSubjects,
+				Storage:   tt.wantStorage,
+				MaxBytes:  tt.wantMaxBytes,
+				MaxAge:    "1h",
+				Replicas:  1,
+				Retention: "workqueue",
+				Discard:   semconfig.StreamDiscardNew,
 			}
-			if stream.Discard != tt.wantDiscard {
-				t.Errorf("Discard = %q, want %q", stream.Discard, tt.wantDiscard)
-			}
-			if stream.MaxBytes != tt.wantMaxBytes {
-				t.Errorf("MaxBytes = %d, want %d", stream.MaxBytes, tt.wantMaxBytes)
-			}
-			if stream.MaxAge != tt.wantMaxAge {
-				t.Errorf("MaxAge = %q, want %q", stream.MaxAge, tt.wantMaxAge)
+			if !reflect.DeepEqual(stream, want) {
+				t.Fatalf("GRAPH stream = %+v, want %+v", stream, want)
 			}
 		})
 	}

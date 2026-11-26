@@ -438,7 +438,7 @@ Optional top-level fields:
 | `websocket_path`          | `"/ws"`              | `ENTITY_STATES` KV-watch WebSocket path (`/ws` is the default and documented contract path)                                                                                                         |
 | `workspace_dir`           | `~/.semsource/repos` | Base directory where **remote git repos are cloned** (not used for local relative source paths)                                                                                                     |
 | `media_store_dir`         | —                    | Local directory for media binary storage                                                                                                                                                            |
-| `streams`                 | —                    | Optional JetStream stream overrides for the external service                                                                                                                                        |
+| `graph_stream`            | `{"posture": "durable"}` | GRAPH ingest transport: `durable` (file storage) or `ephemeral` (memory, lost on a NATS restart); optional `max_bytes` (default 256 MiB) bounds the unapplied backlog. Changing the posture on an existing stream refuses boot: `nats stream rm GRAPH` |
 
 Validate without starting the engine:
 

@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -69,20 +68,27 @@ type MetricsConfig struct {
 	Path string `json:"path,omitempty"`
 }
 
-// StreamOverride allows overriding JetStream stream configuration.
-type StreamOverride struct {
-	Subjects []string `json:"subjects,omitempty"`
-	Storage  string   `json:"storage,omitempty"`
-	MaxBytes *int64   `json:"max_bytes,omitempty"`
-	MaxAge   string   `json:"max_age,omitempty"`
-	Replicas *int     `json:"replicas,omitempty"`
+// GRAPH stream postures. The postures differ only in storage; see
+// graphStreamConfig in cmd/semsource for the fixed shape both share.
+const (
+	// GraphStreamDurable stores the GRAPH stream on file, so a published
+	// fact graph-ingest has not yet applied survives a NATS restart. It is
+	// the default.
+	GraphStreamDurable = "durable"
+	// GraphStreamEphemeral stores the GRAPH stream in memory: a NATS restart
+	// loses every published but unapplied fact.
+	GraphStreamEphemeral = "ephemeral"
+)
 
-	// Discard is what happens when the stream reaches MaxBytes or MaxAge:
-	// "old" evicts the oldest messages (the write succeeds and the loss is
-	// silent), "new" refuses the write (producers see NATS 503
-	// err_code=10077). semengine requires ordinary streams to
-	// declare it; see graphStreamConfig for why the GRAPH default is "new".
-	Discard string `json:"discard,omitempty"`
+// GraphStreamConfig selects the GRAPH ingest transport's posture and sizes its
+// backlog. Subjects, retention, discard, age bound and replicas are fixed and
+// have no field (#395).
+type GraphStreamConfig struct {
+	// Posture is "durable" (default, file storage) or "ephemeral" (memory).
+	Posture string `json:"posture,omitempty"`
+
+	// MaxBytes bounds the unapplied backlog. Defaults to 256 MiB.
+	MaxBytes *int64 `json:"max_bytes,omitempty"`
 }
 
 // Config is the top-level semsource configuration.
@@ -154,9 +160,10 @@ type Config struct {
 	// Metrics configures the Prometheus metrics endpoint.
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
 
-	// Streams allows overriding JetStream stream configurations.
-	// Keys are stream names (e.g., "GRAPH").
-	Streams map[string]StreamOverride `json:"streams,omitempty"`
+	// GraphStream selects the GRAPH ingest transport's posture and byte
+	// bound. The retired raw `streams` overrides are refused by the strict
+	// decoder.
+	GraphStream GraphStreamConfig `json:"graph_stream,omitempty"`
 }
 
 // EnvGitToken is the environment variable holding the access token for
@@ -237,7 +244,7 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	if err := c.validateStreams(); err != nil {
+	if err := c.GraphStream.validate(); err != nil {
 		return err
 	}
 
@@ -365,49 +372,15 @@ func checkEmbeddingURL(raw string) error {
 	return nil
 }
 
-// defaultGraphIngestSubjects lists the five subjects SemSource's GRAPH stream
-// binds by default so entitypub, graph-ingest, and source-manifest stay connected.
-var defaultGraphIngestSubjects = []string{
-	"graph.ingest.entity",
-	"graph.ingest.batch",
-	"graph.ingest.manifest",
-	"graph.ingest.status",
-	"graph.ingest.predicates",
-}
-
-// validateStreams validates optional stream overrides. An explicit GRAPH
-// subject list must name exactly the five default graph.ingest.* subjects
-// (entitypub, graph-ingest, and source-manifest stay connected) and nothing
-// else: a stream bound over a request/reply subject SemSource serves
-// (graph.query.status, graph.ingest.add.<ns>, ...) lets the PubAck answer the
-// request, and SemEngine's boot check protects only its own query verbs.
-// Covering wildcards pass config: "graph.ingest.>", "graph.>", and ">" reach
-// SemEngine's EnsureStreams reserved_subject_capture startup refusal, and
-// "graph.ingest.*" covers only three-token subjects, none of them served.
-func (c *Config) validateStreams() error {
-	override, ok := c.Streams["GRAPH"]
-	if !ok || len(override.Subjects) == 0 {
-		return nil
+// validate refuses an unknown posture and a non-positive byte bound.
+func (g GraphStreamConfig) validate() error {
+	switch g.Posture {
+	case "", GraphStreamDurable, GraphStreamEphemeral:
+	default:
+		return fmt.Errorf("config: graph_stream.posture %q is not %q or %q", g.Posture, GraphStreamDurable, GraphStreamEphemeral)
 	}
-	present := make(map[string]bool, len(override.Subjects))
-	wildcard := false
-	for _, subj := range override.Subjects {
-		if subj == "graph.ingest.*" || subj == "graph.ingest.>" || subj == "graph.>" || subj == ">" {
-			wildcard = true
-			continue
-		}
-		if !slices.Contains(defaultGraphIngestSubjects, subj) {
-			return fmt.Errorf("config: streams.GRAPH.subjects entry %q is not one of the default graph.ingest subjects (a stream bound over a request/reply subject swallows its replies)", subj)
-		}
-		present[subj] = true
-	}
-	if wildcard {
-		return nil
-	}
-	for _, req := range defaultGraphIngestSubjects {
-		if !present[req] {
-			return fmt.Errorf("config: streams.GRAPH.subjects is missing required subject %q (all default graph.ingest.* subjects must remain connected)", req)
-		}
+	if g.MaxBytes != nil && *g.MaxBytes <= 0 {
+		return fmt.Errorf("config: graph_stream.max_bytes must be positive, got %d", *g.MaxBytes)
 	}
 	return nil
 }
