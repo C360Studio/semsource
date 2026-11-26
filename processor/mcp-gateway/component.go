@@ -90,7 +90,7 @@ func (c *Component) buildServer() *mcp.Server {
 	// status.phase is ready AND the relevant source_status signal is ready.
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_context",
-		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. A miss while index.ready is false (source_status) means the structural index is catching up — retry once ready. Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `lexical` may be either (semengine#723).",
+		Description: "Fused code answer for a symbol: the resolved definition, its verbatim source body, and its callers/callees. A miss while index.ready is false (source_status) means the structural index is catching up — retry once ready. Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `merge.honoured` says if it merged.",
 	}, c.codeContext)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_impact",
@@ -98,11 +98,11 @@ func (c *Component) buildServer() *mcp.Server {
 	}, c.codeImpact)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_search",
-		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies, reliable once embedding.ready is true (source_status). Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `lexical` may be either (semengine#723).",
+		Description: "Semantic / natural-language search over indexed code (e.g. 'where is the retry-with-backoff logic'). Returns matching symbols with bodies, reliable once embedding.ready is true (source_status). Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `merge.honoured` says if it merged.",
 	}, c.codeSearch)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "doc_context",
-		Description: "Fused doc context (READMEs/ADRs/prose) for a query: the intended design, not just code. Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `lexical` may be either (semengine#723).",
+		Description: "Fused doc context (READMEs/ADRs/prose) for a query: the intended design, not just code. Tier 1: `provenance` (embedding|lexical) names the seeds; `similarity` is a rank score ≤2/61 when merged, else the word score; `merge.honoured` says if it merged.",
 	}, c.docContext)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "code_changes",

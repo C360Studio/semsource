@@ -53,28 +53,31 @@ merged. The tools-list SHALL stay within its byte budget.
 
 At Tier 1 the fusion tools (`code_search`, `code_context`, `doc_context`) SHALL seed natural-language
 questions only through the substrate's merged search, with no SemSource-owned search path, and SHALL
-return the fusion response's `provenance`. Their descriptions SHALL state that `similarity` is the
-merged rank score (at most 2/61) only when the merge was applied, and the word score otherwise; and that
-`provenance: lexical` cannot tell a word-list fallback from an applied merge with no embedding-list seed
-(semengine#723).
+return the fusion response's `provenance`. For a natural-language question they SHALL also return the
+fusion response's `merge` unchanged (`honoured`, `detail`, and `reason` and `code` when not honoured), so
+`provenance: lexical` beside `merge.honoured: true` is an applied merge with no embedding-list seed and beside
+`merge.honoured: false` is a word-list fallback. A symbol or prefix question SHALL carry no `merge`. Their
+descriptions SHALL state that `similarity` is the merged rank score (at most 2/61) only when the merge was
+applied, and the word score otherwise, and SHALL name `merge.honoured`.
 
 #### Scenario: Merged seeds at Tier 1
 
 - **GIVEN** a Tier 1 composition whose embedding provider answers
 - **WHEN** an agent asks `code_search` a natural-language question whose answer includes an embedding-list seed
-- **THEN** the reply reports `provenance: embedding`
+- **THEN** the reply reports `provenance: embedding` and `merge.honoured: true`
 
 #### Scenario: Provider fails during a fusion question
 
 - **GIVEN** a Tier 1 composition whose provider does not answer
 - **WHEN** an agent asks `code_search` a natural-language question with `include_scores`
 - **THEN** the reply reports `provenance: lexical` and each `similarity` is the word score, not a merged rank score
+- **AND** the reply's `merge` is not honoured and carries the provider failure's reason and code
 
 #### Scenario: Tier 0 unchanged
 
 - **GIVEN** the default Tier 0 composition
 - **WHEN** an agent asks a fusion tool a natural-language question
-- **THEN** the seeds are the word list and the reply reports `provenance: lexical`
+- **THEN** the seeds are the word list and the reply reports `provenance: lexical` with no `merge`
 
 ### Requirement: Tier 1 acceptance needs a reachable, identified provider
 
@@ -85,7 +88,7 @@ unavailable evidence, never as a pass. Readiness SHALL report the semantic index
 graph-lexical and graph-embedding both report their index caught up, and SHALL then report the lower
 of their indexed revisions, unknown when either is unknown. Readiness is index coverage,
 not provider liveness: each answer reports liveness itself, through `merge.honoured` on
-`graph_search`; fusion `provenance` cannot tell provider loss apart (semengine#723).
+`graph_search` and on the fusion tools.
 
 #### Scenario: Provider missing during a qualification run
 
