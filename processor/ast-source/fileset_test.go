@@ -144,7 +144,7 @@ func TestPublishContainers_RetriesRefusedPublish(t *testing.T) {
 		publisher: full, distinct: entitypub.NewDistinctTracker()}
 
 	pw.filesMu.Lock()
-	c.publishContainers(context.Background(), pw, pw.removeFiles("a/c/y.go"), false, true)
+	c.publishContainers(context.Background(), pw, pw.removeFiles("a/c/y.go"), false, true, false)
 	pw.filesMu.Unlock()
 	if !slices.Equal(pw.pendingContainers, []string{"a/c/y.go"}) {
 		t.Fatalf("pending after a refused publish = %v, want [a/c/y.go]", pw.pendingContainers)
@@ -160,7 +160,7 @@ func TestPublishContainers_RetriesRefusedPublish(t *testing.T) {
 	ok.Start(ctx)
 	c.publisher = ok
 	pw.filesMu.Lock()
-	c.publishContainers(ctx, pw, pw.replaceFiles([]*semsourceast.ParseResult{result("a/one.go")}), true, true)
+	c.publishContainers(ctx, pw, pw.replaceFiles([]*semsourceast.ParseResult{result("a/one.go")}), true, true, false)
 	pw.filesMu.Unlock()
 	if err := ok.Stop(ctx); err != nil {
 		t.Fatal(err)

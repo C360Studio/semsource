@@ -1,6 +1,6 @@
 # Skip unchanged folder and repo republishes on the periodic reindex
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-11-26) sha256:f497a487db8d
 
 Track: design (changes what the reindex publishes; durability trade-off named below).
 

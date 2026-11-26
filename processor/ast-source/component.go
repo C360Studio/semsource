@@ -189,6 +189,9 @@ type Component struct {
 	// Content hashes for change detection during periodic reindex
 	fileHashes   map[string]string // path → content hash
 	fileHashesMu sync.RWMutex
+
+	// sentContainers gates the reindex's folder and repo republishes (#401).
+	sentContainers containerSums
 }
 
 // NewComponent creates a new ast-source processor component.
@@ -497,7 +500,7 @@ func (c *Component) seedPath(ctx context.Context, pw *pathWatcher) (int, error) 
 	semsourceast.BuildHierarchy(results, c.authority, pw.scopedSystem)
 	pw.filesMu.Lock()
 	if changed := pw.replaceFiles(results); len(results) > 0 {
-		c.publishContainers(ctx, pw, changed, true, false)
+		c.publishContainers(ctx, pw, changed, true, false, false)
 	}
 	pw.filesMu.Unlock()
 
@@ -730,7 +733,7 @@ func (c *Component) reindexPath(ctx context.Context, pw *pathWatcher) (scanned, 
 	// IDs); the containers whose set changed since the last pass reconcile.
 	semsourceast.BuildHierarchy(results, c.authority, pw.scopedSystem)
 	pw.filesMu.Lock()
-	c.publishContainers(ctx, pw, pw.replaceFiles(results), true, true)
+	c.publishContainers(ctx, pw, pw.replaceFiles(results), true, true, true)
 	pw.filesMu.Unlock()
 
 	for _, result := range results {

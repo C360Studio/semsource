@@ -11,7 +11,8 @@ A periodic ast-source reindex SHALL NOT publish a `folder` or `repo` entity whos
 #### Scenario: A changed tree republishes the affected containers
 - **GIVEN** ast-source has seeded `a/one.go` and `a/b/x.go`
 - **WHEN** `a/b/y.go` is added and the next periodic reindex runs
-- **THEN** folder `a/b`, folder `a`, and the repo are published with `a/b/y.go` in the set
+- **THEN** folder `a/b` is published with `a/b/y.go` in its `contains` set
+- **AND** folder `a` and the repo, whose sets did not change, are not
 
 #### Scenario: A refused container publish is retried
 - **GIVEN** the publisher refused folder `a`'s publish on one reindex

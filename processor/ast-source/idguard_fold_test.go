@@ -193,7 +193,9 @@ func TestReindexKeepsSeedHierarchyOverAFold(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		f.reset()
 		f.reindex()
-		if got := f.repoContains(); strings.Join(got, ",") != strings.Join(seeded, ",") {
+		// An unchanged repo is not republished (#401); a reindex that re-added
+		// the folded file would change its set and so would publish it.
+		if got := f.repoContains(); len(got) != 0 && strings.Join(got, ",") != strings.Join(seeded, ",") {
 			t.Fatalf("reindex %d: repo contains = %v, seed published %v", i+1, got, seeded)
 		}
 	}
