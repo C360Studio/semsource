@@ -173,14 +173,27 @@ func newReconcileFixture(t *testing.T) *reconcileFixture {
 }
 
 // writeImage writes a PNG larger than the thumbnail bound, so the handler
-// stores both the original and a thumbnail.
+// stores both the original and a thumbnail. It writes a temp file (no image
+// extension, so the watcher ignores it) and renames it into place: an
+// in-place os.WriteFile truncates first, and a watcher that reads in that
+// window ingests an empty file with no thumbnail to fault.
 func (f *reconcileFixture) writeImage(name string) {
 	f.t.Helper()
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 600, 600))); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(f.dir, name), buf.Bytes(), 0o644); err != nil {
+	tmp, err := os.CreateTemp(f.dir, ".write-*")
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if _, err := tmp.Write(buf.Bytes()); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := tmp.Close(); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.Rename(tmp.Name(), filepath.Join(f.dir, name)); err != nil {
 		f.t.Fatal(err)
 	}
 }
