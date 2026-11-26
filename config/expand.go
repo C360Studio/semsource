@@ -156,6 +156,7 @@ func expandSingleBranch(src SourceEntry, workspaceDir string) []SourceEntry {
 		Watch:           src.Watch,
 		BranchSlug:      src.BranchSlug,
 		IndexVendoredJS: src.IndexVendoredJS,
+		IndexInterval:   src.IndexInterval,
 	}
 	if src.Language != "" {
 		astEntry.Language = src.Language
@@ -319,6 +320,7 @@ func expandBranchSources(src SourceEntry, bs workspace.BranchState) []SourceEntr
 		Watch:           src.Watch,
 		BranchSlug:      bs.Slug,
 		IndexVendoredJS: src.IndexVendoredJS,
+		IndexInterval:   src.IndexInterval,
 	}
 	if src.Language != "" {
 		astEntry.Language = src.Language
