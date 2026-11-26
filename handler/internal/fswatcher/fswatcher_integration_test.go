@@ -204,12 +204,20 @@ func TestFSWatcher_ExtensionFiltering(t *testing.T) {
 // Debounce: rapid writes produce a single event
 // ---------------------------------------------------------------------------
 
-// TestFSWatcher_SpreadBurstIsOneEvent: writes 100 ms apart with a 300 ms
-// delay span several flush ticks but never go quiet, so they emit one event.
 // spec: openspec/specs/typed-source-change-events/spec.md#Requirement: A watched file emits one change after it goes quiet
-func TestFSWatcher_SpreadBurstIsOneEvent(t *testing.T) {
+func TestFSWatcher_Debounce(t *testing.T) {
+	// Real-time and scheduler-tolerant (#419 review): event counts depend on
+	// scheduling, so they are pinned by the fake-clock tests in
+	// debounce_test.go. This asserts that a burst yields at least one event
+	// and that the watcher's last flush saw the burst's final content.
 	dir := t.TempDir()
-	w, err := fswatcher.New(fswatcher.WatchConfig{Enabled: true, DebounceDelay: "300ms", FileExtensions: []string{".md"}}, dir)
+	const delay = 100 * time.Millisecond
+	w, err := fswatcher.New(fswatcher.WatchConfig{
+		Enabled:        true,
+		DebounceDelay:  delay.String(),
+		FileExtensions: []string{".md"},
+		ExcludeDirs:    []string{},
+	}, dir)
 	if err != nil {
 		t.Fatalf("fswatcher.New: %v", err)
 	}
@@ -217,83 +225,42 @@ func TestFSWatcher_SpreadBurstIsOneEvent(t *testing.T) {
 	if err := w.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	time.Sleep(20 * time.Millisecond) // let fsnotify register the root
-
-	target := filepath.Join(dir, "spread.md")
-	for i := range 5 {
-		if err := os.WriteFile(target, []byte("write "+string(rune('0'+i))), 0o644); err != nil {
-			t.Fatalf("WriteFile %d: %v", i, err)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if _, ok := waitEvent(t, w); !ok {
-		t.Fatal("timed out waiting for the burst's event")
-	}
-	select {
-	case ev := <-w.Events():
-		t.Errorf("a burst that never went quiet emitted a second event: %+v", ev)
-	case <-time.After(600 * time.Millisecond):
-	}
-}
-
-// spec: openspec/specs/typed-source-change-events/spec.md#Requirement: A watched file emits one change after it goes quiet
-func TestFSWatcher_Debounce(t *testing.T) {
-	dir := t.TempDir()
-	// Use a slightly longer debounce so rapid writes collapse reliably.
-	cfg := fswatcher.WatchConfig{
-		Enabled:        true,
-		DebounceDelay:  "100ms",
-		FileExtensions: []string{".md"},
-		ExcludeDirs:    []string{},
-	}
-	w, err := fswatcher.New(cfg, dir)
-	if err != nil {
-		t.Fatalf("fswatcher.New: %v", err)
-	}
-	t.Cleanup(func() { _ = w.Stop() })
-
-	ctx := t.Context()
-	if err := w.Start(ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	time.Sleep(20 * time.Millisecond)
 
 	target := filepath.Join(dir, "burst.md")
-
-	// Rapid writes within the debounce window.
+	final := []byte("write 4")
 	for i := range 5 {
 		content := []byte("write " + string(rune('0'+i)))
 		if err := os.WriteFile(target, content, 0644); err != nil {
 			t.Fatalf("WriteFile %d: %v", i, err)
 		}
 	}
-
-	// Wait for the debounce to flush.
-	ev, ok := waitEvent(t, w)
-	if !ok {
-		t.Fatal("timed out waiting for debounced event")
+	if _, ok := waitEvent(t, w); !ok {
+		t.Fatal("timed out waiting for the burst's event")
 	}
-	_ = ev
+	drainUntilQuiet(t, w, 5*delay)
 
-	// Should not receive more than one event for the burst.
-	count := 1
-	deadline := time.After(200 * time.Millisecond)
-loop:
+	// Rewriting the final content is a no-op only if the last flush hashed it.
+	if err := os.WriteFile(target, final, 0644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ev := <-w.Events():
+		t.Errorf("rewriting the final content emitted %+v: the last flush did not see it", ev)
+	case <-time.After(5 * delay):
+	}
+}
+
+// drainUntilQuiet reads events until none arrives for quiet.
+func drainUntilQuiet(t *testing.T, w *fswatcher.FSWatcher, quiet time.Duration) {
+	t.Helper()
 	for {
 		select {
 		case _, ok := <-w.Events():
 			if !ok {
-				break loop
+				return
 			}
-			count++
-		case <-deadline:
-			break loop
+		case <-time.After(quiet):
+			return
 		}
-	}
-
-	// The burst never went quiet for the delay, so it is one event (#419).
-	if count != 1 {
-		t.Errorf("debounce failed: got %d events for 5 rapid writes, want 1", count)
 	}
 }

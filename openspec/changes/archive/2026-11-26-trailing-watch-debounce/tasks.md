@@ -6,13 +6,13 @@
 
 ## 2. Repro (fails on main)
 
-- [x] 2.1 Spread-out burst (gaps < delay, total > delay) emits one event: `TestFSWatcher_SpreadBurstIsOneEvent` fails on main (second event); fake-clock `TestDebounce_WaitsUntilThePathIsQuiet`.
+- [x] 2.1 Spread-out burst (gaps < delay, total > delay) emits one event: fake-clock `TestDebounce_WaitsUntilThePathIsQuiet`. A real-time variant failed on main (second event) but was dropped after review (#420 r1): a scheduler pause past the delay can legitimately split a burst, so real-time tests assert no counts.
 - [x] 2.2 Continuous writes past the cap flush before they stop: `TestDebounce_ContinuousWritesFlushAtTheCap` (fake clock).
 
 ## 3. Watcher
 
 - [x] 3.1 `pendingEvent{op, first, last}`, readiness check, `max(delay/4, 10ms)` tick, injectable clock.
-- [x] 3.2 `TestFSWatcher_Debounce` keeps its intent on the new rule (one event per burst).
+- [x] 3.2 `TestFSWatcher_Debounce` is now scheduler-tolerant: at least one event, and rewriting the final content emits nothing (the last flush saw it). Counts live in the fake-clock tests.
 
 ## 4. Gates
 
