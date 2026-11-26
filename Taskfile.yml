@@ -171,3 +171,14 @@ tasks:
       - task: ateam:doctor
       - task: spec:check
       - task: test
+
+  verify:
+    desc: The gate ateam's reviewer and preflight contracts run (check + test-spec citations + bench self-test)
+    deps: [tools:ateam]
+    preconditions:
+      - sh: test -d ui/node_modules/typescript
+        msg: "ateam test-spec scans the Vitest tests and needs ui/node_modules: run 'cd ui && npm ci' first"
+    cmds:
+      - task: check
+      - '"{{.ATEAM}}" test-spec --base origin/main'
+      - '"{{.ATEAM}}" bench --selftest'
