@@ -271,7 +271,7 @@ cannot be upgraded in place. Consumers should read the
 
 - `v1.0.0-beta.12` (breaking; fresh storage and re-ingest): the third
   SemEngine release, on `v0.1.0-alpha.8` plus untagged `3d823c8` (graph-index
-  stop and warm-restart fixes, #406/#403). Config dependency and image IDs
+  stop fix and warm-restart candidate, #406/#403). Config dependency and image IDs
   drop the version or tag (#393); deleting a manifest marks its entities stale
   (#393); the `streams` config key is replaced by `graph_stream` and GRAPH is
   file-backed by default (#395); a full GRAPH stream no longer crash-loops the

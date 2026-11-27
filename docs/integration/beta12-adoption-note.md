@@ -119,10 +119,6 @@ None of these changes an ID or a config key.
   draining it (semengine#768, in the `3d823c8` pin, #428); the next boot replays the store anyway. Compose also sets
   `stop_grace_period: 40s` for `semsource`, so Docker's 10 s SIGKILL (exit 137) no longer pre-empts the process's
   own 30 s stop deadline.
-- **#403**: the pin carries semengine#772: graph-index's follower watch carries keys only, so a warm-restart replay
-  of a large store stays under nats.go's 64 MiB subscription buffer. At beta.11 that overflow dropped messages and
-  left about 45 minutes with no structural queries after each restart. The dogfood-host re-measure is recorded on
-  #403. Keep gating queries on `index.ready`.
 - **#419**: the doc, config, image, video and audio watchers flush a path once it goes quiet for the debounce delay,
   or five delays after its first pending event. A burst no longer emits one event per tick boundary. A single save
   now lands about one delay later (500 ms by default). The ast watcher is separate and unchanged.
@@ -145,6 +141,12 @@ None of these changes an ID or a config key.
 
 ## Known open items
 
+- **#403, pending re-measure** ([semengine#750](https://github.com/C360Studio/semengine/issues/750),
+  [#765](https://github.com/C360Studio/semengine/issues/765)): at beta.11, after a warm restart of a large corpus,
+  graph-index took about 45 minutes to reach `index.ready`, and slow-consumer drops appeared on KV-watch
+  subscriptions. The pin carries semengine#772 (the follower watch carries keys only, so the boot replay should stay
+  under nats.go's 64 MiB subscription buffer), but the restart has not been re-measured on it yet. The dogfood-host
+  re-measure will be recorded on #403 before the tag. Until then, gate queries on `index.ready`.
 - **Untagged SemEngine pin.** beta.12 builds on SemEngine commit `3d823c8` (`v0.1.0-alpha.8.0.20261126222333-3d823c823ed7`),
   not a tag. `go.sum` fixes it exactly; the next SemSource release moves to the first SemEngine tag that carries it.
 - **#421**: a dependency a manifest stops declaring is not marked stale (above).
