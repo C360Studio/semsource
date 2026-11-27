@@ -1,7 +1,7 @@
 # SemSource beta.12 — consumer adoption note
 
 Audience: SemTeams, SemDragon, and any deployment moving from `v1.0.0-beta.11` to `v1.0.0-beta.12` (SemEngine
-`v0.1.0-alpha.8`, unchanged). This is the delta since beta.11; the tag is tracked on #408. Coming from beta.10 or
+`v0.1.0-alpha.8` plus two graph-index fixes, pinned at untagged commit `3d823c8`, #428). This is the delta since beta.11; the tag is tracked on #408. Coming from beta.10 or
 earlier, read the [beta.11 adoption note](beta11-adoption-note.md) first (or the
 [SemEngine adoption note](semengine-adoption-note.md) from beta.9): one reseed covers every break in the chain.
 
@@ -115,9 +115,14 @@ None of these changes an ID or a config key.
   `docker buildx imagetools inspect` on both tags should resolve to one digest.
 - **#405**: ADR-0003 no longer claims that runtime `add_source`/`remove_source` republish the manifest. It is
   published once, at start. Documentation only.
-- **#406**: Compose sets `stop_grace_period: 40s` for `semsource`, so Docker's 10 s SIGKILL (exit 137) no longer
-  pre-empts the process's own 30 s stop deadline. A stop during an index backlog still exits 1 when graph-index's
-  drain overruns that deadline (semengine#768, below).
+- **#406**: a stop during an index backlog exits 0 again. graph-index's `Stop` now drops queued index work instead of
+  draining it (semengine#768, in the `3d823c8` pin, #428); the next boot replays the store anyway. Compose also sets
+  `stop_grace_period: 40s` for `semsource`, so Docker's 10 s SIGKILL (exit 137) no longer pre-empts the process's
+  own 30 s stop deadline.
+- **#403**: the pin carries semengine#772: graph-index's follower watch carries keys only, so a warm-restart replay
+  of a large store stays under nats.go's 64 MiB subscription buffer. At beta.11 that overflow dropped messages and
+  left about 45 minutes with no structural queries after each restart. The dogfood-host re-measure is recorded on
+  #403. Keep gating queries on `index.ready`.
 - **#419**: the doc, config, image, video and audio watchers flush a path once it goes quiet for the debounce delay,
   or five delays after its first pending event. A burst no longer emits one event per tick boundary. A single save
   now lands about one delay later (500 ms by default). The ast watcher is separate and unchanged.
@@ -140,14 +145,8 @@ None of these changes an ID or a config key.
 
 ## Known open items
 
-- **#403, upstream** ([semengine#750](https://github.com/C360Studio/semengine/issues/750),
-  [#765](https://github.com/C360Studio/semengine/issues/765)): after a warm restart of a large corpus, graph-index
-  can take about 45 minutes to reach `index.ready`, and slow-consumer drops appear on KV-watch subscriptions. Measured
-  on the dogfood host at beta.11. The mechanism lives in SemEngine; gate queries on `index.ready`. The issue closes
-  when upstream lands a fix and a pin bump re-measures the restart.
-- **#406, upstream** ([semengine#768](https://github.com/C360Studio/semengine/issues/768)): graph-index's `Stop`
-  drains every queued index item, so a backlog can use up the 30 s stop deadline and the process exits 1. The Compose
-  grace period removes the SIGKILL, not the exit code. The issue closes with the pin bump that carries the fix.
+- **Untagged SemEngine pin.** beta.12 builds on SemEngine commit `3d823c8` (`v0.1.0-alpha.8.0.20261126222333-3d823c823ed7`),
+  not a tag. `go.sum` fixes it exactly; the next SemSource release moves to the first SemEngine tag that carries it.
 - **#421**: a dependency a manifest stops declaring is not marked stale (above).
 - **Post-tag measurements**: the scorecard regrade (#387) and the dogfood measurement on the released image (#407)
   are recorded after the tag.

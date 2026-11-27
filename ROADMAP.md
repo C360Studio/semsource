@@ -1,7 +1,8 @@
 # SemSource Roadmap
 
 SemSource is in **public beta**. The current public tag is `v1.0.0-beta.12`
-(2026-11-26), the third SemEngine release, on SemEngine `v0.1.0-alpha.8`. It is
+(2026-11-26), the third SemEngine release, on SemEngine `v0.1.0-alpha.8` plus two
+graph-index fixes (untagged `3d823c8`). It is
 **breaking**: upgrading from beta.11 needs fresh storage and a re-ingest, and a
 `semsource.json` that sets `streams` no longer loads. See
 [v1.0.0-beta.12](#v100-beta12-dogfood-hardening) and the
@@ -48,7 +49,8 @@ confidence and dependency shape. The "why" behind durable choices lives in
 
 ## v1.0.0-beta.12: Dogfood Hardening
 
-The third SemEngine release, still on SemEngine `v0.1.0-alpha.8`. It carries the
+The third SemEngine release, on SemEngine `v0.1.0-alpha.8` plus two graph-index
+fixes, pinned at untagged commit `3d823c8` (#428). It carries the
 fixes from dogfooding beta.11 (#391) and is tracked on
 [#408](https://github.com/C360Studio/semsource/issues/408). Like beta.11 it
 cannot be upgraded in place. Consumers should read the
@@ -268,7 +270,8 @@ cannot be upgraded in place. Consumers should read the
 ## Recently Shipped
 
 - `v1.0.0-beta.12` (breaking; fresh storage and re-ingest): the third
-  SemEngine release, still on `v0.1.0-alpha.8`. Config dependency and image IDs
+  SemEngine release, on `v0.1.0-alpha.8` plus untagged `3d823c8` (graph-index
+  stop and warm-restart fixes, #406/#403). Config dependency and image IDs
   drop the version or tag (#393); deleting a manifest marks its entities stale
   (#393); the `streams` config key is replaced by `graph_stream` and GRAPH is
   file-backed by default (#395); a full GRAPH stream no longer crash-loops the
@@ -497,8 +500,9 @@ narrative above is the public summary, this list keeps the per-tag mechanics.
 
 The list below is the shape up to the latest public tag, beta.12:
 
-1. `v1.0.0-beta.12` is the third SemEngine release — **breaking**: still
-   semengine `v0.1.0-alpha.8`, version-free config dependency and image IDs, the
+1. `v1.0.0-beta.12` is the third SemEngine release — **breaking**:
+   semengine `v0.1.0-alpha.8` plus untagged `3d823c8`, version-free config
+   dependency and image IDs, the
    `streams` config key replaced by `graph_stream` (file-backed GRAPH by
    default; a beta.11 memory GRAPH stream refuses boot), and stale-marking of a
    deleted manifest's entities. Acceptance is the PR-level proofs (#393, #395,
